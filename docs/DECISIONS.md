@@ -3,6 +3,71 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-28 — Phase 1 (Employee & Organization) decisions
+
+### Hard constraint: every edit/config is a button, never backend access
+The user confirmed explicitly that nobody operating this app will ever write
+code or touch the backend/database directly — every create/edit/deactivate
+action needs an in-app form. This changes how "done" is defined for every
+future phase: a feature isn't finished when the schema + a read-only view
+exist, it's finished when there's a button for it. Phase 1 accordingly ships
+full CRUD UI for Org Units, Jobs, Positions (`/admin/org-units`,
+`/admin/jobs`, `/admin/positions`, HR Admin only), manual Employee creation
+(`/employees/new`, separate from the bulk CSV import) and editing
+(`/employees/[id]/edit`, self or HR Admin), and Assignment management
+(add Additional/Acting/Temporary, Movement, end a non-Primary assignment —
+all from the employee detail page). See the `feedback_hr_app_no_backend_access`
+memory for the standing rule.
+
+### Position occupancy: computed live from Assignment, not a cached flag
+`Position.positionStatus` (PLANNED/VACANT/FILLED/FROZEN/CLOSED) is a field
+HR Admin can set directly, but it is **not** what the org chart uses to decide
+whether a seat shows an occupant. The org chart (`src/lib/org-chart.ts`)
+always queries `Assignment` rows whose `effectiveFrom`/`effectiveTo` range
+covers the selected as-of date — this is what makes "view chart as of two
+dates" (Phase 1's own acceptance scenario) actually correct, and it's also
+why an employee can validly show up in more than one Position node at once
+(ORG-05) without a stored flag needing to be kept in sync per position. The
+stored `positionStatus` is auto-nudged between VACANT/FILLED whenever an
+Assignment is added/moved/ended (`syncPositionStatus()` in
+`assignment-actions.ts`), but only when its current value is VACANT or
+FILLED — an admin-set PLANNED/FROZEN/CLOSED is never silently overwritten.
+
+### Movement vs. Add Assignment vs. End Assignment are three distinct actions
+Rather than one generic "edit assignment" form, the employee detail page has:
+- **Tambah Penempatan** — creates a new Additional/Acting/Temporary
+  Assignment. Never touches the Primary Assignment or `Employee.currentPositionId`.
+- **Pindahkan ke Posisi Baru** (Movement) — the only way to change an
+  employee's Primary position. Closes the current Primary Assignment
+  (`effectiveTo` = the move date, `status = ENDED`) and creates a new Primary
+  Assignment, then updates `Employee.currentPositionId`. This is what
+  DM-10 ("no historical overwrite") requires — the old row is closed, never
+  deleted or mutated into the new one.
+- **Akhiri** (End) — only available on non-Primary assignments. Ending a
+  Primary assignment without a replacement isn't offered here on purpose;
+  that's an offboarding scenario (Resignation/Exit Clearance), which is
+  Phase 4 territory, not Phase 1.
+
+### Org chart implementation
+Built with `d3-hierarchy` (`stratify()` + `tree()`) for pure layout math only
+— no DOM manipulation library, no SVG-driven re-render framework. The
+computed `x`/`y` per position are rendered as plain absolutely-positioned React
+`div`s (cards) with an SVG layer underneath just for the connector lines, all
+inside a container whose pan (`translate`) and zoom (`scale`) are driven by
+plain mouse/wheel handlers in React state. This was simpler and more
+debuggable than adopting a full charting/zoom library for what's currently a
+handful of nodes. Multiple root positions (no `reportsToPositionId`) are
+supported by wrapping everything under a synthetic, unrendered root node for
+`stratify()` — and flagged to the user as a data-quality warning banner if
+there's more than one (a lightweight stand-in for ORG-12's "multiple top
+roots" warning; the fuller validation set — circular reporting, orphan
+Assignment, invalid level, etc. — is not built yet).
+Department filtering and search **dim** non-matching cards rather than
+removing them from the tree, so the hierarchy structure never breaks when a
+filter is active — deferred a "collapse to only the filtered subtree" mode as
+a nice-to-have, not needed for the Phase 1 acceptance scenarios.
+Landscape/image export (part of ORG-10, P1) is not built yet.
+
 ## 2026-07-28 — Phase 0 foundation decisions
 
 ### Stack

@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   UserCircle,
   Building2,
+  Settings,
 } from "lucide-react";
 import { requireSession, isHrAdmin, isTrainingAdmin, isGaAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -44,6 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   navItems.push({ href: "/organization", label: t("nav.organization"), icon: Building2 });
   if (isHrAdmin(session)) {
+    navItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: Settings });
     navItems.push({ href: "/import", label: t("nav.importData"), icon: Upload });
     navItems.push({ href: "/audit-log", label: t("nav.auditLog"), icon: ShieldCheck });
   }
@@ -82,7 +84,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl px-6 py-8">{children}</div>
+        <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
       </main>
     </div>
   );

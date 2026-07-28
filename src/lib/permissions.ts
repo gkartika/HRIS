@@ -39,6 +39,21 @@ export function canAccessAuditLog(session: Session): boolean {
   return isHrAdmin(session);
 }
 
+// Org structure (Org Units/Jobs/Positions) and Assignment moves are HR Admin
+// operations — this is the People & Payroll Admin's data per the Data Fields
+// Blueprint's Primary Owner column for Org Units/Job Master/Position Master.
+export function canManageOrgStructure(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+export function canManageAssignments(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+export function canCreateEmployee(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
 // ACC-10: field-level scope. Every field on Employee is tagged with the
 // sensitivity tier from the Data Fields Blueprint. Rather than nulling values
 // (which still leaks "field exists"), we omit the key entirely so the UI

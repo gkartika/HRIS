@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { UserPlus } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireSession, canListEmployees, projectEmployee } from "@/lib/permissions";
+import { requireSession, canListEmployees, canCreateEmployee, projectEmployee } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 
@@ -28,6 +29,15 @@ export default async function EmployeesPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-medium text-slate-900">{t("employee.listTitle")}</h1>
+        {canCreateEmployee(session) && (
+          <Link
+            href="/employees/new"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            <UserPlus size={14} />
+            {t("employee.addEmployee")}
+          </Link>
+        )}
       </div>
 
       {rows.length === 0 ? (

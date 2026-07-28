@@ -352,14 +352,19 @@ model ImportBatch {
 }
 
 model ImportRow {
-  id                String      @id @default(cuid())
-  importBatchId     String
-  importBatch       ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
-  rowNumber         Int
-  rawData           String
-  isValid           Boolean
-  rejectionReason   String?
-  createdEmployeeId String?
+  id              String      @id @default(cuid())
+  importBatchId   String
+  importBatch     ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  rowNumber       Int
+  rawData         String
+  isValid         Boolean
+  rejectionReason String?
+  // CTL-13: generalized from the Phase 0 Employee-only import — every
+  // dataset's importer sets this once its row is committed, whether that
+  // created a brand-new record or updated an existing one (matched by the
+  // dataset's natural key).
+  rowAction       String?
+  createdRecordId String?
 }
 
 model FileObject {

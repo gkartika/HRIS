@@ -146,8 +146,14 @@ English.
 - `src/lib/org-chart.ts` — as-of-date occupancy reconstruction and
   `computeStructureWarnings()` (Director-root / Department-Head-hierarchy
   validation, ORG-15), unit tested.
-- `src/lib/import/employee-import.ts` — CSV parse/validate for the import
-  preview flow; `src/app/(app)/import/` is the UI + server actions.
+- `src/lib/import-export/` — CTL-13 universal import/export framework: one
+  module per dataset (`employees.ts`, `org-units.ts`, `jobs.ts`,
+  `positions.ts`, `assignments.ts`) each exporting `templateHeaders`/
+  `dryRun`/`commitRow`/`exportData`; `registry.ts` maps a dataset key to its
+  module; `employee-documents-zip.ts` is the ZIP+manifest case for
+  file-bearing records. `src/app/(app)/import/` is the hub UI + server
+  actions; `/api/import-export/template|export/[dataset]` are the shared
+  route handlers.
 - `src/app/(app)/` — the authenticated app shell (role-aware nav in
   `layout.tsx`) and all feature pages, including `admin/education-levels/` and
   `admin/ptkp-status/` (lookup-table CRUD) and each employee's

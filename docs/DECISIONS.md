@@ -3,6 +3,83 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-28 — CTL-13 universal import/export, retrofit to Phase 0/1
+
+Before starting Phase 2, re-checked the live Build Guide and found it now
+gates Phase 2 on two things: Phase 0/1 checkpoints being recorded Accepted
+in the **15 In-App Review** tab (several were still "Not Reviewed" there
+despite the phase-summary rows saying "Accepted"), and a new cross-phase
+rule, **CTL-13 ("Universal import and export")**, applying retroactively to
+every Phase 0/1 dataset. Asked the user how to proceed; they chose to build
+CTL-13 for Phase 0/1 first.
+
+### Scope interpreted from CTL-13's text
+"Every business dataset delivered in a phase must provide a downloadable
+XLSX/CSV template, dry-run import with field mapping, create/update upsert
+rules and row-level errors, plus permission-filtered XLSX/CSV export.
+File-bearing records must support authorized ZIP export with a manifest and
+ZIP/manifest import." Applied to Phase 0/1's five datasets: Employee, Org
+Unit, Job, Position, Assignment — plus Employee's KTP/KK/other documents as
+the file-bearing case.
+
+- **CSV only, not XLSX.** Both formats are allowed per the wording ("XLSX/CSV"
+  reads as "either"); CSV avoids adding a spreadsheet-generation dependency
+  (SheetJS/exceljs) for a decision that doesn't change any product behavior.
+  Revisit if the user specifically wants native `.xlsx` files.
+- **Natural-key upsert, not internal IDs.** Templates/imports reference
+  related records by their human business codes (`unitCode`, `jobCode`,
+  `positionCode`, `employeeNumber`) never internal cuids, since a person
+  filling a spreadsheet can't know a cuid. Each dataset module re-resolves
+  "does this natural key already exist?" **at commit time**, not from a
+  value cached during the dry-run preview — simpler and safer than passing a
+  stale resolved ID forward (a record created by someone else between
+  preview and commit is still handled correctly).
+- **Assignment import is create-only.** There's no natural key that
+  identifies "the same" assignment row to update, and DM-10 already forbids
+  overwriting assignment history — every valid row always creates a new
+  Assignment. A `PRIMARY`-type row replicates the exact same close-old/
+  open-new logic as the Movement UI action (including keeping
+  `Employee.currentPositionId` and `Position.positionStatus` in sync), so a
+  bulk Primary-position import can't leave two active Primary assignments.
+- **Employee export reuses `projectEmployee`.** Rather than a separate
+  export-specific redaction ruleset, `employees.ts`'s `exportData()` calls
+  the exact same field-projection function the UI uses — a Training/GA
+  Admin's CSV export is redacted exactly the way their screen view already
+  is (verified live: GA Admin's export has the `noKk`/`namaIbuKandung`/
+  `ptkpStatusCode`/contact columns present but blank, never the values).
+- **Document export/import is ZIP+manifest, not per-file.** One
+  `manifest.csv` (employeeNumber, category, filename, MIME, size, uploader,
+  timestamp, zip-entry-path) plus one ZIP entry per `FileObject`. Import
+  re-validates every entry through the same `validateDocumentFile()` used by
+  the single-file upload panel — confirmed live that re-importing an
+  employee's own exported ZIP correctly rejects the non-KTP/KK `.txt`
+  contract file (wrong extension for that check) while accepting the PDF.
+  Every ZIP import is additive (new `FileObject` rows); a KTP/KK entry still
+  repoints `Employee.ktpFileId`/`kkFileId` the same way the single-upload
+  "Ganti" flow does.
+- **`ImportRow.createdEmployeeId` generalized to `createdRecordId`**, plus a
+  new `rowAction` ("CREATE"/"UPDATE") column, since the row-level result of
+  a commit is no longer always an Employee. Migrated by hand (Prisma's
+  `migrate dev` refused to run non-interactively over a column with existing
+  data) — the migration explicitly copies old values into the new columns
+  rather than dropping them; verified after applying that both pre-existing
+  `ImportRow.createdEmployeeId` references survived the rename.
+
+### Where it lives
+`src/lib/import-export/` — `types.ts`/`csv.ts` (shared), one module per
+dataset (`employees.ts`, `org-units.ts`, `jobs.ts`, `positions.ts`,
+`assignments.ts`, each exporting `templateHeaders`/`dryRun`/`commitRow`/
+`exportData`), `registry.ts` (dataset-key → module lookup used by the
+generic routes/pages), `employee-documents-zip.ts` (the ZIP+manifest case).
+`/import` is now a hub listing all datasets with template/export/import per
+card; `/import/[batchId]` generalized to show whichever dataset's own first
+few template columns as the preview table, and to label committed rows
+"Dibuat"/"Diperbarui" using the actual per-row action returned by
+`commitRow()` (not the pre-commit dry-run guess, so a race between preview
+and commit can't produce a mislabeled result). `/api/import-export/
+template/[dataset]` and `/api/import-export/export/[dataset]` are thin
+permission-checked, audit-logged route handlers shared by every dataset.
+
 ## 2026-07-28 — Phase 1 reopened: Employee Master gaps + Director hierarchy (DEC-011)
 
 Phase 1 was reopened per DEC-011 (Build Guide Decision Log): Employee Master

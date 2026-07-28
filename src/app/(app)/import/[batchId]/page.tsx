@@ -4,6 +4,7 @@ import { canAccessImport } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { commitImportBatch } from "../actions";
+import { DATASET_REGISTRY, isDatasetKey } from "@/lib/import-export/registry";
 
 export default async function ImportBatchPage({
   params,
@@ -22,13 +23,15 @@ export default async function ImportBatchPage({
   });
   if (!batch) notFound();
 
+  const mod = isDatasetKey(batch.importType) ? DATASET_REGISTRY[batch.importType] : null;
+  const previewColumns = mod ? mod.templateHeaders.slice(0, 3) : [];
   const commitWithId = commitImportBatch.bind(null, batchId);
 
   return (
     <div>
       <h1 className="text-lg font-medium text-slate-900">{t("importUi.previewTitle")}</h1>
       <p className="mt-1 text-sm text-slate-500">
-        {batch.sourceFileName} —{" "}
+        {mod?.label ?? batch.importType} — {batch.sourceFileName} —{" "}
         {t("importUi.summary", {
           valid: batch.validRows,
           rejected: batch.errorRows,
@@ -41,8 +44,11 @@ export default async function ImportBatchPage({
           <thead className="bg-slate-50 text-left text-xs text-slate-500">
             <tr>
               <th className="px-4 py-3 font-medium">{t("importUi.rowNumber")}</th>
-              <th className="px-4 py-3 font-medium">employeeNumber</th>
-              <th className="px-4 py-3 font-medium">fullLegalName</th>
+              {previewColumns.map((col) => (
+                <th key={col} className="px-4 py-3 font-medium">
+                  {col}
+                </th>
+              ))}
               <th className="px-4 py-3 font-medium">{t("importUi.status")}</th>
               <th className="px-4 py-3 font-medium">{t("importUi.reason")}</th>
             </tr>
@@ -53,8 +59,11 @@ export default async function ImportBatchPage({
               return (
                 <tr key={row.id} className="border-t border-slate-100">
                   <td className="px-4 py-3 text-slate-500">{row.rowNumber}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{raw.employeeNumber || "—"}</td>
-                  <td className="px-4 py-3">{raw.fullLegalName || "—"}</td>
+                  {previewColumns.map((col) => (
+                    <td key={col} className="px-4 py-3 font-mono text-xs">
+                      {raw[col] || "—"}
+                    </td>
+                  ))}
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-md px-2 py-1 text-xs font-medium ${
@@ -63,7 +72,13 @@ export default async function ImportBatchPage({
                           : "bg-rose-50 text-rose-700"
                       }`}
                     >
-                      {row.isValid ? t("importUi.statusValid") : t("importUi.statusRejected")}
+                      {row.isValid
+                        ? row.rowAction === "UPDATE"
+                          ? "Diperbarui"
+                          : row.createdRecordId
+                            ? "Dibuat"
+                            : t("importUi.statusValid")
+                        : t("importUi.statusRejected")}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">{row.rejectionReason ?? "—"}</td>

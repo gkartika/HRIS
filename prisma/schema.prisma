@@ -1,0 +1,335 @@
+// PT Cahaya Bukit Perunggu HR App — Prisma schema
+// Source of truth for field/entity decisions: docs/DECISIONS.md and the HR App Build Guide /
+// HR App Data Fields Blueprint (see CLAUDE.md for links and priority order).
+//
+// Scope note: this schema currently covers Phase 0 (Foundation) and Phase 1
+// (Employee & Organization). Competency, Training, Assets, Recruitment, Payroll-slip
+// import etc. are deliberately NOT modeled yet — they belong to later phases and will
+// be added when those phases start, to avoid building ahead of a reviewed increment.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------- Enums ----------
+
+enum AccountType {
+  EMPLOYEE_LOGIN
+  ADMIN
+}
+
+// Named admin capability scope. Separate from AppRole: an Account can be ADMIN type
+// with a scope AND still be linked to an Employee (e.g. a manager who is also GA admin).
+enum AdminScope {
+  PEOPLE_PAYROLL
+  TRAINING
+  ASSETS
+  NONE
+}
+
+enum AccountStatus {
+  INVITED
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
+// Manager/Approver is deliberately NOT a role here — per ACC-05 that authority is
+// derived at request time from the employee's active Position assignments
+// (does any Position report to me?), never a stored flag.
+enum AppRole {
+  HR_ADMIN
+  TRAINING_ADMIN
+  GA_ADMIN
+  EMPLOYEE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum EmploymentStatus {
+  PKWTT
+  PKWT
+  HARIAN_LEPAS
+  MAGANG
+}
+
+enum UnitType {
+  DEPARTMENT
+  SECTION
+  GROUP
+  TEAM
+}
+
+enum PositionType {
+  STAFF
+  TEAM_LEAD
+  SECTION_HEAD
+  DEPARTMENT_HEAD
+  DIRECTOR
+}
+
+enum PositionStatus {
+  PLANNED
+  VACANT
+  FILLED
+  FROZEN
+  CLOSED
+}
+
+enum AssignmentType {
+  PRIMARY
+  ADDITIONAL
+  ACTING
+  TEMPORARY
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  ENDED
+}
+
+enum Sensitivity {
+  INTERNAL
+  RESTRICTED
+  HIGHLY_RESTRICTED
+}
+
+enum ImportStatus {
+  UPLOADED
+  VALIDATED
+  NEEDS_FIX
+  POSTED
+  ROLLED_BACK
+}
+
+enum AuditAction {
+  VIEW
+  CREATE
+  UPDATE
+  APPROVE
+  REJECT
+  IMPORT
+  EXPORT
+  PRINT
+  RELEASE
+  DELETE
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+}
+
+// ---------- User Accounts (separate from Employee Master, per ACC-01) ----------
+
+model Account {
+  id                    String        @id @default(cuid())
+  usernameOrEmail       String        @unique
+  passwordHash          String
+  accountType           AccountType
+  employeeId            String?       @unique
+  employee              Employee?     @relation(fields: [employeeId], references: [id])
+  adminScope            AdminScope    @default(NONE)
+  accountStatus         AccountStatus @default(ACTIVE)
+  lastLoginAt           DateTime?
+  failedLoginCount      Int           @default(0)
+  passwordResetRequired Boolean       @default(false)
+  accountDisabledAt     DateTime?
+  roles                 AccountRole[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  auditEvents           AuditLog[]
+  importBatches         ImportBatch[]
+  uploadedFiles         FileObject[]
+}
+
+model AccountRole {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  role      AppRole
+
+  @@unique([accountId, role])
+}
+
+// ---------- Employee & Organization (Phase 1 core data model) ----------
+
+model Employee {
+  id                       String            @id @default(cuid())
+  employeeNumber           String            @unique
+  fullLegalName            String
+  preferredName            String?
+  nationalIdNumber         String?
+  birthPlace               String?
+  birthDate                DateTime?
+  gender                   Gender?
+  personalEmail            String?
+  workEmail                String?           @unique
+  mobileNumber             String?
+  currentAddress           String?
+  emergencyContactName     String?
+  emergencyContactRelation String?
+  emergencyContactPhone    String?
+  bankAccountName          String?
+  bankAccountNumber        String?
+  taxId                    String?
+  bpjsEmploymentNumber     String?
+  bpjsHealthNumber         String?
+  hireDate                 DateTime
+  employmentStatus         EmploymentStatus
+  // Denormalized pointer to the Position of this employee's current Primary
+  // Assignment, kept in sync by application code. Source of truth for history
+  // and for "who holds what" is always the Assignment table, never this field.
+  currentPositionId        String?
+  currentPosition          Position?         @relation("PositionHolder", fields: [currentPositionId], references: [id])
+  activeFlag               Boolean           @default(true)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+
+  account                  Account?
+  assignments              Assignment[]      @relation("EmployeeAssignments")
+  files                    FileObject[]
+}
+
+model OrgUnit {
+  id            String    @id @default(cuid())
+  unitType      UnitType
+  unitCode      String    @unique
+  unitName      String
+  parentUnitId  String?
+  parentUnit    OrgUnit?  @relation("OrgUnitHierarchy", fields: [parentUnitId], references: [id])
+  children      OrgUnit[] @relation("OrgUnitHierarchy")
+  displayOrder  Int       @default(0)
+  activeFlag    Boolean   @default(true)
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+
+  positions     Position[]
+}
+
+model Job {
+  id                String   @id @default(cuid())
+  jobCode           String   @unique
+  jobTitle          String
+  jobLevel          String
+  jobPurpose        String?
+  pdcaPlan          String?
+  pdcaDo            String?
+  pdcaCheck         String?
+  pdcaAct           String?
+  decisionAuthority String?
+  keyCollaboration  String?
+  jobVersion        Int      @default(1)
+  approvalStatus    String   @default("Approved")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  positions         Position[]
+}
+
+model Position {
+  id                   String         @id @default(cuid())
+  positionCode         String         @unique
+  jobId                String
+  job                  Job            @relation(fields: [jobId], references: [id])
+  orgUnitId            String
+  orgUnit              OrgUnit        @relation(fields: [orgUnitId], references: [id])
+  positionType         PositionType
+  approvedFte          Float          @default(1)
+  positionStatus       PositionStatus @default(VACANT)
+  // Sole saved parent-child authority for the org chart (ORG-01). Never inferred
+  // from names or job levels.
+  reportsToPositionId  String?
+  reportsToPosition    Position?      @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id])
+  subordinatePositions Position[]     @relation("PositionHierarchy")
+  effectiveFrom        DateTime       @default(now())
+  effectiveTo          DateTime?
+
+  currentHolders       Employee[]     @relation("PositionHolder")
+  assignments          Assignment[]
+}
+
+model Assignment {
+  id                    String           @id @default(cuid())
+  employeeId            String
+  employee              Employee         @relation("EmployeeAssignments", fields: [employeeId], references: [id])
+  positionId            String
+  position              Position         @relation(fields: [positionId], references: [id])
+  assignmentType        AssignmentType
+  primaryAssignmentFlag Boolean          @default(false)
+  status                AssignmentStatus @default(ACTIVE)
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  createdAt             DateTime         @default(now())
+}
+
+// ---------- Controls: audit, import, private files ----------
+
+model AuditLog {
+  id                String      @id @default(cuid())
+  eventAt           DateTime    @default(now())
+  actorAccountId    String?
+  actorAccount      Account?    @relation(fields: [actorAccountId], references: [id])
+  action            AuditAction
+  datasetName       String
+  recordId          String?
+  fieldName         String?
+  oldValueMasked    String?
+  newValueMasked    String?
+  reason            String?
+  sessionOrDeviceId String?
+}
+
+model ImportBatch {
+  id                  String       @id @default(cuid())
+  importType          String
+  uploadedByAccountId String
+  uploadedByAccount   Account      @relation(fields: [uploadedByAccountId], references: [id])
+  sourceFileName      String
+  uploadedAt          DateTime     @default(now())
+  totalRows           Int
+  validRows           Int
+  errorRows           Int
+  duplicateRows       Int          @default(0)
+  importStatus        ImportStatus @default(UPLOADED)
+  previewConfirmedAt  DateTime?
+  postedAt            DateTime?
+
+  rows                ImportRow[]
+}
+
+model ImportRow {
+  id                String      @id @default(cuid())
+  importBatchId     String
+  importBatch       ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  rowNumber         Int
+  rawData           String
+  isValid           Boolean
+  rejectionReason   String?
+  createdEmployeeId String?
+}
+
+model FileObject {
+  id                  String      @id @default(cuid())
+  storageKey          String      @unique
+  originalFileName    String
+  mimeType            String
+  sizeBytes           Int
+  sensitivity         Sensitivity @default(RESTRICTED)
+  employeeId          String?
+  employee            Employee?   @relation(fields: [employeeId], references: [id])
+  uploadedByAccountId String
+  uploadedByAccount   Account     @relation(fields: [uploadedByAccountId], references: [id])
+  category            String?
+  issueDate           DateTime?
+  expiryDate          DateTime?
+  confidential        Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+}

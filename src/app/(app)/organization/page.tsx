@@ -1,4 +1,4 @@
-import { requireSession } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
 import { getOrgChartData } from "@/lib/org-chart";
 import { t } from "@/lib/i18n/id";

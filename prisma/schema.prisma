@@ -182,6 +182,26 @@ model Employee {
   taxId                    String?
   bpjsEmploymentNumber     String?
   bpjsHealthNumber         String?
+  // DM-17: Kartu Keluarga number. Text, not numeric — must preserve leading
+  // zeroes and is never used as a join/relationship key, just stored/validated
+  // as exactly 16 digits (see src/lib/validation/employee-fields.ts).
+  noKk                     String?
+  namaIbuKandung           String?
+  // DM-19/DM-20: admin-maintained dropdowns, stored as a stable reference
+  // (row id for education, the code itself for PTKP since that's already a
+  // stable regulatory identifier), never free text.
+  educationLevelId         String?
+  educationLevel           EducationLevel?  @relation(fields: [educationLevelId], references: [id])
+  ptkpStatusCode           String?
+  ptkpStatus               PtkpStatus?      @relation(fields: [ptkpStatusCode], references: [code])
+  // DM-18/CTL-12: private file references, never a public URL or base64 blob.
+  // A new upload creates a new FileObject and repoints this FK — the
+  // superseded FileObject row is kept (still linked via FileObject.employeeId)
+  // so replacement history isn't lost.
+  ktpFileId                String?           @unique
+  ktpFile                  FileObject?       @relation("EmployeeKtpFile", fields: [ktpFileId], references: [id])
+  kkFileId                 String?           @unique
+  kkFile                   FileObject?       @relation("EmployeeKkFile", fields: [kkFileId], references: [id])
   hireDate                 DateTime
   employmentStatus         EmploymentStatus
   // Denormalized pointer to the Position of this employee's current Primary
@@ -196,6 +216,32 @@ model Employee {
   account                  Account?
   assignments              Assignment[]      @relation("EmployeeAssignments")
   files                    FileObject[]
+}
+
+// DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
+// /admin/education-levels — never hand-edited in the database.
+model EducationLevel {
+  id           String     @id @default(cuid())
+  label        String     @unique
+  displayOrder Int        @default(0)
+  activeFlag   Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  employees    Employee[]
+}
+
+// DM-20: admin-maintained PTKP (Indonesian income-tax status) codes. The
+// code itself is stable (regulatory), but the list of codes/labels is
+// editable by HR Admin without a code change — managed via /admin/ptkp-status.
+model PtkpStatus {
+  id           String     @id @default(cuid())
+  code         String     @unique
+  label        String
+  displayOrder Int        @default(0)
+  activeFlag   Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  employees    Employee[]
 }
 
 model OrgUnit {
@@ -332,4 +378,7 @@ model FileObject {
   expiryDate          DateTime?
   confidential        Boolean     @default(true)
   createdAt           DateTime    @default(now())
+
+  employeeKtpOf       Employee?   @relation("EmployeeKtpFile")
+  employeeKkOf        Employee?   @relation("EmployeeKkFile")
 }

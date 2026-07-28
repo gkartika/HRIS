@@ -3,6 +3,156 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-28 — Phase 1 reopened: Employee Master gaps + Director hierarchy (DEC-011)
+
+Phase 1 was reopened per DEC-011 (Build Guide Decision Log): Employee Master
+was missing No. KK, Nama Ibu Kandung, Pendidikan Terakhir, PTKP Pajak, and
+KTP/KK file uploads (DM-17 through DM-20, CTL-12), and the org chart had no
+Director-as-single-root layer above Department Heads (ORG-15). Also noted:
+**DEC-010 changed the canonical phase order** — it is now Phase 0 Foundation,
+Phase 1 Employee & Organization, **Phase 2 Employee Lifecycle** (moved up;
+now includes contract renewal per DEC-009), Phase 3 Competency & Training,
+Phase 4 Assets, Phase 5 Later Operations. Recorded here so a future session
+doesn't build against the old ordering from the original Phase 0/1 work.
+
+### Schema: additive migration, zero data loss
+Added `Employee.noKk`, `namaIbuKandung`, `educationLevelId` (FK to new
+`EducationLevel`), `ptkpStatusCode` (FK to new `PtkpStatus`, keyed by the
+code itself since PTKP codes are already stable regulatory identifiers —
+`educationLevelId` uses a surrogate id instead since education-level labels
+are the kind of thing an admin might reword), and `ktpFileId`/`kkFileId`
+(unique FKs to `FileObject`). All six are nullable at the database level —
+per the explicit instruction not to destroy or block existing records.
+Applied via `prisma migrate dev` (not `db:reset`); SQLite required a
+table-rebuild migration to add the FK columns (a normal Prisma/SQLite
+behavior, not a data-loss operation) — verified the generated migration SQL
+includes the `INSERT INTO new_Employee SELECT ... FROM Employee` copy step,
+and confirmed after running it that all pre-existing employees, positions,
+and assignments were intact.
+
+### Existing incomplete records: flagged, not blocked
+Rather than making any of the six new fields required at the database level
+(which would break existing rows), completeness is computed on demand
+(`src/lib/employee-completeness.ts`) and surfaced as an amber banner on the
+employee list (HR Admin only) and detail page (HR Admin or self), listing
+exactly which of the six fields are still missing. Going forward, the
+**create** and **edit** forms make Pendidikan Terakhir and PTKP Pajak
+required `<select>` fields (matching the Build Guide's "Required dropdown"
+wording for DM-19/DM-20) — No. KK and Nama Ibu Kandung stay optional-but-
+validated-if-present, since forcing them retroactively on every edit would
+block unrelated urgent edits (e.g. fixing a phone number) on legacy records
+that don't have them yet. KTP/KK are uploaded separately from the create/edit
+form (a File needs an existing Employee row to attach to), so they can never
+block employee creation either.
+
+### Identity/compliance fields are HR-Admin-edit-only, not self-editable
+No. KK, Nama Ibu Kandung, Pendidikan Terakhir, and PTKP Pajak can only be
+*written* by HR Admin, even though the employee can *view* their own values
+(same self-view rule as the rest of Employee Master). This mirrors the
+Build Guide's document-access line ("HR Admin – People & Payroll has full
+access. An employee may access only their own permitted documents") applied
+by analogy to the equivalent identity fields, not just the files — self-
+service edits stay limited to plain contact info (phone/address/emergency
+contact), same as before this phase.
+
+### Document upload: HR-Admin-only, randomized keys, MIME+extension checked
+`uploadIdentityDocument()` (`src/app/(app)/employees/[id]/document-actions.ts`)
+is reachable only from the employee detail page's new "Dokumen Identitas"
+panel. Per CTL-12:
+- Upload/replace is HR Admin only (view/download remains self-or-HR-Admin,
+  same as every other document in this app since Phase 0).
+- `validateDocumentFile()` (`src/lib/validation/employee-fields.ts`) checks
+  MIME type **and** file extension independently — a renamed file reporting
+  an allowed MIME type but a disallowed extension is still rejected — plus a
+  10 MB size cap, all before anything touches disk or the database.
+- `randomStorageKey()` (`src/lib/file-storage.ts`) generates a UUID-based
+  on-disk filename, never derived from the original filename, per "use
+  randomized storage keys."
+- A **replacement** upload creates a brand-new `FileObject` row and repoints
+  `Employee.ktpFileId`/`kkFileId` to it; the superseded row is left alone
+  (still linked via `FileObject.employeeId`) so replacement history isn't
+  lost, and the audit reason records whether it was an upload or a replace.
+- The generic "Dokumen" list on the employee profile (from Phase 0) now
+  excludes `category: "KTP"|"KK"` rows so they only ever appear once, in the
+  dedicated panel — and that panel itself is only rendered for
+  self/HR Admin, matching `/api/files/[id]`'s own check, after testing
+  surfaced that GA Admin could otherwise see a KTP/KK *filename* (though not
+  download it) via the generic list.
+
+### `permissions.ts` split from `require-session.ts`
+`requireSession()` moved to its own file. Reason: it needs `next/navigation`
+and the NextAuth instance, both Next.js-runtime-only; keeping it inside
+`permissions.ts` meant every unit test for a pure predicate (`isHrAdmin`,
+`projectEmployee`, `canViewEmployeeDocument`, etc.) transitively pulled in
+`next-auth` and failed under Vitest with a module-resolution error
+(`next/server` import inside `next-auth/lib/env.js`). `permissions.ts` is now
+dependency-free besides a type-only `next-auth` import (erased at compile
+time), so it can be tested with plain mock session/employee objects. Every
+call site's import was updated; no behavior changed.
+
+### Bug found and fixed while testing: same-day Movement boundary overlap
+Testing the reopened Director hierarchy surfaced a real bug: when Movement
+closes an old Primary assignment and opens a new one on the *same calendar
+day*, the org chart's as-of-date query previously used an inclusive range on
+both ends (`effectiveFrom <= date <= effectiveTo`), so both the just-ended
+and just-started assignment matched on that boundary day — the same
+employee rendered twice on one position card. Fixed by switching to a
+standard half-open interval, `effectiveFrom <= date < effectiveTo`
+(`src/lib/org-chart.ts`): `effectiveTo` is now the first date a row is *no
+longer* active, not the last date it *is* active. Confirmed fixed live (Budi
+holding a Primary + a fresh Acting assignment now renders once per position,
+correctly) and no regression on the existing "as-of a past date" scenario
+(still correctly excludes an assignment before its `effectiveFrom`).
+
+### Director hierarchy: seeded, not hand-entered
+Added to `prisma/seed.ts` (idempotent, safe to rerun): a `Direksi` org unit,
+a `Direktur Utama` Position (`positionType: DIRECTOR`, `reportsToPositionId:
+null`, left **vacant** on purpose — demonstrates ORG-15's "can remain
+visible when vacant" without needing a 6th demo employee), and a `Kepala
+Departemen Produksi` Position (`DEPARTMENT_HEAD`, reporting to the
+Director) that the existing `Kepala Seksi Produksi` Position was reparented
+under. The reparenting is written as an explicit `prisma.position.update()`
+guarded by an equality check (not relying on upsert's `update: {}`, which
+intentionally leaves pre-existing rows untouched) so it "self-heals" the
+reporting line even against a database seeded before this Director layer
+existed, without touching anything else about that row.
+
+### Structure warnings are computed, not stored
+`computeStructureWarnings()` (`src/lib/org-chart.ts`, unit tested in
+`org-chart.test.ts`) checks, fresh on every load: exactly one Position with
+`positionType: DIRECTOR` and no `reportsToPositionId`; every
+`DEPARTMENT_HEAD` Position's `reportsToPositionId` chain eventually reaches
+that Director (circular-reference-safe); and separately flags any other
+non-Director Position with no reports-to (the existing ORG-02-style check
+from Phase 1's first pass, now split out from the Director-specific ones).
+While building this, a **real** pre-existing stray Position ("Manager FP",
+`DEPARTMENT_HEAD`, no reports-to) already in the dev database triggered
+both warnings correctly on the first try — left in place rather than
+deleted, since it's a good live demonstration of the validation working
+against a genuine data-quality issue rather than only synthetic test data,
+and per "do not delete or recreate the existing database."
+
+### Testing: added Vitest, 33 tests across 4 files
+`validateNoKk`/`validateDocumentFile` (format, MIME+extension, size-boundary
+cases), `isEmployeeProfileIncomplete`/`missingFieldLabels`, the RBAC
+predicates plus `projectEmployee`'s field-stripping for the new sensitive
+fields, and `computeStructureWarnings` (well-formed chain, missing Director,
+duplicate Director, orphan Department Head, stray non-Director root,
+circular-reference guard). Chosen over Playwright/e2e for this pass because
+the acceptance checklist's actual business logic (validation, permission
+predicates, structure-warning computation) is unit-testable in isolation;
+the full click-through was still verified manually in the running app per
+SRC-06, not skipped in favor of the unit tests.
+
+### Phase status: I can't write to the Google Sheet
+This session only has read access to the Build Guide via the Drive
+connector (search/read/download, no update). Phase 1's status in the
+**14 Build Phases** and **15 In-App Review** tabs should be moved from
+"In Progress"/"Not Reviewed" to **"Ready for In-App Review"** — I'm
+recording that here and telling the user directly, since I can't edit the
+Sheet myself. Not marking it "Accepted" — that's the user's call after
+reviewing the running app.
+
 ## 2026-07-28 — Phase 1 (Employee & Organization) decisions
 
 ### Hard constraint: every edit/config is a button, never backend access

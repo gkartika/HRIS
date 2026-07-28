@@ -1,17 +1,11 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import type { Session } from "next-auth";
 import type { Employee } from "@/generated/prisma/client";
 
 // Backend-enforced RBAC (CTL: "enforce permissions in the backend, not only by
 // hiding buttons"). Every server action / route handler that touches HR data
 // must call one of these, not just rely on the nav hiding a link.
-
-export async function requireSession(): Promise<Session> {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  return session;
-}
+// Deliberately no Next.js-runtime imports here — see require-session.ts for
+// requireSession(), which needs next/navigation + the NextAuth instance.
 
 export function hasRole(session: Session, role: string): boolean {
   return session.user.roles.includes(role as never);
@@ -54,6 +48,19 @@ export function canCreateEmployee(session: Session): boolean {
   return isHrAdmin(session);
 }
 
+// CTL-12 / employee identity documents (KTP, KK, contracts, etc.): "HR Admin
+// – People & Payroll has full access. An employee may access only their own
+// permitted documents. Managers, Training Admin, GA/Assets Admin and
+// technical administrators must not receive automatic access." Upload/
+// replace is HR Admin only — self-service is view/download only.
+export function canViewEmployeeDocument(session: Session, employeeId: string): boolean {
+  return isHrAdmin(session) || session.user.employeeId === employeeId;
+}
+
+export function canUploadEmployeeDocument(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
 // ACC-10: field-level scope. Every field on Employee is tagged with the
 // sensitivity tier from the Data Fields Blueprint. Rather than nulling values
 // (which still leaks "field exists"), we omit the key entirely so the UI
@@ -65,6 +72,16 @@ const HIGHLY_RESTRICTED_FIELDS = [
   "taxId",
   "bpjsEmploymentNumber",
   "bpjsHealthNumber",
+  // DM-17/DM-18/CTL-12: "No KK, Nama Ibu Kandung, PTKP Pajak, KTP file and KK
+  // file are sensitive" — same tier as bank/tax/BPJS above. The relation
+  // objects (ptkpStatus/ktpFile/kkFile) aren't part of the base Employee
+  // scalar type — their visibility is gated separately at the page level,
+  // same pattern already used for currentPosition/assignments/files.
+  "noKk",
+  "namaIbuKandung",
+  "ptkpStatusCode",
+  "ktpFileId",
+  "kkFileId",
 ] as const;
 
 const RESTRICTED_CONTACT_FIELDS = [

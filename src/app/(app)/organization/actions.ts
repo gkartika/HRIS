@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSession } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
 import { getOrgChartData, type OrgChartData } from "@/lib/org-chart";
 
 export async function fetchOrgChartData(asOfDateIso: string): Promise<OrgChartData> {

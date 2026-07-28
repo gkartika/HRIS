@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Building2, Briefcase, Network } from "lucide-react";
-import { requireSession, canManageOrgStructure } from "@/lib/permissions";
+import { Building2, Briefcase, Network, GraduationCap, Receipt } from "lucide-react";
+import { requireSession } from "@/lib/require-session";
+import { canManageOrgStructure } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
 
 const SECTIONS = [
@@ -22,6 +23,18 @@ const SECTIONS = [
     title: "Posisi Organisasi",
     desc: "Kursi jabatan yang disetujui, termasuk yang kosong",
   },
+  {
+    href: "/admin/education-levels",
+    icon: GraduationCap,
+    title: "Pendidikan Terakhir",
+    desc: "Daftar dropdown untuk data karyawan",
+  },
+  {
+    href: "/admin/ptkp-status",
+    icon: Receipt,
+    title: "PTKP Pajak",
+    desc: "Daftar kode PTKP untuk data karyawan",
+  },
 ];
 
 export default async function AdminHomePage() {
@@ -34,7 +47,7 @@ export default async function AdminHomePage() {
     <div>
       <h1 className="text-lg font-medium text-slate-900">Pengaturan Struktur Organisasi</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Kelola Unit Organisasi, Jabatan Standar, dan Posisi Organisasi.
+        Kelola Unit Organisasi, Jabatan Standar, Posisi Organisasi, dan data master karyawan.
       </p>
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         {SECTIONS.map((s) => {

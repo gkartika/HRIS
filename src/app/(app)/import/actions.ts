@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireSession, canAccessImport } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { canAccessImport } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { parseAndValidateEmployeeCsv } from "@/lib/import/employee-import";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";

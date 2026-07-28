@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireSession, canManageOrgStructure } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { canManageOrgStructure } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import type { UnitType } from "@/generated/prisma/enums";
 

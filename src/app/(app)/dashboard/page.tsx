@@ -1,11 +1,6 @@
 import { prisma } from "@/lib/db";
-import {
-  requireSession,
-  isHrAdmin,
-  isTrainingAdmin,
-  isGaAdmin,
-  canListEmployees,
-} from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { isHrAdmin, isTrainingAdmin, isGaAdmin, canListEmployees } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
 
 function StatCard({ label, value }: { label: string; value: string | number }) {

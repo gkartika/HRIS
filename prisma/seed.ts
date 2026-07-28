@@ -8,6 +8,53 @@ async function main() {
   console.log("Seeding development-safe fictional sample data...");
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
+  // ---------- DM-19/DM-20 master data (admin-maintained, editable via /admin) ----------
+  const educationLevelLabels = [
+    "Tidak/Belum Sekolah",
+    "SD/Sederajat",
+    "SMP/Sederajat",
+    "SMA/SMK/Sederajat",
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "S1",
+    "S2",
+    "S3",
+    "Lainnya",
+  ];
+  const educationLevelsByLabel = new Map<string, { id: string }>();
+  for (const [index, label] of educationLevelLabels.entries()) {
+    const level = await prisma.educationLevel.upsert({
+      where: { label },
+      update: {},
+      create: { label, displayOrder: index },
+    });
+    educationLevelsByLabel.set(label, level);
+  }
+
+  const ptkpCodes: [string, string][] = [
+    ["TK/0", "Tidak Kawin, 0 Tanggungan"],
+    ["TK/1", "Tidak Kawin, 1 Tanggungan"],
+    ["TK/2", "Tidak Kawin, 2 Tanggungan"],
+    ["TK/3", "Tidak Kawin, 3 Tanggungan"],
+    ["K/0", "Kawin, 0 Tanggungan"],
+    ["K/1", "Kawin, 1 Tanggungan"],
+    ["K/2", "Kawin, 2 Tanggungan"],
+    ["K/3", "Kawin, 3 Tanggungan"],
+    ["K/I/0", "Kawin, Istri Bekerja, 0 Tanggungan"],
+    ["K/I/1", "Kawin, Istri Bekerja, 1 Tanggungan"],
+    ["K/I/2", "Kawin, Istri Bekerja, 2 Tanggungan"],
+    ["K/I/3", "Kawin, Istri Bekerja, 3 Tanggungan"],
+  ];
+  for (const [index, [code, label]] of ptkpCodes.entries()) {
+    await prisma.ptkpStatus.upsert({
+      where: { code },
+      update: {},
+      create: { code, label, displayOrder: index },
+    });
+  }
+
   // ---------- Org structure ----------
   const produksi = await prisma.orgUnit.upsert({
     where: { unitCode: "DEPT-PRODUKSI" },
@@ -39,8 +86,33 @@ async function main() {
     update: {},
     create: { unitType: "DEPARTMENT", unitCode: "DEPT-GA", unitName: "GA & Legal", displayOrder: 4 },
   });
+  const direksi = await prisma.orgUnit.upsert({
+    where: { unitCode: "DIREKSI" },
+    update: {},
+    create: { unitType: "DEPARTMENT", unitCode: "DIREKSI", unitName: "Direksi", displayOrder: 0 },
+  });
 
   // ---------- Jobs ----------
+  const jobDirector = await prisma.job.upsert({
+    where: { jobCode: "DIREKTUR-UTAMA" },
+    update: {},
+    create: {
+      jobCode: "DIREKTUR-UTAMA",
+      jobTitle: "Direktur Utama",
+      jobLevel: "5",
+      jobPurpose: "Memimpin arah strategis perusahaan secara keseluruhan.",
+    },
+  });
+  const jobDeptHeadProduksi = await prisma.job.upsert({
+    where: { jobCode: "PROD-DEPTHEAD" },
+    update: {},
+    create: {
+      jobCode: "PROD-DEPTHEAD",
+      jobTitle: "Kepala Departemen Produksi",
+      jobLevel: "4",
+      jobPurpose: "Memimpin seluruh operasional Departemen Produksi.",
+    },
+  });
   const jobSectionHead = await prisma.job.upsert({
     where: { jobCode: "PROD-SECHEAD" },
     update: {},
@@ -63,6 +135,34 @@ async function main() {
   });
 
   // ---------- Positions ----------
+  // ORG-15/DEC-011: Director is the single organization root, above every
+  // Department Head. Left vacant on purpose — demonstrates "the Director
+  // Position can remain visible when vacant" without needing a 6th demo
+  // employee, and proves occupying it is not required for the hierarchy to
+  // render correctly.
+  const positionDirector = await prisma.position.upsert({
+    where: { positionCode: "POS-DIREKTUR-01" },
+    update: {},
+    create: {
+      positionCode: "POS-DIREKTUR-01",
+      jobId: jobDirector.id,
+      orgUnitId: direksi.id,
+      positionType: "DIRECTOR",
+      positionStatus: "VACANT",
+    },
+  });
+  const positionDeptHeadProduksi = await prisma.position.upsert({
+    where: { positionCode: "POS-PROD-DEPTHEAD-01" },
+    update: {},
+    create: {
+      positionCode: "POS-PROD-DEPTHEAD-01",
+      jobId: jobDeptHeadProduksi.id,
+      orgUnitId: produksi.id,
+      positionType: "DEPARTMENT_HEAD",
+      positionStatus: "VACANT",
+      reportsToPositionId: positionDirector.id,
+    },
+  });
   const positionSectionHead = await prisma.position.upsert({
     where: { positionCode: "POS-PROD-SECHEAD-01" },
     update: {},
@@ -72,8 +172,19 @@ async function main() {
       orgUnitId: produksi.id,
       positionType: "SECTION_HEAD",
       positionStatus: "FILLED",
+      reportsToPositionId: positionDeptHeadProduksi.id,
     },
   });
+  // Self-heal the reporting line even if this position already existed from
+  // a prior seed run (before the Director/Dept Head layer existed) — upsert's
+  // `update: {}` above intentionally leaves existing rows alone, so this
+  // reparents it explicitly without touching anything else about the row.
+  if (positionSectionHead.reportsToPositionId !== positionDeptHeadProduksi.id) {
+    await prisma.position.update({
+      where: { id: positionSectionHead.id },
+      data: { reportsToPositionId: positionDeptHeadProduksi.id },
+    });
+  }
   const positionStaff = await prisma.position.upsert({
     where: { positionCode: "POS-PROD-STAFF-01" },
     update: {},
@@ -123,6 +234,10 @@ async function main() {
       hireDate: hireDateBudi,
       employmentStatus: "PKWTT",
       currentPositionId: positionSectionHead.id,
+      noKk: "3374010101880001",
+      namaIbuKandung: "Sri Wahyuni",
+      educationLevelId: educationLevelsByLabel.get("S1")!.id,
+      ptkpStatusCode: "K/1",
     },
   });
   const hireDateSiti = new Date("2024-01-15");
@@ -149,6 +264,10 @@ async function main() {
       hireDate: hireDateSiti,
       employmentStatus: "PKWT",
       currentPositionId: positionStaff.id,
+      noKk: "3374010101960002",
+      namaIbuKandung: "Ngatinah",
+      educationLevelId: educationLevelsByLabel.get("SMA/SMK/Sederajat")!.id,
+      ptkpStatusCode: "TK/0",
     },
   });
 

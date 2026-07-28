@@ -61,9 +61,24 @@ nearby:
 An Employee may hold multiple **concurrent** Position Assignments (normally
 one Primary + any number of Additional/Acting/Temporary). Never overwrite
 assignment history on a move — close the old assignment's `effectiveTo` and
-create a new one. `reportsToPositionId` is the *only* saved parent-child
-authority for the org chart — never infer hierarchy from names, departments,
-or job levels.
+create a new one. `effectiveTo` is a half-open bound (`effectiveFrom <= date
+< effectiveTo`) — the first date a row is no longer active, not the last date
+it is; this matters when a Movement closes one assignment and opens another
+on the same calendar day. `reportsToPositionId` is the *only* saved
+parent-child authority for the org chart — never infer hierarchy from names,
+departments, or job levels. **Director is the single organization root**
+(ORG-15): one Position with `positionType: DIRECTOR` and
+`reportsToPositionId: null`; every `DEPARTMENT_HEAD` Position must chain up
+to it. Occupying the Director Position never grants admin/system access by
+itself — that only ever comes from `AccountRole`.
+
+Employee Master's identity/compliance fields (`noKk`, `namaIbuKandung`,
+`educationLevelId`, `ptkpStatusCode`, `ktpFileId`, `kkFileId`) are all
+nullable — existing records are flagged incomplete
+(`src/lib/employee-completeness.ts`), never blocked. `educationLevelId` and
+`ptkpStatusCode` reference admin-maintained lookup tables
+(`EducationLevel`, `PtkpStatus`; manage via `/admin/education-levels` and
+`/admin/ptkp-status`), never free text.
 
 ## Terminology (Bahasa Indonesia UI, DEC-003)
 
@@ -86,8 +101,13 @@ English.
   from the Data Fields Blueprint at once — only what the current phase needs.
   See [docs/DECISIONS.md](docs/DECISIONS.md) for what's deliberately deferred.
 - **Backend-enforced permissions.** Every server action / route handler that
-  touches HR data must call through [src/lib/permissions.ts](src/lib/permissions.ts)
-  (`requireSession`, `canListEmployees`, `projectEmployee`, etc.). Hiding a nav
+  touches HR data must call `requireSession()` from
+  [src/lib/require-session.ts](src/lib/require-session.ts) plus the relevant
+  check from [src/lib/permissions.ts](src/lib/permissions.ts) (`canListEmployees`,
+  `projectEmployee`, `canViewEmployeeDocument`, etc.). The two files are split
+  on purpose — `permissions.ts` has zero Next.js-runtime imports so its pure
+  predicates are unit-testable under Vitest; `require-session.ts` is the only
+  place that touches `next/navigation` + the NextAuth instance. Hiding a nav
   link is not access control.
 - **Audit everything sensitive.** Call `logAudit()` from
   [src/lib/audit.ts](src/lib/audit.ts) for logins, sensitive views, mutations,
@@ -109,17 +129,31 @@ English.
 ## Repo map
 
 - `prisma/schema.prisma` — data model (see inline scope-note comment at top).
-- `prisma/seed.ts` — demo accounts + fictional org/employee/assignment data.
+- `prisma/seed.ts` — demo accounts + fictional org/employee/assignment data,
+  including the Director/Department Head hierarchy and lookup-table rows.
+  Idempotent — safe to rerun against an existing database.
 - `src/lib/auth.config.ts` / `src/lib/auth.ts` — split on purpose: `auth.ts`
   has the Credentials provider (needs Node/Prisma/bcrypt); `auth.config.ts` is
   the edge-safe subset used by `src/proxy.ts` (Next.js 16's replacement for
   `middleware.ts`) so route-protection redirects don't need a Node runtime.
-- `src/lib/permissions.ts` — RBAC + field-level projection for Employee data.
+- `src/lib/permissions.ts` / `src/lib/require-session.ts` — RBAC + field-level
+  projection (pure, unit-tested) vs. session-fetching (Next.js-runtime-only).
 - `src/lib/audit.ts`, `src/lib/file-storage.ts` — controls foundation.
+- `src/lib/validation/employee-fields.ts` — No. KK format + document
+  MIME/extension/size validation (DM-17, CTL-12), unit tested.
+- `src/lib/employee-completeness.ts` — computes which DM-17..DM-20 fields are
+  still missing on a given Employee record; never a stored column.
+- `src/lib/org-chart.ts` — as-of-date occupancy reconstruction and
+  `computeStructureWarnings()` (Director-root / Department-Head-hierarchy
+  validation, ORG-15), unit tested.
 - `src/lib/import/employee-import.ts` — CSV parse/validate for the import
   preview flow; `src/app/(app)/import/` is the UI + server actions.
 - `src/app/(app)/` — the authenticated app shell (role-aware nav in
-  `layout.tsx`) and all feature pages.
+  `layout.tsx`) and all feature pages, including `admin/education-levels/` and
+  `admin/ptkp-status/` (lookup-table CRUD) and each employee's
+  `identity-documents-panel.tsx` (KTP/KK upload).
+- `*.test.ts` files sit next to the module they test (e.g.
+  `src/lib/permissions.test.ts`) — run with `npm test`.
 
 ## Commands
 
@@ -129,4 +163,5 @@ npm run db:migrate   # create/apply a migration after editing schema.prisma
 npm run db:seed      # (re)seed demo data — safe to re-run, upserts
 npm run db:studio    # Prisma Studio (visual DB browser)
 npm run db:reset     # drop + recreate + reseed the dev database
+npm test             # run the Vitest unit test suite
 ```

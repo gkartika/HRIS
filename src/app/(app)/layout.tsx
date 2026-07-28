@@ -8,7 +8,8 @@ import {
   Building2,
   Settings,
 } from "lucide-react";
-import { requireSession, isHrAdmin, isTrainingAdmin, isGaAdmin } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { isHrAdmin, isTrainingAdmin, isGaAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";

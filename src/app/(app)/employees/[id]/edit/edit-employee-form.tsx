@@ -3,14 +3,18 @@
 import { useActionState } from "react";
 import { updateEmployee } from "../../actions";
 import { t } from "@/lib/i18n/id";
-import type { Employee } from "@/generated/prisma/client";
+import type { Employee, EducationLevel, PtkpStatus } from "@/generated/prisma/client";
 
 export function EditEmployeeForm({
   employee,
   canEditLegalName,
+  educationLevels,
+  ptkpStatuses,
 }: {
   employee: Employee;
   canEditLegalName: boolean;
+  educationLevels: EducationLevel[];
+  ptkpStatuses: PtkpStatus[];
 }) {
   const action = updateEmployee.bind(null, employee.id);
   const [error, formAction, isPending] = useActionState(action, undefined);
@@ -87,6 +91,64 @@ export function EditEmployeeForm({
           />
         </div>
       </div>
+      {canEditLegalName && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="mb-3 text-xs font-medium text-slate-500">Data Identitas &amp; Kependudukan</p>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">No. KK</label>
+              <input
+                name="noKk"
+                inputMode="numeric"
+                maxLength={16}
+                defaultValue={employee.noKk ?? ""}
+                placeholder="16 digit angka"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Nama Ibu Kandung</label>
+              <input
+                name="namaIbuKandung"
+                defaultValue={employee.namaIbuKandung ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Pendidikan Terakhir</label>
+              <select
+                name="educationLevelId"
+                required
+                defaultValue={employee.educationLevelId ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">— Pilih —</option>
+                {educationLevels.map((lvl) => (
+                  <option key={lvl.id} value={lvl.id}>
+                    {lvl.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">PTKP Pajak</label>
+              <select
+                name="ptkpStatusCode"
+                required
+                defaultValue={employee.ptkpStatusCode ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">— Pilih —</option>
+                {ptkpStatuses.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.code} — {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <button
         type="submit"

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { requireSession, canManageAssignments } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { canManageAssignments } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import type { AssignmentType } from "@/generated/prisma/enums";
 

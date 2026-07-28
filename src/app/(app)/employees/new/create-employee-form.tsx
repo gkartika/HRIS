@@ -3,8 +3,15 @@
 import { useActionState } from "react";
 import { createEmployee } from "../actions";
 import { t } from "@/lib/i18n/id";
+import type { EducationLevel, PtkpStatus } from "@/generated/prisma/client";
 
-export function CreateEmployeeForm() {
+export function CreateEmployeeForm({
+  educationLevels,
+  ptkpStatuses,
+}: {
+  educationLevels: EducationLevel[];
+  ptkpStatuses: PtkpStatus[];
+}) {
   const [error, formAction, isPending] = useActionState(createEmployee, undefined);
 
   return (
@@ -68,8 +75,58 @@ export function CreateEmployeeForm() {
           <option value="MAGANG">{t("employmentStatus.MAGANG")}</option>
         </select>
       </div>
+
+      <div className="md:col-span-2 border-t border-slate-100 pt-4">
+        <p className="text-xs font-medium text-slate-500">Data Identitas &amp; Kependudukan</p>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">No. KK</label>
+        <input
+          name="noKk"
+          inputMode="numeric"
+          maxLength={16}
+          placeholder="16 digit angka"
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">Nama Ibu Kandung</label>
+        <input name="namaIbuKandung" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">Pendidikan Terakhir</label>
+        <select
+          name="educationLevelId"
+          required
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
+          <option value="">— Pilih —</option>
+          {educationLevels.map((lvl) => (
+            <option key={lvl.id} value={lvl.id}>
+              {lvl.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">PTKP Pajak</label>
+        <select
+          name="ptkpStatusCode"
+          required
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
+          <option value="">— Pilih —</option>
+          {ptkpStatuses.map((s) => (
+            <option key={s.code} value={s.code}>
+              {s.code} — {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <p className="text-xs text-slate-400 md:col-span-2">
-        Setelah karyawan dibuat, tambahkan Penempatan (Posisi Utama) dari halaman detail karyawan.
+        Setelah karyawan dibuat, unggah File KTP/KK dan tambahkan Penempatan (Posisi Utama) dari
+        halaman detail karyawan.
       </p>
       {error && <p className="text-xs text-rose-600 md:col-span-2">{error}</p>}
       <div className="md:col-span-2">

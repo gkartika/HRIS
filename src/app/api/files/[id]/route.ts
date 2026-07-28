@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { readPrivateFile } from "@/lib/file-storage";
 import { logAudit } from "@/lib/audit";
-import { isHrAdmin } from "@/lib/permissions";
+import { isHrAdmin, canViewEmployeeDocument } from "@/lib/permissions";
 
 // CTL-06: private file storage. No permanent public URL — every download goes
 // through this handler, which re-checks the current session's permission and
@@ -20,8 +20,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const isOwner = file.employeeId && file.employeeId === session.user.employeeId;
-  if (!isOwner && !isHrAdmin(session)) {
+  const canView = file.employeeId ? canViewEmployeeDocument(session, file.employeeId) : isHrAdmin(session);
+  if (!canView) {
     await logAudit({
       actorAccountId: session.user.id,
       action: "VIEW",

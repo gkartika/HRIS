@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
 
 export default async function ProfilePage() {
   const session = await requireSession();

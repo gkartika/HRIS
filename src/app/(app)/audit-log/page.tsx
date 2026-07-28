@@ -1,4 +1,5 @@
-import { requireSession, canAccessAuditLog } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { canAccessAuditLog } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 

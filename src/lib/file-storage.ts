@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 
 // Private file storage foundation (CTL-06): files live outside public/ and are
 // never reachable by a static URL. The only way to read one back is through
@@ -25,4 +26,14 @@ export async function savePrivateFile(storageKey: string, data: Buffer): Promise
 
 export async function readPrivateFile(storageKey: string): Promise<Buffer> {
   return fs.readFile(resolveStoragePath(storageKey));
+}
+
+// CTL-12: "use randomized storage keys" — the on-disk name must never be
+// derivable from the original filename or any guessable sequence, since the
+// storage key isn't secret-checked on its own (permission is enforced by the
+// /api/files/[id] route, not by obscurity), but a predictable key would still
+// make it trivially easy to enumerate other employees' documents on disk.
+export function randomStorageKey(category: string, extension: string): string {
+  const safeCategory = category.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  return `${safeCategory}/${randomUUID()}${extension}`;
 }

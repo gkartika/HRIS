@@ -24,6 +24,61 @@ export interface OrgChartData {
   positions: OrgChartPosition[];
   asOfDate: string;
   rootCount: number;
+  structureWarnings: string[];
+}
+
+// ORG-15/DEC-011: Director must be the single organization root, and every
+// Department Head must ultimately report up to it. Computed fresh each time
+// (never a stored flag) so a structure edit in /admin/positions is reflected
+// immediately.
+export function computeStructureWarnings(positions: OrgChartPosition[]): string[] {
+  const warnings: string[] = [];
+  const byId = new Map(positions.map((p) => [p.id, p]));
+
+  const directorRoots = positions.filter(
+    (p) => p.positionType === "DIRECTOR" && !p.reportsToPositionId
+  );
+  if (directorRoots.length === 0) {
+    warnings.push("Tidak ada Posisi Direktur sebagai puncak hierarki organisasi.");
+  } else if (directorRoots.length > 1) {
+    warnings.push(
+      `Ditemukan ${directorRoots.length} Posisi Direktur sebagai puncak — seharusnya hanya satu.`
+    );
+  }
+
+  const otherRoots = positions.filter(
+    (p) => !p.reportsToPositionId && p.positionType !== "DIRECTOR"
+  );
+  if (otherRoots.length > 0) {
+    warnings.push(
+      `${otherRoots.length} posisi lain tidak memiliki atasan (selain Direktur): ${otherRoots
+        .map((p) => p.jobTitle)
+        .join(", ")}. Tinjau di Pengaturan Organisasi > Posisi.`
+    );
+  }
+
+  const departmentHeads = positions.filter((p) => p.positionType === "DEPARTMENT_HEAD");
+  for (const deptHead of departmentHeads) {
+    let current: OrgChartPosition | undefined = deptHead;
+    const visited = new Set<string>();
+    let reachesDirector = false;
+    while (current?.reportsToPositionId) {
+      if (visited.has(current.id)) break; // circular reference guard
+      visited.add(current.id);
+      const parent = byId.get(current.reportsToPositionId);
+      if (!parent) break;
+      if (parent.positionType === "DIRECTOR" && !parent.reportsToPositionId) {
+        reachesDirector = true;
+        break;
+      }
+      current = parent;
+    }
+    if (!reachesDirector) {
+      warnings.push(`Kepala Departemen "${deptHead.jobTitle}" tidak berada di bawah hierarki Direktur.`);
+    }
+  }
+
+  return warnings;
 }
 
 /**
@@ -39,10 +94,17 @@ export async function getOrgChartData(asOfDate: Date): Promise<OrgChartData> {
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),
+    // Half-open interval [effectiveFrom, effectiveTo): effectiveTo is the
+    // first date the assignment is NO LONGER active, not the last date it
+    // is. This matters at the exact moment of a Movement, where the old
+    // assignment's effectiveTo is set to the new assignment's effectiveFrom
+    // (same day) — with an inclusive upper bound both rows would show as
+    // active on that boundary day; with this exclusive bound only the new
+    // one does.
     prisma.assignment.findMany({
       where: {
         effectiveFrom: { lte: asOfDate },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: asOfDate } }],
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOfDate } }],
       },
       include: { employee: true },
     }),
@@ -74,10 +136,12 @@ export async function getOrgChartData(asOfDate: Date): Promise<OrgChartData> {
   }));
 
   const rootCount = chartPositions.filter((p) => !p.reportsToPositionId).length;
+  const structureWarnings = computeStructureWarnings(chartPositions);
 
   return {
     positions: chartPositions,
     asOfDate: asOfDate.toISOString().slice(0, 10),
     rootCount,
+    structureWarnings,
   };
 }

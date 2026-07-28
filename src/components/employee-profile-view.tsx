@@ -31,10 +31,14 @@ export function EmployeeProfileView({
   employee,
   assignments,
   files = [],
+  educationLevelLabel,
+  ptkpLabel,
 }: {
   employee: Partial<Employee>;
   assignments: AssignmentWithPosition[];
   files?: FileObject[];
+  educationLevelLabel?: string | null;
+  ptkpLabel?: string | null;
 }) {
   return (
     <div className="space-y-6">
@@ -67,9 +71,17 @@ export function EmployeeProfileView({
           <Field label={t("employee.mobileNumber")} value={employee.mobileNumber} />
           <Field label={t("employee.currentAddress")} value={employee.currentAddress} />
           <Field label={t("employee.hireDate")} value={formatDate(employee.hireDate)} />
+          {educationLevelLabel !== undefined && (
+            <Field label="Pendidikan Terakhir" value={educationLevelLabel} />
+          )}
           {employee.nationalIdNumber !== undefined && (
             <Field label="NIK (KTP)" value={employee.nationalIdNumber} />
           )}
+          {employee.noKk !== undefined && <Field label="No. KK" value={employee.noKk} />}
+          {employee.namaIbuKandung !== undefined && (
+            <Field label="Nama Ibu Kandung" value={employee.namaIbuKandung} />
+          )}
+          {ptkpLabel !== undefined && <Field label="PTKP Pajak" value={ptkpLabel} />}
           {employee.bankAccountNumber !== undefined && (
             <Field label="No. Rekening Bank" value={employee.bankAccountNumber} />
           )}

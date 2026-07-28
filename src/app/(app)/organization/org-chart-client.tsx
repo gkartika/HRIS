@@ -345,12 +345,17 @@ export function OrgChartClient({
         </div>
       </div>
 
-      {data.rootCount > 1 && (
-        <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          Peringatan data: ditemukan {data.rootCount} posisi tanpa atasan (reports_to_position_id
-          kosong). Biasanya hanya satu posisi puncak yang diharapkan — tinjau di Pengaturan
-          Organisasi &gt; Posisi.
-        </p>
+      {data.structureWarnings.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {data.structureWarnings.map((warning, i) => (
+            <p
+              key={i}
+              className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+            >
+              Peringatan struktur: {warning}
+            </p>
+          ))}
+        </div>
       )}
 
       <div className="mt-4 flex gap-4">

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { requireSession, canManageOrgStructure } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EditOrgUnitForm } from "./edit-form";

@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireSession, canCreateEmployee, isHrAdmin } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { canCreateEmployee, isHrAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { validateNoKk } from "@/lib/validation/employee-fields";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";
 
 export async function createEmployee(
@@ -22,9 +24,19 @@ export async function createEmployee(
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
   const hireDate = formData.get("hireDate") as string;
   const employmentStatus = formData.get("employmentStatus") as EmploymentStatus;
+  const noKk = (formData.get("noKk") as string)?.trim() || null;
+  const namaIbuKandung = (formData.get("namaIbuKandung") as string)?.trim() || null;
+  const educationLevelId = (formData.get("educationLevelId") as string) || null;
+  const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
 
   if (!employeeNumber || !fullLegalName || !hireDate || !employmentStatus) {
     return "Nomor karyawan, nama lengkap, tanggal bergabung, dan status kepegawaian wajib diisi.";
+  }
+  if (!educationLevelId) return "Pendidikan Terakhir wajib dipilih.";
+  if (!ptkpStatusCode) return "PTKP Pajak wajib dipilih.";
+  if (noKk) {
+    const noKkError = validateNoKk(noKk);
+    if (noKkError) return noKkError;
   }
 
   const existing = await prisma.employee.findUnique({ where: { employeeNumber } });
@@ -40,6 +52,10 @@ export async function createEmployee(
       mobileNumber,
       hireDate: new Date(hireDate),
       employmentStatus,
+      noKk,
+      namaIbuKandung,
+      educationLevelId,
+      ptkpStatusCode,
     },
   });
 
@@ -77,7 +93,8 @@ export async function updateEmployee(
   if (!fullLegalName) return "Nama lengkap wajib diisi.";
 
   // Self-service edits are limited to contact info — HR Admin can additionally
-  // edit the legal name (ACC-10: field-level scope even when editing).
+  // edit the legal name and the DM-17/DM-19/DM-20 identity/compliance fields
+  // (ACC-10: field-level scope even when editing, not just when viewing).
   const data: Record<string, unknown> = {
     preferredName,
     personalEmail,
@@ -87,8 +104,26 @@ export async function updateEmployee(
     emergencyContactRelation,
     emergencyContactPhone,
   };
+
   if (isHrAdmin(session)) {
     data.fullLegalName = fullLegalName;
+
+    const noKk = (formData.get("noKk") as string)?.trim() || null;
+    const namaIbuKandung = (formData.get("namaIbuKandung") as string)?.trim() || null;
+    const educationLevelId = (formData.get("educationLevelId") as string) || null;
+    const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
+
+    if (!educationLevelId) return "Pendidikan Terakhir wajib dipilih.";
+    if (!ptkpStatusCode) return "PTKP Pajak wajib dipilih.";
+    if (noKk) {
+      const noKkError = validateNoKk(noKk);
+      if (noKkError) return noKkError;
+    }
+
+    data.noKk = noKk;
+    data.namaIbuKandung = namaIbuKandung;
+    data.educationLevelId = educationLevelId;
+    data.ptkpStatusCode = ptkpStatusCode;
   }
 
   await prisma.employee.update({ where: { id: employeeId }, data });

@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { UserPlus } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { requireSession, canListEmployees, canCreateEmployee, projectEmployee } from "@/lib/permissions";
+import { requireSession } from "@/lib/require-session";
+import { canListEmployees, canCreateEmployee, isHrAdmin, projectEmployee } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
+import { isEmployeeProfileIncomplete } from "@/lib/employee-completeness";
 
 export default async function EmployeesPage() {
   const session = await requireSession();
@@ -51,6 +53,7 @@ export default async function EmployeesPage() {
                 <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
                 <th className="px-4 py-3 font-medium">{t("employee.currentPosition")}</th>
                 <th className="px-4 py-3 font-medium">{t("employee.employmentStatus")}</th>
+                {isHrAdmin(session) && <th className="px-4 py-3 font-medium">Kelengkapan Data</th>}
               </tr>
             </thead>
             <tbody>
@@ -75,6 +78,19 @@ export default async function EmployeesPage() {
                     <td className="px-4 py-3 text-slate-600">
                       {row.employmentStatus ? t(`employmentStatus.${row.employmentStatus}`) : "—"}
                     </td>
+                    {isHrAdmin(session) && (
+                      <td className="px-4 py-3">
+                        {isEmployeeProfileIncomplete(employee) ? (
+                          <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                            Belum Lengkap
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                            Lengkap
+                          </span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}

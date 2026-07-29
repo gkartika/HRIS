@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { AssignmentType } from "@/generated/prisma/enums";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
+import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
 
 export const label = "Penempatan (Assignment)";
 export const templateHeaders = ["employeeNumber", "positionCode", "assignmentType", "effectiveFrom", "effectiveTo"];
@@ -18,12 +19,21 @@ const VALID_ASSIGNMENT_TYPES = ["PRIMARY", "ADDITIONAL", "ACTING", "TEMPORARY"];
 // every valid row is always a CREATE, never an UPDATE. There is no natural
 // key that would identify "the same" assignment row to update.
 export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[]> {
-  const [employees, positions] = await Promise.all([
+  const [employees, positions, activePrimaries] = await Promise.all([
     prisma.employee.findMany({ select: { id: true, employeeNumber: true } }),
     prisma.position.findMany({ select: { id: true, positionCode: true } }),
+    prisma.assignment.findMany({
+      where: { assignmentType: "PRIMARY", status: "ACTIVE" },
+      include: { position: true, employee: true },
+    }),
   ]);
   const employeeByNumber = new Map(employees.map((e) => [e.employeeNumber, e.id]));
   const positionByCode = new Map(positions.map((p) => [p.positionCode, p.id]));
+  // DM-07: which position codes already have an active Primary holder, and
+  // who — used to flag a conflicting PRIMARY row before it ever reaches commit.
+  const occupiedPrimaryPositions = new Map(
+    activePrimaries.map((a) => [a.position.positionCode, a.employee.employeeNumber])
+  );
 
   return rows.map((raw, index) => {
     const rowNumber = index + 2;
@@ -49,6 +59,17 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     if (effectiveTo && Number.isNaN(Date.parse(effectiveTo))) {
       reasons.push("Berlaku Sampai (effectiveTo) harus berupa tanggal yang valid jika diisi");
     }
+    if (assignmentType === "PRIMARY" && positionCode && positionByCode.has(positionCode)) {
+      const otherPrimaryHolder = occupiedPrimaryPositions.get(positionCode);
+      if (otherPrimaryHolder && otherPrimaryHolder !== employeeNumber) {
+        reasons.push(`Posisi ${positionCode} sudah memiliki pemegang Utama aktif (${otherPrimaryHolder})`);
+      } else if (employeeNumber) {
+        // Claim it for the rest of this file too, so a second PRIMARY row
+        // further down targeting the same position is caught even though
+        // it isn't in the database yet.
+        occupiedPrimaryPositions.set(positionCode, employeeNumber);
+      }
+    }
 
     return {
       rowNumber,
@@ -60,16 +81,6 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
   });
 }
 
-async function syncPositionStatus(positionId: string) {
-  const position = await prisma.position.findUnique({ where: { id: positionId } });
-  if (!position || (position.positionStatus !== "VACANT" && position.positionStatus !== "FILLED")) return;
-  const activeCount = await prisma.assignment.count({ where: { positionId, status: "ACTIVE" } });
-  await prisma.position.update({
-    where: { id: positionId },
-    data: { positionStatus: activeCount > 0 ? "FILLED" : "VACANT" },
-  });
-}
-
 export async function commitRow(raw: Record<string, string>): Promise<CommitResult> {
   const employee = await prisma.employee.findUniqueOrThrow({ where: { employeeNumber: raw.employeeNumber.trim() } });
   const position = await prisma.position.findUniqueOrThrow({ where: { positionCode: raw.positionCode.trim() } });
@@ -78,6 +89,9 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
   const effectiveTo = raw.effectiveTo?.trim() ? new Date(raw.effectiveTo.trim()) : null;
 
   if (assignmentType === "PRIMARY") {
+    if (await isPositionOccupiedByPrimary(position.id, employee.id)) {
+      throw new Error(`Posisi ${position.positionCode} sudah memiliki pemegang Utama aktif`);
+    }
     // Same rule as the Movement action: close the current Primary (if any)
     // before opening the new one, and keep Employee.currentPositionId in sync.
     const currentPrimary = await prisma.assignment.findFirst({

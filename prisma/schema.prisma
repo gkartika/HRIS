@@ -2,10 +2,15 @@
 // Source of truth for field/entity decisions: docs/DECISIONS.md and the HR App Build Guide /
 // HR App Data Fields Blueprint (see CLAUDE.md for links and priority order).
 //
-// Scope note: this schema currently covers Phase 0 (Foundation) and Phase 1
-// (Employee & Organization). Competency, Training, Assets, Recruitment, Payroll-slip
-// import etc. are deliberately NOT modeled yet — they belong to later phases and will
-// be added when those phases start, to avoid building ahead of a reviewed increment.
+// Scope note: this schema currently covers Phase 0 (Foundation), Phase 1
+// (Employee & Organization), and a first slice of Phase 2 (Employee
+// Lifecycle) — the simplified Recruitment Request -> approval -> Create
+// Employee -> initial Primary Assignment -> fulfillment-link flow (DEC-013,
+// DM-21..DM-23, WF-13..WF-14). Explicitly NOT modeled: Manpower, Candidate,
+// Selected Person (DEC-013 excludes them), and the rest of Phase 2
+// (onboarding, contracts/renewal, resignation, exit clearance) plus later
+// phases (Competency, Training, Assets, Payroll-slip import) — these belong
+// to later increments and will be added when those increments start.
 
 generator client {
   provider = "prisma-client"
@@ -126,6 +131,68 @@ enum AuditAction {
   LOGOUT
 }
 
+// ---------- Phase 2: simplified Recruitment Request (DEC-013, DM-21..23) ----------
+// Every value below is taken directly from the current FR-HC-01-01 form
+// (Formulir Permintaan Tenaga Kerja Baru), per SRC-07.
+
+enum RecruitmentReasonCode {
+  REPLACEMENT // Pengganti karyawan keluar
+  ADDITIONAL // Penambahan karena kebutuhan
+  DEVELOPMENT // Penyesuaian perkembangan PT CBP
+}
+
+enum ShiftCode {
+  SHIFT_1
+  SHIFT_2
+  SHIFT_3
+  NON_SHIFT
+}
+
+enum EducationRequirementCode {
+  S1_UNIVERSITY // Universitas / S1
+  D1_D3_ACADEMY // Akademi D3 / D1
+  SMA // SMA Sederajat
+}
+
+enum WorkExperienceBand {
+  NONE // Tidak Pengalaman
+  ONE_TO_TWO // 1-2 tahun
+  THREE_TO_FOUR // 3-4 tahun
+  MORE_THAN_FIVE // >5 tahun
+}
+
+enum AgeBand {
+  AGE_18_25
+  AGE_26_35
+  AGE_36_45
+}
+
+enum RequestedJobLevel {
+  DEPARTMENT_HEAD
+  SECTION_HEAD
+  SUPERVISOR
+  STAFF_OPERATOR
+  HARIAN_LEPAS
+}
+
+// WF-13: Draft > Submitted > Under Review > Approved/Rejected/Returned >
+// Recruitment In Progress > Partially Filled > Filled > Closed/Cancelled.
+// Only Approved, Recruitment In Progress or Partially Filled requests may
+// create Employees.
+enum RecruitmentRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  RETURNED
+  RECRUITMENT_IN_PROGRESS
+  PARTIALLY_FILLED
+  FILLED
+  CLOSED
+  CANCELLED
+}
+
 // ---------- User Accounts (separate from Employee Master, per ACC-01) ----------
 
 model Account {
@@ -148,6 +215,9 @@ model Account {
   auditEvents           AuditLog[]
   importBatches         ImportBatch[]
   uploadedFiles         FileObject[]
+  recruitmentRequestsSubmittedBy RecruitmentRequest[] @relation("RecruitmentSubmittedBy")
+  recruitmentRequestsApprovedBy RecruitmentRequest[] @relation("RecruitmentApprovedBy")
+  recruitmentFulfillmentsLinked RecruitmentRequestFulfillment[]
 }
 
 model AccountRole {
@@ -216,6 +286,8 @@ model Employee {
   account                  Account?
   assignments              Assignment[]      @relation("EmployeeAssignments")
   files                    FileObject[]
+  recruitmentRequestsSubmitted RecruitmentRequest[] @relation("RecruitmentRequester")
+  recruitmentFulfillment   RecruitmentRequestFulfillment?
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -258,6 +330,7 @@ model OrgUnit {
   effectiveTo   DateTime?
 
   positions     Position[]
+  recruitmentRequests RecruitmentRequest[]
 }
 
 model Job {
@@ -278,6 +351,7 @@ model Job {
   updatedAt         DateTime @updatedAt
 
   positions         Position[]
+  recruitmentRequests RecruitmentRequest[]
 }
 
 model Position {
@@ -300,6 +374,8 @@ model Position {
 
   currentHolders       Employee[]     @relation("PositionHolder")
   assignments          Assignment[]
+  requestedForRecruitment RecruitmentRequest[] @relation("RequestedPosition")
+  requesterForRecruitment RecruitmentRequest[] @relation("RequesterPosition")
 }
 
 model Assignment {
@@ -314,6 +390,71 @@ model Assignment {
   effectiveFrom         DateTime
   effectiveTo           DateTime?
   createdAt             DateTime         @default(now())
+
+  fulfillment           RecruitmentRequestFulfillment?
+}
+
+// ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
+
+model RecruitmentRequest {
+  id                       String                   @id @default(cuid())
+  requestNumber            String                   @unique
+  requestDate              DateTime
+  reasonCode               RecruitmentReasonCode
+  departmentId             String
+  department               OrgUnit                  @relation(fields: [departmentId], references: [id])
+  jobId                    String
+  job                      Job                      @relation(fields: [jobId], references: [id])
+  // Specific approved seat, when one is already known/vacant (DM-21: "when
+  // available") — otherwise HR resolves a Position at fulfillment time.
+  requestedPositionId      String?
+  requestedPosition        Position?                @relation("RequestedPosition", fields: [requestedPositionId], references: [id])
+  shiftCode                ShiftCode
+  requestedHeadcount       Int
+  jobDescriptionSnapshot   String
+  educationRequirementCode EducationRequirementCode
+  workExperienceBand       WorkExperienceBand
+  ageBand                  AgeBand
+  genderRequirement        Gender?
+  requestedJobLevel        RequestedJobLevel
+  specialCriteria          String?
+  status                   RecruitmentRequestStatus @default(DRAFT)
+
+  requesterEmployeeId      String
+  requesterEmployee        Employee                 @relation("RecruitmentRequester", fields: [requesterEmployeeId], references: [id])
+  // The Position through which the requester was acting when submitting —
+  // authority/approvals must retain Position context, never just the person.
+  requesterPositionId      String?
+  requesterPosition        Position?                @relation("RequesterPosition", fields: [requesterPositionId], references: [id])
+
+  submittedAt              DateTime?
+  submittedByAccountId     String?
+  submittedByAccount       Account?                 @relation("RecruitmentSubmittedBy", fields: [submittedByAccountId], references: [id])
+  approvedAt               DateTime?
+  approvedByAccountId      String?
+  approvedByAccount        Account?                 @relation("RecruitmentApprovedBy", fields: [approvedByAccountId], references: [id])
+  decisionNote             String?
+
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+
+  fulfillments             RecruitmentRequestFulfillment[]
+}
+
+// DM-23: supports multiple Employees per request, up to requestedHeadcount.
+// filled_count/remaining_count are always derived from this table, never
+// stored — see src/lib/recruitment.ts.
+model RecruitmentRequestFulfillment {
+  id                   String             @id @default(cuid())
+  recruitmentRequestId String
+  recruitmentRequest   RecruitmentRequest @relation(fields: [recruitmentRequestId], references: [id])
+  employeeId           String             @unique
+  employee             Employee           @relation(fields: [employeeId], references: [id])
+  assignmentId         String             @unique
+  assignment           Assignment         @relation(fields: [assignmentId], references: [id])
+  linkedAt             DateTime           @default(now())
+  linkedByAccountId    String
+  linkedByAccount      Account            @relation(fields: [linkedByAccountId], references: [id])
 }
 
 // ---------- Controls: audit, import, private files ----------

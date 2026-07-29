@@ -7,9 +7,10 @@ import {
   UserCircle,
   Building2,
   Settings,
+  FileText,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin, isTrainingAdmin, isGaAdmin } from "@/lib/permissions";
+import { isHrAdmin, isTrainingAdmin, isGaAdmin, canSubmitRecruitmentRequest } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
@@ -45,6 +46,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     navItems.push({ href: "/employees", label: t("nav.employees"), icon: Users });
   }
   navItems.push({ href: "/organization", label: t("nav.organization"), icon: Building2 });
+  if (canSubmitRecruitmentRequest(session)) {
+    navItems.push({ href: "/recruitment", label: t("recruitment.navLabel"), icon: FileText });
+  }
   if (isHrAdmin(session)) {
     navItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: Settings });
     navItems.push({ href: "/import", label: t("nav.importData"), icon: Upload });

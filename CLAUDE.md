@@ -146,6 +146,18 @@ English.
 - `src/lib/org-chart.ts` — as-of-date occupancy reconstruction and
   `computeStructureWarnings()` (Director-root / Department-Head-hierarchy
   validation, ORG-15), unit tested.
+- `src/lib/recruitment.ts` — pure Recruitment Request logic (fulfillment
+  counts, status transitions, request-number formatting), unit tested. See
+  `src/lib/position-occupancy.ts` — shared `isPositionOccupiedByPrimary()` /
+  `syncPositionStatus()`, used by the Movement action, the Assignment CSV
+  import, and Recruitment Request fulfillment so a Position can never end up
+  with two active PRIMARY assignments.
+- `src/app/(app)/recruitment/` — the simplified Recruitment Request flow
+  (DEC-013, DM-21..23, WF-13/14): list, submit (`new/`), detail + approve/
+  reject/return, and the transactional "create Employee from this request"
+  form (`[id]/create-employee/`) that atomically creates the Employee,
+  Primary Assignment, and `RecruitmentRequestFulfillment` link. Manpower,
+  Candidate, and Selected Person modules are explicitly out of scope.
 - `src/lib/import-export/` — CTL-13 universal import/export framework: one
   module per dataset (`employees.ts`, `org-units.ts`, `jobs.ts`,
   `positions.ts`, `assignments.ts`) each exporting `templateHeaders`/

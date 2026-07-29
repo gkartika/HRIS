@@ -48,6 +48,26 @@ export function canCreateEmployee(session: Session): boolean {
   return isHrAdmin(session);
 }
 
+// ACC-13: "Assistant/Department Head may create and submit Recruitment
+// Requests for their permitted organization scope." This app has no
+// separate "Assistant" account type and Position-scoped authorization is
+// out of scope for this simplified flow (DEC-013) — any employee-linked
+// account can submit a request, same as HR Admin. Approval and Employee
+// creation from a request stay HR-Admin-only (ACC-13: "Human Capital
+// administers approved requests... Only authorized HR users may create
+// Employees or link Employees and Assignments to requests").
+export function canSubmitRecruitmentRequest(session: Session): boolean {
+  return isHrAdmin(session) || !!session.user.employeeId;
+}
+
+export function canApproveRecruitmentRequest(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+export function canCreateEmployeeFromRequest(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
 // CTL-12 / employee identity documents (KTP, KK, contracts, etc.): "HR Admin
 // – People & Payroll has full access. An employee may access only their own
 // permitted documents. Managers, Training Admin, GA/Assets Admin and

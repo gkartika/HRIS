@@ -3,6 +3,115 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-29 — Phase 2 simplified Recruitment Request (DEC-013, DM-21..23, WF-13/14)
+
+Scope: only the simplified flow explicitly requested — Recruitment Request →
+approval → Create Employee → initial Primary Assignment → link back to the
+request. Manpower module, Candidate module, and Selected Person module are
+explicitly out of scope for this increment (per the user's own instruction),
+even though they appear elsewhere in the Phase 2 Build Plan row.
+
+### Fields sourced from FR-HC-01-01, not just the Data Fields Blueprint
+The Blueprint's DM-21/22 rows list field names and types but the physical
+paper form "Formulir Permintaan Tenaga Kerja Baru" (FR-HC-01-01, fetched
+directly from Google Docs per SRC-07) has the authoritative option lists and
+Indonesian labels (e.g. exact wording for `reasonCode`, the specific
+education/experience/age bands). `src/lib/i18n/id.ts`'s new recruitment
+dictionaries were transcribed to match the form's wording, not re-invented.
+
+### Two-model design: `RecruitmentRequest` + `RecruitmentRequestFulfillment`
+A request can ask for more than one headcount (DM-23), and each seat filled
+needs its own Employee + Assignment pair. Rather than a single
+request-to-employee foreign key, `RecruitmentRequestFulfillment` is a join
+row (`employeeId` and `assignmentId` both unique — one fulfillment per
+Employee/Assignment) so `requestedHeadcount` vs. `fulfillments.length` gives
+the Partially Filled / Filled counts directly, and each individual
+Employee+Assignment pair created from the request stays traceable back to it.
+
+### Status machine kept intentionally simpler than the Build Guide's own list
+WF-13 lists a fuller lifecycle (through Manpower/Candidate/Selected Person
+stages); since those modules aren't built, `RecruitmentRequestStatus` skips
+straight from `APPROVED` to accepting fulfillments — `RECRUITMENT_IN_PROGRESS`
+exists as the zero-fulfillments-yet state so the status still communicates
+"approved, nothing hired yet" vs. "approved, hiring underway," without
+modeling stages this increment doesn't implement. `canRequestAcceptFulfillment()`
+(`src/lib/recruitment.ts`) is the single source of truth for which statuses
+allow `createEmployeeFromRecruitmentRequest` to run, checked both for showing/
+hiding the "Buat Karyawan" button and again server-side before the transaction.
+
+### Employee/Assignment/Fulfillment created in one `prisma.$transaction`
+All three rows (plus the Position status nudge) commit atomically in
+`createEmployeeFromRecruitmentRequest` (`src/app/(app)/recruitment/actions.ts`)
+— a failure partway through (e.g. a duplicate employeeNumber slipping past
+the pre-check under a race) can't leave an Employee with no Assignment or a
+Fulfillment pointing at a half-created record. Pre-transaction validation
+re-checks `canRequestAcceptFulfillment`, `!counts.isFull`, employeeNumber
+uniqueness, that the chosen Position's `jobId`/`orgUnitId` actually match the
+request's, and `!isPositionOccupiedByPrimary()` — all the same checks the
+manual create-employee and Movement flows already enforce, applied here too
+rather than assuming the UI's own filtering is sufficient.
+
+### Bug found and fixed while building this: `movePrimaryAssignment` had no occupied-position check
+While writing the "reject an already-Primary-occupied Position" acceptance
+check for the new fulfillment flow, found the existing Movement action
+(`assignment-actions.ts`, from Phase 1) had no equivalent guard — nothing
+stopped two different Employees from both holding an active PRIMARY
+assignment on the same Position at once. Extracted the check into a new
+shared `src/lib/position-occupancy.ts` (`isPositionOccupiedByPrimary()`,
+`syncPositionStatus()`, replacing a duplicated local copy that used to live
+in both `assignment-actions.ts` and `import-export/assignments.ts`) and
+applied it to all three call sites: Movement, the Assignment CSV import's
+PRIMARY-row path (which also gained an in-file duplicate-Position check
+across rows of the same batch), and the new recruitment fulfillment
+transaction.
+
+### Direct employee creation (no Recruitment Request) still works, per DEC-014
+`/employees/new` (Phase 1) is untouched and still HR-Admin-reachable —
+`Employee` has no required FK to `RecruitmentRequest`. The recruitment list
+page keeps a "Buat Karyawan Langsung (Tanpa Permintaan)" link next to "Buat
+Permintaan Baru" so both creation sources stay one click away, matching
+DEC-014's explicit statement that Recruitment Request is optional context,
+not a mandatory gate in front of employee creation.
+
+### Request numbering: server-generated, not user-entered
+`formatRequestNumber()` (`src/lib/recruitment.ts`) produces `REQ-{year}-{4-digit
+sequence}` at submit time from a count of existing requests that year — the
+submitter never types a request number, avoiding collisions/typos on a field
+that's meant to be a stable reference ID.
+
+### Permissions: submit is broad, approve/fulfill are HR-Admin-only
+`canSubmitRecruitmentRequest` allows any linked Employee (not just managers)
+to submit a request, matching the Build Guide's requester field being "any
+employee, defaults to self" rather than a manager-only action; the list page
+scopes non-HR-Admin users to only their own submitted requests.
+`canApproveRecruitmentRequest` and `canCreateEmployeeFromRequest` are both
+HR-Admin-only, consistent with every other Phase 0/1 write-access boundary in
+this app (`src/lib/permissions.ts`).
+
+### Verified live, not just via unit tests
+Submitted REQ-2026-0001 (2 headcount, Staf Produksi/Produksi) as
+`hr.admin@cbp.demo`, approved it, created two vacant Positions through the
+existing `/admin/positions` UI (both existing Staf Produksi seats were
+already occupied from Phase 1 testing — no backend access used), then
+created Employee 1 and confirmed the request showed "Terisi Sebagian" (1/2),
+created Employee 2 and confirmed "Terisi Penuh" (2/2), confirmed both
+Employees/Assignments appear under "Karyawan yang Ditautkan," confirmed a
+third `/create-employee` visit is blocked with "Permintaan ini sudah terisi
+penuh," and confirmed the audit log has one entry per step (submit, approve,
+each Employee create, each Fulfillment link). 10 new unit tests added
+(`src/lib/recruitment.test.ts`) for the pure status/count logic; 43 tests
+total across 5 files, all passing, plus a clean `tsc --noEmit` and `eslint`.
+
+### Where it lives
+`prisma/schema.prisma` (`RecruitmentRequest`, `RecruitmentRequestFulfillment`,
+five new enums) — migration `20260728124417_phase2_recruitment_request`,
+purely additive. `src/lib/recruitment.ts` (pure logic, unit tested),
+`src/lib/position-occupancy.ts` (shared occupancy check, new this phase).
+`src/app/(app)/recruitment/` — list page, `new/` (submit form),
+`[id]/` (detail + approve/reject/return decision), `[id]/create-employee/`
+(the transactional fulfillment form). Nav entry gated by
+`canSubmitRecruitmentRequest`.
+
 ## 2026-07-28 — CTL-13 universal import/export, retrofit to Phase 0/1
 
 Before starting Phase 2, re-checked the live Build Guide and found it now

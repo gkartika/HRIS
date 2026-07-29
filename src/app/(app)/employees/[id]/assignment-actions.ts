@@ -5,26 +5,8 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageAssignments } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
 import type { AssignmentType } from "@/generated/prisma/enums";
-
-// If a position's stored status is just VACANT/FILLED (not an admin-set
-// PLANNED/FROZEN/CLOSED override), keep it in sync with whether it actually
-// has an active Assignment right now. The org chart itself always computes
-// live occupancy from Assignment rows — this is only so the plain admin list
-// view (src/app/(app)/admin/positions) shows a status that isn't obviously stale.
-async function syncPositionStatus(positionId: string) {
-  const position = await prisma.position.findUnique({ where: { id: positionId } });
-  if (!position || (position.positionStatus !== "VACANT" && position.positionStatus !== "FILLED")) {
-    return;
-  }
-  const activeCount = await prisma.assignment.count({
-    where: { positionId, status: "ACTIVE" },
-  });
-  await prisma.position.update({
-    where: { id: positionId },
-    data: { positionStatus: activeCount > 0 ? "FILLED" : "VACANT" },
-  });
-}
 
 export async function addAssignment(
   employeeId: string,
@@ -89,6 +71,12 @@ export async function movePrimaryAssignment(
 
   const newPosition = await prisma.position.findUnique({ where: { id: positionId } });
   if (!newPosition) return "Posisi tidak ditemukan.";
+
+  // DM-07: a Position can't have two different Employees holding an active
+  // Primary Assignment at once.
+  if (await isPositionOccupiedByPrimary(positionId, employeeId)) {
+    return "Posisi ini sudah memiliki pemegang Utama aktif — pilih posisi lain.";
+  }
 
   const effectiveDate = new Date(effectiveFrom);
 

@@ -6,17 +6,50 @@ import { canListEmployees, canCreateEmployee, isHrAdmin, projectEmployee } from 
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { isEmployeeProfileIncomplete } from "@/lib/employee-completeness";
+import type { Prisma } from "@/generated/prisma/client";
 
-export default async function EmployeesPage() {
+const EMPLOYMENT_STATUSES = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"] as const;
+
+export default async function EmployeesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; orgUnitId?: string; employmentStatus?: string; activeFlag?: string }>;
+}) {
   const session = await requireSession();
   if (!canListEmployees(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const employees = await prisma.employee.findMany({
-    orderBy: { employeeNumber: "asc" },
-    include: { currentPosition: { include: { job: true, orgUnit: true } } },
-  });
+  const { q, orgUnitId, employmentStatus, activeFlag } = await searchParams;
+
+  const where: Prisma.EmployeeWhereInput = {};
+  if (q?.trim()) {
+    const query = q.trim();
+    where.OR = [
+      { employeeNumber: { contains: query } },
+      { fullLegalName: { contains: query } },
+      { preferredName: { contains: query } },
+    ];
+  }
+  if (orgUnitId) {
+    where.currentPosition = { orgUnitId };
+  }
+  if (employmentStatus) {
+    where.employmentStatus = employmentStatus as (typeof EMPLOYMENT_STATUSES)[number];
+  }
+  if (activeFlag === "true" || activeFlag === "false") {
+    where.activeFlag = activeFlag === "true";
+  }
+
+  const [employees, orgUnits, totalCount] = await Promise.all([
+    prisma.employee.findMany({
+      where,
+      orderBy: { employeeNumber: "asc" },
+      include: { currentPosition: { include: { job: true, orgUnit: true } } },
+    }),
+    prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+    prisma.employee.count(),
+  ]);
 
   await logAudit({
     actorAccountId: session.user.id,
@@ -26,6 +59,7 @@ export default async function EmployeesPage() {
   });
 
   const rows = employees.map((e) => projectEmployee(e, session));
+  const hasFilters = !!(q || orgUnitId || employmentStatus || activeFlag);
 
   return (
     <div>
@@ -42,8 +76,84 @@ export default async function EmployeesPage() {
         )}
       </div>
 
-      {rows.length === 0 ? (
-        <p className="text-sm text-slate-400">{t("employee.emptyState")}</p>
+      <form className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("common.search")}</label>
+          <input
+            type="text"
+            name="q"
+            defaultValue={q ?? ""}
+            placeholder={t("employee.employeeNumber")}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("employee.department")}</label>
+          <select
+            name="orgUnitId"
+            defaultValue={orgUnitId ?? ""}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">{t("common.allOption")}</option>
+            {orgUnits.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.unitName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("employee.employmentStatus")}</label>
+          <select
+            name="employmentStatus"
+            defaultValue={employmentStatus ?? ""}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">{t("common.allOption")}</option>
+            {EMPLOYMENT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {t(`employmentStatus.${s}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Status Aktif</label>
+          <select
+            name="activeFlag"
+            defaultValue={activeFlag ?? ""}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">{t("common.allOption")}</option>
+            <option value="true">{t("common.active")}</option>
+            <option value="false">{t("common.inactive")}</option>
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t("common.applyFilter")}
+          </button>
+          {hasFilters && (
+            <Link href="/employees" className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:text-slate-700">
+              {t("common.resetFilter")}
+            </Link>
+          )}
+        </div>
+      </form>
+
+      {hasFilters && (
+        <p className="mb-3 text-xs text-slate-400">
+          {t("common.filteredCount", { shown: employees.length, total: totalCount })}
+        </p>
+      )}
+
+      {employees.length === 0 ? (
+        <p className="text-sm text-slate-400">
+          {hasFilters ? t("common.noFilteredResults") : t("employee.emptyState")}
+        </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">

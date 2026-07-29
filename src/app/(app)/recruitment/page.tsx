@@ -5,15 +5,46 @@ import { canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { computeFulfillmentCounts } from "@/lib/recruitment";
+import type { Prisma, RecruitmentRequestStatus } from "@/generated/prisma/client";
 
-export default async function RecruitmentListPage() {
+const RECRUITMENT_STATUSES: RecruitmentRequestStatus[] = [
+  "DRAFT",
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "APPROVED",
+  "REJECTED",
+  "RETURNED",
+  "RECRUITMENT_IN_PROGRESS",
+  "PARTIALLY_FILLED",
+  "FILLED",
+  "CLOSED",
+  "CANCELLED",
+];
+
+export default async function RecruitmentListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; departmentId?: string }>;
+}) {
   const session = await requireSession();
+  const { status, departmentId } = await searchParams;
 
-  const requests = await prisma.recruitmentRequest.findMany({
-    where: isHrAdmin(session) ? {} : { requesterEmployeeId: session.user.employeeId ?? "__none__" },
-    include: { department: true, job: true, fulfillments: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const where: Prisma.RecruitmentRequestWhereInput = isHrAdmin(session)
+    ? {}
+    : { requesterEmployeeId: session.user.employeeId ?? "__none__" };
+  if (status) where.status = status as RecruitmentRequestStatus;
+  if (departmentId) where.departmentId = departmentId;
+
+  const [requests, departments] = await Promise.all([
+    prisma.recruitmentRequest.findMany({
+      where,
+      include: { department: true, job: true, fulfillments: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+  ]);
+
+  const hasFilters = !!(status || departmentId);
 
   return (
     <div>
@@ -43,8 +74,52 @@ export default async function RecruitmentListPage() {
         </div>
       </div>
 
+      <form className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("recruitment.status")}</label>
+          <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {RECRUITMENT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {t(`recruitmentStatus.${s}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("recruitment.department")}</label>
+          <select
+            name="departmentId"
+            defaultValue={departmentId ?? ""}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">{t("common.allOption")}</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.unitName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t("common.applyFilter")}
+          </button>
+          {hasFilters && (
+            <Link href="/recruitment" className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:text-slate-700">
+              {t("common.resetFilter")}
+            </Link>
+          )}
+        </div>
+      </form>
+
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-400">Belum ada permintaan tenaga kerja.</p>
+        <p className="text-sm text-slate-400">
+          {hasFilters ? t("common.noFilteredResults") : "Belum ada permintaan tenaga kerja."}
+        </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">

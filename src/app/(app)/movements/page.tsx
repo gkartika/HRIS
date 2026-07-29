@@ -4,22 +4,36 @@ import { isHrAdmin } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import type { Prisma, MovementRequestStatus, MovementType } from "@/generated/prisma/client";
 
-export default async function MovementListPage() {
+const MOVEMENT_STATUSES: MovementRequestStatus[] = ["SUBMITTED", "APPROVED", "REJECTED", "IMPLEMENTED", "CANCELLED"];
+const MOVEMENT_TYPES: MovementType[] = ["PROMOTION", "ROTATION", "MUTATION", "DEMOTION", "STATUS_CHANGE"];
+
+export default async function MovementListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; movementType?: string }>;
+}) {
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   const isHrManagerNow = hrManagerPositions.length > 0;
   const seesAll = isHrAdmin(session) || isHrManagerNow;
 
+  const { status, movementType } = await searchParams;
+
+  const where: Prisma.MovementRequestWhereInput = seesAll
+    ? {}
+    : {
+        OR: [
+          { requesterEmployeeId: session.user.employeeId ?? "__none__" },
+          { employeeId: session.user.employeeId ?? "__none__" },
+        ],
+      };
+  if (status) where.status = status as MovementRequestStatus;
+  if (movementType) where.movementType = movementType as MovementType;
+
   const requests = await prisma.movementRequest.findMany({
-    where: seesAll
-      ? {}
-      : {
-          OR: [
-            { requesterEmployeeId: session.user.employeeId ?? "__none__" },
-            { employeeId: session.user.employeeId ?? "__none__" },
-          ],
-        },
+    where,
     include: {
       employee: true,
       currentPosition: { include: { job: true } },
@@ -27,6 +41,8 @@ export default async function MovementListPage() {
     },
     orderBy: { createdAt: "desc" },
   });
+
+  const hasFilters = !!(status || movementType);
 
   return (
     <div>
@@ -37,8 +53,52 @@ export default async function MovementListPage() {
         </div>
       </div>
 
+      <form className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("recruitment.status")}</label>
+          <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {MOVEMENT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {t(`movementStatus.${s}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.movementType")}</label>
+          <select
+            name="movementType"
+            defaultValue={movementType ?? ""}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">{t("common.allOption")}</option>
+            {MOVEMENT_TYPES.map((mt) => (
+              <option key={mt} value={mt}>
+                {t(`movementType.${mt}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t("common.applyFilter")}
+          </button>
+          {hasFilters && (
+            <Link href="/movements" className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:text-slate-700">
+              {t("common.resetFilter")}
+            </Link>
+          )}
+        </div>
+      </form>
+
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-400">{t("movement.emptyState")}</p>
+        <p className="text-sm text-slate-400">
+          {hasFilters ? t("common.noFilteredResults") : t("movement.emptyState")}
+        </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">

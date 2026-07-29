@@ -308,6 +308,12 @@ export const strings = {
     no: "Tidak",
     active: "Aktif",
     inactive: "Tidak Aktif",
+    search: "Cari",
+    allOption: "— Semua —",
+    applyFilter: "Terapkan Filter",
+    resetFilter: "Atur Ulang",
+    noFilteredResults: "Tidak ada data yang cocok dengan filter ini.",
+    filteredCount: "Menampilkan {shown} dari {total} data",
   },
 } as const;
 

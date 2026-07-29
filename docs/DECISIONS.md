@@ -3,6 +3,31 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-29 — List filtering added where usage revealed a real need
+
+Not tied to a specific Build Guide row — added on direct request ("put in
+filtering where you think is necessary") after the Audit Log's hard `take:
+100` was found silently truncating 211 real rows with no indication more
+existed. Added URL-searchParams-based filters (plain `<form>` with no JS —
+consistent with this app's server-component-first style, and the filtered
+view is a shareable/bookmarkable URL) to the four list pages that will
+genuinely accumulate rows in production:
+- **Employees** (`/employees`): search (employeeNumber/fullLegalName/
+  preferredName, `contains`), department, employment status, active/inactive.
+- **Audit Log** (`/audit-log`): action, dataset (populated from a live
+  `distinct` query so it always reflects real data, not a hand-maintained
+  list), actor, date range. Now also shows "Menampilkan X dari Y" so a
+  truncated view is visible instead of silent.
+- **Recruitment** (`/recruitment`) and **Movements** (`/movements`): status,
+  plus department (Recruitment) or movement type (Movements).
+Filters are additive to each page's existing visibility scoping (a plain
+employee still only ever sees their own Recruitment/Movement rows — the
+filter narrows within that scope, never widens it). The Org Chart already
+had its own department-filter/search from Phase 1 (ORG-10) — not
+duplicated. Admin lookup lists (Positions/Jobs/Org Units) and the Import
+batch history were left unfiltered — small, infrequently-browsed lists
+where a filter bar would be overhead, not help.
+
 ## 2026-07-29 — Movement Request (LIF-04, Data Fields Blueprint "28 Movement Requests")
 
 Phase 2's next increment after the HR Manager access correction: LIF-04 is

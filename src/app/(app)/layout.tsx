@@ -8,9 +8,13 @@ import {
   Building2,
   Settings,
   FileText,
+  Briefcase,
+  Inbox,
+  BarChart3,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin, isGaAdmin, canSubmitRecruitmentRequest } from "@/lib/permissions";
+import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
@@ -32,6 +36,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   const canSeeEmployees = isHrAdmin(session) || isTrainingAdmin(session) || isGaAdmin(session);
   const isManager = await getIsManager(session.user.employeeId);
+  // ACC-14/DEC-015: derived live from an active Position Assignment on every
+  // page load — never cached in the session/JWT — so access to the HR
+  // Manager workspace ends automatically the moment the Assignment's
+  // effectiveTo passes, with no separate revoke step.
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  const isHrManagerNow = hrManagerPositions.length > 0;
 
   const navItems: { href: string; label: string; icon: typeof LayoutDashboard }[] = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
@@ -48,6 +58,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   navItems.push({ href: "/organization", label: t("nav.organization"), icon: Building2 });
   if (canSubmitRecruitmentRequest(session)) {
     navItems.push({ href: "/recruitment", label: t("recruitment.navLabel"), icon: FileText });
+  }
+  // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
+  // Admin operational nav below, and only visible while the login currently
+  // holds an active HR Manager Position.
+  if (isHrManagerNow) {
+    navItems.push({ href: "/my-positions", label: t("nav.myPositions"), icon: Briefcase });
+    navItems.push({ href: "/approvals", label: t("nav.approvalInbox"), icon: Inbox });
+    navItems.push({ href: "/hr-dashboard", label: t("nav.hrManagerDashboard"), icon: LayoutDashboard });
+    navItems.push({ href: "/hr-reports", label: t("nav.hrReports"), icon: BarChart3 });
   }
   if (isHrAdmin(session)) {
     navItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: Settings });

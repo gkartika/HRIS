@@ -45,3 +45,11 @@ export function nextStatusAfterFulfillment(
 export function formatRequestNumber(sequence: number, year: number): string {
   return `REQ-${year}-${String(sequence).padStart(4, "0")}`;
 }
+
+// DM-25: "Filled or Closed requests cannot be cancelled through the normal
+// action." Also excludes an already-Cancelled request (no double-cancel).
+const NOT_CANCELLABLE_STATUSES: RecruitmentRequestStatus[] = ["FILLED", "CLOSED", "CANCELLED"];
+
+export function canCancelRequestStatus(status: RecruitmentRequestStatus): boolean {
+  return !NOT_CANCELLABLE_STATUSES.includes(status);
+}

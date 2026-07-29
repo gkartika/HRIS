@@ -5,6 +5,9 @@ import {
   isHrAdmin,
   isTrainingAdmin,
   isGaAdmin,
+  isHrManager,
+  canApproveRecruitmentRequest,
+  canCancelRecruitmentRequest,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
   projectEmployee,
@@ -70,6 +73,47 @@ describe("role predicates", () => {
     expect(isTrainingAdmin(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
     expect(isGaAdmin(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
     expect(isHrAdmin(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+  });
+});
+
+describe("isHrManager / canApproveRecruitmentRequest (ACC-14/WF-15)", () => {
+  it("is false with zero active HR Manager positions", () => {
+    expect(isHrManager([])).toBe(false);
+    expect(canApproveRecruitmentRequest([])).toBe(false);
+  });
+
+  it("is true as soon as there's at least one active HR Manager position", () => {
+    expect(isHrManager(["pos-hr-manager"])).toBe(true);
+    expect(canApproveRecruitmentRequest(["pos-hr-manager"])).toBe(true);
+  });
+
+  it("does not require being HR Admin — an HR_ADMIN session with no HR Manager position still can't approve", () => {
+    // canApproveRecruitmentRequest only ever looks at the resolved position
+    // list now, never the session/role — this is the WF-15 correction: HR
+    // Admin has read-only decision access, no approve/return/reject.
+    expect(canApproveRecruitmentRequest([])).toBe(false);
+  });
+});
+
+describe("canCancelRecruitmentRequest (DM-25/ACC-16)", () => {
+  it("allows the original Requester even with no admin role and no HR Manager position", () => {
+    const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-requester" });
+    expect(canCancelRecruitmentRequest(session, "emp-requester", [])).toBe(true);
+  });
+
+  it("allows an active HR Manager who is not the Requester", () => {
+    const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-hr-manager" });
+    expect(canCancelRecruitmentRequest(session, "emp-requester", ["pos-hr-manager"])).toBe(true);
+  });
+
+  it("allows HR Admin who is neither the Requester nor an HR Manager", () => {
+    const session = mockSession({ roles: ["HR_ADMIN"], employeeId: null });
+    expect(canCancelRecruitmentRequest(session, "emp-requester", [])).toBe(true);
+  });
+
+  it("denies a plain employee who is neither the Requester, an HR Manager, nor HR Admin", () => {
+    const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-bystander" });
+    expect(canCancelRecruitmentRequest(session, "emp-requester", [])).toBe(false);
   });
 });
 

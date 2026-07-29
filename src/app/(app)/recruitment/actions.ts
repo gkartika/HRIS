@@ -4,11 +4,19 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { canSubmitRecruitmentRequest, canApproveRecruitmentRequest, canCreateEmployeeFromRequest } from "@/lib/permissions";
+import {
+  canSubmitRecruitmentRequest,
+  canApproveRecruitmentRequest,
+  canCreateEmployeeFromRequest,
+  canCancelRecruitmentRequest,
+  isHrManager,
+} from "@/lib/permissions";
+import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary } from "@/lib/position-occupancy";
 import {
   canRequestAcceptFulfillment,
+  canCancelRequestStatus,
   computeFulfillmentCounts,
   nextStatusAfterFulfillment,
   formatRequestNumber,
@@ -115,7 +123,10 @@ export async function submitRecruitmentRequest(
 
 export async function startReviewRecruitmentRequest(requestId: string) {
   const session = await requireSession();
-  if (!canApproveRecruitmentRequest(session)) throw new Error("Access denied");
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  if (!canApproveRecruitmentRequest(hrManagerPositions.map((p) => p.positionId))) {
+    throw new Error("Access denied");
+  }
 
   const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId } });
   if (!request) throw new Error("Request not found");
@@ -134,6 +145,10 @@ export async function startReviewRecruitmentRequest(requestId: string) {
   revalidatePath("/recruitment");
 }
 
+// WF-15/WF-02/WF-05: only the employee occupying an active HR Manager
+// Position may decide, and the specific Position they're acting through
+// (decisionPositionId) must be recorded — required data when they hold more
+// than one qualifying Position, per ACC-14's note.
 export async function decideRecruitmentRequest(
   requestId: string,
   decision: "APPROVED" | "REJECTED" | "RETURNED",
@@ -141,7 +156,15 @@ export async function decideRecruitmentRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canApproveRecruitmentRequest(session)) return "Anda tidak memiliki akses.";
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  if (!canApproveRecruitmentRequest(hrManagerPositions.map((p) => p.positionId))) {
+    return "Anda tidak memiliki akses. Hanya HR Manager aktif yang dapat memutuskan permintaan ini.";
+  }
+
+  const decisionPositionId = formData.get("decisionPositionId") as string;
+  if (!hrManagerPositions.some((p) => p.positionId === decisionPositionId)) {
+    return "Posisi HR Manager yang dipilih tidak valid atau tidak lagi aktif.";
+  }
 
   const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -160,6 +183,7 @@ export async function decideRecruitmentRequest(
       status: decision === "APPROVED" ? "APPROVED" : decision,
       approvedAt: decision === "APPROVED" ? new Date() : null,
       approvedByAccountId: session.user.id,
+      decisionPositionId,
       decisionNote,
     },
   });
@@ -170,6 +194,66 @@ export async function decideRecruitmentRequest(
     datasetName: "RecruitmentRequest",
     recordId: requestId,
     reason: decisionNote ?? `Request ${request.requestNumber} ${decision.toLowerCase()}`,
+  });
+
+  revalidatePath(`/recruitment/${requestId}`);
+  revalidatePath("/recruitment");
+}
+
+// DM-25/ACC-16: cancellation is the explicit exception to "HR Manager alone
+// decides" — Requester, active HR Manager, or HR Admin may all cancel from
+// an eligible state. The request row is never deleted; existing fulfillment
+// links are preserved untouched.
+export async function cancelRecruitmentRequest(
+  requestId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId } });
+  if (!request) return "Permintaan tidak ditemukan.";
+
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  const activeHrManagerPositionIds = hrManagerPositions.map((p) => p.positionId);
+  if (!canCancelRecruitmentRequest(session, request.requesterEmployeeId, activeHrManagerPositionIds)) {
+    return "Anda tidak memiliki akses untuk membatalkan permintaan ini.";
+  }
+  if (!canCancelRequestStatus(request.status)) {
+    return "Permintaan berstatus Terisi Penuh, Ditutup, atau sudah Dibatalkan tidak dapat dibatalkan.";
+  }
+
+  const cancellationReason = (formData.get("cancellationReason") as string)?.trim();
+  if (!cancellationReason) return "Alasan pembatalan wajib diisi.";
+
+  const isRequester = session.user.employeeId === request.requesterEmployeeId;
+  // Attribute to HR Manager whenever the actor currently holds that
+  // authority, even if they're also the original Requester — HR Manager is
+  // the stronger/more specific authority of the three.
+  const cancellationAuthority = isHrManager(activeHrManagerPositionIds)
+    ? "HR_MANAGER"
+    : isRequester
+      ? "REQUESTER"
+      : "HR_ADMIN";
+
+  await prisma.recruitmentRequest.update({
+    where: { id: requestId },
+    data: {
+      status: "CANCELLED",
+      previousStatus: request.status,
+      cancelledAt: new Date(),
+      cancelledByAccountId: session.user.id,
+      cancelledByEmployeeId: session.user.employeeId,
+      cancellationAuthority,
+      cancellationReason,
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "RecruitmentRequest",
+    recordId: requestId,
+    reason: `Cancelled ${request.requestNumber} (was ${request.status}, authority: ${cancellationAuthority}): ${cancellationReason}`,
   });
 
   revalidatePath(`/recruitment/${requestId}`);

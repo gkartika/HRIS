@@ -109,6 +109,16 @@ export function EditPositionForm({
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
         />
       </div>
+      <div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" name="grantsHrManagerAccess" defaultChecked={position.grantsHrManagerAccess} />
+          Memberikan Akses HR Manager
+        </label>
+        <p className="mt-1 text-xs text-slate-400">
+          Karyawan dengan Penempatan aktif pada Posisi ini otomatis mendapat akses ruang kerja HR Manager
+          (ACC-14) — dan kehilangan akses tersebut otomatis saat Penempatan berakhir.
+        </p>
+      </div>
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <button
         type="submit"

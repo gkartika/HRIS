@@ -52,20 +52,48 @@ export function canCreateEmployee(session: Session): boolean {
 // Requests for their permitted organization scope." This app has no
 // separate "Assistant" account type and Position-scoped authorization is
 // out of scope for this simplified flow (DEC-013) — any employee-linked
-// account can submit a request, same as HR Admin. Approval and Employee
-// creation from a request stay HR-Admin-only (ACC-13: "Human Capital
-// administers approved requests... Only authorized HR users may create
-// Employees or link Employees and Assignments to requests").
+// account can submit a request, same as HR Admin.
 export function canSubmitRecruitmentRequest(session: Session): boolean {
   return isHrAdmin(session) || !!session.user.employeeId;
 }
 
-export function canApproveRecruitmentRequest(session: Session): boolean {
+// ACC-14/DEC-015: HR Manager authority is derived live from an active
+// Position Assignment (see src/lib/hr-manager.ts's getActiveHrManagerPositions),
+// never a stored role — so this predicate takes the already-resolved list of
+// currently-active HR Manager Position ids as plain data, keeping this file
+// dependency-free/pure for Vitest. A caller with zero active positions
+// (assignment never existed, or its effectiveTo has passed) has no HR
+// Manager authority, automatically, with no separate "revoke" step needed.
+export function isHrManager(activeHrManagerPositionIds: string[]): boolean {
+  return activeHrManagerPositionIds.length > 0;
+}
+
+// WF-15/ACC-13: "Only the employee occupying an active HR Manager Position
+// may approve, return or reject. HR Admin has read-only decision access."
+export function canApproveRecruitmentRequest(activeHrManagerPositionIds: string[]): boolean {
+  return isHrManager(activeHrManagerPositionIds);
+}
+
+// ACC-13/ACC-02: HR Admin creates/links Employees to a request only AFTER
+// HR Manager approval (enforced separately by canRequestAcceptFulfillment on
+// the request's status) and may also create an Employee directly with no
+// request at all (DEC-014, unrelated to this predicate).
+export function canCreateEmployeeFromRequest(session: Session): boolean {
   return isHrAdmin(session);
 }
 
-export function canCreateEmployeeFromRequest(session: Session): boolean {
-  return isHrAdmin(session);
+// DM-25/ACC-16: cancellation is the explicit exception to "HR Manager alone
+// decides" — the original Requester, an active HR Manager, or HR Admin may
+// all cancel an eligible (not yet Filled/Closed/Cancelled) request. Status
+// eligibility itself is checked separately via canCancelRequestStatus in
+// recruitment.ts.
+export function canCancelRecruitmentRequest(
+  session: Session,
+  requesterEmployeeId: string,
+  activeHrManagerPositionIds: string[]
+): boolean {
+  const isRequester = !!session.user.employeeId && session.user.employeeId === requesterEmployeeId;
+  return isRequester || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
 }
 
 // CTL-12 / employee identity documents (KTP, KK, contracts, etc.): "HR Admin

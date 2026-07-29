@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeFulfillmentCounts,
   canRequestAcceptFulfillment,
+  canCancelRequestStatus,
   nextStatusAfterFulfillment,
   formatRequestNumber,
 } from "./recruitment";
@@ -44,6 +45,24 @@ describe("canRequestAcceptFulfillment (WF-13)", () => {
     expect(canRequestAcceptFulfillment("FILLED")).toBe(false);
     expect(canRequestAcceptFulfillment("CLOSED")).toBe(false);
     expect(canRequestAcceptFulfillment("CANCELLED")).toBe(false);
+  });
+});
+
+describe("canCancelRequestStatus (DM-25)", () => {
+  it("blocks Filled, Closed, and an already-Cancelled request", () => {
+    expect(canCancelRequestStatus("FILLED")).toBe(false);
+    expect(canCancelRequestStatus("CLOSED")).toBe(false);
+    expect(canCancelRequestStatus("CANCELLED")).toBe(false);
+  });
+
+  it("allows every other eligible state, including after approval", () => {
+    expect(canCancelRequestStatus("SUBMITTED")).toBe(true);
+    expect(canCancelRequestStatus("UNDER_REVIEW")).toBe(true);
+    expect(canCancelRequestStatus("APPROVED")).toBe(true);
+    expect(canCancelRequestStatus("RECRUITMENT_IN_PROGRESS")).toBe(true);
+    expect(canCancelRequestStatus("PARTIALLY_FILLED")).toBe(true);
+    expect(canCancelRequestStatus("RETURNED")).toBe(true);
+    expect(canCancelRequestStatus("REJECTED")).toBe(true);
   });
 });
 

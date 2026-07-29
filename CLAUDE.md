@@ -147,17 +147,35 @@ English.
   `computeStructureWarnings()` (Director-root / Department-Head-hierarchy
   validation, ORG-15), unit tested.
 - `src/lib/recruitment.ts` — pure Recruitment Request logic (fulfillment
-  counts, status transitions, request-number formatting), unit tested. See
-  `src/lib/position-occupancy.ts` — shared `isPositionOccupiedByPrimary()` /
-  `syncPositionStatus()`, used by the Movement action, the Assignment CSV
-  import, and Recruitment Request fulfillment so a Position can never end up
-  with two active PRIMARY assignments.
+  counts, status transitions, cancellation-status eligibility, request-number
+  formatting), unit tested. See `src/lib/position-occupancy.ts` — shared
+  `isPositionOccupiedByPrimary()` / `syncPositionStatus()`, used by the
+  Movement action, the Assignment CSV import, and Recruitment Request
+  fulfillment so a Position can never end up with two active PRIMARY
+  assignments.
+- `src/lib/hr-manager.ts` — `getActiveHrManagerPositions()`: the live,
+  Prisma-backed derivation of HR Manager authority from
+  `Position.grantsHrManagerAccess` + an employee's currently-ACTIVE,
+  effective-dated Assignments (ACC-14). Split out from `permissions.ts` for
+  the same reason as `require-session.ts` — keeps the pure predicates
+  (`isHrManager`, `canApproveRecruitmentRequest`,
+  `canCancelRecruitmentRequest` in `permissions.ts`) dependency-free and unit
+  testable. Called fresh on every page/action — never cached in the
+  session/JWT — so access ends automatically the moment the granting
+  Assignment's `effectiveTo` passes.
 - `src/app/(app)/recruitment/` — the simplified Recruitment Request flow
-  (DEC-013, DM-21..23, WF-13/14): list, submit (`new/`), detail + approve/
-  reject/return, and the transactional "create Employee from this request"
-  form (`[id]/create-employee/`) that atomically creates the Employee,
-  Primary Assignment, and `RecruitmentRequestFulfillment` link. Manpower,
-  Candidate, and Selected Person modules are explicitly out of scope.
+  (DEC-013, DM-21..23, WF-13/15, DM-25): list, submit (`new/`), detail with
+  approve/reject/return (HR-Manager-Position-only, WF-15) and cancel
+  (Requester/HR-Manager/HR-Admin, DM-25), and the transactional "create
+  Employee from this request" form (`[id]/create-employee/`, HR-Admin-only)
+  that atomically creates the Employee, Primary Assignment, and
+  `RecruitmentRequestFulfillment` link. Manpower, Candidate, and Selected
+  Person modules are explicitly out of scope.
+- `src/app/(app)/my-positions/`, `approvals/`, `hr-dashboard/`, `hr-reports/`
+  — the personal HR Manager workspace (ACC-15), each gated by
+  `getActiveHrManagerPositions()`. Dashboard and Reports are intentionally
+  empty placeholders, deferred to a later increment. `/profile` (Phase 0) is
+  reused for "My Profile" rather than duplicated.
 - `src/lib/import-export/` — CTL-13 universal import/export framework: one
   module per dataset (`employees.ts`, `org-units.ts`, `jobs.ts`,
   `positions.ts`, `assignments.ts`) each exporting `templateHeaders`/

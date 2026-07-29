@@ -21,6 +21,7 @@ export async function createPosition(
   const positionType = formData.get("positionType") as PositionType;
   const reportsToPositionId = (formData.get("reportsToPositionId") as string) || null;
   const approvedFte = Number(formData.get("approvedFte") ?? 1);
+  const grantsHrManagerAccess = formData.get("grantsHrManagerAccess") === "on";
 
   if (!positionCode || !jobId || !orgUnitId || !positionType) {
     return "Kode posisi, jabatan, unit organisasi, dan jenis posisi wajib diisi.";
@@ -38,6 +39,7 @@ export async function createPosition(
       approvedFte: Number.isFinite(approvedFte) && approvedFte > 0 ? approvedFte : 1,
       reportsToPositionId: reportsToPositionId || null,
       positionStatus: "VACANT",
+      grantsHrManagerAccess,
     },
   });
 
@@ -68,6 +70,7 @@ export async function updatePosition(
   const positionStatus = formData.get("positionStatus") as PositionStatus;
   const reportsToPositionId = (formData.get("reportsToPositionId") as string) || null;
   const approvedFte = Number(formData.get("approvedFte") ?? 1);
+  const grantsHrManagerAccess = formData.get("grantsHrManagerAccess") === "on";
 
   if (!jobId || !orgUnitId || !positionType || !positionStatus) {
     return "Jabatan, unit organisasi, jenis, dan status posisi wajib diisi.";
@@ -85,6 +88,7 @@ export async function updatePosition(
       positionStatus,
       reportsToPositionId: reportsToPositionId || null,
       approvedFte: Number.isFinite(approvedFte) && approvedFte > 0 ? approvedFte : 1,
+      grantsHrManagerAccess,
     },
   });
 

@@ -71,7 +71,7 @@ async function main() {
       displayOrder: 2,
     },
   });
-  await prisma.orgUnit.upsert({
+  const sdm = await prisma.orgUnit.upsert({
     where: { unitCode: "DEPT-SDM" },
     update: {},
     create: {
@@ -131,6 +131,20 @@ async function main() {
       jobTitle: "Staf Produksi",
       jobLevel: "2A",
       jobPurpose: "Menjalankan proses produksi sesuai standar kerja dan target kualitas.",
+    },
+  });
+  // ACC-14/DEC-015: the HR Manager persona reference from the prototype
+  // (Made Wirawan, Human Capital, "employee + hr_manager"), rebuilt on the
+  // real Position-based access model — this Job/Position is what
+  // grantsHrManagerAccess is set on below, not a stored role.
+  const jobHrManager = await prisma.job.upsert({
+    where: { jobCode: "SDM-HRMANAGER" },
+    update: {},
+    create: {
+      jobCode: "SDM-HRMANAGER",
+      jobTitle: "HR Manager",
+      jobLevel: "4",
+      jobPurpose: "Memimpin fungsi SDM: keputusan rekrutmen, mutasi, kontrak, dan pengunduran diri karyawan.",
     },
   });
 
@@ -211,6 +225,32 @@ async function main() {
       reportsToPositionId: positionSectionHead.id,
     },
   });
+  // ACC-14: the only Position in this seed with grantsHrManagerAccess set —
+  // reports directly to the Director, same tier as the Production
+  // Department Head. Occupying it (below) is what grants Made Wirawan HR
+  // Manager access; the flag on the Position, not an AccountRole.
+  const positionHrManager = await prisma.position.upsert({
+    where: { positionCode: "POS-SDM-HRMANAGER-01" },
+    update: {},
+    create: {
+      positionCode: "POS-SDM-HRMANAGER-01",
+      jobId: jobHrManager.id,
+      orgUnitId: sdm.id,
+      positionType: "DEPARTMENT_HEAD",
+      positionStatus: "VACANT",
+      reportsToPositionId: positionDirector.id,
+      grantsHrManagerAccess: true,
+    },
+  });
+  // Self-heal the flag even against a database seeded before this Position
+  // existed — same idempotent-reparenting pattern used for the Director
+  // layer above.
+  if (!positionHrManager.grantsHrManagerAccess) {
+    await prisma.position.update({
+      where: { id: positionHrManager.id },
+      data: { grantsHrManagerAccess: true },
+    });
+  }
 
   // ---------- Employees ----------
   const hireDateBudi = new Date("2022-03-01");
@@ -270,6 +310,51 @@ async function main() {
       ptkpStatusCode: "TK/0",
     },
   });
+
+  const hireDateMade = new Date("2020-06-01");
+  const made = await prisma.employee.upsert({
+    where: { employeeNumber: "CBP-0003" },
+    update: {},
+    create: {
+      employeeNumber: "CBP-0003",
+      fullLegalName: "Made Wirawan",
+      preferredName: "Made",
+      gender: "MALE",
+      birthDate: new Date("1985-11-02"),
+      birthPlace: "Denpasar",
+      workEmail: "made.wirawan@cbp.demo",
+      personalEmail: "made.pribadi@example.demo",
+      mobileNumber: "0812-0000-0003",
+      currentAddress: "Jl. Pahlawan No. 22, Semarang",
+      emergencyContactName: "Ayu Wirawan",
+      emergencyContactRelation: "Istri",
+      emergencyContactPhone: "0812-0000-0097",
+      hireDate: hireDateMade,
+      employmentStatus: "PKWTT",
+      currentPositionId: positionHrManager.id,
+      noKk: "3374010101850003",
+      namaIbuKandung: "Ketut Sari",
+      educationLevelId: educationLevelsByLabel.get("S1")!.id,
+      ptkpStatusCode: "K/2",
+    },
+  });
+
+  await prisma.assignment.upsert({
+    where: { id: "seed-assignment-made-primary" },
+    update: {},
+    create: {
+      id: "seed-assignment-made-primary",
+      employeeId: made.id,
+      positionId: positionHrManager.id,
+      assignmentType: "PRIMARY",
+      primaryAssignmentFlag: true,
+      status: "ACTIVE",
+      effectiveFrom: hireDateMade,
+    },
+  });
+  if (positionHrManager.positionStatus !== "FILLED") {
+    await prisma.position.update({ where: { id: positionHrManager.id }, data: { positionStatus: "FILLED" } });
+  }
 
   await prisma.assignment.upsert({
     where: { id: "seed-assignment-budi-primary" },
@@ -384,6 +469,28 @@ async function main() {
     create: { accountId: employeeAccount.id, role: "EMPLOYEE" },
   });
 
+  // ACC-14/DEC-015: Made's own personal login, linked to his Employee record
+  // like any other employee account — no shared/generic "HR Manager" login,
+  // and no AppRole granting HR Manager access. His workspace and approval
+  // authority come entirely from holding the Primary Assignment to
+  // positionHrManager above; ending that Assignment would remove it again.
+  const hrManagerAccount = await prisma.account.upsert({
+    where: { usernameOrEmail: "made.wirawan@cbp.demo" },
+    update: {},
+    create: {
+      usernameOrEmail: "made.wirawan@cbp.demo",
+      passwordHash,
+      accountType: "EMPLOYEE_LOGIN",
+      employeeId: made.id,
+      accountStatus: "ACTIVE",
+    },
+  });
+  await prisma.accountRole.upsert({
+    where: { accountId_role: { accountId: hrManagerAccount.id, role: "EMPLOYEE" } },
+    update: {},
+    create: { accountId: hrManagerAccount.id, role: "EMPLOYEE" },
+  });
+
   // ---------- Private file storage demo ----------
   const existingFile = await prisma.fileObject.findFirst({
     where: { employeeId: siti.id, category: "Kontrak Kerja" },
@@ -418,6 +525,7 @@ async function main() {
   console.log("  GA & Asset Admin       ga.admin@cbp.demo");
   console.log("  Manager (Budi)         budi.manager@cbp.demo");
   console.log("  Employee (Siti)        siti.karyawan@cbp.demo");
+  console.log("  HR Manager (Made)      made.wirawan@cbp.demo");
 }
 
 main()

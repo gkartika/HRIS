@@ -6,11 +6,15 @@
 // (Employee & Organization), and a first slice of Phase 2 (Employee
 // Lifecycle) — the simplified Recruitment Request -> approval -> Create
 // Employee -> initial Primary Assignment -> fulfillment-link flow (DEC-013,
-// DM-21..DM-23, WF-13..WF-14). Explicitly NOT modeled: Manpower, Candidate,
-// Selected Person (DEC-013 excludes them), and the rest of Phase 2
-// (onboarding, contracts/renewal, resignation, exit clearance) plus later
-// phases (Competency, Training, Assets, Payroll-slip import) — these belong
-// to later increments and will be added when those increments start.
+// DM-21..DM-23, WF-13..WF-14), corrected so decision authority is
+// Position-derived HR Manager only, with HR Admin as a separate operational
+// account and Requester/HR Manager/HR Admin cancellation (ACC-14..16,
+// WF-15, DM-25, DEC-004/015/016/018). Explicitly NOT modeled: Manpower,
+// Candidate, Selected Person (DEC-013 excludes them), and the rest of
+// Phase 2 (onboarding, contracts/renewal, movement, resignation, exit
+// clearance) plus later phases (Competency, Training, Assets, Payroll-slip
+// import) — these belong to later increments and will be added when those
+// increments start.
 
 generator client {
   provider = "prisma-client"
@@ -113,6 +117,13 @@ enum ImportStatus {
   NEEDS_FIX
   POSTED
   ROLLED_BACK
+}
+
+// DM-25 / WF-13: who had the authority to cancel a Recruitment Request.
+enum CancellationAuthority {
+  REQUESTER
+  HR_MANAGER
+  HR_ADMIN
 }
 
 enum AuditAction {
@@ -218,6 +229,7 @@ model Account {
   recruitmentRequestsSubmittedBy RecruitmentRequest[] @relation("RecruitmentSubmittedBy")
   recruitmentRequestsApprovedBy RecruitmentRequest[] @relation("RecruitmentApprovedBy")
   recruitmentFulfillmentsLinked RecruitmentRequestFulfillment[]
+  recruitmentRequestsCancelledBy RecruitmentRequest[] @relation("RecruitmentCancelledByAccount")
 }
 
 model AccountRole {
@@ -288,6 +300,7 @@ model Employee {
   files                    FileObject[]
   recruitmentRequestsSubmitted RecruitmentRequest[] @relation("RecruitmentRequester")
   recruitmentFulfillment   RecruitmentRequestFulfillment?
+  recruitmentRequestsCancelled RecruitmentRequest[] @relation("RecruitmentCancelledByEmployee")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -364,6 +377,12 @@ model Position {
   positionType         PositionType
   approvedFte          Float          @default(1)
   positionStatus       PositionStatus @default(VACANT)
+  // ACC-14/DEC-015: functional flag, independent of positionType's hierarchy
+  // tier. An Employee holding an ACTIVE Assignment (any type) to a Position
+  // with this flag set derives HR Manager authority live — never a stored
+  // AccountRole, so access starts/ends automatically with the Assignment's
+  // effective dates. See src/lib/hr-manager.ts.
+  grantsHrManagerAccess Boolean       @default(false)
   // Sole saved parent-child authority for the org chart (ORG-01). Never inferred
   // from names or job levels.
   reportsToPositionId  String?
@@ -376,6 +395,7 @@ model Position {
   assignments          Assignment[]
   requestedForRecruitment RecruitmentRequest[] @relation("RequestedPosition")
   requesterForRecruitment RecruitmentRequest[] @relation("RequesterPosition")
+  recruitmentDecisions RecruitmentRequest[] @relation("RecruitmentDecisionPosition")
 }
 
 model Assignment {
@@ -430,10 +450,30 @@ model RecruitmentRequest {
   submittedAt              DateTime?
   submittedByAccountId     String?
   submittedByAccount       Account?                 @relation("RecruitmentSubmittedBy", fields: [submittedByAccountId], references: [id])
+  // WF-15: only the Employee occupying an active HR Manager Position may
+  // decide (approve/reject/return). approvedByAccountId records who (the
+  // login used); decisionPositionId records the specific HR Manager Position
+  // that gave them authority for THIS decision (WF-02/WF-05 — required when
+  // an Employee holds more than one qualifying Position).
   approvedAt               DateTime?
   approvedByAccountId      String?
   approvedByAccount        Account?                 @relation("RecruitmentApprovedBy", fields: [approvedByAccountId], references: [id])
+  decisionPositionId       String?
+  decisionPosition         Position?                @relation("RecruitmentDecisionPosition", fields: [decisionPositionId], references: [id])
   decisionNote             String?
+
+  // DM-25: cancellation is a distinct action from Approve/Reject/Return.
+  // Requester, HR Manager or HR Admin may cancel from an eligible state
+  // (never Filled/Closed/already-Cancelled); the request row is never
+  // deleted and existing fulfillment links are always preserved.
+  cancelledAt              DateTime?
+  cancelledByAccountId     String?
+  cancelledByAccount       Account?                 @relation("RecruitmentCancelledByAccount", fields: [cancelledByAccountId], references: [id])
+  cancelledByEmployeeId    String?
+  cancelledByEmployee      Employee?                @relation("RecruitmentCancelledByEmployee", fields: [cancelledByEmployeeId], references: [id])
+  cancellationAuthority    CancellationAuthority?
+  cancellationReason       String?
+  previousStatus           RecruitmentRequestStatus?
 
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt

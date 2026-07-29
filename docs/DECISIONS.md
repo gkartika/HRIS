@@ -3,6 +3,123 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-29 — HR Manager persona and corrected recruitment access model (ACC-14..16, WF-15, DM-25, DEC-004/015/016/018)
+
+The Build Guide was updated with a correction: the earlier Recruitment
+checkpoint let HR Admin approve/reject/return requests
+(`canApproveRecruitmentRequest = isHrAdmin`). The corrected model requires
+decision authority to belong exclusively to whoever currently holds an
+active **HR Manager Position** — a personal, Position-derived persona, not
+HR Admin and not a shared login. This pass corrects that access model and
+adds the HR Manager workspace, without touching Phase 0/1 data or starting
+onboarding/contract-renewal/movement/offboarding (explicitly deferred).
+
+### HR Manager authority is a Position flag, not a stored role — checked live, never cached
+Added `Position.grantsHrManagerAccess` (boolean, additive migration). An
+Employee derives HR Manager authority from holding any **ACTIVE** Assignment
+(any type — Primary, Additional, Acting, or Temporary; ACC-14 doesn't
+restrict to Primary) to a flagged Position, evaluated against the
+Assignment's effective-dated range at request time
+(`src/lib/hr-manager.ts`'s `getActiveHrManagerPositions()`, same half-open
+`effectiveFrom <= now < effectiveTo` convention as `org-chart.ts`). This is
+deliberately **not** baked into the JWT/session the way `AppRole` is —
+`AppRole` roles are copied from the token into the session on every request
+without re-querying the database (see `auth.config.ts`'s `session` callback),
+which would leave stale HR Manager access until the next login if we reused
+that mechanism. Instead every page/action that needs the check calls
+`getActiveHrManagerPositions()` fresh, so access starts and ends exactly on
+the Assignment's effective dates with no separate revoke step — verified
+live: moved the demo HR Manager (Made Wirawan) off the flagged Position via
+the existing Movement action, confirmed his HR Manager nav items disappeared
+immediately on next login and `/approvals` 403'd server-side even by direct
+URL, then moved him back (Movement's own history-preserving behavior meant
+this created a third Assignment row, not a mutation of the first two —
+demonstrated DM-10 "never overwrite" as a side effect of the test).
+
+### `permissions.ts` predicates now take resolved position ids, not a session
+`canApproveRecruitmentRequest` changed signature from `(session)` to
+`(activeHrManagerPositionIds: string[])` — keeps the file dependency-free
+(no Prisma import) by pushing the live DB lookup to callers
+(`hr-manager.ts`, Node-only, same split rationale as `require-session.ts`)
+and passing already-resolved data in, the same pattern `projectEmployee`
+already used. Added `isHrManager()` and `canCancelRecruitmentRequest()`
+alongside it; all three are unit tested with plain arrays/mock sessions.
+
+### WF-05/ACC-14: which Position decided is recorded, not just who
+An Employee can hold multiple Positions concurrently, and ACC-14 requires
+storing which one gave authority for a given approval. Added
+`RecruitmentRequest.decisionPositionId`. The decision form
+(`decision-forms.tsx`) sends it as a hidden field when the HR Manager holds
+exactly one qualifying Position, or a `<select>` when they hold more than
+one — verified live: Made (single HR Manager Position) approved
+REQ-2026-0003 and the record correctly shows "Posisi HR Manager yang
+Digunakan: HR Manager (POS-SDM-HRMANAGER-01)" with no user interaction
+needed to pick it.
+
+### DM-25 cancellation: the explicit exception to "HR Manager alone decides"
+Added `cancelRecruitmentRequest()` plus `RecruitmentRequest.cancelledAt`/
+`cancelledByAccountId`/`cancelledByEmployeeId`/`cancellationAuthority`
+(new `CancellationAuthority` enum: `REQUESTER`/`HR_MANAGER`/`HR_ADMIN`)/
+`cancellationReason`/`previousStatus`. `canCancelRecruitmentRequest()`
+allows the original Requester, an active HR Manager, or HR Admin;
+`canCancelRequestStatus()` (`recruitment.ts`, unit tested) blocks
+Filled/Closed/already-Cancelled per DM-25's explicit note. The request row
+is never deleted and existing `RecruitmentRequestFulfillment` links are
+never touched — a cancelled-after-partially-filled request keeps its linked
+Employees/Assignments, only the remaining unfilled headcount is abandoned.
+Verified live: HR Admin cancelled REQ-2026-0003 (status: Approved →
+Cancelled, `cancellationAuthority: HR_ADMIN`, reason recorded, "Buat
+Karyawan dari Permintaan Ini" correctly disappears), and confirmed a Filled
+request (REQ-2026-0001) shows no cancel control at all.
+
+### HR Manager workspace: five routes, two left intentionally empty
+Per the explicit instruction to keep the dashboard and reports empty until a
+later increment: `/my-positions` (every active Assignment this employee
+holds, with a badge on any that grants HR Manager access — reuses the same
+live Assignment query pattern as the org chart, not a cached list),
+`/approvals` (Recruitment Requests in Submitted/Under Review, scoped to
+whoever currently has HR Manager authority — no department scoping yet,
+since ACC-13's department-scoped "Assistant/Department Head" submission
+isn't built), `/hr-dashboard` and `/hr-reports` (placeholder pages, gated by
+the same live check, existing only to reserve the route and prove the access
+gate works before content is built). `/profile` (existing from Phase 0) is
+reused for "My Profile" rather than duplicated. All four new routes 403
+server-side for a non-HR-Manager even with the URL typed directly, not just
+hidden from nav — verified live.
+
+### HR Admin position in the model: unchanged mechanism, corrected scope
+HR Admin (`isHrAdmin`, `AccountRole.HR_ADMIN`) remains exactly what it was —
+a separate operational `Account` with no Employee link required (ACC-01/02).
+What changed is which recruitment actions it's allowed to call:
+approve/reject/return moved to HR-Manager-only; create-Employee-from-request
+stays HR-Admin-only (ACC-13: only after HR Manager approval, enforced
+because that action already requires an Approved-or-later status); direct
+Employee creation with no Recruitment Request stays HR-Admin-only (DEC-014,
+unaffected); cancellation is newly available to HR Admin per the ACC-16
+"explicit exception" note.
+
+### Demo data: one new seeded Position/Job/Employee/Account, additive only
+`prisma/seed.ts` gained `POS-SDM-HRMANAGER-01` (`grantsHrManagerAccess:
+true`, reports to the Director, same tier as the Production Department
+Head), Job "HR Manager", Employee "Made Wirawan" (CBP-0003 — the prototype's
+own HR Manager persona reference, rebuilt on the real Position-based access
+model instead of its flat `roles: ["employee","hr_manager"]` array), and
+account `made.wirawan@cbp.demo` — a personal login like every other
+employee account, no shared/generic HR Manager credential. Self-healing
+upsert pattern (same as the Director-layer fix): if the Position already
+existed from a prior seed run without the flag, it's explicitly set rather
+than left alone by `update: {}`. No existing Phase 0/1 rows were modified or
+deleted.
+
+### Migration
+`20260729053419_hr_manager_position_access_and_cancellation` — purely
+additive (one boolean column, one nullable FK, six nullable cancellation
+columns, one new enum). Applied via `prisma migrate dev` with no data-loss
+warning; existing REQ-2026-0001 (already Filled from the prior checkpoint)
+is untouched and simply has null values for all the new columns, which is
+correct — it was decided under the old HR-Admin-approves model and isn't
+retroactively rewritten.
+
 ## 2026-07-29 — Phase 2 simplified Recruitment Request (DEC-013, DM-21..23, WF-13/14)
 
 Scope: only the simplified flow explicitly requested — Recruitment Request →

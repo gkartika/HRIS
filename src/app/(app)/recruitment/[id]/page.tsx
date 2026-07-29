@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
-import { canApproveRecruitmentRequest, canCreateEmployeeFromRequest, isHrAdmin } from "@/lib/permissions";
+import {
+  canApproveRecruitmentRequest,
+  canCreateEmployeeFromRequest,
+  canCancelRecruitmentRequest,
+  isHrAdmin,
+} from "@/lib/permissions";
+import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { computeFulfillmentCounts, canRequestAcceptFulfillment } from "@/lib/recruitment";
-import { StartReviewButton, DecisionButtons } from "./decision-forms";
+import { computeFulfillmentCounts, canRequestAcceptFulfillment, canCancelRequestStatus } from "@/lib/recruitment";
+import { StartReviewButton, DecisionButtons, CancelRequestForm } from "./decision-forms";
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
@@ -26,6 +32,9 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
       requesterPosition: { include: { job: true } },
       submittedByAccount: true,
       approvedByAccount: true,
+      decisionPosition: { include: { job: true } },
+      cancelledByAccount: true,
+      cancelledByEmployee: true,
       fulfillments: {
         include: { employee: true, assignment: { include: { position: { include: { job: true } } } } },
       },
@@ -38,10 +47,16 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  const activeHrManagerPositionIds = hrManagerPositions.map((p) => p.positionId);
+
   const counts = computeFulfillmentCounts(request.requestedHeadcount, request.fulfillments.length);
-  const canApprove = canApproveRecruitmentRequest(session);
+  const canApprove = canApproveRecruitmentRequest(activeHrManagerPositionIds);
   const canFulfill =
     canCreateEmployeeFromRequest(session) && canRequestAcceptFulfillment(request.status) && !counts.isFull;
+  const canCancel =
+    canCancelRecruitmentRequest(session, request.requesterEmployeeId, activeHrManagerPositionIds) &&
+    canCancelRequestStatus(request.status);
 
   return (
     <div className="space-y-6">
@@ -139,6 +154,18 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
             <>
               {" · "}
               {t("recruitment.approvedBy")}: {request.approvedByAccount.usernameOrEmail} ({formatDate(request.approvedAt)})
+              {request.decisionPosition && (
+                <> — {t("recruitment.decisionPosition")}: {request.decisionPosition.job.jobTitle} ({request.decisionPosition.positionCode})</>
+              )}
+            </>
+          )}
+          {request.status === "CANCELLED" && (
+            <>
+              {" · "}
+              {t("recruitment.cancelledBy")}:{" "}
+              {request.cancelledByEmployee?.preferredName ?? request.cancelledByEmployee?.fullLegalName ?? request.cancelledByAccount?.usernameOrEmail ?? "—"}
+              {" "}({t(`cancellationAuthority.${request.cancellationAuthority}`)}, {formatDate(request.cancelledAt)})
+              {request.cancellationReason && <> — {request.cancellationReason}</>}
             </>
           )}
         </p>
@@ -150,13 +177,19 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
             <StartReviewButton requestId={request.id} />
           </div>
           <div className="mt-3">
-            <DecisionButtons requestId={request.id} />
+            <DecisionButtons requestId={request.id} positions={hrManagerPositions} />
           </div>
         </div>
       )}
       {canApprove && request.status === "UNDER_REVIEW" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <DecisionButtons requestId={request.id} />
+          <DecisionButtons requestId={request.id} positions={hrManagerPositions} />
+        </div>
+      )}
+      {canCancel && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <p className="mb-3 text-sm font-medium text-slate-900">{t("recruitment.cancelRequestButton")}</p>
+          <CancelRequestForm requestId={request.id} />
         </div>
       )}
 

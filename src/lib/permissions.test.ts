@@ -8,6 +8,10 @@ import {
   isHrManager,
   canApproveRecruitmentRequest,
   canCancelRecruitmentRequest,
+  canSubmitMovementRequest,
+  canApproveMovementRequest,
+  canExecuteMovementRequest,
+  canCancelMovementRequest,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
   projectEmployee,
@@ -114,6 +118,57 @@ describe("canCancelRecruitmentRequest (DM-25/ACC-16)", () => {
   it("denies a plain employee who is neither the Requester, an HR Manager, nor HR Admin", () => {
     const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-bystander" });
     expect(canCancelRecruitmentRequest(session, "emp-requester", [])).toBe(false);
+  });
+});
+
+describe("canSubmitMovementRequest (LIF-04)", () => {
+  it("allows the employee's direct manager", () => {
+    const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "manager-1" });
+    expect(canSubmitMovementRequest(session, true)).toBe(true);
+  });
+
+  it("allows HR Admin even when not the direct manager", () => {
+    const session = mockSession({ roles: ["HR_ADMIN"], employeeId: null });
+    expect(canSubmitMovementRequest(session, false)).toBe(true);
+  });
+
+  it("denies a plain employee who isn't the direct manager", () => {
+    const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" });
+    expect(canSubmitMovementRequest(session, false)).toBe(false);
+  });
+});
+
+describe("canApproveMovementRequest / canExecuteMovementRequest (LIF-04)", () => {
+  it("approval requires an active HR Manager position, not HR Admin", () => {
+    expect(canApproveMovementRequest([])).toBe(false);
+    expect(canApproveMovementRequest(["pos-hr-manager"])).toBe(true);
+  });
+
+  it("execution requires HR Admin", () => {
+    expect(canExecuteMovementRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canExecuteMovementRequest(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }))).toBe(false);
+  });
+});
+
+describe("canCancelMovementRequest", () => {
+  it("allows the original Requester, an active HR Manager, or HR Admin", () => {
+    expect(
+      canCancelMovementRequest(mockSession({ roles: ["EMPLOYEE"], employeeId: "requester-1" }), "requester-1", [])
+    ).toBe(true);
+    expect(
+      canCancelMovementRequest(mockSession({ roles: ["EMPLOYEE"], employeeId: "hr-manager-1" }), "requester-1", [
+        "pos-hr-manager",
+      ])
+    ).toBe(true);
+    expect(canCancelMovementRequest(mockSession({ roles: ["HR_ADMIN"], employeeId: null }), "requester-1", [])).toBe(
+      true
+    );
+  });
+
+  it("denies a bystander", () => {
+    expect(
+      canCancelMovementRequest(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "requester-1", [])
+    ).toBe(false);
   });
 });
 

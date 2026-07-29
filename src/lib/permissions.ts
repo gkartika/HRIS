@@ -96,6 +96,42 @@ export function canCancelRecruitmentRequest(
   return isRequester || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
 }
 
+// LIF-04: "An authorized manager submits or recommends promotion/transfer."
+// isEmployeesManager is resolved by the caller via
+// src/lib/manager-scope.ts's isDirectManagerOfEmployee (Prisma-backed, kept
+// out of this file for the same dependency-free-for-Vitest reason as
+// isHrManager above). HR Admin may also submit directly, same administrative
+// latitude it already has for Employee creation (DEC-014).
+export function canSubmitMovementRequest(session: Session, isEmployeesManager: boolean): boolean {
+  return isHrAdmin(session) || isEmployeesManager;
+}
+
+// LIF-04: "HR Manager approves or rejects the movement" — same
+// Position-derived-only authority as Recruitment (WF-15), reused here for
+// consistency.
+export function canApproveMovementRequest(activeHrManagerPositionIds: string[]): boolean {
+  return isHrManager(activeHrManagerPositionIds);
+}
+
+// LIF-04: "HR Admin executes the future/effective-dated Position
+// Assignment" — only after HR Manager has approved (enforced separately via
+// canExecuteMovementRequestStatus on the request's status).
+export function canExecuteMovementRequest(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// Same DM-25-style exception as Recruitment cancellation: the original
+// Requester (the submitting manager), an active HR Manager, or HR Admin may
+// cancel an eligible Movement Request.
+export function canCancelMovementRequest(
+  session: Session,
+  requesterEmployeeId: string,
+  activeHrManagerPositionIds: string[]
+): boolean {
+  const isRequester = !!session.user.employeeId && session.user.employeeId === requesterEmployeeId;
+  return isRequester || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
+}
+
 // CTL-12 / employee identity documents (KTP, KK, contracts, etc.): "HR Admin
 // – People & Payroll has full access. An employee may access only their own
 // permitted documents. Managers, Training Admin, GA/Assets Admin and

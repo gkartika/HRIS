@@ -11,6 +11,7 @@ import {
   Briefcase,
   Inbox,
   BarChart3,
+  ArrowLeftRight,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin, isGaAdmin, canSubmitRecruitmentRequest } from "@/lib/permissions";
@@ -58,6 +59,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   navItems.push({ href: "/organization", label: t("nav.organization"), icon: Building2 });
   if (canSubmitRecruitmentRequest(session)) {
     navItems.push({ href: "/recruitment", label: t("recruitment.navLabel"), icon: FileText });
+  }
+  // LIF-04: same broad visibility as Recruitment — any employee-linked
+  // account can see the list (scoped to their own cases) or HR Admin (sees
+  // all); actually submitting a request is separately gated per-employee by
+  // canSubmitMovementRequest on the /movements/new page itself.
+  if (isHrAdmin(session) || session.user.employeeId) {
+    navItems.push({ href: "/movements", label: t("movement.navLabel"), icon: ArrowLeftRight });
   }
   // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
   // Admin operational nav below, and only visible while the login currently

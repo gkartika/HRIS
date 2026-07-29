@@ -150,9 +150,10 @@ English.
   counts, status transitions, cancellation-status eligibility, request-number
   formatting), unit tested. See `src/lib/position-occupancy.ts` — shared
   `isPositionOccupiedByPrimary()` / `syncPositionStatus()`, used by the
-  Movement action, the Assignment CSV import, and Recruitment Request
-  fulfillment so a Position can never end up with two active PRIMARY
-  assignments.
+  direct "Pindahkan ke Posisi Baru" Movement action
+  (`employees/[id]/assignment-actions.ts`), the formal Movement Request flow
+  below, the Assignment CSV import, and Recruitment Request fulfillment so a
+  Position can never end up with two active PRIMARY assignments.
 - `src/lib/hr-manager.ts` — `getActiveHrManagerPositions()`: the live,
   Prisma-backed derivation of HR Manager authority from
   `Position.grantsHrManagerAccess` + an employee's currently-ACTIVE,
@@ -171,10 +172,26 @@ English.
   that atomically creates the Employee, Primary Assignment, and
   `RecruitmentRequestFulfillment` link. Manpower, Candidate, and Selected
   Person modules are explicitly out of scope.
+- `src/lib/movement.ts` — pure Movement Request logic (status-transition
+  eligibility, STATUS_CHANGE-vs-Position-change validation, request-number
+  formatting), unit tested. `src/lib/manager-scope.ts`'s
+  `isDirectManagerOfEmployee()` is the Prisma-backed check (parallel to
+  `hr-manager.ts`) for "is this account the target employee's direct
+  manager" — resolved fresh, never stored.
+- `src/app/(app)/movements/` — the Movement Request flow (LIF-04, Data
+  Fields Blueprint "28 Movement Requests"): list, submit (`new/`, reached
+  from a "Ajukan Mutasi" link on the Employee detail page), detail with
+  approve/reject (HR-Manager-Position-only) and execute
+  (`executeMovementRequest`, HR-Admin-only — performs the actual Assignment
+  close-old/open-new, or just updates `employmentStatus` for a
+  STATUS_CHANGE request) and cancel (Requester/HR-Manager/HR-Admin). This is
+  a *formal* path alongside the pre-existing direct "Pindahkan ke Posisi
+  Baru" HR-Admin action, same direct-vs-formal-request precedent as DEC-014.
 - `src/app/(app)/my-positions/`, `approvals/`, `hr-dashboard/`, `hr-reports/`
   — the personal HR Manager workspace (ACC-15), each gated by
-  `getActiveHrManagerPositions()`. Dashboard and Reports are intentionally
-  empty placeholders, deferred to a later increment. `/profile` (Phase 0) is
+  `getActiveHrManagerPositions()`. `approvals/` lists pending items from both
+  Recruitment and Movement. Dashboard and Reports are intentionally empty
+  placeholders, deferred to a later increment. `/profile` (Phase 0) is
   reused for "My Profile" rather than duplicated.
 - `src/lib/import-export/` — CTL-13 universal import/export framework: one
   module per dataset (`employees.ts`, `org-units.ts`, `jobs.ts`,

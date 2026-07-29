@@ -10,7 +10,9 @@ import {
   canManageAssignments,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
+  canSubmitMovementRequest,
 } from "@/lib/permissions";
+import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { EmployeeProfileView } from "@/components/employee-profile-view";
@@ -69,6 +71,9 @@ export default async function EmployeeDetailPage({
   const canEdit = isSelf || isHrAdmin(session);
   const canManage = canManageAssignments(session);
   const canUploadDocs = canUploadEmployeeDocument(session);
+  const isEmployeesManager = await isDirectManagerOfEmployee(session.user.employeeId, employee.id);
+  const canSubmitMovement =
+    !!employee.currentPositionId && canSubmitMovementRequest(session, isEmployeesManager);
 
   // noKk/namaIbuKandung/ptkpStatusCode are already stripped by projectEmployee
   // for roles that shouldn't see them. educationLevel isn't in that restricted
@@ -101,14 +106,24 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="space-y-6">
-      {canEdit && (
-        <div className="flex justify-end">
-          <Link
-            href={`/employees/${employee.id}/edit`}
-            className="text-sm text-indigo-600 hover:underline"
-          >
-            {t("common.edit")}
-          </Link>
+      {(canEdit || canSubmitMovement) && (
+        <div className="flex justify-end gap-4">
+          {canSubmitMovement && (
+            <Link
+              href={`/movements/new?employeeId=${employee.id}`}
+              className="text-sm text-indigo-600 hover:underline"
+            >
+              {t("movement.newRequest")}
+            </Link>
+          )}
+          {canEdit && (
+            <Link
+              href={`/employees/${employee.id}/edit`}
+              className="text-sm text-indigo-600 hover:underline"
+            >
+              {t("common.edit")}
+            </Link>
+          )}
         </div>
       )}
       {incomplete && (canEdit || canManage) && (

@@ -3,6 +3,130 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-29 — Movement Request (LIF-04, Data Fields Blueprint "28 Movement Requests")
+
+Phase 2's next increment after the HR Manager access correction: LIF-04 is
+the only remaining Phase 2 lifecycle row marked **P0** (Onboarding,
+Contract Renewal, and Offboarding are all P1) and its mechanics reuse the
+existing Assignment model directly, so it was the natural next slice —
+"reuse the Phase 1 Assignment model; do not rebuild it."
+
+### A formal request/decision/execution flow, alongside the existing direct action
+LIF-04: "An authorized manager submits or recommends promotion/transfer. HR
+Manager approves or rejects the movement. HR Admin executes the future/
+effective-dated Position Assignment." The existing "Pindahkan ke Posisi
+Baru" panel on the Employee page (Phase 1) executes immediately with no
+approval step — kept as-is rather than removed, on the same direct-vs-
+formal-request precedent as DEC-014 (Employee creation stays valid without a
+Recruitment Request). The new `MovementRequest` model adds the formal path
+Build Guide requires HR Manager decisions to gate. Whether the direct path
+should eventually require the same gate is an open question for a future
+pass, not decided here.
+
+### Schema fields sourced from the Data Fields Blueprint's "Movement Requests" dataset
+Modeled `movement_request_id` → `requestNumber` (`MOV-{year}-{seq}`,
+matching Recruitment's `REQ-` convention), `employee_id`, `movement_type`
+(`PROMOTION`/`ROTATION`/`MUTATION`/`DEMOTION`/`STATUS_CHANGE` — the
+blueprint's exact 5 dropdown values), `current_position_id` (a snapshot
+taken at submission time — the employee's actual current position could
+change before decision/execution), `proposed_position_id`,
+`proposed_effective_date`, `request_reason`, and `approval_status`
+(`SUBMITTED`/`APPROVED`/`REJECTED`/`IMPLEMENTED`/`CANCELLED` — note: no
+"Returned" state, unlike Recruitment's fuller WF-13 machine; the blueprint
+lists exactly these five). **Deliberately not modeled**:
+`source_evaluation_id`, `competency_readiness_percent`,
+`attendance_summary`, `training_readiness` — these reference
+Evaluation/Competency/Attendance/Training datasets that don't exist yet in
+this app (Phase 3/5). Adding stub FKs to nonexistent datasets now would be
+speculative; revisit when those phases start.
+
+### STATUS_CHANGE is the one type that doesn't move a Position
+The blueprint's `movement_type` dropdown includes "Status Change" (e.g. a
+PKWT→PKWTT conversion) alongside the four Position-changing types, but
+defines no separate "proposed employment status" field. Rather than leave
+that dropdown option meaningless, added `proposedEmploymentStatus
+EmploymentStatus?` (reusing the existing enum, no new modeling) and made
+`proposedPositionId` required for every type — for STATUS_CHANGE the
+create form locks it to the employee's current Position (disabled `<select>`
++ hidden input pattern) since there's nothing to propose there.
+`validateProposedPosition()` (`src/lib/movement.ts`, unit tested) enforces
+the inverse rule for every other type: the proposed Position must actually
+differ from the current one. Execution (`executeMovementRequest`) skips the
+Assignment close-old/open-new step entirely for STATUS_CHANGE and only
+updates `Employee.employmentStatus` — verified live: approved and executed
+a STATUS_CHANGE request for Budi (PKWTT → PKWT) and confirmed no new
+Assignment row was created, only the employmentStatus field changed.
+
+### Decision authority: same HR-Manager-Position-derived pattern as Recruitment, reused not duplicated
+`canApproveMovementRequest()` and `canExecuteMovementRequest()`
+(`permissions.ts`) call the same `isHrManager()`/`isHrAdmin()` primitives
+Recruitment already established — HR Manager alone approves/rejects
+(WF-15's principle applied here too, even though LIF-04 doesn't restate it
+as explicitly), HR Admin alone executes. `decisionPositionId` is captured
+the same way (hidden field when the HR Manager holds exactly one qualifying
+Position, a `<select>` when they hold more). Cancellation reuses the exact
+same `CancellationAuthority` enum and Requester-or-HR-Manager-or-HR-Admin
+rule as Recruitment's DM-25 — Movement's blueprint doesn't spell out
+cancellation authority the way DM-25 does for Recruitment, but applying the
+same rule keeps the app's cancellation model consistent everywhere rather
+than inventing a second one.
+
+### "Authorized manager" is the employee's direct manager, resolved fresh — not a stored flag
+Added `src/lib/manager-scope.ts`'s `isDirectManagerOfEmployee()`: true only
+when the target employee's `currentPosition.reportsToPositionId` equals the
+candidate manager's own `currentPositionId`. Same "derive live, never
+cache" principle as HR Manager access — a manager's authority to submit for
+a specific employee is checked fresh against current Position data, not a
+remembered relationship. HR Admin can also submit directly (mirrors its
+existing latitude to create Employees directly), and the create-request
+form gives HR Admin the same explicit "Diajukan Oleh" employee-picker
+Recruitment's form already has — **a bug caught during live testing**: the
+first implementation defaulted an HR-Admin-submitted request's
+`requesterEmployeeId` to the *target* employee whenever
+`session.user.employeeId` was null (HR Admin accounts have no linked
+Employee), which silently mislabeled every HR-Admin-submitted request as
+"requested by the person being moved." Fixed by requiring an explicit
+`requesterEmployeeId` from the form (mirroring Recruitment's pattern
+exactly) instead of falling back to the target employee.
+
+### Approval Inbox extended, not duplicated
+`/approvals` (built for Recruitment in the HR Manager increment) now shows
+a second section for pending Movement Requests, since DSH-04's "HR Manager
+personal dashboard shows pending approvals" is written generically, not
+Recruitment-specific. Same scoping rule: visible to whoever currently holds
+an active HR Manager Position.
+
+### Verified live end-to-end
+Submitted MOV-2026-0002 (Mutation, Siti → vacant "Manager FP" seat) as HR
+Admin with Budi as requester, approved as HR Manager (Made) with
+`decisionPositionId` auto-populated, executed as HR Admin — confirmed
+Siti's Assignment history shows the old Primary closed and the new one
+opened, nothing overwritten. Submitted, approved, and executed a
+STATUS_CHANGE request for Budi (see above). Confirmed HR Admin sees no
+approve/reject controls on a Submitted request (only Cancel) and that
+attempting the position-occupancy check correctly blocks a move into an
+already-Filled Position. Cancelled a test request (wrong-requester-bug
+artifact) and confirmed `cancellationAuthority: HR_ADMIN` recorded
+correctly. 12 new unit tests (`movement.test.ts`, `permissions.test.ts`
+additions); 67 tests total across 6 files, clean `tsc` and `eslint`.
+
+### Migration
+`20260729072950_movement_request_lif04` — purely additive (one new model,
+two new enums, back-relations on Employee/Position/Account/Assignment). No
+existing Phase 0/1/2 data touched.
+
+## 2026-07-29 — Recruitment Request field correction: Shift simplified to two options
+
+The Shift dropdown on the FR-HC-01-01 form (`recruitment/new`) was reduced
+from four values (`SHIFT_1`/`SHIFT_2`/`SHIFT_3`/`NON_SHIFT`) to two
+(`SHIFT`/`NON_SHIFT`) per direct user correction. No migration was needed —
+Prisma represents enums on SQLite as plain `TEXT` columns with no `CHECK`
+constraint, so narrowing the set of allowed values is purely an
+application/TypeScript-level change (confirmed by inspecting the generated
+migration SQL for the original `shiftCode` column: `"shiftCode" TEXT NOT
+NULL`, no enum constraint). All existing Recruitment Requests were already
+`NON_SHIFT`, so nothing needed backfilling.
+
 ## 2026-07-29 — HR Manager persona and corrected recruitment access model (ACC-14..16, WF-15, DM-25, DEC-004/015/016/018)
 
 The Build Guide was updated with a correction: the earlier Recruitment

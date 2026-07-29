@@ -3,18 +3,22 @@
 // HR App Data Fields Blueprint (see CLAUDE.md for links and priority order).
 //
 // Scope note: this schema currently covers Phase 0 (Foundation), Phase 1
-// (Employee & Organization), and a first slice of Phase 2 (Employee
-// Lifecycle) — the simplified Recruitment Request -> approval -> Create
-// Employee -> initial Primary Assignment -> fulfillment-link flow (DEC-013,
-// DM-21..DM-23, WF-13..WF-14), corrected so decision authority is
-// Position-derived HR Manager only, with HR Admin as a separate operational
-// account and Requester/HR Manager/HR Admin cancellation (ACC-14..16,
-// WF-15, DM-25, DEC-004/015/016/018). Explicitly NOT modeled: Manpower,
-// Candidate, Selected Person (DEC-013 excludes them), and the rest of
-// Phase 2 (onboarding, contracts/renewal, movement, resignation, exit
-// clearance) plus later phases (Competency, Training, Assets, Payroll-slip
-// import) — these belong to later increments and will be added when those
-// increments start.
+// (Employee & Organization), and Phase 2 (Employee Lifecycle) slices for
+// Recruitment and Movement:
+// - Recruitment Request -> approval -> Create Employee -> initial Primary
+//   Assignment -> fulfillment-link flow (DEC-013, DM-21..DM-23, WF-13..
+//   WF-14), corrected so decision authority is Position-derived HR Manager
+//   only, with HR Admin as a separate operational account and
+//   Requester/HR Manager/HR Admin cancellation (ACC-14..16, WF-15, DM-25,
+//   DEC-004/015/016/018).
+// - Movement Request -> HR Manager decision -> HR Admin execution flow
+//   (LIF-04, Data Fields Blueprint "28 Movement Requests"), reusing the
+//   Phase 1 Assignment model rather than rebuilding it.
+// Explicitly NOT modeled: Manpower, Candidate, Selected Person (DEC-013
+// excludes them), and the rest of Phase 2 (onboarding, contracts/renewal,
+// resignation, exit clearance) plus later phases (Competency, Training,
+// Assets, Payroll-slip import) — these belong to later increments and will
+// be added when those increments start.
 
 generator client {
   provider = "prisma-client"
@@ -202,6 +206,31 @@ enum RecruitmentRequestStatus {
   CANCELLED
 }
 
+// ---------- Phase 2: Movement Request (LIF-04, Data Fields Blueprint "28 Movement Requests") ----------
+// source_evaluation_id, competency_readiness_percent, attendance_summary, and
+// training_readiness from the blueprint are deliberately NOT modeled yet —
+// they reference Evaluation/Competency/Attendance/Training, none of which
+// exist in this app (Phase 3/5). Adding stub FKs to nonexistent datasets now
+// would be speculative; revisit when those phases start.
+
+enum MovementType {
+  PROMOTION
+  ROTATION
+  MUTATION
+  DEMOTION
+  STATUS_CHANGE
+}
+
+// Blueprint's exact approval_status values — no "Returned" state for
+// Movement (unlike Recruitment's fuller WF-13 state machine).
+enum MovementRequestStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  IMPLEMENTED
+  CANCELLED
+}
+
 // ---------- User Accounts (separate from Employee Master, per ACC-01) ----------
 
 model Account {
@@ -228,6 +257,10 @@ model Account {
   recruitmentRequestsApprovedBy RecruitmentRequest[] @relation("RecruitmentApprovedBy")
   recruitmentFulfillmentsLinked RecruitmentRequestFulfillment[]
   recruitmentRequestsCancelledBy RecruitmentRequest[] @relation("RecruitmentCancelledByAccount")
+  movementRequestsSubmittedBy   MovementRequest[] @relation("MovementSubmittedBy")
+  movementRequestsDecidedBy     MovementRequest[] @relation("MovementDecisionBy")
+  movementRequestsImplementedBy MovementRequest[] @relation("MovementImplementedBy")
+  movementRequestsCancelledBy   MovementRequest[] @relation("MovementCancelledByAccount")
 }
 
 model AccountRole {
@@ -299,6 +332,9 @@ model Employee {
   recruitmentRequestsSubmitted RecruitmentRequest[] @relation("RecruitmentRequester")
   recruitmentFulfillment   RecruitmentRequestFulfillment?
   recruitmentRequestsCancelled RecruitmentRequest[] @relation("RecruitmentCancelledByEmployee")
+  movementRequests             MovementRequest[] @relation("MovementEmployee")
+  movementRequestsSubmitted    MovementRequest[] @relation("MovementRequester")
+  movementRequestsCancelled    MovementRequest[] @relation("MovementCancelledByEmployee")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -394,6 +430,10 @@ model Position {
   requestedForRecruitment RecruitmentRequest[] @relation("RequestedPosition")
   requesterForRecruitment RecruitmentRequest[] @relation("RequesterPosition")
   recruitmentDecisions RecruitmentRequest[] @relation("RecruitmentDecisionPosition")
+  movementRequestsAsCurrent  MovementRequest[] @relation("MovementCurrentPosition")
+  movementRequestsAsProposed MovementRequest[] @relation("MovementProposedPosition")
+  movementRequestsAsRequesterPosition MovementRequest[] @relation("MovementRequesterPosition")
+  movementRequestsDecisions  MovementRequest[] @relation("MovementDecisionPosition")
 }
 
 model Assignment {
@@ -410,6 +450,7 @@ model Assignment {
   createdAt             DateTime         @default(now())
 
   fulfillment           RecruitmentRequestFulfillment?
+  movementImplementation MovementRequest?
 }
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
@@ -493,6 +534,78 @@ model RecruitmentRequestFulfillment {
   linkedAt             DateTime           @default(now())
   linkedByAccountId    String
   linkedByAccount      Account            @relation(fields: [linkedByAccountId], references: [id])
+}
+
+// ---------- Phase 2: Movement Request (LIF-04) ----------
+// WF-17 decision-to-execution pattern: an authorized manager (or HR Admin)
+// submits/recommends -> the active HR Manager Position approves or rejects
+// -> HR Admin executes the effective-dated Assignment change. This is a
+// *formal* path alongside the existing direct "Pindahkan ke Posisi Baru"
+// HR-Admin action on the Employee page (kept as an administrative
+// shortcut/correction tool, same direct-vs-formal-request precedent as
+// DEC-014 for Employee creation) — see docs/DECISIONS.md.
+model MovementRequest {
+  id                       String                @id @default(cuid())
+  requestNumber            String                @unique
+  employeeId               String
+  employee                 Employee              @relation("MovementEmployee", fields: [employeeId], references: [id])
+  movementType             MovementType
+  // Captured at submission time from Employee.currentPositionId — a
+  // snapshot, since the employee's actual current position could change
+  // before this request is decided/executed.
+  currentPositionId        String
+  currentPosition          Position              @relation("MovementCurrentPosition", fields: [currentPositionId], references: [id])
+  // Required for every movementType, incl. STATUS_CHANGE (where it's the
+  // same as currentPositionId — no position change, only employmentStatus).
+  proposedPositionId       String
+  proposedPosition         Position              @relation("MovementProposedPosition", fields: [proposedPositionId], references: [id])
+  // Only meaningful/required when movementType is STATUS_CHANGE.
+  proposedEmploymentStatus EmploymentStatus?
+  proposedEffectiveDate    DateTime
+  requestReason            String
+  status                   MovementRequestStatus @default(SUBMITTED)
+
+  requesterEmployeeId      String
+  requesterEmployee        Employee              @relation("MovementRequester", fields: [requesterEmployeeId], references: [id])
+  requesterPositionId      String?
+  requesterPosition        Position?             @relation("MovementRequesterPosition", fields: [requesterPositionId], references: [id])
+  submittedAt              DateTime              @default(now())
+  submittedByAccountId     String
+  submittedByAccount       Account               @relation("MovementSubmittedBy", fields: [submittedByAccountId], references: [id])
+
+  // LIF-04: "HR Manager approves or rejects" — decisionPositionId records
+  // which active HR Manager Position gave authority (WF-02/WF-05), same
+  // pattern as RecruitmentRequest.decisionPositionId.
+  decisionAt               DateTime?
+  decisionByAccountId      String?
+  decisionByAccount        Account?              @relation("MovementDecisionBy", fields: [decisionByAccountId], references: [id])
+  decisionPositionId       String?
+  decisionPosition         Position?             @relation("MovementDecisionPosition", fields: [decisionPositionId], references: [id])
+  decisionNote             String?
+
+  // LIF-04: "HR Admin executes the future/effective-dated Position
+  // Assignment and preserves previous records" — implementedAssignmentId
+  // points at the new Assignment row created by execution (old Assignment
+  // is closed, never overwritten, same as the direct Movement action).
+  implementedAt            DateTime?
+  implementedByAccountId   String?
+  implementedByAccount     Account?              @relation("MovementImplementedBy", fields: [implementedByAccountId], references: [id])
+  implementedAssignmentId  String?               @unique
+  implementedAssignment    Assignment?           @relation(fields: [implementedAssignmentId], references: [id])
+
+  // DM-25-style cancellation, reusing the same CancellationAuthority enum
+  // as Recruitment for consistency. Only eligible from SUBMITTED/APPROVED.
+  cancelledAt              DateTime?
+  cancelledByAccountId     String?
+  cancelledByAccount       Account?              @relation("MovementCancelledByAccount", fields: [cancelledByAccountId], references: [id])
+  cancelledByEmployeeId    String?
+  cancelledByEmployee      Employee?             @relation("MovementCancelledByEmployee", fields: [cancelledByEmployeeId], references: [id])
+  cancellationAuthority    CancellationAuthority?
+  cancellationReason       String?
+  previousStatus           MovementRequestStatus?
+
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
 }
 
 // ---------- Controls: audit, import, private files ----------

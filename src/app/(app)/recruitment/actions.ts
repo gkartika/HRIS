@@ -21,6 +21,7 @@ import {
   nextStatusAfterFulfillment,
   formatRequestNumber,
 } from "@/lib/recruitment";
+import { formatOnboardingCaseNumber } from "@/lib/onboarding";
 import { validateNoKk } from "@/lib/validation/employee-fields";
 import type {
   RecruitmentReasonCode,
@@ -368,6 +369,21 @@ export async function createEmployeeFromRecruitmentRequest(
       await tx.position.update({ where: { id: positionId }, data: { positionStatus: "FILLED" } });
     }
 
+    // LIF-03: same automatic Onboarding Case as direct Employee creation —
+    // this path must not skip it just because the Employee came from a
+    // Recruitment Request.
+    const onbYear = hireDateObj.getFullYear();
+    const onbCountThisYear = await tx.onboardingCase.count({
+      where: { caseNumber: { startsWith: `ONB-${onbYear}-` } },
+    });
+    await tx.onboardingCase.create({
+      data: {
+        caseNumber: formatOnboardingCaseNumber(onbCountThisYear + 1, onbYear),
+        employeeId: employee.id,
+        plannedStartDate: hireDateObj,
+      },
+    });
+
     return { employee, assignment, fulfillment, newStatus };
   });
 
@@ -390,5 +406,6 @@ export async function createEmployeeFromRecruitmentRequest(
   revalidatePath("/recruitment");
   revalidatePath("/employees");
   revalidatePath("/organization");
+  revalidatePath("/onboarding");
   redirect(`/employees/${result.employee.id}`);
 }

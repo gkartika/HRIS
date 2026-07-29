@@ -187,6 +187,17 @@ English.
   STATUS_CHANGE request) and cancel (Requester/HR-Manager/HR-Admin). This is
   a *formal* path alongside the pre-existing direct "Pindahkan ke Posisi
   Baru" HR-Admin action, same direct-vs-formal-request precedent as DEC-014.
+- `src/lib/onboarding.ts` — pure Onboarding Case logic (`computeOnboardingStatus()`
+  deriving Not Started/In Progress/Overdue/Complete live from the three
+  completion flags, never stored; case-number formatting), unit tested.
+  `src/app/(app)/onboarding/` (LIF-03, Data Fields Blueprint "12
+  Onboarding"): list and detail with three admin-owned completion toggles
+  (contract/mandatory-training-material/assets, each with its own Primary
+  Owner per the blueprint, plus HR Admin). An `OnboardingCase` is created
+  automatically inside the same transaction as every new Employee — both
+  direct creation (`employees/actions.ts`) and Recruitment fulfillment
+  (`recruitment/actions.ts`) — never a separate step. Visibility is "Admin
+  shared" (HR/Training/GA Admin + active HR Manager), not self-view.
 - `src/app/(app)/my-positions/`, `approvals/`, `hr-dashboard/`, `hr-reports/`
   — the personal HR Manager workspace (ACC-15), each gated by
   `getActiveHrManagerPositions()`. `approvals/` lists pending items from both

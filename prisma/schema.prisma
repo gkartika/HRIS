@@ -14,10 +14,15 @@
 // - Movement Request -> HR Manager decision -> HR Admin execution flow
 //   (LIF-04, Data Fields Blueprint "28 Movement Requests"), reusing the
 //   Phase 1 Assignment model rather than rebuilding it.
+// - Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding"): created
+//   automatically alongside every new Employee (direct creation or
+//   Recruitment fulfillment), tracked via three admin-owned completion
+//   flags (contract/training-material/assets) with a live-computed overall
+//   status — never a stored one.
 // Explicitly NOT modeled: Manpower, Candidate, Selected Person (DEC-013
-// excludes them), and the rest of Phase 2 (onboarding, contracts/renewal,
-// resignation, exit clearance) plus later phases (Competency, Training,
-// Assets, Payroll-slip import) — these belong to later increments and will
+// excludes them), and the rest of Phase 2 (contracts/renewal, resignation,
+// exit clearance) plus later phases (Competency, Training, Assets,
+// Payroll-slip import) — these belong to later increments and will
 // be added when those increments start.
 
 generator client {
@@ -121,6 +126,16 @@ enum ImportStatus {
   NEEDS_FIX
   POSTED
   ROLLED_BACK
+}
+
+// LIF-03 / Data Fields Blueprint "12 Onboarding": computed live from the
+// three completion flags + planned_start_date/mandatory_material_due_date —
+// never stored directly.
+enum OnboardingOverallStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  OVERDUE
+  COMPLETE
 }
 
 // DM-25 / WF-13: who had the authority to cancel a Recruitment Request.
@@ -261,6 +276,9 @@ model Account {
   movementRequestsDecidedBy     MovementRequest[] @relation("MovementDecisionBy")
   movementRequestsImplementedBy MovementRequest[] @relation("MovementImplementedBy")
   movementRequestsCancelledBy   MovementRequest[] @relation("MovementCancelledByAccount")
+  onboardingContractsCompletedBy OnboardingCase[] @relation("OnboardingContractCompletedBy")
+  onboardingTrainingCompletedBy  OnboardingCase[] @relation("OnboardingTrainingCompletedBy")
+  onboardingAssetsCompletedBy    OnboardingCase[] @relation("OnboardingAssetsCompletedBy")
 }
 
 model AccountRole {
@@ -335,6 +353,7 @@ model Employee {
   movementRequests             MovementRequest[] @relation("MovementEmployee")
   movementRequestsSubmitted    MovementRequest[] @relation("MovementRequester")
   movementRequestsCancelled    MovementRequest[] @relation("MovementCancelledByEmployee")
+  onboardingCase               OnboardingCase?
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -606,6 +625,47 @@ model MovementRequest {
 
   createdAt                DateTime              @default(now())
   updatedAt                DateTime              @updatedAt
+}
+
+// ---------- Phase 2: Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding") ----------
+// Created automatically alongside every new Employee (direct creation or
+// Recruitment fulfillment) — "reuse the Employee and initial Position
+// Assignment; do not re-enter identity data." Three completion flags, each
+// with its own admin owner per the blueprint (People & Payroll / Training /
+// Assets); candidate_id, asset_requirement_profile, and other fields tied to
+// Candidate/Competency/Asset datasets that don't exist yet in this app are
+// deliberately not modeled — same reasoning as Movement Request's deferred
+// Evaluation/Competency fields.
+model OnboardingCase {
+  id                       String    @id @default(cuid())
+  caseNumber               String    @unique
+  employeeId               String    @unique
+  employee                 Employee  @relation(fields: [employeeId], references: [id])
+  plannedStartDate         DateTime
+
+  contractComplete             Boolean   @default(false)
+  contractCompletedAt          DateTime?
+  contractCompletedByAccountId  String?
+  contractCompletedByAccount    Account? @relation("OnboardingContractCompletedBy", fields: [contractCompletedByAccountId], references: [id])
+
+  mandatoryMaterialComplete        Boolean   @default(false)
+  mandatoryMaterialDueDate         DateTime?
+  mandatoryMaterialCompletedAt     DateTime?
+  mandatoryMaterialCompletedByAccountId String?
+  mandatoryMaterialCompletedByAccount   Account? @relation("OnboardingTrainingCompletedBy", fields: [mandatoryMaterialCompletedByAccountId], references: [id])
+
+  assetsComplete             Boolean   @default(false)
+  assetsCompletedAt          DateTime?
+  assetsCompletedByAccountId  String?
+  assetsCompletedByAccount    Account? @relation("OnboardingAssetsCompletedBy", fields: [assetsCompletedByAccountId], references: [id])
+
+  // Set automatically the moment all three flags become true — never
+  // hand-set, and overall_status (Not Started/In Progress/Overdue/Complete)
+  // is computed live from these fields, never stored (src/lib/onboarding.ts).
+  completedAt              DateTime?
+
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 }
 
 // ---------- Controls: audit, import, private files ----------

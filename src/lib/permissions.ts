@@ -132,6 +132,28 @@ export function canCancelMovementRequest(
   return isRequester || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
 }
 
+// LIF-03/Data Fields Blueprint "12 Onboarding": "Shared onboarding across
+// People & Payroll, Training and Assets accounts" — visibility is "Admin
+// shared", not self-view (unlike Employee Master), plus the HR Manager per
+// ACC-15/DSH-13 ("HR Manager sees onboarding progress... in personal
+// dashboard").
+export function canViewOnboarding(session: Session, activeHrManagerPositionIds: string[]): boolean {
+  return isHrAdmin(session) || isTrainingAdmin(session) || isGaAdmin(session) || isHrManager(activeHrManagerPositionIds);
+}
+
+// Each completion flag has its own Primary Owner in the blueprint; HR Admin
+// (People & Payroll) can also mark any of them, consistent with its broader
+// operational latitude elsewhere in this app.
+export function canMarkOnboardingContract(session: Session): boolean {
+  return isHrAdmin(session);
+}
+export function canMarkOnboardingTraining(session: Session): boolean {
+  return isHrAdmin(session) || isTrainingAdmin(session);
+}
+export function canMarkOnboardingAssets(session: Session): boolean {
+  return isHrAdmin(session) || isGaAdmin(session);
+}
+
 // CTL-12 / employee identity documents (KTP, KK, contracts, etc.): "HR Admin
 // – People & Payroll has full access. An employee may access only their own
 // permitted documents. Managers, Training Admin, GA/Assets Admin and

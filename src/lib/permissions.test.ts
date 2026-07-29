@@ -12,6 +12,10 @@ import {
   canApproveMovementRequest,
   canExecuteMovementRequest,
   canCancelMovementRequest,
+  canViewOnboarding,
+  canMarkOnboardingContract,
+  canMarkOnboardingTraining,
+  canMarkOnboardingAssets,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
   projectEmployee,
@@ -169,6 +173,32 @@ describe("canCancelMovementRequest", () => {
     expect(
       canCancelMovementRequest(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "requester-1", [])
     ).toBe(false);
+  });
+});
+
+describe("Onboarding visibility and completion ownership (LIF-03)", () => {
+  it("canViewOnboarding allows HR Admin, Training Admin, GA Admin, and an active HR Manager", () => {
+    expect(canViewOnboarding(mockSession({ roles: ["HR_ADMIN"] }), [])).toBe(true);
+    expect(canViewOnboarding(mockSession({ roles: ["TRAINING_ADMIN"] }), [])).toBe(true);
+    expect(canViewOnboarding(mockSession({ roles: ["GA_ADMIN"] }), [])).toBe(true);
+    expect(canViewOnboarding(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), ["pos-hr-manager"])).toBe(
+      true
+    );
+  });
+
+  it("canViewOnboarding denies a plain employee with no admin role or HR Manager position", () => {
+    expect(canViewOnboarding(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), [])).toBe(false);
+  });
+
+  it("each completion flag is owned by its Primary Owner, plus HR Admin", () => {
+    expect(canMarkOnboardingContract(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canMarkOnboardingContract(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+    expect(canMarkOnboardingTraining(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canMarkOnboardingTraining(mockSession({ roles: ["GA_ADMIN"] }))).toBe(false);
+    expect(canMarkOnboardingTraining(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canMarkOnboardingAssets(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
+    expect(canMarkOnboardingAssets(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+    expect(canMarkOnboardingAssets(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
   });
 });
 

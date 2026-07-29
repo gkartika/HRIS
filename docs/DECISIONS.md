@@ -3,6 +3,112 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-29 — Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding")
+
+Next Phase 2 increment after Movement: the Build Guide's own "15 In-App
+Review" checklist bundles "Employee creation, request fulfillment,
+onboarding and movement" into one Phase 2 row (still "Not Reviewed") with
+the note "Continue here after the Recruitment role correction; reuse
+Phase 1 Employee and Assignment models" — direct creation, fulfillment, and
+Movement were already done, so Onboarding was the remaining piece of that
+row.
+
+### Created automatically alongside every new Employee, never a separate step
+LIF-03: "After Employee creation, HR Admin coordinates tasks... reuse the
+Employee and initial Position Assignment; do not re-enter identity data."
+Wired an `OnboardingCase` creation into the same transaction as both
+Employee-creation paths: direct creation (`employees/actions.ts`'s
+`createEmployee`, now transactional where it previously wasn't) and
+Recruitment fulfillment (`recruitment/actions.ts`'s
+`createEmployeeFromRecruitmentRequest`, extending its existing
+transaction). `plannedStartDate` defaults to `hireDate` — no separate date
+entry. Verified live: creating a direct Employee produced `ONB-2026-0001`
+automatically with no extra action needed.
+
+### Three completion flags, each with the blueprint's own Primary Owner
+Modeled `contractComplete`/`mandatoryMaterialComplete`/`assetsComplete`
+exactly as the blueprint's three booleans, each owned by a different admin
+type (People & Payroll / Training / Assets) per its Primary Owner column,
+plus HR Admin as universal owner (consistent with HR Admin's broader
+operational latitude elsewhere in this app). **Deliberately manual, not
+system-derived**: the blueprint ties these booleans to Contracts/Training
+Assignments/Asset Assignments, none of which exist yet in this app
+(Contract Renewal is still unbuilt Phase 2; Training is Phase 3; Assets is
+Phase 4) — building automatic derivation now would mean stub-linking to
+nonexistent systems. HR/Training/Assets Admin mark each flag directly,
+matching LIF-03's own framing ("HR Admin coordinates tasks... and
+responsible owners", not "the system detects completion"). Revisit once
+those underlying systems exist.
+
+### `candidate_id`, `asset_requirement_profile` deliberately not modeled
+Same reasoning as Movement Request's deferred Evaluation/Competency
+fields — these reference Candidate and Asset-catalog datasets that don't
+exist in this app yet.
+
+### overall_status computed live, never stored
+`computeOnboardingStatus()` (`src/lib/onboarding.ts`, unit tested) derives
+Not Started / In Progress / Overdue / Complete from the three flags plus
+`plannedStartDate`/`mandatoryMaterialDueDate` on every read — same
+"derive live, never cache" principle as HR Manager access and the org
+chart. `completedAt` is set/cleared automatically the moment all three
+flags become true/false — verified live: marking all three complete moved
+the case to "Selesai" with a `completedAt` timestamp; un-marking one flag
+reverted it to "Sedang Berjalan" with `completedAt` cleared again, no stale
+"complete" state left behind.
+
+### Visibility: "Admin shared", not self-view — unlike Employee Master
+The blueprint's Visibility column says "Admin shared" for every Onboarding
+field, distinct from Employee Master's self-view pattern. `canViewOnboarding()`
+allows HR/Training/GA Admin and the active HR Manager (ACC-15/DSH-13: "HR
+Manager sees onboarding progress... in personal dashboard") but not the
+employee being onboarded themselves. Verified live: a plain employee
+account gets `common.accessDenied` on `/onboarding` and the nav item is
+hidden; GA Admin can only toggle the Assets flag (Contract/Training render
+as a plain read-only "Selesai"/"Belum Selesai" label, not an inert
+action-styled button — a UI clarity bug caught and fixed during this same
+verification pass, where the read-only label had reused the actionable
+button's verb-phrase text).
+
+### Migration
+`20260729084513_onboarding_case_lif03` — purely additive (one new model,
+one new enum, back-relations on Employee/Account). No existing Phase 0/1/2
+data touched.
+
+## 2026-07-29 — Reviewed future-phase filtering/import-export requirements; no existing code changed
+
+The user updated the Build Guide's "15 In-App Review" tab with much more
+detailed acceptance criteria, including search/filter/import/export
+specifics for Phase 3 (Competency, Training), Phase 4 (Assets), and Phase 5
+(Performance, Salary-slip, Attendance, GA requests) datasets, plus richer
+detail on Phase 2's own rows (e.g. Recruitment: "searches request number,
+Job, Department and requester; filters status, date, Position and
+fulfilment; supports combined filters, clear/reset, no-result and
+pagination persistence... Export contains only the permitted filtered
+rows"). Per explicit instruction, **nothing already built was changed** —
+this is reviewed and recorded here for a future increment, not
+retrofitted now:
+
+- Phase 3/4/5 rows are all "Not Reviewed"/future-phase and describe
+  datasets that don't exist in this app yet (Competency Dictionary,
+  Training Catalogue, Asset Master, Performance cycles, Salary Slips,
+  Attendance, GA Requests) — nothing to build until those phases start.
+- The Phase 2 rows' expanded filter/search/export detail (multi-field
+  search, combined-filter UI with clear/reset, pagination persistence,
+  filtered exports scoped to the visible rows) goes beyond the single-field
+  status/department filters added earlier today to Employees, Audit Log,
+  Recruitment, and Movements (see the "List filtering" entry below). That
+  richer filter UX, plus a genuine filtered-export capability tying into
+  the existing CTL-13 import/export framework, is noted here as a defined
+  future increment rather than expanded now, per instruction not to change
+  what's already built.
+- Every future-phase row explicitly states its dataset's import
+  restrictions (e.g. "Recruitment Request import is not available",
+  "Fulfilment, onboarding and movement workflows cannot be imported",
+  "Routine renewal decisions cannot be imported") — worth remembering when
+  those phases start, since it means CTL-13's "universal import" framework
+  does NOT apply uniformly to every dataset; several are export/filter-only
+  by explicit design.
+
 ## 2026-07-29 — List filtering added where usage revealed a real need
 
 Not tied to a specific Build Guide row — added on direct request ("put in

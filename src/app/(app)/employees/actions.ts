@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/require-session";
 import { canCreateEmployee, isHrAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { validateNoKk } from "@/lib/validation/employee-fields";
+import { formatOnboardingCaseNumber } from "@/lib/onboarding";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";
 
 export async function createEmployee(
@@ -42,21 +43,42 @@ export async function createEmployee(
   const existing = await prisma.employee.findUnique({ where: { employeeNumber } });
   if (existing) return `Nomor karyawan ${employeeNumber} sudah digunakan.`;
 
-  const employee = await prisma.employee.create({
-    data: {
-      employeeNumber,
-      fullLegalName,
-      preferredName,
-      gender: gender ? (gender as Gender) : null,
-      workEmail,
-      mobileNumber,
-      hireDate: new Date(hireDate),
-      employmentStatus,
-      noKk,
-      namaIbuKandung,
-      educationLevelId,
-      ptkpStatusCode,
-    },
+  const hireDateObj = new Date(hireDate);
+
+  // LIF-03: "After Employee creation..." — an Onboarding Case is created
+  // automatically alongside every new Employee, reusing hireDate as the
+  // planned start date rather than asking for it again.
+  const employee = await prisma.$transaction(async (tx) => {
+    const created = await tx.employee.create({
+      data: {
+        employeeNumber,
+        fullLegalName,
+        preferredName,
+        gender: gender ? (gender as Gender) : null,
+        workEmail,
+        mobileNumber,
+        hireDate: hireDateObj,
+        employmentStatus,
+        noKk,
+        namaIbuKandung,
+        educationLevelId,
+        ptkpStatusCode,
+      },
+    });
+
+    const year = hireDateObj.getFullYear();
+    const countThisYear = await tx.onboardingCase.count({
+      where: { caseNumber: { startsWith: `ONB-${year}-` } },
+    });
+    await tx.onboardingCase.create({
+      data: {
+        caseNumber: formatOnboardingCaseNumber(countThisYear + 1, year),
+        employeeId: created.id,
+        plannedStartDate: hireDateObj,
+      },
+    });
+
+    return created;
   });
 
   await logAudit({
@@ -68,6 +90,7 @@ export async function createEmployee(
   });
 
   revalidatePath("/employees");
+  revalidatePath("/onboarding");
   redirect(`/employees/${employee.id}`);
 }
 

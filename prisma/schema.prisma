@@ -153,9 +153,7 @@ enum RecruitmentReasonCode {
 }
 
 enum ShiftCode {
-  SHIFT_1
-  SHIFT_2
-  SHIFT_3
+  SHIFT
   NON_SHIFT
 }
 

@@ -206,9 +206,7 @@ export const strings = {
     DEVELOPMENT: "Penyesuaian perkembangan PT CBP",
   },
   shiftCode: {
-    SHIFT_1: "Shift 1",
-    SHIFT_2: "Shift 2",
-    SHIFT_3: "Shift 3",
+    SHIFT: "Shift",
     NON_SHIFT: "Non Shift",
   },
   educationRequirementCode: {

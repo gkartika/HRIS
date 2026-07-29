@@ -109,9 +109,7 @@ export function CreateRequestForm({
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.shiftCode")}</label>
           <select name="shiftCode" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">— Pilih —</option>
-            <option value="SHIFT_1">{t("shiftCode.SHIFT_1")}</option>
-            <option value="SHIFT_2">{t("shiftCode.SHIFT_2")}</option>
-            <option value="SHIFT_3">{t("shiftCode.SHIFT_3")}</option>
+            <option value="SHIFT">{t("shiftCode.SHIFT")}</option>
             <option value="NON_SHIFT">{t("shiftCode.NON_SHIFT")}</option>
           </select>
         </div>

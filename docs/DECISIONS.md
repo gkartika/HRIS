@@ -3,6 +3,109 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-30 — Contract + renewal pipeline (WF-10, LIF-08..12, Data Fields Blueprint "08 Contracts")
+
+Next Phase 2 increment: LIF-08..12/WF-10 is the one remaining "Not Reviewed"
+Phase 2 row the review checklist lists right after Onboarding/Movement
+("Build after the Recruitment and onboarding continuation point; keep
+decision and execution permissions separate"). Offboarding is the last
+piece left.
+
+### One Contract model, no separate renewal-case dataset
+The Data Fields Blueprint's "08 Contracts" is the *only* dataset here —
+there's no separate "Renewal Case" entity, and its own fields
+(`drafted_at`/`released_at`/`signed_at`) are the only place WF-10's 9-state
+pipeline could live. Decision: a single `Contract.status` enum plays two
+roles depending on where a row sits in the pipeline — (1) an existing
+ACTIVE contract nearing its own `end_date` moves through
+`REVIEW_REQUESTED` → `RECOMMENDATION_SUBMITTED` → `APPROVED_FOR_RENEWAL`/
+`NOT_RENEWED`; (2) once approved, a **new** Contract row (linked via
+`renewedFromContractId`) moves `DRAFT` → `RELEASED` → `SIGNED` → `ACTIVE`,
+at which point the old row flips to `ENDED`. "Old/new history remains"
+(WF-12) falls out naturally — nothing is ever overwritten, only new rows
+created and old ones' status changed, same discipline as Assignment's
+close-old/open-new pattern.
+
+### Approval-evidence fields not in the blueprint, added per WF-02
+The Contract dataset's own field list has no recommendation/decision
+fields at all (only 11 thin fields, several already "Missing" in the
+blueprint). WF-02's general rule — "record requester, submission date,
+approver, approver Position, approval date, decision, comments" — applies
+to every approval workflow in this app, so `recommendationByEmployeeId`/
+`recommendationByPositionId`/`recommendationNote` and
+`decisionByAccountId`/`decisionPositionId`/`decisionNote` were added,
+mirroring Recruitment's and Movement's own fields exactly rather than
+inventing a third shape for the same evidence.
+
+### Draft/Release/Sign/Activate have no actor field — the audit log covers it
+Unlike the recommendation/decision steps, `draftedAt`/`releasedAt`/
+`signedAt`/`activatedAt` have no accompanying "by" foreign key — matching
+the blueprint's own thin field set here (it lists only the timestamp, not
+an actor, for these three). The audit log (CTL-01) already records who
+performed each action; adding redundant actor FKs for steps the blueprint
+itself doesn't ask for would be speculative.
+
+### Baseline contract creation is direct, not a renewal
+HR Admin can create a brand-new Contract for any existing Employee
+directly (`/contracts/new?employeeId=...`, reached from a "Buat Kontrak"
+link on the Employee page) — goes straight to `ACTIVE`, since there's no
+renewal process for a first-ever contract entry. Only a Contract *already
+ACTIVE and nearing its own end date* can enter the WF-10 renewal pipeline.
+This intentionally does **not** hook into Employee creation the way
+Onboarding does — retrofitting the employee-creation forms to also collect
+contract end dates was judged out of scope for this increment; HR Admin
+establishes the baseline contract as a small separate step instead.
+
+### Expiry urgency computed live, never stored (LIF-10)
+`computeExpiryUrgency()` (`src/lib/contract.ts`, unit tested) derives the
+90/60/30/7-day reminder thresholds plus an Expired state from `status` +
+`endDate` on every read — same "derive live, never cache" principle as
+Onboarding's `overall_status`, HR Manager access, and the org chart. No
+actual notifications are sent (DSH-10, "Notification channel," is still
+"Needs Decision" — unchanged from earlier phases); this only drives the
+list/detail page's urgency badge.
+
+### `source_evaluation_id`, `candidate_id`-adjacent fields not modeled
+Same reasoning as Movement Request's and Onboarding's own deferrals —
+`source_evaluation_id` references Evaluation Results, which doesn't exist
+in this app yet (Phase 3).
+
+### A real visibility bug caught and fixed during live verification
+The first implementation's `canViewContract(session, employeeId)` only
+allowed HR Admin or the employee themselves — which meant neither the
+Department Manager (who must view the contract to submit a recommendation)
+nor the active HR Manager (who must view it to decide) could actually reach
+the detail page they needed to act on. Caught live: logging in as the HR
+Manager to decide the contract's renewal produced `common.accessDenied`
+instead of the decision buttons. Fixed by adding
+`canViewContractDetail()`, a wider check used only on the detail page
+(the Employee-profile contract list summary still uses the narrower
+`canViewContract`). Verified live afterward: HR Manager could view and
+decide; a Department Manager (Budi, recommending on his own report) could
+too.
+
+### Verified live end-to-end, both branches
+Renew path: created a baseline contract for Siti, started review,
+Budi (her manager) recommended Renew, HR Manager (Made) approved with
+`decisionPositionId` recorded, HR Admin drafted/released the renewal,
+Siti signed her own contract (self-only, confirmed HR Admin cannot sign on
+her behalf), HR Admin activated it — confirmed the old contract flipped to
+`ENDED` with a forward link to the new one, and the new one is `ACTIVE`
+with a backward link, `Employee.employmentStatus` synced. Not-Renew path:
+created a second baseline contract for Budi, recommended Not Renew,
+HR Manager decided Not Renew with a reason — confirmed the contract lands
+in the `NOT_RENEWED` terminal state with no further action buttons (no
+draft/release/sign/activate offered). Per LIF-12, the reason is recorded
+but no actual offboarding handoff is created — Offboarding doesn't exist
+yet in this app; revisit when it does. 16 new unit tests
+(`contract.test.ts`, plus `permissions.test.ts` additions); 90 tests total
+across 8 files, clean `tsc`/`eslint`.
+
+### Migration
+`20260730035218_contract_renewal_wf10` — purely additive (one new model,
+two new enums, back-relations on Employee/Account/Position/FileObject). No
+existing data touched.
+
 ## 2026-07-29 — Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding")
 
 Next Phase 2 increment after Movement: the Build Guide's own "15 In-App

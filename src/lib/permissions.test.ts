@@ -16,6 +16,11 @@ import {
   canMarkOnboardingContract,
   canMarkOnboardingTraining,
   canMarkOnboardingAssets,
+  canViewContract,
+  canManageContracts,
+  canSubmitContractRecommendation,
+  canDecideContractRenewal,
+  canSignContract,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
   projectEmployee,
@@ -199,6 +204,39 @@ describe("Onboarding visibility and completion ownership (LIF-03)", () => {
     expect(canMarkOnboardingAssets(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
     expect(canMarkOnboardingAssets(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
     expect(canMarkOnboardingAssets(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+  });
+});
+
+describe("Contract permissions (WF-10, LIF-08..12, Data Fields Blueprint '08 Contracts')", () => {
+  it("canViewContract: HR Admin sees any, the employee sees only their own", () => {
+    expect(canViewContract(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(true);
+    expect(canViewContract(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1")).toBe(true);
+    expect(canViewContract(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-2" }), "emp-1")).toBe(false);
+  });
+
+  it("canManageContracts is HR Admin only", () => {
+    expect(canManageContracts(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canManageContracts(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }))).toBe(false);
+  });
+
+  it("canSubmitContractRecommendation allows the employee's direct manager or HR Admin", () => {
+    expect(canSubmitContractRecommendation(mockSession({ roles: ["EMPLOYEE"], employeeId: "mgr-1" }), true)).toBe(
+      true
+    );
+    expect(canSubmitContractRecommendation(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(true);
+    expect(canSubmitContractRecommendation(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), false)).toBe(
+      false
+    );
+  });
+
+  it("canDecideContractRenewal requires an active HR Manager position, not HR Admin", () => {
+    expect(canDecideContractRenewal([])).toBe(false);
+    expect(canDecideContractRenewal(["pos-hr-manager"])).toBe(true);
+  });
+
+  it("canSignContract is the covered employee only, never HR Admin on their behalf", () => {
+    expect(canSignContract(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1")).toBe(true);
+    expect(canSignContract(mockSession({ roles: ["HR_ADMIN"], employeeId: null }), "emp-1")).toBe(false);
   });
 });
 

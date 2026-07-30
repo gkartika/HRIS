@@ -154,6 +154,55 @@ export function canMarkOnboardingAssets(session: Session): boolean {
   return isHrAdmin(session) || isGaAdmin(session);
 }
 
+// Data Fields Blueprint "08 Contracts": Visibility "Self + People Admin" —
+// the employee sees only their own contracts, HR Admin sees any. Used for
+// the summary list on the Employee profile page.
+export function canViewContract(session: Session, employeeId: string): boolean {
+  return isHrAdmin(session) || session.user.employeeId === employeeId;
+}
+
+// The contract *detail* page also needs to be reachable by whoever must act
+// on it mid-workflow — the employee's direct manager (to submit the
+// Department Manager recommendation) and the active HR Manager (to decide
+// Renew/Not Renew) — neither of whom is "self" or HR Admin. Missing this
+// widening would silently lock both of them out of a page they need to use.
+export function canViewContractDetail(
+  session: Session,
+  employeeId: string,
+  activeHrManagerPositionIds: string[],
+  isEmployeesManager: boolean
+): boolean {
+  return canViewContract(session, employeeId) || isHrManager(activeHrManagerPositionIds) || isEmployeesManager;
+}
+
+// Contracts' Primary Owner is People & Payroll Admin throughout — creating
+// the baseline contract, starting a review, and preparing/releasing/
+// administering a renewal are all HR-Admin-only (LIF-09: "HR Admin
+// prepares, releases and administers").
+export function canManageContracts(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// LIF-09: "Department Manager recommendation" — the employee's own direct
+// manager, resolved live via src/lib/manager-scope.ts (same pattern as
+// canSubmitMovementRequest). HR Admin may also submit on behalf, same
+// administrative latitude as elsewhere in this app.
+export function canSubmitContractRecommendation(session: Session, isEmployeesManager: boolean): boolean {
+  return isHrAdmin(session) || isEmployeesManager;
+}
+
+// LIF-09: "HR Manager review and Renew/Not Renew decision" — same
+// Position-derived-only authority as Recruitment (WF-15) and Movement.
+export function canDecideContractRenewal(activeHrManagerPositionIds: string[]): boolean {
+  return isHrManager(activeHrManagerPositionIds);
+}
+
+// Blueprint: signed_at's Primary Owner is "Employee" — only the employee
+// covered by the contract signs it, never HR Admin on their behalf.
+export function canSignContract(session: Session, employeeId: string): boolean {
+  return session.user.employeeId === employeeId;
+}
+
 // CTL-12 / employee identity documents (KTP, KK, contracts, etc.): "HR Admin
 // – People & Payroll has full access. An employee may access only their own
 // permitted documents. Managers, Training Admin, GA/Assets Admin and

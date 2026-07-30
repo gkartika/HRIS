@@ -11,6 +11,8 @@ import {
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
   canSubmitMovementRequest,
+  canViewContract,
+  canManageContracts,
 } from "@/lib/permissions";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { logAudit } from "@/lib/audit";
@@ -104,6 +106,12 @@ export default async function EmployeeDetailPage({
       assignmentType: a.assignmentType,
     }));
 
+  const canViewContracts = canViewContract(session, employee.id);
+  const canCreateContract = canManageContracts(session);
+  const contracts = canViewContracts
+    ? await prisma.contract.findMany({ where: { employeeId: employee.id }, orderBy: { createdAt: "desc" } })
+    : [];
+
   return (
     <div className="space-y-6">
       {(canEdit || canSubmitMovement) && (
@@ -152,6 +160,37 @@ export default async function EmployeeDetailPage({
           positions={positions}
           activeNonPrimaryAssignments={activeNonPrimaryAssignments}
         />
+      )}
+      {canViewContracts && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-900">{t("contract.listTitle")}</p>
+            {canCreateContract && (
+              <Link
+                href={`/contracts/new?employeeId=${employee.id}`}
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700"
+              >
+                {t("contract.newContract")}
+              </Link>
+            )}
+          </div>
+          {contracts.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-400">{t("contract.emptyState")}</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {contracts.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/contracts/${c.id}`}
+                  className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2 text-sm hover:bg-slate-50"
+                >
+                  <span className="font-mono text-xs text-indigo-600">{c.contractNumber}</span>
+                  <span className="text-xs text-slate-500">{t(`contractStatus.${c.status}`)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

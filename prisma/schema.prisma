@@ -19,10 +19,16 @@
 //   Recruitment fulfillment), tracked via three admin-owned completion
 //   flags (contract/training-material/assets) with a live-computed overall
 //   status — never a stored one.
+// - Contract + renewal pipeline (WF-10, LIF-08..12, Data Fields Blueprint
+//   "08 Contracts"): a single Contract model whose own `status` carries the
+//   full WF-10 state machine (an expiring contract moves through the
+//   Department-Manager-recommends -> HR-Manager-decides states; an
+//   approved renewal creates a NEW Contract row that moves through
+//   Draft -> Released -> Signed -> Active while the old one ends).
 // Explicitly NOT modeled: Manpower, Candidate, Selected Person (DEC-013
-// excludes them), and the rest of Phase 2 (contracts/renewal, resignation,
-// exit clearance) plus later phases (Competency, Training, Assets,
-// Payroll-slip import) — these belong to later increments and will
+// excludes them), and the rest of Phase 2 (resignation, exit clearance)
+// plus later phases (Competency, Training, Assets, Payroll-slip import) —
+// these belong to later increments and will
 // be added when those increments start.
 
 generator client {
@@ -143,6 +149,29 @@ enum CancellationAuthority {
   REQUESTER
   HR_MANAGER
   HR_ADMIN
+}
+
+// WF-10: one enum carries the full renewal pipeline. DRAFT/RELEASED/SIGNED
+// apply to a brand-new Contract on its way to becoming ACTIVE; ACTIVE is the
+// steady state (no renewal in progress); REVIEW_REQUESTED..NOT_RENEWED apply
+// to an existing ACTIVE contract as its own end date approaches; ENDED is
+// the final historical state once superseded by a newer Contract or expired
+// without renewal.
+enum ContractStatus {
+  DRAFT
+  RELEASED
+  SIGNED
+  ACTIVE
+  REVIEW_REQUESTED
+  RECOMMENDATION_SUBMITTED
+  APPROVED_FOR_RENEWAL
+  NOT_RENEWED
+  ENDED
+}
+
+enum ContractRenewalRecommendation {
+  RENEW
+  NOT_RENEW
 }
 
 enum AuditAction {
@@ -279,6 +308,7 @@ model Account {
   onboardingContractsCompletedBy OnboardingCase[] @relation("OnboardingContractCompletedBy")
   onboardingTrainingCompletedBy  OnboardingCase[] @relation("OnboardingTrainingCompletedBy")
   onboardingAssetsCompletedBy    OnboardingCase[] @relation("OnboardingAssetsCompletedBy")
+  contractDecisionsMade          Contract[] @relation("ContractDecisionBy")
 }
 
 model AccountRole {
@@ -354,6 +384,8 @@ model Employee {
   movementRequestsSubmitted    MovementRequest[] @relation("MovementRequester")
   movementRequestsCancelled    MovementRequest[] @relation("MovementCancelledByEmployee")
   onboardingCase               OnboardingCase?
+  contracts                    Contract[] @relation("EmployeeContracts")
+  contractRecommendationsGiven Contract[] @relation("ContractRecommendationBy")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -453,6 +485,8 @@ model Position {
   movementRequestsAsProposed MovementRequest[] @relation("MovementProposedPosition")
   movementRequestsAsRequesterPosition MovementRequest[] @relation("MovementRequesterPosition")
   movementRequestsDecisions  MovementRequest[] @relation("MovementDecisionPosition")
+  contractRecommendations    Contract[] @relation("ContractRecommendationPosition")
+  contractDecisions          Contract[] @relation("ContractDecisionPosition")
 }
 
 model Assignment {
@@ -668,6 +702,71 @@ model OnboardingCase {
   updatedAt                DateTime  @updatedAt
 }
 
+// ---------- Phase 2: Contract + renewal pipeline (WF-10, LIF-08..12) ----------
+// Data Fields Blueprint "08 Contracts" has no separate renewal-case
+// dataset — its own contract_id/drafted_at/released_at/signed_at fields are
+// the only place WF-10's pipeline can live, so this single model plays two
+// roles depending on where it sits in that pipeline: (1) an ACTIVE contract
+// nearing its own end_date, moving through the Department-Manager-
+// recommends -> HR-Manager-decides states; (2) once approved, a brand-new
+// Contract row moving Draft -> Released -> Signed -> Active while the old
+// one (linked via renewedFromContractId) flips to Ended. "Not Renewed"
+// records the reason (LIF-12) but does not create an actual offboarding
+// handoff — Offboarding doesn't exist yet in this app; revisit when it does.
+model Contract {
+  id                  String                         @id @default(cuid())
+  contractNumber      String                         @unique
+  employeeId          String
+  employee            Employee                       @relation("EmployeeContracts", fields: [employeeId], references: [id])
+  contractType        EmploymentStatus
+  startDate           DateTime
+  // Blueprint: "blank for indefinite contract" — null means PKWTT/indefinite.
+  endDate             DateTime?
+  status              ContractStatus                 @default(DRAFT)
+
+  // Set when this Contract is a renewal — the Contract it replaces.
+  renewedFromContractId String?                       @unique
+  renewedFromContract   Contract?                     @relation("ContractRenewalChain", fields: [renewedFromContractId], references: [id])
+  renewedByContract     Contract?                     @relation("ContractRenewalChain")
+
+  // Department Manager recommendation (WF-10/LIF-09 step 1). WF-02:
+  // "approval evidence" always records the Position context too, not just
+  // the person — same pattern as Recruitment/Movement requesters.
+  reviewRequestedAt          DateTime?
+  recommendationSubmittedAt  DateTime?
+  recommendationByEmployeeId String?
+  recommendationByEmployee   Employee?                      @relation("ContractRecommendationBy", fields: [recommendationByEmployeeId], references: [id])
+  recommendationByPositionId String?
+  recommendationByPosition   Position?                      @relation("ContractRecommendationPosition", fields: [recommendationByPositionId], references: [id])
+  recommendation             ContractRenewalRecommendation?
+  recommendationNote         String?
+
+  // HR Manager decision (WF-10/LIF-09 step 2) — same Position-derived-only
+  // authority as Recruitment (WF-15) and Movement, reused for consistency.
+  decisionAt           DateTime?
+  decisionByAccountId  String?
+  decisionByAccount    Account?  @relation("ContractDecisionBy", fields: [decisionByAccountId], references: [id])
+  decisionPositionId   String?
+  decisionPosition     Position? @relation("ContractDecisionPosition", fields: [decisionPositionId], references: [id])
+  decisionNote         String?
+  notRenewedReason     String?
+
+  // HR Admin prepares/releases/administers (WF-10/LIF-09 step 3); Employee
+  // signs their own contract (blueprint: signed_at's Primary Owner is
+  // "Employee"). No separate actor FK for these three — the audit log
+  // already records who, matching the blueprint's own thin field set here.
+  draftedAt   DateTime?
+  releasedAt  DateTime?
+  signedAt    DateTime?
+  activatedAt DateTime?
+
+  contractFileId String?     @unique
+  contractFile   FileObject? @relation(fields: [contractFileId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ---------- Controls: audit, import, private files ----------
 
 model AuditLog {
@@ -738,4 +837,5 @@ model FileObject {
 
   employeeKtpOf       Employee?   @relation("EmployeeKtpFile")
   employeeKkOf        Employee?   @relation("EmployeeKkFile")
+  contractOf          Contract?
 }

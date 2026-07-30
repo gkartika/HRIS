@@ -13,9 +13,16 @@ import {
   BarChart3,
   ArrowLeftRight,
   ClipboardCheck,
+  FileSignature,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin, isTrainingAdmin, isGaAdmin, canSubmitRecruitmentRequest, canViewOnboarding } from "@/lib/permissions";
+import {
+  isHrAdmin,
+  isTrainingAdmin,
+  isGaAdmin,
+  canSubmitRecruitmentRequest,
+  canViewOnboarding,
+} from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
@@ -72,6 +79,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // HR Manager, never a plain self-view (unlike Employee Master).
   if (canViewOnboarding(session, hrManagerPositions.map((p) => p.positionId))) {
     navItems.push({ href: "/onboarding", label: t("onboarding.navLabel"), icon: ClipboardCheck });
+  }
+  // Data Fields Blueprint "08 Contracts": Visibility "Self + People Admin" —
+  // same broad list-nav visibility as Recruitment/Movement, scoped to own
+  // contracts for non-HR-Admin on the list page itself.
+  if (isHrAdmin(session) || session.user.employeeId) {
+    navItems.push({ href: "/contracts", label: t("contract.navLabel"), icon: FileSignature });
   }
   // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
   // Admin operational nav below, and only visible while the login currently

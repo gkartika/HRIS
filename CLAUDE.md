@@ -198,6 +198,23 @@ English.
   direct creation (`employees/actions.ts`) and Recruitment fulfillment
   (`recruitment/actions.ts`) — never a separate step. Visibility is "Admin
   shared" (HR/Training/GA Admin + active HR Manager), not self-view.
+- `src/lib/contract.ts` — pure Contract + renewal logic
+  (`computeExpiryUrgency()` deriving the 90/60/30/7-day/Expired reminder
+  state live from `status`/`endDate`, never stored; WF-10 status-transition
+  eligibility per step; contract-number formatting matching the blueprint's
+  own 3-digit example). `src/app/(app)/contracts/` (WF-10, LIF-08..12, Data
+  Fields Blueprint "08 Contracts"): a single `Contract` model whose
+  `status` carries the full pipeline — an existing ACTIVE contract nearing
+  its own end date moves through Department-Manager-recommends ->
+  HR-Manager-decides states; once approved, a **new** Contract row (linked
+  via `renewedFromContractId`) moves Draft -> Released -> Signed -> Active
+  while the old one flips to Ended. HR Admin creates the baseline contract
+  directly and handles Draft/Release/Activate; the employee signs their own
+  contract only. `canViewContractDetail()` in `permissions.ts` (wider than
+  `canViewContract`, used for the Employee-profile summary list) also
+  admits the Department Manager and active HR Manager, who must reach the
+  detail page to act on it — a real bug caught during this feature's own
+  live verification.
 - `src/app/(app)/my-positions/`, `approvals/`, `hr-dashboard/`, `hr-reports/`
   — the personal HR Manager workspace (ACC-15), each gated by
   `getActiveHrManagerPositions()`. `approvals/` lists pending items from both

@@ -3,6 +3,77 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-30 — Department Manager/Head (Job level 3B) approval gate added ahead of the HR Manager for Recruitment Requests
+
+Direct user request: "every Recruitment Request form (FR-HC-01-01) need
+approval of manager/dept head (level 3B) before it goes to HC manager for
+approval." This amends the Build Guide's WF-15/DEC-016, both previously
+"Confirmed"/"Decided" as "HR Manager alone approves, returns or rejects
+Recruitment Requests" — the Drive connector is read-only in this session,
+so the Build Guide's own Decision Log tab still needs the user to record
+this change there; this file is the durable record until then.
+
+Two points needed clarifying before implementation, both resolved directly
+with the user rather than assumed:
+- **Who is "manager/dept head"**: literally whoever holds a Job graded
+  level "3B" — not the requester's reporting-line manager (the mechanism
+  Movement/Contract-renewal already use) and not an OrgUnit's structural
+  head. Confirmed after showing that only Finance & Procurement's "Manager
+  FP" is actually graded 3B in the current org data — Produksi's own dept
+  head ("Kepala Departemen Produksi") is graded level 4, and Direksi/SDM/IT
+  have no level-3B role at all. The user confirmed they'll create a
+  level-3B position in each department themselves (existing Position UI,
+  no code needed) rather than have the rule fall back to a structural
+  check — so a request from a department with no level-3B position filled
+  will sit at Pending Dept Head with no eligible approver until one exists.
+- **Self-approval**: if the requester's own current Position is already
+  level 3B in the request's own department, the gate is skipped entirely
+  (status goes straight to Submitted/HR-Manager-queue) — there's no one
+  else in that capacity to approve on their behalf.
+
+### Implementation
+Same "distinct status per stage" pattern this codebase already uses for
+Contract renewal (`REVIEW_REQUESTED` → `RECOMMENDATION_SUBMITTED` → HR
+Manager decision), not a side-channel field on top of the existing status:
+new `PENDING_DEPT_HEAD` status ahead of `SUBMITTED`, with its own decision
+-evidence fields (`deptHeadDecisionAt/ByAccountId/PositionId/Note`) kept
+separate from the HR Manager's own `approvedAt/approvedByAccountId/
+decisionPositionId/decisionNote` — both trails survive independently, e.g.
+a request rejected at the dept-head stage vs. the HR Manager stage remains
+distinguishable. New `src/lib/dept-head.ts` (`getActiveDeptHeadPositions`,
+`getDeptHeadDepartmentIds`) mirrors `hr-manager.ts`'s live Assignment
+-resolution pattern, just filtered on `Job.jobLevel === "3B"` and scoped to
+one department (or all departments, for the personal inbox) instead of a
+`grantsHrManagerAccess` Position flag. `decideRecruitmentRequestAsDeptHead`
+mirrors `decideRecruitmentRequest`'s shape exactly (Approve →
+`SUBMITTED`, unblocking the HR Manager's queue; Reject/Return →
+`REJECTED`/`RETURNED` directly, same outcome as if the HR Manager had
+decided). The HR Manager's own decision flow (Jabatan-at-approval, review,
+etc.) is completely unchanged — it only now starts one step later.
+
+### Access-check and nav-link widening follow the same pattern as the earlier HR Manager fix
+`recruitment/[id]/page.tsx`'s access gate and `approvals/page.tsx`'s
+personal inbox both needed widening to also admit a dept-head-only user
+(not HR Admin, not HR Manager, not the request's own submitter) —
+otherwise this feature would be unreachable for exactly the persona it's
+built for, repeating the same class of gap fixed earlier today for HR
+Manager (see the recruitment-detail-access-bug memory). `approvals/page.tsx`
+now serves both personas in one inbox (a new section scoped to whichever
+departments the caller holds a level-3B Position in, alongside the
+existing HR-Manager section) rather than a separate page. The `/approvals`
+nav link in `layout.tsx` was also split out from the `isHrManagerNow`-only
+block it shared with `/my-positions`/`/hr-dashboard`/`/hr-reports`, since
+those three do stay HR-Manager-exclusive but `/approvals` no longer is.
+
+Live-verified end to end: a Finance & Procurement request sits at Pending
+Dept Head until Siti (Manager FP, level 3B) approves it from her own
+approvals-inbox section; it then appears in Made's (HR Manager) queue and
+approves normally with the Jabatan-at-approval step intact, both decision
+trails shown together on the request detail page. Separately verified a
+Produksi request (no level-3B position there yet) sits unroutable at
+Pending Dept Head as expected, and that a self-submitted request from Siti
+(already level 3B in her own department) skips the gate entirely.
+
 ## 2026-07-30 — Jabatan removed from the Recruitment Request submit form; set by the HR Manager at Approve time instead
 
 Direct user request: "Take out Jabatan from Formulir Permintaan Tenaga

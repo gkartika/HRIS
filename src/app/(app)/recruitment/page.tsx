@@ -9,6 +9,7 @@ import type { Prisma, RecruitmentRequestStatus } from "@/generated/prisma/client
 
 const RECRUITMENT_STATUSES: RecruitmentRequestStatus[] = [
   "DRAFT",
+  "PENDING_DEPT_HEAD",
   "SUBMITTED",
   "UNDER_REVIEW",
   "APPROVED",

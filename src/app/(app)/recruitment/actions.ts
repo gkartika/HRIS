@@ -7,11 +7,13 @@ import { requireSession } from "@/lib/require-session";
 import {
   canSubmitRecruitmentRequest,
   canApproveRecruitmentRequest,
+  canApproveRecruitmentRequestAsDeptHead,
   canCreateEmployeeFromRequest,
   canCancelRecruitmentRequest,
   isHrManager,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
+import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary } from "@/lib/position-occupancy";
 import {
@@ -20,6 +22,7 @@ import {
   computeFulfillmentCounts,
   nextStatusAfterFulfillment,
   formatRequestNumber,
+  initialRecruitmentStatus,
 } from "@/lib/recruitment";
 import { formatOnboardingCaseNumber } from "@/lib/onboarding";
 import { validateNoKk } from "@/lib/validation/employee-fields";
@@ -76,6 +79,9 @@ export async function submitRecruitmentRequest(
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
   if (!requester) return "Karyawan pengaju tidak ditemukan.";
 
+  const requesterDeptHeadPositions = await getActiveDeptHeadPositions(requesterEmployeeId, departmentId);
+  const initialStatus = initialRecruitmentStatus(requesterDeptHeadPositions.length > 0);
+
   const year = new Date(requestDate).getFullYear();
   const countThisYear = await prisma.recruitmentRequest.count({
     where: { requestNumber: { startsWith: `REQ-${year}-` } },
@@ -99,7 +105,7 @@ export async function submitRecruitmentRequest(
       genderRequirement: genderRequirement ? (genderRequirement as Gender) : null,
       requestedJobLevel,
       specialCriteria,
-      status: "SUBMITTED",
+      status: initialStatus,
       requesterEmployeeId,
       requesterPositionId: requester.currentPositionId,
       submittedAt: now,
@@ -141,6 +147,65 @@ export async function startReviewRecruitmentRequest(requestId: string) {
 
   revalidatePath(`/recruitment/${requestId}`);
   revalidatePath("/recruitment");
+}
+
+// Department Manager/Head (Job level 3B) approval gate, ahead of the HR
+// Manager, added per direct user request — same evidence shape as
+// decideRecruitmentRequest below (WF-02/WF-05: record the specific
+// qualifying Position, required when the actor holds more than one in this
+// department). Approve unblocks the HR Manager's queue (status ->
+// SUBMITTED); Reject/Return short-circuit the request exactly like the HR
+// Manager's own decision would, since the outcome is the same either way.
+export async function decideRecruitmentRequestAsDeptHead(
+  requestId: string,
+  decision: "APPROVED" | "REJECTED" | "RETURNED",
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId } });
+  if (!request) return "Permintaan tidak ditemukan.";
+  if (request.status !== "PENDING_DEPT_HEAD") {
+    return "Permintaan ini sudah diproses.";
+  }
+
+  const deptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, request.departmentId);
+  if (!canApproveRecruitmentRequestAsDeptHead(deptHeadPositions.map((p) => p.positionId))) {
+    return "Anda tidak memiliki akses. Hanya Kepala Departemen/Manajer (Level 3B) di department ini yang dapat memutuskan permintaan ini.";
+  }
+
+  const decisionPositionId = formData.get("decisionPositionId") as string;
+  if (!deptHeadPositions.some((p) => p.positionId === decisionPositionId)) {
+    return "Posisi Kepala Departemen/Manajer yang dipilih tidak valid atau tidak lagi aktif.";
+  }
+
+  const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
+  if ((decision === "REJECTED" || decision === "RETURNED") && !decisionNote) {
+    return "Catatan keputusan wajib diisi untuk Tolak/Kembalikan.";
+  }
+
+  await prisma.recruitmentRequest.update({
+    where: { id: requestId },
+    data: {
+      status: decision === "APPROVED" ? "SUBMITTED" : decision,
+      deptHeadDecisionAt: new Date(),
+      deptHeadDecisionByAccountId: session.user.id,
+      deptHeadDecisionPositionId: decisionPositionId,
+      deptHeadDecisionNote: decisionNote,
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: decision === "APPROVED" ? "APPROVE" : "REJECT",
+    datasetName: "RecruitmentRequest",
+    recordId: requestId,
+    reason: decisionNote ?? `Request ${request.requestNumber} ${decision.toLowerCase()} by dept head/manager`,
+  });
+
+  revalidatePath(`/recruitment/${requestId}`);
+  revalidatePath("/recruitment");
+  revalidatePath("/approvals");
 }
 
 // WF-15/WF-02/WF-05: only the employee occupying an active HR Manager

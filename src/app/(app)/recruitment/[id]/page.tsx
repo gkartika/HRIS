@@ -3,15 +3,17 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import {
   canApproveRecruitmentRequest,
+  canApproveRecruitmentRequestAsDeptHead,
   canCreateEmployeeFromRequest,
   canCancelRecruitmentRequest,
   isHrAdmin,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
+import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { computeFulfillmentCounts, canRequestAcceptFulfillment, canCancelRequestStatus } from "@/lib/recruitment";
-import { StartReviewButton, DecisionButtons, CancelRequestForm } from "./decision-forms";
+import { StartReviewButton, DecisionButtons, DeptHeadDecisionButtons, CancelRequestForm } from "./decision-forms";
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
@@ -31,6 +33,8 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
       requesterEmployee: true,
       requesterPosition: { include: { job: true } },
       submittedByAccount: true,
+      deptHeadDecisionByAccount: true,
+      deptHeadDecisionPosition: { include: { job: true } },
       approvedByAccount: true,
       decisionPosition: { include: { job: true } },
       cancelledByAccount: true,
@@ -46,13 +50,18 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   const activeHrManagerPositionIds = hrManagerPositions.map((p) => p.positionId);
   const isHrManagerNow = activeHrManagerPositionIds.length > 0;
+  const deptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, request.departmentId);
+  const activeDeptHeadPositionIds = deptHeadPositions.map((p) => p.positionId);
+  const isDeptHeadNow = activeDeptHeadPositionIds.length > 0;
 
-  if (!isHrAdmin(session) && !isHrManagerNow && !isOwnRequest) {
+  if (!isHrAdmin(session) && !isHrManagerNow && !isDeptHeadNow && !isOwnRequest) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
   const counts = computeFulfillmentCounts(request.requestedHeadcount, request.fulfillments.length);
   const canApprove = canApproveRecruitmentRequest(activeHrManagerPositionIds);
+  const canApproveAsDeptHead =
+    canApproveRecruitmentRequestAsDeptHead(activeDeptHeadPositionIds) && request.status === "PENDING_DEPT_HEAD";
   // Jabatan is no longer chosen by the requester — the HR Manager sets it
   // here as part of Approve, so the job list only needs fetching when this
   // session could actually reach that decision.
@@ -146,6 +155,14 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
             <p className="text-sm text-slate-900">{request.specialCriteria}</p>
           </div>
         )}
+        {request.deptHeadDecisionNote && (
+          <div className="mt-4">
+            <p className="text-xs text-slate-500">
+              {t("recruitment.decisionNote")} ({t("recruitment.deptHeadApprovalSectionTitle")})
+            </p>
+            <p className="text-sm text-slate-900">{request.deptHeadDecisionNote}</p>
+          </div>
+        )}
         {request.decisionNote && (
           <div className="mt-4">
             <p className="text-xs text-slate-500">{t("recruitment.decisionNote")}</p>
@@ -155,6 +172,20 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
         <p className="mt-4 text-xs text-slate-400">
           {t("recruitment.submittedBy")}: {request.submittedByAccount?.usernameOrEmail ?? "—"} (
           {formatDate(request.submittedAt)})
+          {request.deptHeadDecisionByAccount && (
+            <>
+              {" · "}
+              {t("recruitment.deptHeadDecisionBy")}: {request.deptHeadDecisionByAccount.usernameOrEmail} (
+              {formatDate(request.deptHeadDecisionAt)})
+              {request.deptHeadDecisionPosition && (
+                <>
+                  {" — "}
+                  {t("recruitment.deptHeadDecisionPosition")}: {request.deptHeadDecisionPosition.job.jobTitle} (
+                  {request.deptHeadDecisionPosition.positionCode})
+                </>
+              )}
+            </>
+          )}
           {request.approvedByAccount && (
             <>
               {" · "}
@@ -176,6 +207,12 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
         </p>
       </div>
 
+      {canApproveAsDeptHead && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <p className="mb-3 text-sm font-medium text-slate-900">{t("recruitment.deptHeadApprovalSectionTitle")}</p>
+          <DeptHeadDecisionButtons requestId={request.id} positions={deptHeadPositions} />
+        </div>
+      )}
       {canApprove && request.status === "SUBMITTED" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex flex-wrap gap-2">

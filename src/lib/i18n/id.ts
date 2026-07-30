@@ -194,6 +194,9 @@ export const strings = {
     jobPendingApproval: "Jabatan (belum ditentukan)",
     setJobToApprove: "Jabatan (dipilih oleh HR Manager)",
     decisionPosition: "Posisi HR Manager yang Digunakan",
+    deptHeadApprovalSectionTitle: "Persetujuan Kepala Departemen/Manajer",
+    deptHeadDecisionBy: "Diputuskan Kepala Departemen/Manajer Oleh",
+    deptHeadDecisionPosition: "Posisi Kepala Departemen/Manajer yang Digunakan",
     cancelRequestButton: "Batalkan Permintaan",
     cancellationReason: "Alasan Pembatalan",
     cancelledBy: "Dibatalkan Oleh",
@@ -237,6 +240,7 @@ export const strings = {
   },
   recruitmentStatus: {
     DRAFT: "Draf",
+    PENDING_DEPT_HEAD: "Menunggu Persetujuan Kepala Departemen/Manajer",
     SUBMITTED: "Diajukan",
     UNDER_REVIEW: "Sedang Ditinjau",
     APPROVED: "Disetujui",

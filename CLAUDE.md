@@ -165,13 +165,16 @@ English.
   session/JWT — so access ends automatically the moment the granting
   Assignment's `effectiveTo` passes.
 - `src/app/(app)/recruitment/` — the simplified Recruitment Request flow
-  (DEC-013, DM-21..23, WF-13/15, DM-25): list, submit (`new/`), detail with
-  approve/reject/return (HR-Manager-Position-only, WF-15) and cancel
-  (Requester/HR-Manager/HR-Admin, DM-25), and the transactional "create
-  Employee from this request" form (`[id]/create-employee/`, HR-Admin-only)
-  that atomically creates the Employee, Primary Assignment, and
-  `RecruitmentRequestFulfillment` link. Manpower, Candidate, and Selected
-  Person modules are explicitly out of scope.
+  (DEC-013, DM-21..23, WF-13/15, DM-25): list, submit (`new/`), a Department
+  Manager/Head (Job level 3B, `src/lib/dept-head.ts`) approval gate ahead of
+  the HR Manager (added 2026-07-30, amending WF-15/DEC-016 — see
+  docs/DECISIONS.md), detail with approve/reject/return
+  (HR-Manager-Position-only, WF-15) and cancel (Requester/HR-Manager/HR-Admin,
+  DM-25), and the transactional "create Employee from this request" form
+  (`[id]/create-employee/`, HR-Admin-only) that atomically creates the
+  Employee, Primary Assignment, and `RecruitmentRequestFulfillment` link.
+  Manpower, Candidate, and Selected Person modules are explicitly out of
+  scope.
 - `src/lib/movement.ts` — pure Movement Request logic (status-transition
   eligibility, STATUS_CHANGE-vs-Position-change validation, request-number
   formatting), unit tested. `src/lib/manager-scope.ts`'s

@@ -1,8 +1,15 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { startReviewRecruitmentRequest, decideRecruitmentRequest, cancelRecruitmentRequest } from "../actions";
+import {
+  startReviewRecruitmentRequest,
+  decideRecruitmentRequest,
+  decideRecruitmentRequestAsDeptHead,
+  cancelRecruitmentRequest,
+} from "../actions";
 import { t } from "@/lib/i18n/id";
+
+type DecideAction = typeof decideRecruitmentRequest;
 
 export interface DecisionPositionOption {
   positionId: string;
@@ -79,6 +86,7 @@ function DecisionButton({
   requireNote,
   positions,
   jobs,
+  decideAction = decideRecruitmentRequest,
 }: {
   requestId: string;
   decision: "APPROVED" | "REJECTED" | "RETURNED";
@@ -87,9 +95,10 @@ function DecisionButton({
   requireNote: boolean;
   positions: DecisionPositionOption[];
   jobs?: DecisionJobOption[];
+  decideAction?: DecideAction;
 }) {
   const [open, setOpen] = useState(false);
-  const action = decideRecruitmentRequest.bind(null, requestId, decision);
+  const action = decideAction.bind(null, requestId, decision);
   const [error, formAction, isPending] = useActionState(action, undefined);
 
   if (!open) {
@@ -170,6 +179,51 @@ export function DecisionButtons({
         tone="border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
         requireNote={true}
         positions={positions}
+      />
+    </div>
+  );
+}
+
+// Department Manager/Head (Job level 3B) approval gate, ahead of the HR
+// Manager, added per direct user request — same button shell as
+// DecisionButtons, just bound to decideRecruitmentRequestAsDeptHead and
+// with no Jabatan field (that's only ever set at the HR Manager's own
+// Approve step).
+export function DeptHeadDecisionButtons({
+  requestId,
+  positions,
+}: {
+  requestId: string;
+  positions: DecisionPositionOption[];
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <DecisionButton
+        requestId={requestId}
+        decision="APPROVED"
+        label={t("recruitment.approveButton")}
+        tone="bg-emerald-600 text-white hover:bg-emerald-700"
+        requireNote={false}
+        positions={positions}
+        decideAction={decideRecruitmentRequestAsDeptHead}
+      />
+      <DecisionButton
+        requestId={requestId}
+        decision="RETURNED"
+        label={t("recruitment.returnButton")}
+        tone="border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+        requireNote={true}
+        positions={positions}
+        decideAction={decideRecruitmentRequestAsDeptHead}
+      />
+      <DecisionButton
+        requestId={requestId}
+        decision="REJECTED"
+        label={t("recruitment.rejectButton")}
+        tone="border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+        requireNote={true}
+        positions={positions}
+        decideAction={decideRecruitmentRequestAsDeptHead}
       />
     </div>
   );

@@ -24,6 +24,7 @@ import {
   canViewOnboarding,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
+import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
@@ -51,6 +52,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // effectiveTo passes, with no separate revoke step.
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   const isHrManagerNow = hrManagerPositions.length > 0;
+  // Department Manager/Head (Job level 3B) approval gate, added per direct
+  // user request — this persona also needs the Approval Inbox link even
+  // when they're not the HR Manager, or their own queue is unreachable via
+  // nav (see src/app/(app)/approvals/page.tsx, which now serves both).
+  const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
+  const isDeptHeadAnywhere = deptHeadDepartmentIds.length > 0;
 
   const navItems: { href: string; label: string; icon: typeof LayoutDashboard }[] = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
@@ -91,9 +98,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // holds an active HR Manager Position.
   if (isHrManagerNow) {
     navItems.push({ href: "/my-positions", label: t("nav.myPositions"), icon: Briefcase });
-    navItems.push({ href: "/approvals", label: t("nav.approvalInbox"), icon: Inbox });
     navItems.push({ href: "/hr-dashboard", label: t("nav.hrManagerDashboard"), icon: LayoutDashboard });
     navItems.push({ href: "/hr-reports", label: t("nav.hrReports"), icon: BarChart3 });
+  }
+  if (isHrManagerNow || isDeptHeadAnywhere) {
+    navItems.push({ href: "/approvals", label: t("nav.approvalInbox"), icon: Inbox });
   }
   if (isHrAdmin(session)) {
     navItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: Settings });

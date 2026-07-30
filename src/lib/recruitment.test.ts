@@ -5,6 +5,7 @@ import {
   canCancelRequestStatus,
   nextStatusAfterFulfillment,
   formatRequestNumber,
+  initialRecruitmentStatus,
 } from "./recruitment";
 
 describe("computeFulfillmentCounts (DM-23)", () => {
@@ -38,6 +39,7 @@ describe("canRequestAcceptFulfillment (WF-13)", () => {
 
   it("blocks every other status", () => {
     expect(canRequestAcceptFulfillment("DRAFT")).toBe(false);
+    expect(canRequestAcceptFulfillment("PENDING_DEPT_HEAD")).toBe(false);
     expect(canRequestAcceptFulfillment("SUBMITTED")).toBe(false);
     expect(canRequestAcceptFulfillment("UNDER_REVIEW")).toBe(false);
     expect(canRequestAcceptFulfillment("REJECTED")).toBe(false);
@@ -56,6 +58,7 @@ describe("canCancelRequestStatus (DM-25)", () => {
   });
 
   it("allows every other eligible state, including after approval", () => {
+    expect(canCancelRequestStatus("PENDING_DEPT_HEAD")).toBe(true);
     expect(canCancelRequestStatus("SUBMITTED")).toBe(true);
     expect(canCancelRequestStatus("UNDER_REVIEW")).toBe(true);
     expect(canCancelRequestStatus("APPROVED")).toBe(true);
@@ -63,6 +66,16 @@ describe("canCancelRequestStatus (DM-25)", () => {
     expect(canCancelRequestStatus("PARTIALLY_FILLED")).toBe(true);
     expect(canCancelRequestStatus("RETURNED")).toBe(true);
     expect(canCancelRequestStatus("REJECTED")).toBe(true);
+  });
+});
+
+describe("initialRecruitmentStatus (dept-head approval gate)", () => {
+  it("starts at Pending Dept Head when the requester holds no level-3B position in this department", () => {
+    expect(initialRecruitmentStatus(false)).toBe("PENDING_DEPT_HEAD");
+  });
+
+  it("skips straight to Submitted when the requester is already the dept head/manager", () => {
+    expect(initialRecruitmentStatus(true)).toBe("SUBMITTED");
   });
 });
 

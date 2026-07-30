@@ -238,6 +238,12 @@ enum RequestedJobLevel {
 // create Employees.
 enum RecruitmentRequestStatus {
   DRAFT
+  // Department Manager/Head (Job level 3B) approval gate, ahead of the HR
+  // Manager — inserted per direct user request. A request only reaches
+  // SUBMITTED (the HR Manager's queue) after this stage clears, unless the
+  // requester's own current Position is already level 3B in this
+  // department, in which case it's skipped entirely.
+  PENDING_DEPT_HEAD
   SUBMITTED
   UNDER_REVIEW
   APPROVED
@@ -299,6 +305,7 @@ model Account {
   uploadedFiles         FileObject[]
   recruitmentRequestsSubmittedBy RecruitmentRequest[] @relation("RecruitmentSubmittedBy")
   recruitmentRequestsApprovedBy RecruitmentRequest[] @relation("RecruitmentApprovedBy")
+  recruitmentRequestsDeptHeadDecisionsBy RecruitmentRequest[] @relation("RecruitmentDeptHeadDecisionBy")
   recruitmentFulfillmentsLinked RecruitmentRequestFulfillment[]
   recruitmentRequestsCancelledBy RecruitmentRequest[] @relation("RecruitmentCancelledByAccount")
   movementRequestsSubmittedBy   MovementRequest[] @relation("MovementSubmittedBy")
@@ -481,6 +488,7 @@ model Position {
   requestedForRecruitment RecruitmentRequest[] @relation("RequestedPosition")
   requesterForRecruitment RecruitmentRequest[] @relation("RequesterPosition")
   recruitmentDecisions RecruitmentRequest[] @relation("RecruitmentDecisionPosition")
+  recruitmentDeptHeadDecisions RecruitmentRequest[] @relation("RecruitmentDeptHeadDecisionPosition")
   movementRequestsAsCurrent  MovementRequest[] @relation("MovementCurrentPosition")
   movementRequestsAsProposed MovementRequest[] @relation("MovementProposedPosition")
   movementRequestsAsRequesterPosition MovementRequest[] @relation("MovementRequesterPosition")
@@ -548,6 +556,17 @@ model RecruitmentRequest {
   submittedAt              DateTime?
   submittedByAccountId     String?
   submittedByAccount       Account?                 @relation("RecruitmentSubmittedBy", fields: [submittedByAccountId], references: [id])
+  // Department Manager/Head (Job level 3B, scoped to this request's own
+  // department) decision — runs before the HR Manager ever sees the
+  // request. Same evidence shape as HR Manager's own decision fields below,
+  // kept separate so both stages' evidence survive independently even
+  // though they share the same REJECTED/RETURNED status outcomes.
+  deptHeadDecisionAt          DateTime?
+  deptHeadDecisionByAccountId String?
+  deptHeadDecisionByAccount   Account?                 @relation("RecruitmentDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
+  deptHeadDecisionPositionId  String?
+  deptHeadDecisionPosition    Position?                @relation("RecruitmentDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
+  deptHeadDecisionNote        String?
   // WF-15: only the Employee occupying an active HR Manager Position may
   // decide (approve/reject/return). approvedByAccountId records who (the
   // login used); decisionPositionId records the specific HR Manager Position

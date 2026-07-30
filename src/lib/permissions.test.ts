@@ -7,6 +7,7 @@ import {
   isGaAdmin,
   isHrManager,
   canApproveRecruitmentRequest,
+  canApproveRecruitmentRequestAsDeptHead,
   canCancelRecruitmentRequest,
   canSubmitMovementRequest,
   canApproveMovementRequest,
@@ -105,6 +106,16 @@ describe("isHrManager / canApproveRecruitmentRequest (ACC-14/WF-15)", () => {
     // list now, never the session/role — this is the WF-15 correction: HR
     // Admin has read-only decision access, no approve/return/reject.
     expect(canApproveRecruitmentRequest([])).toBe(false);
+  });
+});
+
+describe("canApproveRecruitmentRequestAsDeptHead (dept-head approval gate)", () => {
+  it("is false with zero active level-3B positions in the request's department", () => {
+    expect(canApproveRecruitmentRequestAsDeptHead([])).toBe(false);
+  });
+
+  it("is true as soon as there's at least one active level-3B position there", () => {
+    expect(canApproveRecruitmentRequestAsDeptHead(["pos-dept-head"])).toBe(true);
   });
 });
 

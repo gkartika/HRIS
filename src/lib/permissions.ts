@@ -74,6 +74,21 @@ export function canApproveRecruitmentRequest(activeHrManagerPositionIds: string[
   return isHrManager(activeHrManagerPositionIds);
 }
 
+// Department Manager/Head approval gate (Job level 3B, scoped to the
+// request's own department — resolved live via
+// src/lib/dept-head.ts's getActiveDeptHeadPositions), added ahead of the HR
+// Manager per direct user request. Same shape as isHrManager/
+// canApproveRecruitmentRequest — HR Admin has no special access here either,
+// matching WF-15's "HR Admin has read-only decision access" for the HR
+// Manager step.
+export function isDeptHeadApprover(activeDeptHeadPositionIds: string[]): boolean {
+  return activeDeptHeadPositionIds.length > 0;
+}
+
+export function canApproveRecruitmentRequestAsDeptHead(activeDeptHeadPositionIds: string[]): boolean {
+  return isDeptHeadApprover(activeDeptHeadPositionIds);
+}
+
 // ACC-13/ACC-02: HR Admin creates/links Employees to a request only AFTER
 // HR Manager approval (enforced separately by canRequestAcceptFulfillment on
 // the request's status) and may also create an Employee directly with no

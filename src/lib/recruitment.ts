@@ -42,6 +42,15 @@ export function nextStatusAfterFulfillment(
   return "RECRUITMENT_IN_PROGRESS";
 }
 
+// Department Manager/Head (Job level 3B) approval gate, ahead of the HR
+// Manager, added per direct user request. Skipped when the requester
+// already holds that authority themselves in this department — there is no
+// one else to approve on their behalf, so the request goes straight to the
+// HR Manager's queue instead of getting stuck.
+export function initialRecruitmentStatus(requesterIsDeptHead: boolean): RecruitmentRequestStatus {
+  return requesterIsDeptHead ? "SUBMITTED" : "PENDING_DEPT_HEAD";
+}
+
 export function formatRequestNumber(sequence: number, year: number): string {
   return `REQ-${year}-${String(sequence).padStart(4, "0")}`;
 }

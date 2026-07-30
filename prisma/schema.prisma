@@ -515,8 +515,14 @@ model RecruitmentRequest {
   reasonCode               RecruitmentReasonCode
   departmentId             String
   department               OrgUnit                  @relation(fields: [departmentId], references: [id])
-  jobId                    String
-  job                      Job                      @relation(fields: [jobId], references: [id])
+  // Removed from the submitter's form on direct user request — the
+  // requester no longer picks Job themselves. The active HR Manager sets it
+  // as part of the Approve decision instead (decideRecruitmentRequest),
+  // since it's still needed to filter candidate Positions when creating the
+  // Employee later. Nullable so a request can exist in Submitted/Under
+  // Review with no Job chosen yet.
+  jobId                    String?
+  job                      Job?                     @relation(fields: [jobId], references: [id])
   // Specific approved seat, when one is already known/vacant (DM-21: "when
   // available") — otherwise HR resolves a Position at fulfillment time.
   requestedPositionId      String?

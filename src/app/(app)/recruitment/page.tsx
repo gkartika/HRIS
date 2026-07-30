@@ -143,7 +143,7 @@ export default async function RecruitmentListPage({
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{r.department.unitName}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.job.jobTitle}</td>
+                    <td className="px-4 py-3 text-slate-600">{r.job?.jobTitle ?? "—"}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {t("recruitment.filledOf", { filled: counts.filledCount, total: r.requestedHeadcount })}
                     </td>

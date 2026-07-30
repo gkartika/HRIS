@@ -43,15 +43,20 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
   if (!request) notFound();
 
   const isOwnRequest = request.requesterEmployeeId === session.user.employeeId;
-  if (!isHrAdmin(session) && !isOwnRequest) {
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  const activeHrManagerPositionIds = hrManagerPositions.map((p) => p.positionId);
+  const isHrManagerNow = activeHrManagerPositionIds.length > 0;
+
+  if (!isHrAdmin(session) && !isHrManagerNow && !isOwnRequest) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
-  const activeHrManagerPositionIds = hrManagerPositions.map((p) => p.positionId);
-
   const counts = computeFulfillmentCounts(request.requestedHeadcount, request.fulfillments.length);
   const canApprove = canApproveRecruitmentRequest(activeHrManagerPositionIds);
+  // Jabatan is no longer chosen by the requester — the HR Manager sets it
+  // here as part of Approve, so the job list only needs fetching when this
+  // session could actually reach that decision.
+  const jobs = canApprove ? await prisma.job.findMany({ orderBy: { jobTitle: "asc" } }) : [];
   const canFulfill =
     canCreateEmployeeFromRequest(session) && canRequestAcceptFulfillment(request.status) && !counts.isFull;
   const canCancel =
@@ -65,7 +70,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
           <div>
             <h1 className="font-mono text-lg font-medium text-slate-900">{request.requestNumber}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              {request.job.jobTitle} — {request.department.unitName}
+              {request.job?.jobTitle ?? t("recruitment.jobPendingApproval")} — {request.department.unitName}
             </p>
           </div>
           <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
@@ -177,13 +182,13 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
             <StartReviewButton requestId={request.id} />
           </div>
           <div className="mt-3">
-            <DecisionButtons requestId={request.id} positions={hrManagerPositions} />
+            <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} />
           </div>
         </div>
       )}
       {canApprove && request.status === "UNDER_REVIEW" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <DecisionButtons requestId={request.id} positions={hrManagerPositions} />
+          <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} />
         </div>
       )}
       {canCancel && (

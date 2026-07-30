@@ -31,6 +31,12 @@ export default async function CreateEmployeeFromRequestPage({
       </p>
     );
   }
+  // Jabatan is set by the HR Manager at Approve time (no longer picked by
+  // the requester) — canRequestAcceptFulfillment already guarantees this
+  // request passed through Approved, so jobId should always be set here.
+  if (!request.jobId || !request.job) {
+    return <p className="text-sm text-rose-600">{t("recruitment.jobNotSetOnApproval")}</p>;
+  }
 
   const [candidatePositions, educationLevels, ptkpStatuses] = await Promise.all([
     prisma.position.findMany({

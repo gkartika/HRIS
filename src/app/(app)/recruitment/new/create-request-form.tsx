@@ -13,14 +13,12 @@ function todayIso() {
 
 export function CreateRequestForm({
   departments,
-  jobs,
   positions,
   employees,
   currentEmployeeId,
   isHrAdmin,
 }: {
   departments: OrgUnit[];
-  jobs: Job[];
   positions: PositionOption[];
   employees: Employee[];
   currentEmployeeId: string | null;
@@ -79,17 +77,6 @@ export function CreateRequestForm({
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.unitName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("recruitment.job")}</label>
-          <select name="jobId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">— Pilih —</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.jobTitle} ({j.jobLevel})
               </option>
             ))}
           </select>

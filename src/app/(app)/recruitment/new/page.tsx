@@ -10,9 +10,8 @@ export default async function NewRecruitmentRequestPage() {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const [departments, jobs, positions, employees] = await Promise.all([
+  const [departments, positions, employees] = await Promise.all([
     prisma.orgUnit.findMany({ where: { activeFlag: true }, orderBy: { unitName: "asc" } }),
-    prisma.job.findMany({ orderBy: { jobTitle: "asc" } }),
     prisma.position.findMany({ include: { job: true, orgUnit: true }, orderBy: { positionCode: "asc" } }),
     isHrAdmin(session)
       ? prisma.employee.findMany({ where: { activeFlag: true }, orderBy: { fullLegalName: "asc" } })
@@ -25,7 +24,6 @@ export default async function NewRecruitmentRequestPage() {
       <div className="mt-4 max-w-3xl">
         <CreateRequestForm
           departments={departments}
-          jobs={jobs}
           positions={positions}
           employees={employees}
           currentEmployeeId={session.user.employeeId}

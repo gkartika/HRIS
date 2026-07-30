@@ -3,6 +3,44 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-07-30 — Jabatan removed from the Recruitment Request submit form; set by the HR Manager at Approve time instead
+
+Direct user request: "Take out Jabatan from Formulir Permintaan Tenaga
+Kerja Baru (FR-HC-01-01)". `jobId` was required on submit and used later
+to filter candidate Positions when creating the Employee from an approved
+request, so removing it needed a decision on where that link would still
+come from. Presented three options; the user picked "keep it in the data
+model, just hide it from requesters" — HR Admin/Manager sets Job as part
+of the Approve decision, not the original requester.
+
+Implementation: `RecruitmentRequest.jobId`/`job` made nullable (migration
+`20260730073159_recruitment_job_nullable_set_at_approval`, a standard
+SQLite table-rebuild, no data loss). The Jabatan `<select>` was removed
+from `recruitment/new/create-request-form.tsx`; `decideRecruitmentRequest`
+now reads `jobId` from the Approve form and requires it only when
+`decision === "APPROVED"` (Reject/Return don't need it).
+`createEmployeeFromRecruitmentRequest` and the create-employee page guard
+against a request that reached Approved without a Job somehow set. All
+read surfaces (list, approvals inbox, request detail) render `job?.jobTitle
+?? "—"` for the window between submission and approval where it's still
+null.
+
+### Same change surfaced a real access-control bug in the request detail page
+While re-verifying the "HR Manager can't approve" complaint that came in in the same
+message, found that `recruitment/[id]/page.tsx`'s access gate only allowed
+`isHrAdmin(session) || isOwnRequest` — an HR Manager who is not also HR
+Admin and not the request's own submitter got a hard access-denied page,
+never even reaching the Approve/Reject/Return buttons. `movements/[id]/page.tsx`
+already had the correct pattern (`isHrAdmin || isHrManagerNow || isOwnRequest`,
+computed from `getActiveHrManagerPositions`); recruitment's page was
+missing the `isHrManagerNow` branch. Fixed by reordering so
+`hrManagerPositions` is computed before the gate and adding it to the
+condition, matching movements. This was very likely the actual cause of
+"HR manager can not approved new permintaan tenaga kerja baru" — reproduced
+live with `made.wirawan@cbp.demo` (HR Manager, not HR Admin) against
+someone else's request before the fix (access denied) and after (approved
+successfully, Jabatan select appeared and worked).
+
 ## 2026-07-30 — Contract + renewal pipeline (WF-10, LIF-08..12, Data Fields Blueprint "08 Contracts")
 
 Next Phase 2 increment: LIF-08..12/WF-10 is the one remaining "Not Reviewed"

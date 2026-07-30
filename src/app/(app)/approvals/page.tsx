@@ -60,7 +60,7 @@ export default async function ApprovalsPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{r.department.unitName}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.job.jobTitle}</td>
+                    <td className="px-4 py-3 text-slate-600">{r.job?.jobTitle ?? "—"}</td>
                     <td className="px-4 py-3">
                       <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                         {t(`recruitmentStatus.${r.status}`)}

@@ -44,7 +44,6 @@ export async function submitRecruitmentRequest(
   const requestDate = formData.get("requestDate") as string;
   const reasonCode = formData.get("reasonCode") as RecruitmentReasonCode;
   const departmentId = formData.get("departmentId") as string;
-  const jobId = formData.get("jobId") as string;
   const requestedPositionId = (formData.get("requestedPositionId") as string) || null;
   const shiftCode = formData.get("shiftCode") as ShiftCode;
   const requestedHeadcount = Number(formData.get("requestedHeadcount"));
@@ -61,7 +60,6 @@ export async function submitRecruitmentRequest(
     !requestDate ||
     !reasonCode ||
     !departmentId ||
-    !jobId ||
     !shiftCode ||
     !requestedHeadcount ||
     !jobDescriptionSnapshot ||
@@ -91,7 +89,6 @@ export async function submitRecruitmentRequest(
       requestDate: new Date(requestDate),
       reasonCode,
       departmentId,
-      jobId,
       requestedPositionId,
       shiftCode,
       requestedHeadcount,
@@ -178,6 +175,15 @@ export async function decideRecruitmentRequest(
     return "Catatan keputusan wajib diisi untuk Tolak/Kembalikan.";
   }
 
+  // Jabatan is no longer picked by the requester (removed from the submit
+  // form on direct request) — the HR Manager sets it here as part of
+  // Approve, since createEmployeeFromRecruitmentRequest still needs it to
+  // filter candidate Positions. Not required for Reject/Return.
+  const jobId = (formData.get("jobId") as string) || request.jobId;
+  if (decision === "APPROVED" && !jobId) {
+    return "Jabatan wajib dipilih sebelum menyetujui permintaan ini.";
+  }
+
   await prisma.recruitmentRequest.update({
     where: { id: requestId },
     data: {
@@ -186,6 +192,7 @@ export async function decideRecruitmentRequest(
       approvedByAccountId: session.user.id,
       decisionPositionId,
       decisionNote,
+      jobId: decision === "APPROVED" ? jobId : request.jobId,
     },
   });
 
@@ -308,6 +315,9 @@ export async function createEmployeeFromRecruitmentRequest(
   const existingEmployee = await prisma.employee.findUnique({ where: { employeeNumber } });
   if (existingEmployee) return `Nomor karyawan ${employeeNumber} sudah digunakan.`;
 
+  if (!request.jobId) {
+    return "Jabatan pada permintaan ini belum ditentukan oleh HR Manager saat persetujuan.";
+  }
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";
   if (position.jobId !== request.jobId || position.orgUnitId !== request.departmentId) {

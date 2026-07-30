@@ -10,6 +10,12 @@ export interface DecisionPositionOption {
   jobTitle: string;
 }
 
+export interface DecisionJobOption {
+  id: string;
+  jobTitle: string;
+  jobLevel: string;
+}
+
 export function StartReviewButton({ requestId }: { requestId: string }) {
   const action = async () => {
     await startReviewRecruitmentRequest(requestId);
@@ -49,6 +55,22 @@ function DecisionPositionField({ positions }: { positions: DecisionPositionOptio
   );
 }
 
+function DecisionJobField({ jobs }: { jobs: DecisionJobOption[] }) {
+  return (
+    <div>
+      <label className="block text-xs text-slate-500">{t("recruitment.setJobToApprove")}</label>
+      <select name="jobId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        <option value="">— Pilih —</option>
+        {jobs.map((j) => (
+          <option key={j.id} value={j.id}>
+            {j.jobTitle} ({j.jobLevel})
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function DecisionButton({
   requestId,
   decision,
@@ -56,6 +78,7 @@ function DecisionButton({
   tone,
   requireNote,
   positions,
+  jobs,
 }: {
   requestId: string;
   decision: "APPROVED" | "REJECTED" | "RETURNED";
@@ -63,6 +86,7 @@ function DecisionButton({
   tone: string;
   requireNote: boolean;
   positions: DecisionPositionOption[];
+  jobs?: DecisionJobOption[];
 }) {
   const [open, setOpen] = useState(false);
   const action = decideRecruitmentRequest.bind(null, requestId, decision);
@@ -82,6 +106,7 @@ function DecisionButton({
   return (
     <form action={formAction} className="w-full space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <DecisionPositionField positions={positions} />
+      {decision === "APPROVED" && jobs && <DecisionJobField jobs={jobs} />}
       <label className="block text-xs text-slate-500">
         {t("recruitment.decisionNote")} {requireNote && "(wajib)"}
       </label>
@@ -110,7 +135,15 @@ function DecisionButton({
 // WF-15: approval controls are only ever rendered for an active HR Manager
 // (the caller only passes non-empty `positions` when the page's own
 // canApprove check already confirmed that) — HR Admin never sees these.
-export function DecisionButtons({ requestId, positions }: { requestId: string; positions: DecisionPositionOption[] }) {
+export function DecisionButtons({
+  requestId,
+  positions,
+  jobs,
+}: {
+  requestId: string;
+  positions: DecisionPositionOption[];
+  jobs: DecisionJobOption[];
+}) {
   return (
     <div className="flex flex-wrap gap-2">
       <DecisionButton
@@ -120,6 +153,7 @@ export function DecisionButtons({ requestId, positions }: { requestId: string; p
         tone="bg-emerald-600 text-white hover:bg-emerald-700"
         requireNote={false}
         positions={positions}
+        jobs={jobs}
       />
       <DecisionButton
         requestId={requestId}

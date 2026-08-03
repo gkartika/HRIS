@@ -41,6 +41,7 @@ export const strings = {
     GA_ADMIN: "Admin GA & Aset",
     EMPLOYEE: "Karyawan",
     MANAGER: "Atasan/Manajer",
+    HR_MANAGER: "HR Manager",
   },
   dataModel: {
     job: "Jabatan Standar",

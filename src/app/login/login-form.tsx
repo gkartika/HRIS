@@ -10,6 +10,7 @@ const DEMO_ACCOUNTS = [
   { role: "roles.GA_ADMIN", user: "ga.admin@cbp.demo" },
   { role: "roles.MANAGER", user: "budi.manager@cbp.demo" },
   { role: "roles.EMPLOYEE", user: "siti.karyawan@cbp.demo" },
+  { role: "roles.HR_MANAGER", user: "made.wirawan@cbp.demo" },
 ];
 
 const DEMO_PASSWORD = "Demo12345!";

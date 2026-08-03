@@ -20,7 +20,7 @@ export default async function ApprovalsPage() {
     return <p className="text-sm text-rose-600">{t("hrManagerUi.notHrManager")}</p>;
   }
 
-  const [pendingRequests, pendingMovements, pendingDeptHeadRequests] = await Promise.all([
+  const [pendingRequests, pendingMovements, pendingDeptHeadRequests, pendingDeptHeadMovements] = await Promise.all([
     prisma.recruitmentRequest.findMany({
       where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
       include: { department: true, job: true },
@@ -35,6 +35,21 @@ export default async function ApprovalsPage() {
       ? prisma.recruitmentRequest.findMany({
           where: { status: "PENDING_DEPT_HEAD", departmentId: { in: deptHeadDepartmentIds } },
           include: { department: true, job: true },
+          orderBy: { submittedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // Perubahan Posisi refactor: same dept-head-scoped queue, but
+    // department isn't a direct field on MovementRequest — derived from
+    // currentPosition.orgUnit (itself or its Section-tier parent).
+    deptHeadDepartmentIds.length > 0
+      ? prisma.movementRequest.findMany({
+          where: {
+            status: "PENDING_DEPT_HEAD",
+            currentPosition: {
+              orgUnit: { OR: [{ id: { in: deptHeadDepartmentIds } }, { parentUnitId: { in: deptHeadDepartmentIds } }] },
+            },
+          },
+          include: { employee: true, currentPosition: { include: { job: true } } },
           orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
@@ -76,6 +91,48 @@ export default async function ApprovalsPage() {
                       <td className="px-4 py-3">
                         <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
                           {t(`recruitmentStatus.${r.status}`)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {deptHeadDepartmentIds.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">
+            {t("recruitment.deptHeadApprovalSectionTitle")} — {t("movement.navLabel")}
+          </h2>
+          {pendingDeptHeadMovements.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">{t("movement.requestNumber")}</th>
+                    <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                    <th className="px-4 py-3 font-medium">{t("movement.movementType")}</th>
+                    <th className="px-4 py-3 font-medium">{t("recruitment.status")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingDeptHeadMovements.map((m) => (
+                    <tr key={m.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/movements/${m.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {m.requestNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{m.employee.preferredName ?? m.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{t(`movementType.${m.movementType}`)}</td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                          {t(`movementStatus.${m.status}`)}
                         </span>
                       </td>
                     </tr>

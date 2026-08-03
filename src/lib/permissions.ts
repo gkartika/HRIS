@@ -111,19 +111,29 @@ export function canCancelRecruitmentRequest(
   return isRequester || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
 }
 
-// LIF-04: "An authorized manager submits or recommends promotion/transfer."
-// isEmployeesManager is resolved by the caller via
-// src/lib/manager-scope.ts's isDirectManagerOfEmployee (Prisma-backed, kept
-// out of this file for the same dependency-free-for-Vitest reason as
-// isHrManager above). HR Admin may also submit directly, same administrative
-// latitude it already has for Employee creation (DEC-014).
-export function canSubmitMovementRequest(session: Session, isEmployeesManager: boolean): boolean {
-  return isHrAdmin(session) || isEmployeesManager;
+// Perubahan Posisi refactor: submission is now Level-3 (Job level 3A/3B,
+// scoped to the requester's own Department) eligibility, not "is this
+// employee's direct manager" — isLevel3InDepartment is resolved by the
+// caller via src/lib/level3-scope.ts's isLevel3ForEmployeeDepartment
+// (Prisma-backed, kept out of this file for the same dependency-free-for-
+// Vitest reason as isHrManager above). HR Admin may also submit directly,
+// same administrative latitude it already has for Employee creation
+// (DEC-014).
+export function canSubmitMovementRequest(session: Session, isLevel3InDepartment: boolean): boolean {
+  return isHrAdmin(session) || isLevel3InDepartment;
 }
 
-// LIF-04: "HR Manager approves or rejects the movement" — same
-// Position-derived-only authority as Recruitment (WF-15), reused here for
-// consistency.
+// Perubahan Posisi refactor: Department Head 3B approval gate (first
+// stage), same shape as Recruitment's canApproveRecruitmentRequestAsDeptHead
+// — HR Admin has no special access here either (notified only, per the
+// access spec).
+export function canApproveMovementRequestAsDeptHead(activeDeptHeadPositionIds: string[]): boolean {
+  return activeDeptHeadPositionIds.length > 0;
+}
+
+// LIF-04: "HR Manager approves or rejects the movement" (final stage) —
+// same Position-derived-only authority as Recruitment (WF-15), reused here
+// for consistency.
 export function canApproveMovementRequest(activeHrManagerPositionIds: string[]): boolean {
   return isHrManager(activeHrManagerPositionIds);
 }
@@ -133,6 +143,15 @@ export function canApproveMovementRequest(activeHrManagerPositionIds: string[]):
 // canExecuteMovementRequestStatus on the request's status).
 export function canExecuteMovementRequest(session: Session): boolean {
   return isHrAdmin(session);
+}
+
+// Perubahan Posisi refactor: "Prevent self-approval" — neither approval
+// stage may be decided by the request's own Requester, even if they
+// otherwise hold a qualifying Position (Dept Head 3B or HR Manager) for
+// this department. Pure/session-agnostic so both decideMovementRequest and
+// decideMovementRequestAsDeptHead share the exact same check.
+export function isSelfApprovalAttempt(actingEmployeeId: string | null | undefined, requesterEmployeeId: string): boolean {
+  return !!actingEmployeeId && actingEmployeeId === requesterEmployeeId;
 }
 
 // Same DM-25-style exception as Recruitment cancellation: the original

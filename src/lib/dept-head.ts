@@ -46,6 +46,29 @@ export async function getActiveDeptHeadPositions(
 }
 
 /**
+ * Every Employee currently holding level-3B approval authority in one
+ * department, company-wide (not scoped to a single Employee) — Perubahan
+ * Posisi's self-approval guard: if the requester IS one of these, routing
+ * must fall back to a different entry here (e.g. an Acting-type Assignment
+ * covering the same Position) rather than silently bypass or self-approve.
+ */
+export async function getDeptHeadApprovers(
+  departmentId: string,
+  asOf: Date = new Date()
+): Promise<{ employeeId: string; positionId: string }[]> {
+  const assignments = await prisma.assignment.findMany({
+    where: {
+      status: "ACTIVE",
+      effectiveFrom: { lte: asOf },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+      position: { orgUnitId: departmentId, job: { jobLevel: DEPT_HEAD_JOB_LEVEL } },
+    },
+    select: { employeeId: true, positionId: true },
+  });
+  return assignments;
+}
+
+/**
  * Every departmentId this Employee currently holds level-3B approval
  * authority in, company-wide — used to populate the personal approvals
  * inbox (no single request's departmentId to scope by yet).

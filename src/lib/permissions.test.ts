@@ -11,8 +11,10 @@ import {
   canCancelRecruitmentRequest,
   canSubmitMovementRequest,
   canApproveMovementRequest,
+  canApproveMovementRequestAsDeptHead,
   canExecuteMovementRequest,
   canCancelMovementRequest,
+  isSelfApprovalAttempt,
   canViewOnboarding,
   canMarkOnboardingContract,
   canMarkOnboardingTraining,
@@ -141,20 +143,41 @@ describe("canCancelRecruitmentRequest (DM-25/ACC-16)", () => {
   });
 });
 
-describe("canSubmitMovementRequest (LIF-04)", () => {
-  it("allows the employee's direct manager", () => {
-    const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "manager-1" });
+describe("canSubmitMovementRequest (Perubahan Posisi refactor)", () => {
+  it("allows a Level-3 (3A/3B) holder in the employee's own department", () => {
+    const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "level3-1" });
     expect(canSubmitMovementRequest(session, true)).toBe(true);
   });
 
-  it("allows HR Admin even when not the direct manager", () => {
+  it("allows HR Admin even when not Level 3 there", () => {
     const session = mockSession({ roles: ["HR_ADMIN"], employeeId: null });
     expect(canSubmitMovementRequest(session, false)).toBe(true);
   });
 
-  it("denies a plain employee who isn't the direct manager", () => {
+  it("denies a plain employee who isn't Level 3 in that department", () => {
     const session = mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" });
     expect(canSubmitMovementRequest(session, false)).toBe(false);
+  });
+});
+
+describe("canApproveMovementRequestAsDeptHead (Perubahan Posisi refactor)", () => {
+  it("is false with zero active level-3B positions in the request's department", () => {
+    expect(canApproveMovementRequestAsDeptHead([])).toBe(false);
+  });
+
+  it("is true as soon as there's at least one active level-3B position there", () => {
+    expect(canApproveMovementRequestAsDeptHead(["pos-dept-head"])).toBe(true);
+  });
+});
+
+describe("isSelfApprovalAttempt (Perubahan Posisi refactor)", () => {
+  it("is true when the acting employee is the request's own requester", () => {
+    expect(isSelfApprovalAttempt("emp-1", "emp-1")).toBe(true);
+  });
+
+  it("is false for a different employee, or no employeeId at all", () => {
+    expect(isSelfApprovalAttempt("emp-2", "emp-1")).toBe(false);
+    expect(isSelfApprovalAttempt(null, "emp-1")).toBe(false);
   });
 });
 

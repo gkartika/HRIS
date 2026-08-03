@@ -271,12 +271,17 @@ enum MovementType {
   STATUS_CHANGE
 }
 
-// Blueprint's exact approval_status values — no "Returned" state for
-// Movement (unlike Recruitment's fuller WF-13 state machine).
+// Perubahan Posisi refactor (2026-07-31): PENDING_DEPT_HEAD and RETURNED
+// added ahead of the Blueprint's original approval_status values, for the
+// new Department Head 3B -> HR Manager two-stage approval chain. Purely
+// additive — every pre-existing row (any movementType, any of the original
+// five statuses) remains a valid row under this enum; nothing was removed.
 enum MovementRequestStatus {
+  PENDING_DEPT_HEAD
   SUBMITTED
   APPROVED
   REJECTED
+  RETURNED
   IMPLEMENTED
   CANCELLED
 }
@@ -310,6 +315,7 @@ model Account {
   recruitmentRequestsCancelledBy RecruitmentRequest[] @relation("RecruitmentCancelledByAccount")
   movementRequestsSubmittedBy   MovementRequest[] @relation("MovementSubmittedBy")
   movementRequestsDecidedBy     MovementRequest[] @relation("MovementDecisionBy")
+  movementRequestsDeptHeadDecisionsBy MovementRequest[] @relation("MovementDeptHeadDecisionBy")
   movementRequestsImplementedBy MovementRequest[] @relation("MovementImplementedBy")
   movementRequestsCancelledBy   MovementRequest[] @relation("MovementCancelledByAccount")
   onboardingContractsCompletedBy OnboardingCase[] @relation("OnboardingContractCompletedBy")
@@ -493,6 +499,7 @@ model Position {
   movementRequestsAsProposed MovementRequest[] @relation("MovementProposedPosition")
   movementRequestsAsRequesterPosition MovementRequest[] @relation("MovementRequesterPosition")
   movementRequestsDecisions  MovementRequest[] @relation("MovementDecisionPosition")
+  movementRequestsDeptHeadDecisions MovementRequest[] @relation("MovementDeptHeadDecisionPosition")
   contractRecommendations    Contract[] @relation("ContractRecommendationPosition")
   contractDecisions          Contract[] @relation("ContractDecisionPosition")
 }
@@ -512,6 +519,7 @@ model Assignment {
 
   fulfillment           RecruitmentRequestFulfillment?
   movementImplementation MovementRequest?
+  movementCurrentAssignmentOf MovementRequest[] @relation("MovementCurrentAssignment")
 }
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
@@ -633,11 +641,19 @@ model MovementRequest {
   // before this request is decided/executed.
   currentPositionId        String
   currentPosition          Position              @relation("MovementCurrentPosition", fields: [currentPositionId], references: [id])
+  // Perubahan Posisi refactor: the specific Assignment being changed —
+  // required so execution acts on exactly the Assignment the requester
+  // identified, not whatever happens to be "the Primary" at execution time
+  // (which could differ if something else changed in between). Nullable
+  // only because pre-refactor rows predate this field.
+  currentAssignmentId      String?
+  currentAssignment        Assignment?           @relation("MovementCurrentAssignment", fields: [currentAssignmentId], references: [id])
   // Required for every movementType, incl. STATUS_CHANGE (where it's the
   // same as currentPositionId — no position change, only employmentStatus).
   proposedPositionId       String
   proposedPosition         Position              @relation("MovementProposedPosition", fields: [proposedPositionId], references: [id])
-  // Only meaningful/required when movementType is STATUS_CHANGE.
+  // Only meaningful/required when movementType is STATUS_CHANGE — a legacy
+  // type, no longer offered by the Perubahan Posisi submit form.
   proposedEmploymentStatus EmploymentStatus?
   proposedEffectiveDate    DateTime
   requestReason            String
@@ -651,15 +667,39 @@ model MovementRequest {
   submittedByAccountId     String
   submittedByAccount       Account               @relation("MovementSubmittedBy", fields: [submittedByAccountId], references: [id])
 
-  // LIF-04: "HR Manager approves or rejects" — decisionPositionId records
-  // which active HR Manager Position gave authority (WF-02/WF-05), same
-  // pattern as RecruitmentRequest.decisionPositionId.
+  // Perubahan Posisi refactor: Department Head 3B decision (first stage),
+  // same evidence shape as the HR Manager's own decision fields below —
+  // kept separate so both stages' evidence survive independently.
+  deptHeadDecisionAt          DateTime?
+  deptHeadDecisionByAccountId String?
+  deptHeadDecisionByAccount   Account?              @relation("MovementDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
+  deptHeadDecisionPositionId  String?
+  deptHeadDecisionPosition    Position?             @relation("MovementDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
+  deptHeadDecisionNote        String?
+
+  // LIF-04: "HR Manager approves or rejects" (second/final stage) —
+  // decisionPositionId records which active HR Manager Position gave
+  // authority (WF-02/WF-05), same pattern as RecruitmentRequest.
   decisionAt               DateTime?
   decisionByAccountId      String?
   decisionByAccount        Account?              @relation("MovementDecisionBy", fields: [decisionByAccountId], references: [id])
   decisionPositionId       String?
   decisionPosition         Position?             @relation("MovementDecisionPosition", fields: [decisionPositionId], references: [id])
   decisionNote             String?
+
+  // Perubahan Posisi refactor: HR-only supporting fields (FR-HC-01-09's
+  // "Absensi 3 Bulan Terakhir" + evaluation reference) — added/verified by
+  // HR Admin, never visible or editable by the requester. Evaluation
+  // reference is mandatory for Promosi (validated in the action, not here).
+  attendanceAlpha             Int?
+  attendanceSakit             Int?
+  attendanceIjin              Int?
+  attendanceIjinHalfDay        Int?
+  attendanceCuti               Int?
+  performanceEvaluationRef      String?
+  performanceEvaluationFileId   String?               @unique
+  performanceEvaluationFile     FileObject?           @relation(fields: [performanceEvaluationFileId], references: [id])
+  hrConfidentialNotes           String?
 
   // LIF-04: "HR Admin executes the future/effective-dated Position
   // Assignment and preserves previous records" — implementedAssignmentId
@@ -863,4 +903,5 @@ model FileObject {
   employeeKtpOf       Employee?   @relation("EmployeeKtpFile")
   employeeKkOf        Employee?   @relation("EmployeeKkFile")
   contractOf          Contract?
+  movementPerformanceEvaluationOf MovementRequest?
 }

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { canSubmitMovementRequest, isHrAdmin } from "@/lib/permissions";
-import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
+import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { SubmitMovementForm } from "./submit-movement-form";
@@ -17,12 +17,18 @@ export default async function NewMovementRequestPage({
 
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
-    include: { currentPosition: { include: { job: true, orgUnit: true } } },
+    include: {
+      currentPosition: { include: { job: true, orgUnit: true } },
+      assignments: {
+        where: { status: "ACTIVE" },
+        include: { position: { include: { job: true, orgUnit: true } } },
+      },
+    },
   });
   if (!employee) notFound();
 
-  const isManager = await isDirectManagerOfEmployee(session.user.employeeId, employeeId);
-  if (!canSubmitMovementRequest(session, isManager)) {
+  const eligible = await isLevel3ForEmployeeDepartment(session.user.employeeId, employeeId);
+  if (!canSubmitMovementRequest(session, eligible)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
   if (!employee.currentPositionId) {
@@ -50,6 +56,7 @@ export default async function NewMovementRequestPage({
       <div className="mt-4 max-w-2xl">
         <SubmitMovementForm
           employee={employee}
+          assignments={employee.assignments}
           positions={positions}
           employees={employees}
           currentEmployeeId={session.user.employeeId}

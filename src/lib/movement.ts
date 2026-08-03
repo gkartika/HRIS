@@ -49,3 +49,75 @@ export function validateProposedPosition(
   }
   return samePosition ? "Posisi yang diusulkan harus berbeda dari Posisi saat ini." : null;
 }
+
+// ---------- Perubahan Posisi refactor (2026-08-03) ----------
+// Only these three types are offered by the Perubahan Posisi submit form
+// going forward — ROTATION and STATUS_CHANGE remain valid historical
+// movementType values (existing rows are never touched/deleted) but are no
+// longer creatable, and render read-only/archived in the UI.
+export const PERUBAHAN_POSISI_TYPES: MovementType[] = ["PROMOTION", "MUTATION", "DEMOTION"];
+
+export function isPerubahanPosisiType(movementType: MovementType): boolean {
+  return PERUBAHAN_POSISI_TYPES.includes(movementType);
+}
+
+// Promosi requires an Evaluasi Kinerja Karyawan reference per FR-HC-01-09's
+// own footnote ("Untuk promosi kenaikan Golongan/Jabatan, harus disertakan
+// hasil Evaluasi Kinerja Karyawan").
+export function requiresPerformanceEvaluation(movementType: MovementType): boolean {
+  return movementType === "PROMOTION";
+}
+
+/**
+ * Parses a Job.jobLevel code into a comparable (tier, subTier) pair —
+ * e.g. "3B" -> [3, "B"], "12" -> [12, ""]. Job.jobLevel is a free-text
+ * field with no dedicated ordinal column, but every level code observed in
+ * this org (both seed data and the real FR-HC-01-09 examples: 1B, 1C, 2A,
+ * 3A, 3B, 4, 5) follows this numeric-tier-plus-optional-letter-subtier
+ * shape, so it's used as the comparison key rather than adding a new field
+ * speculatively. Returns null for a code that doesn't fit — direction
+ * validation is then skipped rather than guessed.
+ */
+function parseJobLevel(jobLevel: string): [number, string] | null {
+  const match = /^(\d+)([A-Za-z]*)$/.exec(jobLevel.trim());
+  if (!match) return null;
+  return [Number(match[1]), match[2].toUpperCase()];
+}
+
+/**
+ * Positive if `a` is a higher tier than `b`, negative if lower, 0 if equal,
+ * null if either code doesn't parse (direction can't be determined).
+ */
+export function compareJobLevels(a: string, b: string): number | null {
+  const parsedA = parseJobLevel(a);
+  const parsedB = parseJobLevel(b);
+  if (!parsedA || !parsedB) return null;
+  if (parsedA[0] !== parsedB[0]) return parsedA[0] - parsedB[0];
+  if (parsedA[1] === parsedB[1]) return 0;
+  return parsedA[1] > parsedB[1] ? 1 : -1;
+}
+
+/**
+ * Promosi must move to a strictly higher job level; Demotasi to a strictly
+ * lower one. Mutasi "normally remains at the equivalent level" — a norm,
+ * not a hard rule, so it isn't validated here (only that the Position
+ * itself differs, already enforced by validateProposedPosition). Returns
+ * null (no error) when the levels can't be parsed/compared — this only
+ * blocks a clearly wrong-direction submission, it never blocks on
+ * ambiguous data.
+ */
+export function validateJobLevelDirection(
+  movementType: MovementType,
+  currentJobLevel: string,
+  proposedJobLevel: string
+): string | null {
+  const comparison = compareJobLevels(proposedJobLevel, currentJobLevel);
+  if (comparison === null) return null;
+  if (movementType === "PROMOTION" && comparison <= 0) {
+    return "Promosi harus menuju Golongan/Jabatan yang lebih tinggi dari saat ini.";
+  }
+  if (movementType === "DEMOTION" && comparison >= 0) {
+    return "Demosi harus menuju Golongan/Jabatan yang lebih rendah dari saat ini.";
+  }
+  return null;
+}

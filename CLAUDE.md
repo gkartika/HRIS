@@ -176,20 +176,33 @@ English.
   Manpower, Candidate, and Selected Person modules are explicitly out of
   scope.
 - `src/lib/movement.ts` — pure Movement Request logic (status-transition
-  eligibility, STATUS_CHANGE-vs-Position-change validation, request-number
-  formatting), unit tested. `src/lib/manager-scope.ts`'s
-  `isDirectManagerOfEmployee()` is the Prisma-backed check (parallel to
-  `hr-manager.ts`) for "is this account the target employee's direct
-  manager" — resolved fresh, never stored.
-- `src/app/(app)/movements/` — the Movement Request flow (LIF-04, Data
-  Fields Blueprint "28 Movement Requests"): list, submit (`new/`, reached
-  from a "Ajukan Mutasi" link on the Employee detail page), detail with
-  approve/reject (HR-Manager-Position-only) and execute
-  (`executeMovementRequest`, HR-Admin-only — performs the actual Assignment
-  close-old/open-new, or just updates `employmentStatus` for a
-  STATUS_CHANGE request) and cancel (Requester/HR-Manager/HR-Admin). This is
-  a *formal* path alongside the pre-existing direct "Pindahkan ke Posisi
-  Baru" HR-Admin action, same direct-vs-formal-request precedent as DEC-014.
+  eligibility, STATUS_CHANGE-vs-Position-change validation, job-level-
+  direction validation, request-number formatting), unit tested.
+  `src/lib/manager-scope.ts`'s `isDirectManagerOfEmployee()` is still used
+  by Contract renewal but no longer by Movement (see below).
+- `src/app/(app)/movements/` — **"Perubahan Posisi"** (refactored in place
+  2026-08-03, see docs/DECISIONS.md — same route/model, not a new module):
+  Promosi/Mutasi/Demosi only, going forward. `ROTATION`/`STATUS_CHANGE`
+  remain valid historical `MovementType` values (never removed from the
+  enum/DB) but the submit form and `submitMovementRequest` no longer accept
+  them (`isPerubahanPosisiType`) — any existing row of those types renders
+  as a read-only archive on the detail page, no action controls. Submit
+  eligibility is Job level "3A"/"3B" scoped to the target employee's own
+  Department (`src/lib/level3-scope.ts`'s `isLevel3ForEmployeeDepartment`,
+  walking `OrgUnit.parentUnit` up to the nearest DEPARTMENT tier) — not
+  "direct manager" anymore. Workflow: Department Head 3B
+  (`src/lib/dept-head.ts`, reused from Recruitment, `PENDING_DEPT_HEAD`
+  status, never bypassed — a routing-configuration error blocks submission
+  outright if no *other* level-3B holder exists in that department) → HR
+  Manager (`SUBMITTED` → `APPROVED`/`REJECTED`/`RETURNED`, same as before)
+  → HR Admin executes (`executeMovementRequest`, using the request's own
+  stored `currentAssignmentId` rather than re-deriving "the Primary"). HR
+  Admin also adds HR-only supporting fields (`updateMovementHrFields`:
+  3-month attendance, evaluation reference, confidential notes) — never
+  visible to the requester or the affected employee. Cancel stays
+  Requester/HR-Manager/HR-Admin. This is a *formal* path alongside the
+  pre-existing direct "Pindahkan ke Posisi Baru" HR-Admin action, same
+  direct-vs-formal-request precedent as DEC-014.
 - `src/lib/onboarding.ts` — pure Onboarding Case logic (`computeOnboardingStatus()`
   deriving Not Started/In Progress/Overdue/Complete live from the three
   completion flags, never stored; case-number formatting), unit tested.

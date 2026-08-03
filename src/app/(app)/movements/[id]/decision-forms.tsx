@@ -1,8 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { decideMovementRequest, executeMovementRequest, cancelMovementRequest } from "../actions";
+import {
+  decideMovementRequest,
+  decideMovementRequestAsDeptHead,
+  executeMovementRequest,
+  cancelMovementRequest,
+  updateMovementHrFields,
+} from "../actions";
 import { t } from "@/lib/i18n/id";
+
+type DecideAction = typeof decideMovementRequest;
 
 export interface DecisionPositionOption {
   positionId: string;
@@ -36,16 +44,18 @@ function DecisionButton({
   tone,
   requireNote,
   positions,
+  decideAction = decideMovementRequest,
 }: {
   requestId: string;
-  decision: "APPROVED" | "REJECTED";
+  decision: "APPROVED" | "REJECTED" | "RETURNED";
   label: string;
   tone: string;
   requireNote: boolean;
   positions: DecisionPositionOption[];
+  decideAction?: DecideAction;
 }) {
   const [open, setOpen] = useState(false);
-  const action = decideMovementRequest.bind(null, requestId, decision);
+  const action = decideAction.bind(null, requestId, decision);
   const [error, formAction, isPending] = useActionState(action, undefined);
 
   if (!open) {
@@ -99,11 +109,62 @@ export function MovementDecisionButtons({
       />
       <DecisionButton
         requestId={requestId}
+        decision="RETURNED"
+        label={t("recruitment.returnButton")}
+        tone="border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+        requireNote={true}
+        positions={positions}
+      />
+      <DecisionButton
+        requestId={requestId}
         decision="REJECTED"
         label={t("recruitment.rejectButton")}
         tone="border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
         requireNote={true}
         positions={positions}
+      />
+    </div>
+  );
+}
+
+// Perubahan Posisi refactor: Department Head 3B approval gate, ahead of the
+// HR Manager — same button shell as MovementDecisionButtons, just bound to
+// decideMovementRequestAsDeptHead.
+export function DeptHeadDecisionButtons({
+  requestId,
+  positions,
+}: {
+  requestId: string;
+  positions: DecisionPositionOption[];
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <DecisionButton
+        requestId={requestId}
+        decision="APPROVED"
+        label={t("recruitment.approveButton")}
+        tone="bg-emerald-600 text-white hover:bg-emerald-700"
+        requireNote={false}
+        positions={positions}
+        decideAction={decideMovementRequestAsDeptHead}
+      />
+      <DecisionButton
+        requestId={requestId}
+        decision="RETURNED"
+        label={t("recruitment.returnButton")}
+        tone="border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+        requireNote={true}
+        positions={positions}
+        decideAction={decideMovementRequestAsDeptHead}
+      />
+      <DecisionButton
+        requestId={requestId}
+        decision="REJECTED"
+        label={t("recruitment.rejectButton")}
+        tone="border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+        requireNote={true}
+        positions={positions}
+        decideAction={decideMovementRequestAsDeptHead}
       />
     </div>
   );
@@ -167,6 +228,85 @@ export function CancelMovementForm({ requestId }: { requestId: string }) {
           {t("common.cancel")}
         </button>
       </div>
+    </form>
+  );
+}
+
+// Perubahan Posisi refactor: HR Admin-only supporting fields (FR-HC-01-09's
+// 3-month attendance block + evaluation reference + confidential notes) —
+// never rendered for the Level-3 requester (enforced by the parent page
+// only ever passing this component to an HR Admin viewer).
+export function MovementHrFieldsForm({
+  requestId,
+  initial,
+}: {
+  requestId: string;
+  initial: {
+    attendanceAlpha: number | null;
+    attendanceSakit: number | null;
+    attendanceIjin: number | null;
+    attendanceIjinHalfDay: number | null;
+    attendanceCuti: number | null;
+    performanceEvaluationRef: string | null;
+    hrConfidentialNotes: string | null;
+  };
+}) {
+  const action = updateMovementHrFields.bind(null, requestId);
+  const [error, formAction, isPending] = useActionState(action, undefined);
+
+  return (
+    <form action={formAction} className="space-y-3">
+      <div>
+        <p className="mb-1 text-xs text-slate-500">{t("movement.attendanceTitle")}</p>
+        <div className="grid grid-cols-5 gap-2">
+          {(
+            [
+              ["attendanceAlpha", "movement.attendanceAlpha", initial.attendanceAlpha],
+              ["attendanceSakit", "movement.attendanceSakit", initial.attendanceSakit],
+              ["attendanceIjin", "movement.attendanceIjin", initial.attendanceIjin],
+              ["attendanceIjinHalfDay", "movement.attendanceIjinHalfDay", initial.attendanceIjinHalfDay],
+              ["attendanceCuti", "movement.attendanceCuti", initial.attendanceCuti],
+            ] as const
+          ).map(([name, labelKey, value]) => (
+            <div key={name}>
+              <label className="mb-1 block text-xs text-slate-500">{t(labelKey)}</label>
+              <input
+                type="number"
+                min={0}
+                name={name}
+                defaultValue={value ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">{t("movement.performanceEvaluationRef")}</label>
+        <input
+          type="text"
+          name="performanceEvaluationRef"
+          defaultValue={initial.performanceEvaluationRef ?? ""}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">{t("movement.hrConfidentialNotes")}</label>
+        <textarea
+          name="hrConfidentialNotes"
+          rows={2}
+          defaultValue={initial.hrConfidentialNotes ?? ""}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        />
+      </div>
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={isPending}
+        className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-60"
+      >
+        {isPending ? t("common.loading") : t("common.save")}
+      </button>
     </form>
   );
 }

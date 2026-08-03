@@ -14,7 +14,7 @@ import {
   canViewContract,
   canManageContracts,
 } from "@/lib/permissions";
-import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
+import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { EmployeeProfileView } from "@/components/employee-profile-view";
@@ -73,9 +73,9 @@ export default async function EmployeeDetailPage({
   const canEdit = isSelf || isHrAdmin(session);
   const canManage = canManageAssignments(session);
   const canUploadDocs = canUploadEmployeeDocument(session);
-  const isEmployeesManager = await isDirectManagerOfEmployee(session.user.employeeId, employee.id);
+  const isLevel3InDepartment = await isLevel3ForEmployeeDepartment(session.user.employeeId, employee.id);
   const canSubmitMovement =
-    !!employee.currentPositionId && canSubmitMovementRequest(session, isEmployeesManager);
+    !!employee.currentPositionId && canSubmitMovementRequest(session, isLevel3InDepartment);
 
   // noKk/namaIbuKandung/ptkpStatusCode are already stripped by projectEmployee
   // for roles that shouldn't see them. educationLevel isn't in that restricted

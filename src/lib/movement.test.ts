@@ -6,6 +6,10 @@ import {
   canCancelMovementRequestStatus,
   requiresProposedEmploymentStatus,
   validateProposedPosition,
+  isPerubahanPosisiType,
+  requiresPerformanceEvaluation,
+  compareJobLevels,
+  validateJobLevelDirection,
 } from "./movement";
 
 describe("formatMovementRequestNumber", () => {
@@ -70,5 +74,67 @@ describe("validateProposedPosition", () => {
     expect(validateProposedPosition("ROTATION", "pos-1", "pos-1")).not.toBeNull();
     expect(validateProposedPosition("MUTATION", "pos-1", "pos-1")).not.toBeNull();
     expect(validateProposedPosition("DEMOTION", "pos-1", "pos-1")).not.toBeNull();
+  });
+});
+
+describe("isPerubahanPosisiType (Perubahan Posisi refactor)", () => {
+  it("allows only Promosi, Mutasi and Demotasi", () => {
+    expect(isPerubahanPosisiType("PROMOTION")).toBe(true);
+    expect(isPerubahanPosisiType("MUTATION")).toBe(true);
+    expect(isPerubahanPosisiType("DEMOTION")).toBe(true);
+  });
+
+  it("excludes the legacy Rotasi and Perubahan Status types", () => {
+    expect(isPerubahanPosisiType("ROTATION")).toBe(false);
+    expect(isPerubahanPosisiType("STATUS_CHANGE")).toBe(false);
+  });
+});
+
+describe("requiresPerformanceEvaluation", () => {
+  it("is true only for Promosi", () => {
+    expect(requiresPerformanceEvaluation("PROMOTION")).toBe(true);
+    expect(requiresPerformanceEvaluation("MUTATION")).toBe(false);
+    expect(requiresPerformanceEvaluation("DEMOTION")).toBe(false);
+    expect(requiresPerformanceEvaluation("ROTATION")).toBe(false);
+    expect(requiresPerformanceEvaluation("STATUS_CHANGE")).toBe(false);
+  });
+});
+
+describe("compareJobLevels", () => {
+  it("compares numeric tier first", () => {
+    expect(compareJobLevels("4", "3B")).toBeGreaterThan(0);
+    expect(compareJobLevels("2A", "3A")).toBeLessThan(0);
+  });
+
+  it("compares the letter sub-tier within the same numeric tier", () => {
+    expect(compareJobLevels("1C", "1B")).toBeGreaterThan(0);
+    expect(compareJobLevels("3A", "3B")).toBeLessThan(0);
+    expect(compareJobLevels("3B", "3B")).toBe(0);
+  });
+
+  it("returns null for a code that doesn't parse", () => {
+    expect(compareJobLevels("Senior", "3B")).toBeNull();
+  });
+});
+
+describe("validateJobLevelDirection", () => {
+  it("requires Promosi to move to a strictly higher level", () => {
+    expect(validateJobLevelDirection("PROMOTION", "3A", "3B")).toBeNull();
+    expect(validateJobLevelDirection("PROMOTION", "3B", "3A")).not.toBeNull();
+    expect(validateJobLevelDirection("PROMOTION", "3B", "3B")).not.toBeNull();
+  });
+
+  it("requires Demotasi to move to a strictly lower level", () => {
+    expect(validateJobLevelDirection("DEMOTION", "3B", "3A")).toBeNull();
+    expect(validateJobLevelDirection("DEMOTION", "3A", "3B")).not.toBeNull();
+  });
+
+  it("does not constrain Mutasi by level direction", () => {
+    expect(validateJobLevelDirection("MUTATION", "3B", "3B")).toBeNull();
+    expect(validateJobLevelDirection("MUTATION", "3A", "4")).toBeNull();
+  });
+
+  it("skips validation when a level code can't be parsed", () => {
+    expect(validateJobLevelDirection("PROMOTION", "Senior", "3B")).toBeNull();
   });
 });

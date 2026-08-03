@@ -3,6 +3,88 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-03 — Movement Request refactored in place into "Perubahan Posisi" (Promosi/Mutasi/Demosi only)
+
+Direct user request, using the real FR-HC-01-09 "Rekomendasi Perubahan
+Posisi" form (fetched from Drive) as the field reference: narrow the
+existing Movement Request feature to only Promosi/Mutasi/Demosi, add a
+Department Head 3B → HR Manager two-stage approval chain (reusing the
+exact mechanism just built for Recruitment), add confidentiality, and add
+HR-only supporting fields (3-month attendance, evaluation reference,
+confidential notes). Explicitly an in-place refactor, not a new module —
+`MovementRequest`/`MovementType`/`MovementRequestStatus` keep every
+existing value; nothing was renamed or removed at the schema level.
+
+### Nothing destructive — old Rotasi/Perubahan Status rows are frozen, not migrated
+`MovementType` still has all 5 values (`ROTATION`/`STATUS_CHANGE` included)
+and `MovementRequestStatus` only gained two new values
+(`PENDING_DEPT_HEAD`, `RETURNED`) — every pre-existing row (3 in the dev
+DB: one cancelled Rotasi, one implemented Mutasi, one implemented Status
+Change) survived the migration byte-for-byte. The submit form and server
+action now only accept Promosi/Mutasi/Demosi (`isPerubahanPosisiType`,
+enforced server-side, not just in the dropdown); the detail page renders
+any other type with a "legacy/archived" notice and suppresses every
+decision/execute/HR-fields control regardless of status — old records are
+inert, not reclassified or force-migrated into the new flow.
+
+### "Level 3" (submit) vs "Level 3B" (Dept Head approval) are different job-level checks
+Per direct clarification: any employee holding `Job.jobLevel` "3A" or "3B"
+(`src/lib/level3-scope.ts`) may submit — scoped to their own Department
+(resolved by walking `OrgUnit.parentUnit` up to the nearest DEPARTMENT-tier
+ancestor, since a Position can sit under a Section). The Dept Head
+approval stage is still literally "3B" only, reusing
+`src/lib/dept-head.ts` from the Recruitment work unchanged.
+
+### The Dept Head 3B gate never bypasses — unlike Recruitment's
+Recruitment's dept-head gate skips straight to the HR Manager when the
+requester already holds that authority (nobody else needs to review their
+own call). Perubahan Posisi explicitly forbids that: "do not silently
+self-approve or skip the stage." Every new request always starts at
+`PENDING_DEPT_HEAD`. Two routing checks run at submit time
+(`getDeptHeadApprovers`, extended in `dept-head.ts`): if literally no one
+holds a level-3B Position in the department, or if the only holder is the
+person actually submitting, the request is blocked outright with a
+routing-configuration error rather than created in an unroutable state.
+Separately, `isSelfApprovalAttempt` blocks a decision (at either stage) by
+whoever is recorded as the request's own `requesterEmployeeId`, even if
+they otherwise hold a qualifying Position — this is requester-keyed, not
+employee-being-changed-keyed, since "prevent self-approval" is about not
+rubber-stamping your own ask.
+
+### `currentAssignmentId` replaces re-deriving "the Primary" at execution time
+The request now stores exactly which Assignment it identified at
+submission (required going forward, nullable only because pre-refactor
+rows predate it) — execution ends that specific Assignment, re-validating
+it's still ACTIVE, instead of re-querying "whichever Assignment is
+currently Primary" (which could have changed in between). Falls back to
+the old re-derivation only for a legacy row with no stored
+`currentAssignmentId`.
+
+### Confidentiality: HR-only fields are a separate field set, not a split decisionNote
+Attendance counts, evaluation reference, and `hrConfidentialNotes` are new
+fields, editable only by HR Admin (`updateMovementHrFields`) and rendered
+only for HR Admin/HR Manager/the deciding Dept Head 3B — never the
+requester or the affected employee. `decisionNote`/`deptHeadDecisionNote`
+(the return/reject reason) stay visible to everyone once the request has
+actually been Returned/Rejected, since that's their entire purpose —
+splitting them into a second "confidential" field would only obscure
+feedback the requester needs to act on.
+
+### Live-verified end to end
+Produksi initially had no level-3B Position at all — reproduced the
+"no eligible approver" routing error live as Budi (Kepala Seksi Produksi,
+3A) attempting to submit for himself. Created a real level-3B Position
+("Asisten Kepala Departemen Produksi", reporting to Kepala Departemen
+Produksi — matching FR-HC-01-09's own "Asst. Dept. Head" approval line)
+via the existing admin UI and granted it to Budi as an Additional
+Assignment (Primary role untouched). Verified the full chain with HR Admin
+submitting a Promosi for Rendra Wicaksono (2A → vacant Kepala Departemen
+Produksi, level 4): blocked with "evaluation required" until HR Admin
+filled in the HR-only fields, Budi approved as Dept Head, Made approved as
+HR Manager, HR Admin executed — Rendra's old Assignment end-dated, new one
+created, full history intact. Confirmed the legacy STATUS_CHANGE row
+(MOV-2026-0003) renders as a read-only archive with no action controls.
+
 ## 2026-07-30 — Department Manager/Head (Job level 3B) approval gate added ahead of the HR Manager for Recruitment Requests
 
 Direct user request: "every Recruitment Request form (FR-HC-01-01) need

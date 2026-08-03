@@ -2,47 +2,144 @@ import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
+import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import type { Prisma, MovementRequestStatus, MovementType } from "@/generated/prisma/client";
 
-const MOVEMENT_STATUSES: MovementRequestStatus[] = ["SUBMITTED", "APPROVED", "REJECTED", "IMPLEMENTED", "CANCELLED"];
+const MOVEMENT_STATUSES: MovementRequestStatus[] = [
+  "PENDING_DEPT_HEAD",
+  "SUBMITTED",
+  "APPROVED",
+  "REJECTED",
+  "RETURNED",
+  "IMPLEMENTED",
+  "CANCELLED",
+];
 const MOVEMENT_TYPES: MovementType[] = ["PROMOTION", "ROTATION", "MUTATION", "DEMOTION", "STATUS_CHANGE"];
 
 export default async function MovementListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; movementType?: string }>;
+  searchParams: Promise<{
+    requestNumber?: string;
+    employeeId?: string;
+    status?: string;
+    movementType?: string;
+    departmentId?: string;
+    currentPositionId?: string;
+    proposedPositionId?: string;
+    requesterEmployeeId?: string;
+    approverAccountId?: string;
+    effectiveFrom?: string;
+    effectiveTo?: string;
+  }>;
 }) {
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   const isHrManagerNow = hrManagerPositions.length > 0;
-  const seesAll = isHrAdmin(session) || isHrManagerNow;
+  const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
+  const isHrAdminUser = isHrAdmin(session);
+  const seesAll = isHrAdminUser || isHrManagerNow;
 
-  const { status, movementType } = await searchParams;
+  const {
+    requestNumber,
+    employeeId,
+    status,
+    movementType,
+    departmentId,
+    currentPositionId,
+    proposedPositionId,
+    requesterEmployeeId,
+    approverAccountId,
+    effectiveFrom,
+    effectiveTo,
+  } = await searchParams;
 
-  const where: Prisma.MovementRequestWhereInput = seesAll
-    ? {}
-    : {
-        OR: [
-          { requesterEmployeeId: session.user.employeeId ?? "__none__" },
-          { employeeId: session.user.employeeId ?? "__none__" },
-        ],
-      };
-  if (status) where.status = status as MovementRequestStatus;
-  if (movementType) where.movementType = movementType as MovementType;
+  // Perubahan Posisi refactor: Department Head 3B sees every request within
+  // a department they hold that authority in, in addition to their own
+  // submitted/affected requests — not scoped to HR Manager/HR Admin alone.
+  // Every filter below is its own AND-ed condition (never merged into a
+  // shared OR array with the visibility scope) — mixing them would let an
+  // unprivileged viewer widen their own visibility via a filter value
+  // instead of narrowing it.
+  const conditions: Prisma.MovementRequestWhereInput[] = [];
+  if (!seesAll) {
+    conditions.push({
+      OR: [
+        { requesterEmployeeId: session.user.employeeId ?? "__none__" },
+        { employeeId: session.user.employeeId ?? "__none__" },
+        ...(deptHeadDepartmentIds.length > 0
+          ? [
+              {
+                currentPosition: {
+                  orgUnit: { OR: [{ id: { in: deptHeadDepartmentIds } }, { parentUnitId: { in: deptHeadDepartmentIds } }] },
+                },
+              },
+            ]
+          : []),
+      ],
+    });
+  }
+  if (requestNumber) conditions.push({ requestNumber: { contains: requestNumber } });
+  if (employeeId) conditions.push({ employeeId });
+  if (status) conditions.push({ status: status as MovementRequestStatus });
+  if (movementType) conditions.push({ movementType: movementType as MovementType });
+  if (currentPositionId) conditions.push({ currentPositionId });
+  if (proposedPositionId) conditions.push({ proposedPositionId });
+  if (requesterEmployeeId) conditions.push({ requesterEmployeeId });
+  if (approverAccountId) {
+    conditions.push({
+      OR: [{ decisionByAccountId: approverAccountId }, { deptHeadDecisionByAccountId: approverAccountId }],
+    });
+  }
+  if (departmentId) {
+    conditions.push({
+      currentPosition: { orgUnit: { OR: [{ id: departmentId }, { parentUnitId: departmentId }] } },
+    });
+  }
+  if (effectiveFrom || effectiveTo) {
+    conditions.push({
+      proposedEffectiveDate: {
+        ...(effectiveFrom ? { gte: new Date(effectiveFrom) } : {}),
+        ...(effectiveTo ? { lte: new Date(effectiveTo) } : {}),
+      },
+    });
+  }
+  const where: Prisma.MovementRequestWhereInput = conditions.length > 0 ? { AND: conditions } : {};
 
-  const requests = await prisma.movementRequest.findMany({
-    where,
-    include: {
-      employee: true,
-      currentPosition: { include: { job: true } },
-      proposedPosition: { include: { job: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const [requests, departments, positions, employees, approverAccounts] = await Promise.all([
+    prisma.movementRequest.findMany({
+      where,
+      include: {
+        employee: true,
+        currentPosition: { include: { job: true, orgUnit: true } },
+        proposedPosition: { include: { job: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
+    prisma.position.findMany({ include: { job: true }, orderBy: { positionCode: "asc" } }),
+    prisma.employee.findMany({ orderBy: { fullLegalName: "asc" } }),
+    prisma.account.findMany({
+      where: { OR: [{ movementRequestsDecidedBy: { some: {} } }, { movementRequestsDeptHeadDecisionsBy: { some: {} } }] },
+      orderBy: { usernameOrEmail: "asc" },
+    }),
+  ]);
 
-  const hasFilters = !!(status || movementType);
+  const hasFilters = !!(
+    requestNumber ||
+    employeeId ||
+    status ||
+    movementType ||
+    departmentId ||
+    currentPositionId ||
+    proposedPositionId ||
+    requesterEmployeeId ||
+    approverAccountId ||
+    effectiveFrom ||
+    effectiveTo
+  );
 
   return (
     <div>
@@ -53,10 +150,40 @@ export default async function MovementListPage({
         </div>
       </div>
 
-      <form className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+      <form className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-4">
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.requestNumber")}</label>
+          <input
+            name="requestNumber"
+            defaultValue={requestNumber ?? ""}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("employee.fullLegalName")}</label>
+          <select name="employeeId" defaultValue={employeeId ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.movementType")}</label>
+          <select name="movementType" defaultValue={movementType ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {MOVEMENT_TYPES.map((mt) => (
+              <option key={mt} value={mt}>
+                {t(`movementType.${mt}`)}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.status")}</label>
-          <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <select name="status" defaultValue={status ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">{t("common.allOption")}</option>
             {MOVEMENT_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -66,25 +193,70 @@ export default async function MovementListPage({
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("movement.movementType")}</label>
-          <select
-            name="movementType"
-            defaultValue={movementType ?? ""}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          >
+          <label className="mb-1 block text-xs text-slate-500">{t("recruitment.department")}</label>
+          <select name="departmentId" defaultValue={departmentId ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">{t("common.allOption")}</option>
-            {MOVEMENT_TYPES.map((mt) => (
-              <option key={mt} value={mt}>
-                {t(`movementType.${mt}`)}
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.unitName}
               </option>
             ))}
           </select>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.currentPosition")}</label>
+          <select name="currentPositionId" defaultValue={currentPositionId ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {positions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.positionCode} — {p.job.jobTitle}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedPosition")}</label>
+          <select name="proposedPositionId" defaultValue={proposedPositionId ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {positions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.positionCode} — {p.job.jobTitle}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("recruitment.submittedBy")}</label>
+          <select name="requesterEmployeeId" defaultValue={requesterEmployeeId ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.approver")}</label>
+          <select name="approverAccountId" defaultValue={approverAccountId ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {approverAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.usernameOrEmail}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.effectiveFrom")}</label>
+          <input type="date" name="effectiveFrom" defaultValue={effectiveFrom ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.effectiveTo")}</label>
+          <input type="date" name="effectiveTo" defaultValue={effectiveTo ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        </div>
+        <div className="flex items-end gap-2">
+          <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
             {t("common.applyFilter")}
           </button>
           {hasFilters && (

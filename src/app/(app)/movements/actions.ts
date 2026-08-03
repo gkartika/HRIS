@@ -45,6 +45,7 @@ export async function submitMovementRequest(
   const proposedEffectiveDate = formData.get("proposedEffectiveDate") as string;
   const requestReason = (formData.get("requestReason") as string)?.trim();
   const requesterEmployeeId = (formData.get("requesterEmployeeId") as string) || session.user.employeeId;
+  const performanceEvaluationRef = (formData.get("performanceEvaluationRef") as string)?.trim() || null;
 
   if (
     !employeeId ||
@@ -66,6 +67,15 @@ export async function submitMovementRequest(
   }
   if (requiresProposedEmploymentStatus(movementType) && !proposedEmploymentStatus) {
     return "Status Kepegawaian yang diusulkan wajib diisi untuk jenis Perubahan Status.";
+  }
+  // Collected directly on the single submit form now (the requester is
+  // best placed to know it exists) rather than only afterward via HR
+  // Admin's own fields — a placeholder text/link until a dedicated
+  // Evaluation record module exists to point at instead. Still re-checked
+  // at the HR Manager's approval step as a safety net (e.g. for a request
+  // HR Admin needs to add/correct it on afterward).
+  if (requiresPerformanceEvaluation(movementType) && !performanceEvaluationRef) {
+    return "Evaluasi Kinerja Karyawan wajib diisi/ditautkan untuk Promosi.";
   }
 
   const employee = await prisma.employee.findUnique({
@@ -166,6 +176,7 @@ export async function submitMovementRequest(
       requesterEmployeeId: requester.id,
       requesterPositionId: requester.currentPositionId,
       submittedByAccountId: session.user.id,
+      performanceEvaluationRef,
     },
   });
 

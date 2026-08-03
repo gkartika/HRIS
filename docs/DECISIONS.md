@@ -3,6 +3,47 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-03 (fix, same day) — Perubahan Posisi: merged picker+form into one page; evaluation reference now collected at submission
+
+Two follow-ups from the user testing the feature directly.
+
+**Routing block from leftover test data.** The user (as Budi) hit "Anda
+adalah satu-satunya Kepala Departemen/Manajer (Level 3B) di department
+ini" trying to move Agus Setiawan within Produksi. Cause: the "Asisten
+Kepala Departemen Produksi" Position created earlier purely to verify the
+dept-head mechanism was still assigned to Budi as an Additional
+Assignment — making him Produksi's only level-3B holder, which the
+self-approval-conflict check correctly (but unhelpfully, since it was
+never a real appointment) blocked. Ended that test Assignment via the
+existing admin UI (Employee page's "Akhiri Penempatan Non-Utama") —
+Produksi is back to zero active level-3B holders, so Budi's own
+submissions now succeed and simply wait at `PENDING_DEPT_HEAD`, per the
+fix earlier the same day.
+
+**One page instead of two steps.** Combined the employee picker
+(`pick-employee-form.tsx`, added earlier the same day) directly into
+`submit-movement-form.tsx` — the employee select is now just the form's
+first field; choosing one switches which of their Assignments can be
+picked as `currentAssignmentId`, entirely client-side (every eligible
+employee's Assignment data is preloaded, no extra request). `/movements/new`
+always renders this one form now; an `?employeeId=` query param (still
+used by the link on an Employee's own detail page) only pre-selects that
+employee rather than branching to a different page.
+
+**Evaluation reference moves to the submit form itself.** Previously
+`performanceEvaluationRef` was purely an HR-Admin-only field, addable only
+after submission — but the person submitting a Promosi is exactly the one
+who knows the evaluation exists. Added it directly to the submit form,
+required when Jenis Perubahan is Promosi, with a notice that it's a free
+text/link placeholder for now ("we will create the evaluation form
+later" — Phase 3 Competency & Training scope, not built yet) that will
+point at a real Evaluation record once that module exists. The HR-Manager-
+approval-time check and HR Admin's own edit form both stay as a safety
+net (e.g. for a request HR Admin needs to add/correct it on afterward).
+Moved its display out of the confidentiality-gated block on the detail
+page too, since it's now one of the requester's own submitted fields, not
+an HR-only addition — attendance and confidential notes remain HR-only.
+
 ## 2026-08-03 (fix, same day) — Perubahan Posisi had no "add" entry point from its own list page
 
 Reported by the user after logging in as a Level-3 employee (Budi):

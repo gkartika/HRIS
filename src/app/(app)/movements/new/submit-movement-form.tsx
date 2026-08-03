@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { submitMovementRequest } from "../actions";
 import { t } from "@/lib/i18n/id";
 import type { Employee, Position, Job, OrgUnit, Assignment } from "@/generated/prisma/client";
 
 type PositionOption = Position & { job: Job; orgUnit: OrgUnit };
 type AssignmentOption = Assignment & { position: PositionOption };
+type EmployeeOption = Employee & {
+  currentPosition: PositionOption | null;
+  assignments: AssignmentOption[];
+};
 
 // Perubahan Posisi refactor: only these three types are offered here —
 // Rotasi and Perubahan Status remain valid historical types (never removed
@@ -17,29 +21,36 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Single-page flow: "which employee" is just the first field of this same
+// form now, not a separate picker page — selecting one switches which of
+// their current Assignments can be chosen, entirely client-side (every
+// eligible employee's Assignment data is already loaded).
 export function SubmitMovementForm({
-  employee,
-  assignments,
-  positions,
   employees,
+  defaultEmployeeId,
+  positions,
+  requesterCandidates,
   currentEmployeeId,
   isHrAdmin,
 }: {
-  employee: Employee;
-  assignments: AssignmentOption[];
+  employees: EmployeeOption[];
+  defaultEmployeeId: string;
   positions: PositionOption[];
-  employees: Employee[];
+  requesterCandidates: Employee[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
 }) {
   const [error, formAction, isPending] = useActionState(submitMovementRequest, undefined);
+  const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
   const [movementType, setMovementType] = useState<(typeof MOVEMENT_TYPES)[number] | "">("");
+
+  const employee = useMemo(() => employees.find((e) => e.id === employeeId) ?? null, [employees, employeeId]);
+  const assignments = employee?.assignments ?? [];
   const primaryAssignment = assignments.find((a) => a.assignmentType === "PRIMARY");
+  const isPromotion = movementType === "PROMOTION";
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-6 md:grid-cols-2">
-      <input type="hidden" name="employeeId" value={employee.id} />
-
       {isHrAdmin ? (
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.submittedBy")}</label>
@@ -50,7 +61,7 @@ export function SubmitMovementForm({
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           >
             <option value="">— Pilih Karyawan —</option>
-            {employees.map((e) => (
+            {requesterCandidates.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
               </option>
@@ -60,6 +71,25 @@ export function SubmitMovementForm({
       ) : (
         <input type="hidden" name="requesterEmployeeId" value={currentEmployeeId ?? ""} />
       )}
+
+      <div className="md:col-span-2">
+        <label className="mb-1 block text-xs text-slate-500">{t("employee.fullLegalName")}</label>
+        <select
+          name="employeeId"
+          required
+          value={employeeId}
+          onChange={(e) => setEmployeeId(e.target.value)}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
+          <option value="">— Pilih —</option>
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+              {e.currentPosition ? ` — ${e.currentPosition.job.jobTitle} · ${e.currentPosition.orgUnit.unitName}` : ""}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("movement.movementType")}</label>
@@ -81,13 +111,13 @@ export function SubmitMovementForm({
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("movement.currentAssignment")}</label>
-        {assignments.length <= 1 ? (
+        {!employee ? (
+          <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-400">
+            — {t("employee.fullLegalName")} —
+          </p>
+        ) : assignments.length <= 1 ? (
           <>
-            <input
-              type="hidden"
-              name="currentAssignmentId"
-              value={(primaryAssignment ?? assignments[0])?.id ?? ""}
-            />
+            <input type="hidden" name="currentAssignmentId" value={(primaryAssignment ?? assignments[0])?.id ?? ""} />
             <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               {(primaryAssignment ?? assignments[0])?.position.job.jobTitle ?? "—"} (
               {(primaryAssignment ?? assignments[0])?.position.positionCode ?? "—"})
@@ -143,8 +173,18 @@ export function SubmitMovementForm({
         />
       </div>
 
-      {movementType === "PROMOTION" && (
-        <p className="text-xs text-amber-700 md:col-span-2">{t("movement.promotionEvaluationNotice")}</p>
+      {isPromotion && (
+        <div className="md:col-span-2">
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.performanceEvaluationRef")}</label>
+          <input
+            type="text"
+            name="performanceEvaluationRef"
+            required={isPromotion}
+            placeholder="FR-HC-05-01 — ..."
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-amber-700">{t("movement.performanceEvaluationLinkNotice")}</p>
+        </div>
       )}
 
       {error && <p className="text-xs text-rose-600 md:col-span-2">{error}</p>}

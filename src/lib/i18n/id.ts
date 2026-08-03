@@ -288,6 +288,8 @@ export const strings = {
     attendanceIjinHalfDay: "Ijin 1/2 Hari",
     attendanceCuti: "Cuti",
     performanceEvaluationRef: "Referensi Evaluasi Kinerja Karyawan",
+    performanceEvaluationLinkNotice:
+      "Sementara berupa referensi/tautan bebas — akan ditautkan langsung ke Formulir Evaluasi Kinerja Karyawan setelah modul tersebut dibangun.",
     hrConfidentialNotes: "Catatan Rahasia SDM",
   },
   movementType: {

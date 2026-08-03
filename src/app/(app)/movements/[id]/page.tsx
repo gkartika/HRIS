@@ -168,6 +168,13 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           <p className="text-sm text-slate-900">{request.requestReason}</p>
         </div>
 
+        {request.performanceEvaluationRef && (
+          <div className="mt-4">
+            <p className="text-xs text-slate-500">{t("movement.performanceEvaluationRef")}</p>
+            <p className="text-sm text-slate-900">{request.performanceEvaluationRef}</p>
+          </div>
+        )}
+
         {canSeeConfidential && (
           <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
             <p className="mb-2 text-xs font-medium text-slate-600">{t("movement.hrOnlySectionTitle")}</p>
@@ -195,10 +202,6 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
                     {t("movement.attendanceIjinHalfDay")} {request.attendanceIjinHalfDay ?? "—"} ·{" "}
                     {t("movement.attendanceCuti")} {request.attendanceCuti ?? "—"}
                   </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">{t("movement.performanceEvaluationRef")}</p>
-                  <p className="text-slate-900">{request.performanceEvaluationRef ?? "—"}</p>
                 </div>
                 {request.hrConfidentialNotes && (
                   <div>

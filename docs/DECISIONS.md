@@ -3,6 +3,27 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-03 (fix, same day) — Perubahan Posisi had no "add" entry point from its own list page
+
+Reported by the user after logging in as a Level-3 employee (Budi):
+"no add button for me to change people in my department." The only way
+to reach the submit form was a link on a specific Employee's own detail
+page — the Perubahan Posisi list page itself had no equivalent of
+Recruitment's "Buat Permintaan Baru" button, so a Level-3 user with no
+other reason to be on a particular Employee's page had no way to start
+one at all.
+
+Added an "Ajukan Perubahan Posisi" button to the list page (HR Admin, or
+anyone holding a Level-3 position anywhere). `/movements/new` now handles
+being reached with no `employeeId` yet: it shows a picker
+(`pick-employee-form.tsx`) scoped to whoever the viewer can actually
+submit for — every employee for HR Admin, or everyone in a department the
+viewer holds a Level-3 (3A/3B) Position in (`getLevel3DepartmentIds`,
+mirroring the analogous helper already built for the Dept-Head-3B
+approver side) — then hands off to the same per-employee form. Live-
+verified as Budi: the picker correctly narrows to Produksi's 5 employees
+only, not the full company list.
+
 ## 2026-08-03 (fix, same day) — Perubahan Posisi: submission was blocked company-wide except in the 2 departments with a level-3B Position
 
 Reported by the user as "no one can add new perubahan posisi." Root cause:

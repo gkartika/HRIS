@@ -15,12 +15,38 @@ export default async function ApprovalsPage() {
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
+  const employeeId = session.user.employeeId ?? "__none__";
 
-  if (hrManagerPositions.length === 0 && deptHeadDepartmentIds.length === 0) {
+  // Contract Renewal Case (DM-15/WF-10..12): any employee-linked account may
+  // be assigned as a P1/P2 evaluator regardless of whether they hold an HR
+  // Manager or Dept Head position, so this inbox's own gate below is widened
+  // to also admit "I have a pending evaluation assigned to me" — otherwise a
+  // plain evaluator would have no notification surface at all (this app has
+  // no email channel; see DSH-10).
+  const pendingOwnEvaluations = await prisma.contractRenewalCase.findMany({
+    where: {
+      status: "EVALUATION_SENT",
+      OR: [
+        { p1EmployeeId: employeeId, p1SubmittedAt: null },
+        { p2EmployeeId: employeeId, p2SubmittedAt: null },
+      ],
+    },
+    include: { employee: true },
+    orderBy: { sentAt: "asc" },
+  });
+
+  if (hrManagerPositions.length === 0 && deptHeadDepartmentIds.length === 0 && pendingOwnEvaluations.length === 0) {
     return <p className="text-sm text-rose-600">{t("hrManagerUi.notHrManager")}</p>;
   }
 
-  const [pendingRequests, pendingMovements, pendingDeptHeadRequests, pendingDeptHeadMovements] = await Promise.all([
+  const [
+    pendingRequests,
+    pendingMovements,
+    pendingDeptHeadRequests,
+    pendingDeptHeadMovements,
+    pendingDeptHeadRenewals,
+    pendingHrManagerRenewals,
+  ] = await Promise.all([
     prisma.recruitmentRequest.findMany({
       where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
       include: { department: true, job: true },
@@ -51,6 +77,33 @@ export default async function ApprovalsPage() {
           },
           include: { employee: true, currentPosition: { include: { job: true } } },
           orderBy: { submittedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // Dept Head's own renewal recommendation queue: both evaluations in,
+    // scoped to this viewer's department(s) the same way the Movement
+    // dept-head queue above is (currentPositionId isn't on
+    // ContractRenewalCase directly — derived from snapshotPositionId's
+    // orgUnit, itself or its Section-tier parent).
+    deptHeadDepartmentIds.length > 0
+      ? prisma.contractRenewalCase.findMany({
+          where: {
+            status: "EVALUATION_SENT",
+            p1SubmittedAt: { not: null },
+            p2SubmittedAt: { not: null },
+            snapshotPosition: {
+              orgUnit: { OR: [{ id: { in: deptHeadDepartmentIds } }, { parentUnitId: { in: deptHeadDepartmentIds } }] },
+            },
+          },
+          include: { employee: true },
+          orderBy: { sentAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // HR Manager's combined-decision queue (ACC-16/DEC-019).
+    hrManagerPositions.length > 0
+      ? prisma.contractRenewalCase.findMany({
+          where: { status: "PENDING_HR_MANAGER" },
+          include: { employee: true },
+          orderBy: { deptHeadRecommendedAt: "asc" },
         })
       : Promise.resolve([]),
   ]);
@@ -219,6 +272,104 @@ export default async function ApprovalsPage() {
           </div>
         )}
       </div>
+
+      {pendingOwnEvaluations.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">{t("contractRenewal.navLabel")} — {t("contractRenewal.p1Label")}/{t("contractRenewal.p2Label")}</h2>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">{t("contractRenewal.caseNumber")}</th>
+                  <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                  <th className="px-4 py-3 font-medium">{t("contractRenewal.evaluationDueDate")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingOwnEvaluations.map((c) => (
+                  <tr key={c.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3">
+                      <Link href={`/contract-renewals/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                        {c.caseNumber}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {c.evaluationDueDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(c.evaluationDueDate) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {deptHeadDepartmentIds.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">
+            {t("recruitment.deptHeadApprovalSectionTitle")} — {t("contractRenewal.navLabel")}
+          </h2>
+          {pendingDeptHeadRenewals.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">{t("contractRenewal.caseNumber")}</th>
+                    <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingDeptHeadRenewals.map((c) => (
+                    <tr key={c.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/contract-renewals/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {c.caseNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hrManagerPositions.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">{t("contractRenewal.navLabel")}</h2>
+          {pendingHrManagerRenewals.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">{t("contractRenewal.caseNumber")}</th>
+                    <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingHrManagerRenewals.map((c) => (
+                    <tr key={c.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/contract-renewals/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {c.caseNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

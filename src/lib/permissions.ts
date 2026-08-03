@@ -250,6 +250,70 @@ export function canUploadEmployeeDocument(session: Session): boolean {
   return isHrAdmin(session);
 }
 
+// ---------- Contract Renewal Case (DM-15, WF-10..12, ACC-11, ACC-16) ----------
+// A separate, richer workflow layered next to the manual Contract-renewal
+// predicates above — HR Admin reviews/sends, the two assigned evaluators
+// (P1/P2) each see only their own evaluation, the primary Dept Head 3B
+// recommends, and the HR Manager makes the combined final decision.
+
+// ACC-11: "At D-30, HR Admin receives the case... selects two different
+// evaluators... and manually sends." Reviewing/sending is HR-Admin-only,
+// same operational latitude as the rest of the Contract lifecycle.
+export function canReviewContractRenewalCase(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// ACC-11: "P1 and P2 see only the assigned evaluation fields" — the acting
+// session must literally be the specific employee assigned to that slot,
+// not just any Level-3 holder or manager.
+export function canSubmitRenewalEvaluationAs(
+  actingEmployeeId: string | null | undefined,
+  assignedEvaluatorEmployeeId: string | null
+): boolean {
+  return !!actingEmployeeId && !!assignedEvaluatorEmployeeId && actingEmployeeId === assignedEvaluatorEmployeeId;
+}
+
+// ACC-11/LIF-09: "The primary Department Head reviews both evaluations and
+// submits the recommendation" — same Level-3B-of-department gate as
+// Perubahan Posisi (dept-head.ts's getActiveDeptHeadPositions), reused here
+// rather than the direct-report canSubmitContractRecommendation predicate
+// the older manual Contract pipeline still uses.
+export function canSubmitRenewalDeptHeadRecommendation(activeDeptHeadPositionIds: string[]): boolean {
+  return isDeptHeadApprover(activeDeptHeadPositionIds);
+}
+
+// ACC-11/ACC-16: "HR Manager uses the personal Position-based account to
+// approve, return, reject or change the recommendation... HR Admin has no
+// approval control." Same Position-derived-only authority as every other
+// HR Manager decision in this app.
+export function canDecideContractRenewalCase(activeHrManagerPositionIds: string[]): boolean {
+  return isHrManager(activeHrManagerPositionIds);
+}
+
+// Case detail visibility: HR Admin, either assigned evaluator (own slot
+// only — field-level hiding of the *other* evaluator's scores still happens
+// at the page level), the primary Dept Head of the employee's department,
+// or an active HR Manager. The subject employee themself is deliberately
+// NOT included — ACC-11 gives them no view into the renewal case itself,
+// only their own released Contract once generated (existing /contracts
+// visibility already covers that).
+export function canViewContractRenewalCase(
+  session: Session,
+  actingEmployeeId: string | null | undefined,
+  p1EmployeeId: string | null,
+  p2EmployeeId: string | null,
+  activeDeptHeadPositionIds: string[],
+  activeHrManagerPositionIds: string[]
+): boolean {
+  return (
+    isHrAdmin(session) ||
+    canSubmitRenewalEvaluationAs(actingEmployeeId, p1EmployeeId) ||
+    canSubmitRenewalEvaluationAs(actingEmployeeId, p2EmployeeId) ||
+    isDeptHeadApprover(activeDeptHeadPositionIds) ||
+    isHrManager(activeHrManagerPositionIds)
+  );
+}
+
 // ACC-10: field-level scope. Every field on Employee is tagged with the
 // sensitivity tier from the Data Fields Blueprint. Rather than nulling values
 // (which still leaks "field exists"), we omit the key entirely so the UI

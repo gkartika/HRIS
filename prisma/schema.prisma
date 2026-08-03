@@ -286,6 +286,141 @@ enum MovementRequestStatus {
   CANCELLED
 }
 
+// ---------- Phase 2: Contract Renewal Case (DM-15, DM-26, WF-10..12, LIF-08..13) ----------
+// The blueprint's automated D-30 case: FR-HC-01-07's dual-evaluator (P1/P2)
+// form, the primary Department Head's recommendation (Level 3B, same
+// definition as Perubahan Posisi's dept-head gate — see dept-head.ts), and a
+// combined HR Manager decision that can also approve a linked Perubahan
+// Posisi draft in one action (DEC-019). This is layered ADDITIVELY next to
+// the existing single-recommender Contract fields above (reviewRequestedAt..
+// decisionNote) — that manual path remains valid for a renewal not started
+// by this automated case; this model owns the richer workflow end to end and
+// only touches Contract itself at the very end (via the same
+// createRenewalDraftContract/markContractNotRenewed mutations the manual
+// path already uses).
+enum RenewalRecommendation {
+  PERPANJANG_3
+  PERPANJANG_6
+  PERPANJANG_12
+  TIDAK_DIPERPANJANG
+  MUTASI
+  DEMOSI
+}
+
+// WF-10: Upcoming Expiry (D-30) > HR Admin Review > Evaluation Sent >
+// [Waiting for P1/P2 is derived live from p1SubmittedAt/p2SubmittedAt, not a
+// separate stored state] > Department Head Recommendation [likewise derived
+// live from deptHeadRecommendedAt] > Pending HR Manager Combined Review >
+// Returned/Rejected/Approved.
+enum ContractRenewalCaseStatus {
+  TRIGGERED
+  EVALUATION_SENT
+  PENDING_HR_MANAGER
+  RETURNED
+  REJECTED
+  APPROVED
+  CANCELLED
+}
+
+model ContractRenewalCase {
+  id                String                    @id @default(cuid())
+  caseNumber        String                    @unique
+  currentContractId String                    @unique
+  currentContract   Contract                  @relation("RenewalCurrentContract", fields: [currentContractId], references: [id])
+  employeeId        String
+  employee          Employee                  @relation("RenewalCaseEmployee", fields: [employeeId], references: [id])
+  // DM-15 "primary_assignment_id and organization snapshot" — department/
+  // section are re-derived live via level3-scope.ts's resolveDepartmentId/
+  // resolveSectionId from snapshotPositionId, same pattern as
+  // MovementRequest's currentPositionId/currentAssignmentId, rather than
+  // duplicating department/section text fields that could drift.
+  primaryAssignmentId String
+  primaryAssignment   Assignment              @relation(fields: [primaryAssignmentId], references: [id])
+  snapshotPositionId  String
+  snapshotPosition    Position                @relation("RenewalSnapshotPosition", fields: [snapshotPositionId], references: [id])
+
+  status      ContractRenewalCaseStatus       @default(TRIGGERED)
+  triggerDate DateTime                        @default(now())
+
+  // HR Admin review + manual send (DM-15, ACC-11).
+  responsibleHrAdminAccountId String?
+  responsibleHrAdminAccount  Account?          @relation("RenewalResponsibleHrAdmin", fields: [responsibleHrAdminAccountId], references: [id])
+  sentAt                     DateTime?
+  evaluationDueDate          DateTime?
+
+  // FR-HC-01-07 HR-owned prefilled attendance snapshot (DM-26) — Sakit,
+  // Ijin, Alfa, Ijin 1/2 Hari only (no Cuti, unlike Movement's 5-field set).
+  attendanceSakit       Int?
+  attendanceIjin        Int?
+  attendanceAlpha       Int?
+  attendanceIjinHalfDay Int?
+
+  // P1/P2 evaluators (DM-15/DM-26/ACC-11: must be two different people, each
+  // sees/submits only their own assigned evaluation, both auditable and
+  // separate). Itemized FR-HC-01-07 criteria scores are stored as JSON
+  // rather than ~13 mostly-null columns per evaluator, since KPI/Productivity
+  // and its 5 alternative criteria are mutually exclusive on the real form.
+  p1EmployeeId  String?
+  p1Employee    Employee?                     @relation("RenewalP1Evaluator", fields: [p1EmployeeId], references: [id])
+  p1PositionId  String?
+  p1Position    Position?                     @relation("RenewalP1Position", fields: [p1PositionId], references: [id])
+  p1SubmittedAt DateTime?
+  p1Scores      Json?
+  p1Total       Int?
+
+  p2EmployeeId  String?
+  p2Employee    Employee?                     @relation("RenewalP2Evaluator", fields: [p2EmployeeId], references: [id])
+  p2PositionId  String?
+  p2Position    Position?                     @relation("RenewalP2Position", fields: [p2PositionId], references: [id])
+  p2SubmittedAt DateTime?
+  p2Scores      Json?
+  p2Total       Int?
+
+  // Primary Department Head recommendation — LIF-09/DEC-019: this
+  // recommendation counts as the Dept Head approval for any linked
+  // Perubahan Posisi it creates.
+  deptHeadEmployeeId             String?
+  deptHeadEmployee               Employee?               @relation("RenewalDeptHeadEmployee", fields: [deptHeadEmployeeId], references: [id])
+  deptHeadPositionId             String?
+  deptHeadPosition               Position?               @relation("RenewalDeptHeadPosition", fields: [deptHeadPositionId], references: [id])
+  deptHeadRecommendedAt          DateTime?
+  deptHeadRecommendation         RenewalRecommendation?
+  deptHeadProposedDurationMonths Int?
+  deptHeadProposedPositionId     String?
+  deptHeadProposedPosition       Position?               @relation("RenewalDeptHeadProposedPosition", fields: [deptHeadProposedPositionId], references: [id])
+  deptHeadNote                   String?
+
+  // Linked Perubahan Posisi draft (DM-10/LIF-13/DEC-019) — created or
+  // updated automatically when a Mutasi/Demosi recommendation is in play;
+  // voided (cancelled), never deleted, if the final recommendation moves
+  // away from Mutasi/Demosi (WF-12).
+  linkedMovementRequestId String?          @unique
+  linkedMovementRequest   MovementRequest? @relation("RenewalLinkedMovement", fields: [linkedMovementRequestId], references: [id])
+
+  // HR Manager combined decision (WF-12/ACC-16/DEC-019) — one action updates
+  // this case AND the linked Perubahan Posisi (if any) together.
+  // finalRecommendation may differ from deptHeadRecommendation; a change
+  // requires changeReason (mandatory).
+  decisionAt          DateTime?
+  decisionByAccountId String?
+  decisionByAccount   Account?               @relation("RenewalDecisionBy", fields: [decisionByAccountId], references: [id])
+  decisionPositionId  String?
+  decisionPosition    Position?              @relation("RenewalDecisionPosition", fields: [decisionPositionId], references: [id])
+  finalRecommendation RenewalRecommendation?
+  changeReason        String?
+  decisionNote         String?
+
+  // Contract-generation gating (WF-12: disabled until the linked Perubahan
+  // Posisi is approved/executed, then uses the approved new Position) — the
+  // new Contract row is created via the same shared helper the manual
+  // renewal path uses, never a duplicated mutation.
+  generatedContractId String?   @unique
+  generatedContract   Contract? @relation("RenewalGeneratedContract", fields: [generatedContractId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ---------- User Accounts (separate from Employee Master, per ACC-01) ----------
 
 model Account {
@@ -322,6 +457,8 @@ model Account {
   onboardingTrainingCompletedBy  OnboardingCase[] @relation("OnboardingTrainingCompletedBy")
   onboardingAssetsCompletedBy    OnboardingCase[] @relation("OnboardingAssetsCompletedBy")
   contractDecisionsMade          Contract[] @relation("ContractDecisionBy")
+  renewalCasesResponsibleAsHrAdmin ContractRenewalCase[] @relation("RenewalResponsibleHrAdmin")
+  renewalCasesDecidedBy            ContractRenewalCase[] @relation("RenewalDecisionBy")
 }
 
 model AccountRole {
@@ -399,6 +536,10 @@ model Employee {
   onboardingCase               OnboardingCase?
   contracts                    Contract[] @relation("EmployeeContracts")
   contractRecommendationsGiven Contract[] @relation("ContractRecommendationBy")
+  renewalCases                 ContractRenewalCase[] @relation("RenewalCaseEmployee")
+  renewalP1Evaluations         ContractRenewalCase[] @relation("RenewalP1Evaluator")
+  renewalP2Evaluations         ContractRenewalCase[] @relation("RenewalP2Evaluator")
+  renewalDeptHeadRecommendations ContractRenewalCase[] @relation("RenewalDeptHeadEmployee")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -502,6 +643,12 @@ model Position {
   movementRequestsDeptHeadDecisions MovementRequest[] @relation("MovementDeptHeadDecisionPosition")
   contractRecommendations    Contract[] @relation("ContractRecommendationPosition")
   contractDecisions          Contract[] @relation("ContractDecisionPosition")
+  renewalSnapshotOf              ContractRenewalCase[] @relation("RenewalSnapshotPosition")
+  renewalP1PositionOf             ContractRenewalCase[] @relation("RenewalP1Position")
+  renewalP2PositionOf             ContractRenewalCase[] @relation("RenewalP2Position")
+  renewalDeptHeadPositionOf       ContractRenewalCase[] @relation("RenewalDeptHeadPosition")
+  renewalDeptHeadProposedPositionOf ContractRenewalCase[] @relation("RenewalDeptHeadProposedPosition")
+  renewalDecisionPositionOf       ContractRenewalCase[] @relation("RenewalDecisionPosition")
 }
 
 model Assignment {
@@ -520,6 +667,7 @@ model Assignment {
   fulfillment           RecruitmentRequestFulfillment?
   movementImplementation MovementRequest?
   movementCurrentAssignmentOf MovementRequest[] @relation("MovementCurrentAssignment")
+  renewalCasesAsPrimaryAssignment ContractRenewalCase[]
 }
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
@@ -724,6 +872,11 @@ model MovementRequest {
 
   createdAt                DateTime              @default(now())
   updatedAt                DateTime              @updatedAt
+
+  // DM-10/LIF-13: set only for a draft auto-created by the Contract Renewal
+  // workflow (Mutasi/Demosi outcome) — reverse of ContractRenewalCase's
+  // linkedMovementRequestId.
+  renewalCase              ContractRenewalCase?  @relation("RenewalLinkedMovement")
 }
 
 // ---------- Phase 2: Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding") ----------
@@ -830,6 +983,9 @@ model Contract {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  renewalCaseAsCurrentContract   ContractRenewalCase? @relation("RenewalCurrentContract")
+  renewalCaseAsGeneratedContract ContractRenewalCase? @relation("RenewalGeneratedContract")
 }
 
 // ---------- Controls: audit, import, private files ----------

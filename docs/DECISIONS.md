@@ -3,6 +3,44 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-03 — Contract Renewal Case: FR-HC-01-07 dual-evaluator workflow, linked Perubahan Posisi, combined HR Manager decision (DM-15, DM-26, WF-10..12, LIF-08..13, ACC-11/16, DEC-009/019)
+
+### A second, richer renewal workflow — additive alongside the existing simple one, not a replacement
+
+Discovered mid-inspection: Contract renewal already existed (`20260730035218_contract_renewal_wf10`), but as a single-recommender pipeline (`Contract.reviewRequestedAt/recommendationSubmittedAt/recommendation/decisionAt`, driven by `isDirectManagerOfEmployee` + HR Manager). The Build Guide's tab 15 scenario describes a materially different, richer flow: an automated D-30 case, two independent evaluators (P1/P2) using the FR-HC-01-07 form, a primary Department Head 3B recommendation (the same dept-head definition Perubahan Posisi already uses, not the direct-manager one), and an HR Manager decision that can also approve a linked Perubahan Posisi draft in one action.
+
+Rather than contort the existing simple fields to fit this, added a new `ContractRenewalCase` model that owns the whole automated pipeline end to end, and only touches `Contract` itself at the very end — via the exact same mutation the manual path already used (see below). The old manual fields on `Contract` are untouched and remain valid for a renewal not started by this automated case (e.g. an ad-hoc HR-initiated review).
+
+### Schema: one new table, fully additive
+
+`ContractRenewalCase` (migration `20260803151403_contract_renewal_case_workflow`) plus two new enums (`RenewalRecommendation`: `PERPANJANG_3/6/12`, `TIDAK_DIPERPANJANG`, `MUTASI`, `DEMOSI`; `ContractRenewalCaseStatus`: `TRIGGERED`, `EVALUATION_SENT`, `PENDING_HR_MANAGER`, `RETURNED`, `REJECTED`, `APPROVED`, `CANCELLED`) and one new nullable/unique FK on `MovementRequest` (`renewalCaseId`, reverse of the case's `linkedMovementRequestId`). No existing table altered; verified by reading the generated migration SQL (`CREATE TABLE` only).
+
+Two deliberate leanness choices:
+- **Itemized FR-HC-01-07 scores are a JSON blob** (`p1Scores`/`p2Scores`), not ~13 mostly-null columns per evaluator — the form's KPI/Productivity branch and its 5-alternative-criteria branch are mutually exclusive, so most columns would always be empty either way. `computeEvaluationTotal` sums whichever branch was populated; the exact weighting formula is unknown until the real FR-HC-01-07 DOCX is supplied (deferred with the DOCX templates themselves), so the total is a straight sum — documented as a simplification.
+- **No stored reminder/escalation timestamps.** This app has no notification-delivery channel at all (DSH-10 is still "Needs Decision" — confirmed by grep, zero hits for any mailer/cron dependency). "Reminders" are implemented the same way every other deadline in this app is (Contract's `computeExpiryUrgency`, Onboarding's `OVERDUE`): computed live from `evaluationDueDate` via `isOverdue()`, surfaced as a badge on the case detail page and in the Approval Inbox — never a persisted "reminder sent" event, since there's no channel to have sent it through.
+
+### D-30 trigger: idempotent, computed on page load (no cron exists)
+
+`triggerDueRenewalCases()` scans `ACTIVE` contracts with no existing case and an `endDate` within 30 days (`isRenewalDue`, mirrors `computeExpiryUrgency`'s `DUE_30` cutoff exactly), called at the top of `/contract-renewals`'s list page — same "derive/act on read" pattern the rest of this app already uses for anything time-based, since there's no scheduler dependency to add one for. `currentContractId`'s unique constraint is the actual idempotency guarantee (a concurrent second load can't double-create); the "no existing case" filter just avoids the wasted round trip on every subsequent load.
+
+### Work calendar: Mon-Fri only, no public holidays
+
+`src/lib/work-calendar.ts`'s `addWorkingDays` is a plain Mon-Fri calculator — no `Holiday`/`WorkingCalendar` table exists anywhere in the schema (the only admin-maintained master lists are `EducationLevel`/`PtkpStatus`), and building one wasn't in scope for "build the workflow." WF-18's "5 working days" and "configurable company work calendar" are satisfied for the weekend case; Indonesian public holidays are a known gap, flagged here rather than silently approximated.
+
+### Dept Head recommendation counts as its own Perubahan Posisi approval (DEC-019), verified live
+
+When the primary Dept Head (Level 3B of the employee's department — reusing `dept-head.ts`/`level3-scope.ts` unchanged) recommends Mutasi/Demosi, `submitDeptHeadRecommendation` creates the linked `MovementRequest` directly at `status: "SUBMITTED"` with `deptHeadDecision*` already populated and a note explaining the auto-satisfaction — skipping `PENDING_DEPT_HEAD` entirely, since re-requiring a separate Dept Head click on the same recommendation would violate "no duplicate Department Head... approval" (WF-17's own note). `proposedEffectiveDate` defaults to the current contract's `endDate + 1 day`, so the Position change takes effect exactly when the new contract would begin.
+
+### HR Manager's combined decision genuinely updates both records in one transaction
+
+`decideRenewalCase` is the one action WF-12/ACC-16 call for: on Approve, it writes the case's decision fields AND (if a linked Mutasi/Demosi draft exists) the `MovementRequest`'s HR-Manager decision fields, in the same `$transaction` — never by calling the standalone `decideMovementRequest` action a second time. If the final recommendation changes away from Mutasi/Demosi, the linked draft is cancelled (never deleted) with `cancellationAuthority: "HR_MANAGER"`; if it changes into Mutasi/Demosi where no draft existed, a new one is created with the Dept-Head-decision fields attributed to the HR Manager's own decision (there's no real Dept Head recommendation to attribute in that edge case) — noted explicitly in both the code comment and the created record's `deptHeadDecisionNote`, same "flag the tension, don't paper over it" practice as Recruitment vs. Movement's differing self-approval bypass rules. A changed recommendation always requires `changeReason` (`requiresChangeReason`); an unchanged one doesn't.
+
+Live-verified end to end (two real test cases, `REN-2026-0001`/`REN-2026-0002`): D-30 trigger fires exactly at the `DUE_30` boundary; HR Admin sends to two distinct evaluators (blocked if the same person is picked twice); each evaluator sees only their own scores, both full evaluations become visible to the Dept Head/HR Manager/HR Admin once submitted; 5-working-day due date computed correctly across a weekend; Dept Head's Mutasi recommendation auto-created `MOV-2026-0007` at `SUBMITTED` with correct evidence; HR Manager's one Approve action flipped **both** the case and `MOV-2026-0007` to Approved simultaneously; contract generation stayed blocked until HR Admin executed the movement via the existing, unchanged `executeMovementRequest`; the new contract (`PKWT/CBP/2026/007`) was created via the same `createRenewalDraftContract` helper the manual path uses, linked via `renewedFromContractId`; the old contract and the employee's prior Assignment both remained intact and unmodified throughout.
+
+### Shared Contract-mutation helper extracted, not duplicated
+
+`nextContractNumber`/`createRenewalDraftContract` moved out of `contracts/actions.ts` into `src/lib/contract-mutations.ts` so both the pre-existing manual "Buat Draf Perpanjangan" button and this new automated path create the next Contract row identically — refactor verified behavior-preserving by re-running the full existing `contract.test.ts` suite (all passing; the manual path's own live behavior was already covered by that suite and by the prior session's live verification when WF-10 was first built, not re-clicked-through again here).
+
 ## 2026-08-03 (fix, same day) — Perubahan Posisi: merged picker+form into one page; evaluation reference now collected at submission
 
 Two follow-ups from the user testing the feature directly.

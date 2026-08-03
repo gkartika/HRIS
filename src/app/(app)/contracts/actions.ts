@@ -14,7 +14,6 @@ import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { logAudit } from "@/lib/audit";
 import {
-  formatContractNumber,
   canStartContractReview,
   canSubmitContractRecommendation as canSubmitRecommendationStatus,
   canDecideContractRenewal as canDecideRenewalStatus,
@@ -23,15 +22,8 @@ import {
   canSignContractStatus,
   canActivateContract,
 } from "@/lib/contract";
+import { nextContractNumber, createRenewalDraftContract } from "@/lib/contract-mutations";
 import type { EmploymentStatus, ContractRenewalRecommendation } from "@/generated/prisma/enums";
-
-async function nextContractNumber(contractType: EmploymentStatus): Promise<string> {
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.contract.count({
-    where: { contractNumber: { startsWith: `${contractType}/CBP/${year}/` } },
-  });
-  return formatContractNumber(contractType, countThisYear + 1, year);
-}
 
 // HR Admin establishes a baseline Contract for an existing Employee — goes
 // straight to ACTIVE since there's no renewal process for a brand-new
@@ -220,26 +212,14 @@ export async function createRenewalDraft(
   const endDate = (formData.get("endDate") as string) || null;
   if (!contractType || !startDate) return "Jenis kontrak dan tanggal mulai wajib diisi.";
 
-  const contractNumber = await nextContractNumber(contractType);
-  const newContract = await prisma.contract.create({
-    data: {
-      contractNumber,
-      employeeId: oldContract.employeeId,
-      contractType,
-      startDate: new Date(startDate),
-      endDate: endDate ? new Date(endDate) : null,
-      status: "DRAFT",
-      draftedAt: new Date(),
-      renewedFromContractId: oldContract.id,
-    },
-  });
-
-  await logAudit({
+  const newContract = await createRenewalDraftContract({
+    oldContractId: oldContract.id,
+    employeeId: oldContract.employeeId,
+    contractType,
+    startDate: new Date(startDate),
+    endDate: endDate ? new Date(endDate) : null,
     actorAccountId: session.user.id,
-    action: "CREATE",
-    datasetName: "Contract",
-    recordId: newContract.id,
-    reason: `Drafted renewal ${contractNumber} for ${oldContract.contractNumber}`,
+    buildAuditReason: (contractNumber) => `Drafted renewal ${contractNumber} for ${oldContract.contractNumber}`,
   });
 
   revalidatePath(`/contracts/${contractId}`);

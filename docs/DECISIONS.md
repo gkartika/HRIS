@@ -3,6 +3,32 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-03 (fix, same day) — Perubahan Posisi: submission was blocked company-wide except in the 2 departments with a level-3B Position
+
+Reported by the user as "no one can add new perubahan posisi." Root cause:
+`submitMovementRequest`'s routing check blocked *any* submission whenever
+`getDeptHeadApprovers(departmentId).length === 0` — i.e. whenever a
+department had no level-3B Position holder at all, not only when the
+actual submitter was the sole one. As of this writing only Finance &
+Procurement and Produksi have a level-3B Position, so every other
+department (Direksi, GA & Legal, Pengembangan Kualitas, SDM &
+Pengembangan Organisasi, Teknologi Informasi) was completely unable to
+submit, for anyone — an over-generalization of the spec's actual
+requirement, which is specifically about the requester being the *only*
+Department Head 3B (a self-approval conflict), not about the department
+lacking one at all.
+
+Fixed by narrowing the block to that literal case: submission is refused
+only when every level-3B holder in the department *is* the submitter
+(`deptHeadApprovers.every(a => a.employeeId === session.user.employeeId)`,
+only true when that list is non-empty and entirely the submitter). When no
+one holds a level-3B Position there yet, the request now submits normally
+and simply sits at `PENDING_DEPT_HEAD` until one exists — same accepted,
+cancellable-in-the-meantime behavior already documented for Recruitment's
+own dept-head gate. Live-verified: HR Admin submitting a Mutasi for an
+employee in SDM & Pengembangan Organisasi (zero level-3B Positions there)
+now succeeds.
+
 ## 2026-08-03 — Movement Request refactored in place into "Perubahan Posisi" (Promosi/Mutasi/Demosi only)
 
 Direct user request, using the real FR-HC-01-09 "Rekomendasi Perubahan

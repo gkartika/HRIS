@@ -123,20 +123,25 @@ export async function submitMovementRequest(
   if (!requester) return "Karyawan pengaju tidak ditemukan.";
 
   // Perubahan Posisi refactor: Department Head 3B approval is never
-  // bypassed, even when the requester (the person actually submitting) also
-  // holds that authority — routing must fall back to a different active
-  // level-3B holder (Primary or Acting) in this department. Checked at
-  // submit time so a request never gets created only to sit unroutable.
+  // silently bypassed for the specific case the spec calls out — the
+  // requester being the *only* level-3B holder in this department, which
+  // would force them to approve their own submission. That's a narrower
+  // check than "does this department have a level-3B position at all":
+  // most departments don't have one yet (only Finance & Procurement and
+  // Produksi do, as of this writing), and blocking every submission until
+  // one exists everywhere would make the feature unusable company-wide.
+  // A request with no current approver simply sits at PENDING_DEPT_HEAD —
+  // same accepted, cancellable-in-the-meantime behavior as Recruitment's
+  // own dept-head gate — rather than being refused at submit time.
   const departmentId = await resolveDepartmentId(employee.currentPosition.orgUnitId);
   if (!departmentId) {
     return "Department tidak dapat ditentukan dari Posisi karyawan ini — hubungi Admin SDM.";
   }
   const deptHeadApprovers = await getDeptHeadApprovers(departmentId);
-  if (deptHeadApprovers.length === 0) {
-    return "Kesalahan konfigurasi routing: belum ada Posisi Kepala Departemen/Manajer (Level 3B) di department ini.";
-  }
-  const otherApprovers = deptHeadApprovers.filter((a) => a.employeeId !== session.user.employeeId);
-  if (otherApprovers.length === 0 && deptHeadApprovers.some((a) => a.employeeId === session.user.employeeId)) {
+  const submitterIsOnlyDeptHead =
+    deptHeadApprovers.length > 0 &&
+    deptHeadApprovers.every((a) => a.employeeId === session.user.employeeId);
+  if (submitterIsOnlyDeptHead) {
     return "Kesalahan konfigurasi routing: Anda adalah satu-satunya Kepala Departemen/Manajer (Level 3B) di department ini. Tetapkan Kepala Departemen/Manajer pengganti (Acting) sebelum mengajukan permintaan ini sendiri.";
   }
 

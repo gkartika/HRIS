@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { FilePlus } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin } from "@/lib/permissions";
+import { isHrAdmin, canSubmitMovementRequest } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
+import { getActiveLevel3Positions } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import type { Prisma, MovementRequestStatus, MovementType } from "@/generated/prisma/client";
@@ -41,6 +43,8 @@ export default async function MovementListPage({
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
   const isHrAdminUser = isHrAdmin(session);
   const seesAll = isHrAdminUser || isHrManagerNow;
+  const level3Positions = await getActiveLevel3Positions(session.user.employeeId);
+  const canSubmit = canSubmitMovementRequest(session, level3Positions.length > 0);
 
   const {
     requestNumber,
@@ -148,6 +152,15 @@ export default async function MovementListPage({
           <h1 className="text-lg font-medium text-slate-900">{t("movement.listTitle")}</h1>
           <p className="mt-1 text-sm text-slate-500">{t("movement.listSubtitle")}</p>
         </div>
+        {canSubmit && (
+          <Link
+            href="/movements/new"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            <FilePlus size={14} />
+            {t("movement.newRequest")}
+          </Link>
+        )}
       </div>
 
       <form className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-4">

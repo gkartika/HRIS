@@ -269,6 +269,7 @@ export const strings = {
     requestReason: "Alasan Permintaan",
     statusChangeKeepsPosition: "Perubahan Status tidak mengubah Posisi — otomatis menggunakan Posisi saat ini.",
     noCurrentPosition: "Karyawan ini belum memiliki Posisi saat ini.",
+    noEligibleEmployees: "Tidak ada karyawan yang dapat Anda ajukan perubahan posisinya.",
     submitButton: "Ajukan Permintaan Perubahan Posisi",
     executeButton: "Laksanakan Perubahan Posisi",
     implementedBy: "Dilaksanakan Oleh",
@@ -414,6 +415,7 @@ export const strings = {
     resetFilter: "Atur Ulang",
     noFilteredResults: "Tidak ada data yang cocok dengan filter ini.",
     filteredCount: "Menampilkan {shown} dari {total} data",
+    next: "Lanjutkan",
   },
 } as const;
 

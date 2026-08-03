@@ -76,6 +76,22 @@ export async function resolveSectionId(orgUnitId: string): Promise<string | null
 }
 
 /**
+ * Every departmentId this Employee currently holds Level-3 (3A/3B)
+ * authority in, company-wide — used to populate the "pick an employee"
+ * step when starting a new Perubahan Posisi request without one already
+ * chosen (e.g. from the list page, rather than a specific Employee's own
+ * detail page).
+ */
+export async function getLevel3DepartmentIds(
+  employeeId: string | null | undefined,
+  asOf: Date = new Date()
+): Promise<string[]> {
+  const positions = await getActiveLevel3Positions(employeeId, asOf);
+  const departmentIds = await Promise.all(positions.map((p) => resolveDepartmentId(p.orgUnitId)));
+  return [...new Set(departmentIds.filter((id): id is string => id !== null))];
+}
+
+/**
  * Level-3 (3A/3B) submit eligibility, scoped to the requester's own
  * Department — mirrors FR-HC-01-09's "Section Head / Department Head"
  * context (proposing changes for their own people), not company-wide.

@@ -26,9 +26,10 @@ import {
   requiresProposedEmploymentStatus,
   validateProposedPosition,
   isPerubahanPosisiType,
-  requiresPerformanceEvaluation,
   validateJobLevelDirection,
 } from "@/lib/movement";
+import { requiresEvaluationForMovementType, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
+import { createDraftEvaluation } from "@/app/(app)/evaluations/actions";
 import type { MovementType, EmploymentStatus } from "@/generated/prisma/enums";
 
 export async function submitMovementRequest(
@@ -68,15 +69,10 @@ export async function submitMovementRequest(
   if (requiresProposedEmploymentStatus(movementType) && !proposedEmploymentStatus) {
     return "Status Kepegawaian yang diusulkan wajib diisi untuk jenis Perubahan Status.";
   }
-  // Collected directly on the single submit form now (the requester is
-  // best placed to know it exists) rather than only afterward via HR
-  // Admin's own fields — a placeholder text/link until a dedicated
-  // Evaluation record module exists to point at instead. Still re-checked
-  // at the HR Manager's approval step as a safety net (e.g. for a request
-  // HR Admin needs to add/correct it on afterward).
-  if (requiresPerformanceEvaluation(movementType) && !performanceEvaluationRef) {
-    return "Evaluasi Kinerja Karyawan wajib diisi/ditautkan untuk Promosi.";
-  }
+  // DM-27/WF-17/LIF-14: a real shared Evaluation is now auto-created below
+  // for every Promosi/Mutasi/Demosi — the requester no longer types or
+  // links a free-text reference at submission (superseded; the field stays
+  // as an optional HR-only supplementary note for legacy rows only).
 
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
@@ -161,6 +157,24 @@ export async function submitMovementRequest(
   });
   const requestNumber = formatMovementRequestNumber(countThisYear + 1, year);
 
+  // DM-27/WF-17/LIF-14: every Promosi, Mutasi or Demotasi auto-creates one
+  // linked Evaluation Draft on submission — never a requester trigger
+  // (ACC-16/17). Created before the request itself so it can be linked in
+  // the same insert; nothing is released to evaluators yet, and HR Admin
+  // still has to release it before Dept Head/HR Manager can complete.
+  let evaluationId: string | null = null;
+  if (requiresEvaluationForMovementType(movementType)) {
+    const purpose = movementTypeToEvaluationPurpose(movementType)!;
+    const evaluation = await createDraftEvaluation({
+      employeeId,
+      purpose,
+      primaryAssignmentId: currentAssignmentId,
+      snapshotPositionId: employee.currentPositionId,
+      createdByAccountId: session.user.id,
+    });
+    evaluationId = evaluation.id;
+  }
+
   const request = await prisma.movementRequest.create({
     data: {
       requestNumber,
@@ -177,6 +191,7 @@ export async function submitMovementRequest(
       requesterPositionId: requester.currentPositionId,
       submittedByAccountId: session.user.id,
       performanceEvaluationRef,
+      evaluationId,
     },
   });
 
@@ -190,6 +205,7 @@ export async function submitMovementRequest(
 
   revalidatePath("/movements");
   revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/evaluations");
   redirect(`/movements/${request.id}`);
 }
 
@@ -206,13 +222,20 @@ export async function decideMovementRequestAsDeptHead(
   const session = await requireSession();
   const request = await prisma.movementRequest.findUnique({
     where: { id: requestId },
-    include: { currentPosition: true },
+    include: { currentPosition: true, evaluation: true },
   });
   if (!request) return "Permintaan tidak ditemukan.";
   if (request.status !== "PENDING_DEPT_HEAD") return "Permintaan ini sudah diproses.";
 
   if (isSelfApprovalAttempt(session.user.employeeId, request.requesterEmployeeId)) {
     return "Anda tidak dapat memutuskan permintaan yang Anda ajukan sendiri.";
+  }
+
+  // WF-17/ACC-16: "Block Department Head/HR Manager completion until
+  // evaluation is Completed" — a null evaluation only occurs on a legacy
+  // pre-refactor row and is never blocked.
+  if (!isEvaluationGateSatisfied(request.evaluation?.status ?? null)) {
+    return "Evaluasi FR-HC-01-07 (P1 dan P2) harus selesai terlebih dahulu.";
   }
 
   const departmentId = await resolveDepartmentId(request.currentPosition.orgUnitId);
@@ -277,7 +300,7 @@ export async function decideMovementRequest(
     return "Posisi HR Manager yang dipilih tidak valid atau tidak lagi aktif.";
   }
 
-  const request = await prisma.movementRequest.findUnique({ where: { id: requestId } });
+  const request = await prisma.movementRequest.findUnique({ where: { id: requestId }, include: { evaluation: true } });
   if (!request) return "Permintaan tidak ditemukan.";
   if (!canDecideMovementRequestStatus(request.status)) return "Permintaan ini sudah diproses.";
 
@@ -285,18 +308,16 @@ export async function decideMovementRequest(
     return "Anda tidak dapat memutuskan permintaan yang Anda ajukan sendiri.";
   }
 
+  // WF-17/ACC-16: same Evaluation-Completed gate as the Dept Head stage —
+  // checked again here since a request can only reach this stage after the
+  // Dept Head already cleared it, but this stays defense-in-depth.
+  if (!isEvaluationGateSatisfied(request.evaluation?.status ?? null)) {
+    return "Evaluasi FR-HC-01-07 (P1 dan P2) harus selesai terlebih dahulu.";
+  }
+
   const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
   if ((decision === "REJECTED" || decision === "RETURNED") && !decisionNote) {
     return "Catatan keputusan wajib diisi untuk Tolak/Kembalikan.";
-  }
-
-  if (
-    decision === "APPROVED" &&
-    requiresPerformanceEvaluation(request.movementType) &&
-    !request.performanceEvaluationRef &&
-    !request.performanceEvaluationFileId
-  ) {
-    return "Evaluasi Kinerja Karyawan wajib dilampirkan (oleh Admin SDM) sebelum Promosi dapat disetujui.";
   }
 
   if (

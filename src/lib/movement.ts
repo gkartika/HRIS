@@ -61,13 +61,6 @@ export function isPerubahanPosisiType(movementType: MovementType): boolean {
   return PERUBAHAN_POSISI_TYPES.includes(movementType);
 }
 
-// Promosi requires an Evaluasi Kinerja Karyawan reference per FR-HC-01-09's
-// own footnote ("Untuk promosi kenaikan Golongan/Jabatan, harus disertakan
-// hasil Evaluasi Kinerja Karyawan").
-export function requiresPerformanceEvaluation(movementType: MovementType): boolean {
-  return movementType === "PROMOTION";
-}
-
 /**
  * Parses a Job.jobLevel code into a comparable (tier, subTier) pair —
  * e.g. "3B" -> [3, "B"], "12" -> [12, ""]. Job.jobLevel is a free-text

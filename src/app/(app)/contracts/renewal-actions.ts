@@ -4,10 +4,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import {
-  canReviewContractRenewalCase,
-  canSubmitRenewalEvaluationAs,
   canSubmitRenewalDeptHeadRecommendation,
   canDecideContractRenewalCase,
+  canManageContracts,
   isSelfApprovalAttempt,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -17,31 +16,31 @@ import { isPositionOccupiedByPrimary } from "@/lib/position-occupancy";
 import { logAudit } from "@/lib/audit";
 import { createRenewalDraftContract } from "@/lib/contract-mutations";
 import { formatMovementRequestNumber, validateProposedPosition, validateJobLevelDirection } from "@/lib/movement";
+import { isEvaluationComplete } from "@/lib/evaluation";
+import { createDraftEvaluation } from "@/app/(app)/evaluations/actions";
 import {
   formatRenewalCaseNumber,
   isRenewalDue,
-  canSendRenewalEvaluation,
-  canSubmitRenewalEvaluation,
   canSubmitDeptHeadRecommendation,
   canDecideRenewalCase,
   requiresLinkedMovement,
   recommendationToMovementType,
   recommendationDurationMonths,
   requiresChangeReason,
-  isValidScoreValue,
-  computeEvaluationTotal,
-  type RenewalEvaluationScores,
 } from "@/lib/contract-renewal";
-import { addWorkingDays } from "@/lib/work-calendar";
 import type { RenewalRecommendation } from "@/generated/prisma/enums";
-import type { Prisma } from "@/generated/prisma/client";
 
-// LIF-08: idempotent D-30 scan — called at the top of the renewal-case list
-// page (server component), same "derive/act on read" pattern as
-// computeExpiryUrgency, since this app has no cron/scheduler. The unique
-// constraint on ContractRenewalCase.currentContractId is the actual
-// idempotency guarantee; the "no existing case" filter just avoids the
-// wasted round trip on every subsequent page load.
+// LIF-08: idempotent D-30 scan — called at the top of the /contracts list
+// page (server component). Contract and its D-30 renewal case are ONE
+// module/workflow (never a separate "Perpanjangan Kontrak" nav item/route),
+// same "derive/act on read" pattern as computeExpiryUrgency, since this app
+// has no cron/scheduler. The unique constraint on ContractRenewalCase.
+// currentContractId is the actual idempotency guarantee; the "no existing
+// case" filter just avoids the wasted round trip on every subsequent page
+// load. Creates the case AND its linked Evaluation Draft together
+// (LIF-08/DM-27) — draft creation alone does not notify evaluators or start
+// their deadline (that only happens when HR Admin releases it, via the
+// shared evaluations/actions.ts).
 export async function triggerDueRenewalCases(): Promise<void> {
   const candidates = await prisma.contract.findMany({
     where: {
@@ -69,6 +68,14 @@ export async function triggerDueRenewalCases(): Promise<void> {
     const caseNumber = formatRenewalCaseNumber(countThisYear + 1, year);
 
     try {
+      const evaluation = await createDraftEvaluation({
+        employeeId: employee.id,
+        purpose: "CONTRACT_RENEWAL",
+        primaryAssignmentId: primaryAssignment.id,
+        snapshotPositionId: employee.currentPositionId,
+        createdByAccountId: null,
+      });
+
       const created = await prisma.contractRenewalCase.create({
         data: {
           caseNumber,
@@ -77,6 +84,7 @@ export async function triggerDueRenewalCases(): Promise<void> {
           primaryAssignmentId: primaryAssignment.id,
           snapshotPositionId: employee.currentPositionId,
           status: "TRIGGERED",
+          evaluationId: evaluation.id,
         },
       });
       await logAudit({
@@ -84,157 +92,13 @@ export async function triggerDueRenewalCases(): Promise<void> {
         action: "CREATE",
         datasetName: "ContractRenewalCase",
         recordId: created.id,
-        reason: `Auto-triggered at D-30 for contract ${contract.contractNumber}`,
+        reason: `Auto-triggered at D-30 for contract ${contract.contractNumber}, linked to ${evaluation.evaluationNumber}`,
       });
     } catch {
       // Unique constraint on currentContractId — another concurrent load
       // already created it; safe to ignore (LIF-08 idempotency).
     }
   }
-}
-
-export async function sendRenewalEvaluation(
-  caseId: string,
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canReviewContractRenewalCase(session)) return "Anda tidak memiliki akses.";
-
-  const renewalCase = await prisma.contractRenewalCase.findUnique({ where: { id: caseId } });
-  if (!renewalCase) return "Kasus tidak ditemukan.";
-  if (!canSendRenewalEvaluation(renewalCase.status)) return "Kasus ini sudah diproses.";
-
-  const p1EmployeeId = (formData.get("p1EmployeeId") as string) || "";
-  const p2EmployeeId = (formData.get("p2EmployeeId") as string) || "";
-  if (!p1EmployeeId || !p2EmployeeId) return "P1 dan P2 wajib dipilih.";
-  if (p1EmployeeId === p2EmployeeId) return "P1 dan P2 harus dua orang yang berbeda.";
-
-  const [p1, p2] = await Promise.all([
-    prisma.employee.findUnique({ where: { id: p1EmployeeId } }),
-    prisma.employee.findUnique({ where: { id: p2EmployeeId } }),
-  ]);
-  if (!p1 || !p2) return "P1 atau P2 tidak ditemukan.";
-
-  const parseCount = (name: string): number | null => {
-    const raw = (formData.get(name) as string)?.trim();
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  };
-
-  const now = new Date();
-  await prisma.contractRenewalCase.update({
-    where: { id: caseId },
-    data: {
-      status: "EVALUATION_SENT",
-      responsibleHrAdminAccountId: session.user.id,
-      sentAt: now,
-      evaluationDueDate: addWorkingDays(now, 5),
-      attendanceSakit: parseCount("attendanceSakit"),
-      attendanceIjin: parseCount("attendanceIjin"),
-      attendanceAlpha: parseCount("attendanceAlpha"),
-      attendanceIjinHalfDay: parseCount("attendanceIjinHalfDay"),
-      p1EmployeeId,
-      p1PositionId: p1.currentPositionId,
-      p2EmployeeId,
-      p2PositionId: p2.currentPositionId,
-    },
-  });
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "UPDATE",
-    datasetName: "ContractRenewalCase",
-    recordId: caseId,
-    reason: `Sent FR-HC-01-07 evaluation for ${renewalCase.caseNumber} to P1=${p1EmployeeId}, P2=${p2EmployeeId}`,
-  });
-
-  revalidatePath(`/contract-renewals/${caseId}`);
-  revalidatePath("/contract-renewals");
-}
-
-function parseEvaluationScores(formData: FormData): { scores: Prisma.InputJsonValue; total: number } {
-  const parseScore = (name: string): number | undefined => {
-    const raw = (formData.get(name) as string)?.trim();
-    if (!raw) return undefined;
-    const n = Number(raw);
-    return isValidScoreValue(n) ? n : undefined;
-  };
-
-  const useKpi = formData.get("useKpi") === "on" || formData.get("useKpi") === "true";
-  const companyValues = ["companyValue1", "companyValue2", "companyValue3", "companyValue4", "companyValue5"]
-    .map(parseScore)
-    .filter((v): v is number => typeof v === "number");
-
-  const rawScores: RenewalEvaluationScores = useKpi
-    ? {
-        kpiProductivity: parseScore("kpiProductivity"),
-        absensi: parseScore("absensi"),
-        tugasKhusus: parseScore("tugasKhusus"),
-        sp: parseScore("sp"),
-        kompetensi: parseScore("kompetensi"),
-        companyValues,
-      }
-    : {
-        qualityOrientation: parseScore("qualityOrientation"),
-        problemSolving: parseScore("problemSolving"),
-        communicationLeadership: parseScore("communicationLeadership"),
-        technicalExpertise: parseScore("technicalExpertise"),
-        workDiscipline: parseScore("workDiscipline"),
-        absensi: parseScore("absensi"),
-        tugasKhusus: parseScore("tugasKhusus"),
-        sp: parseScore("sp"),
-        kompetensi: parseScore("kompetensi"),
-        companyValues,
-      };
-
-  const total = computeEvaluationTotal(rawScores);
-  // Strips undefined-valued keys — Prisma's Json scalar requires a plain
-  // JSON-serializable value, and JSON.stringify already drops `undefined`.
-  const scores = JSON.parse(JSON.stringify(rawScores)) as Prisma.InputJsonValue;
-  return { scores, total };
-}
-
-export async function submitRenewalEvaluation(
-  caseId: string,
-  slot: "P1" | "P2",
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
-  const renewalCase = await prisma.contractRenewalCase.findUnique({ where: { id: caseId } });
-  if (!renewalCase) return "Kasus tidak ditemukan.";
-
-  const assignedEmployeeId = slot === "P1" ? renewalCase.p1EmployeeId : renewalCase.p2EmployeeId;
-  if (!canSubmitRenewalEvaluationAs(session.user.employeeId, assignedEmployeeId)) {
-    return "Anda tidak memiliki akses. Hanya evaluator yang ditugaskan yang dapat mengisi evaluasi ini.";
-  }
-  const alreadySubmittedAt = slot === "P1" ? renewalCase.p1SubmittedAt : renewalCase.p2SubmittedAt;
-  if (!canSubmitRenewalEvaluation(renewalCase.status, alreadySubmittedAt)) {
-    return "Evaluasi ini sudah dikirim atau kasus belum siap menerima evaluasi.";
-  }
-
-  const { scores, total } = parseEvaluationScores(formData);
-  const evaluator = await prisma.employee.findUnique({ where: { id: session.user.employeeId! } });
-
-  await prisma.contractRenewalCase.update({
-    where: { id: caseId },
-    data:
-      slot === "P1"
-        ? { p1SubmittedAt: new Date(), p1Scores: scores, p1Total: total, p1PositionId: evaluator?.currentPositionId }
-        : { p2SubmittedAt: new Date(), p2Scores: scores, p2Total: total, p2PositionId: evaluator?.currentPositionId },
-  });
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "UPDATE",
-    datasetName: "ContractRenewalCase",
-    recordId: caseId,
-    reason: `${slot} evaluation submitted for ${renewalCase.caseNumber} (total ${total})`,
-  });
-
-  revalidatePath(`/contract-renewals/${caseId}`);
 }
 
 export async function submitDeptHeadRecommendation(
@@ -245,7 +109,7 @@ export async function submitDeptHeadRecommendation(
   const session = await requireSession();
   const renewalCase = await prisma.contractRenewalCase.findUnique({
     where: { id: caseId },
-    include: { employee: { include: { currentPosition: true } }, currentContract: true },
+    include: { employee: { include: { currentPosition: true } }, currentContract: true, evaluation: true },
   });
   if (!renewalCase) return "Kasus tidak ditemukan.";
 
@@ -263,8 +127,8 @@ export async function submitDeptHeadRecommendation(
   if (!canSubmitRenewalDeptHeadRecommendation(deptHeadPositions.map((p) => p.positionId))) {
     return "Anda tidak memiliki akses. Hanya Kepala Departemen/Manajer (Level 3B) di department ini yang dapat memberikan rekomendasi.";
   }
-  if (!canSubmitDeptHeadRecommendation(renewalCase.status, renewalCase.p1SubmittedAt, renewalCase.p2SubmittedAt)) {
-    return "Kedua evaluasi P1 dan P2 harus dikirim terlebih dahulu.";
+  if (!canSubmitDeptHeadRecommendation(renewalCase.status) || !isEvaluationComplete(renewalCase.evaluation?.status ?? "DRAFT")) {
+    return "Evaluasi FR-HC-01-07 (P1 dan P2) harus selesai terlebih dahulu.";
   }
 
   const decisionPositionId = (formData.get("decisionPositionId") as string) || "";
@@ -337,7 +201,9 @@ export async function submitDeptHeadRecommendation(
           requesterEmployeeId: session.user.employeeId!,
           requesterPositionId: decisionPositionId,
           submittedByAccountId: session.user.id,
-          performanceEvaluationRef: `Perpanjangan Kontrak ${renewalCase.caseNumber} (FR-HC-01-07)`,
+          // LIF-13: reuse the renewal's already-completed Evaluation — never
+          // create a second one for the linked Perubahan Posisi draft.
+          evaluationId: renewalCase.evaluationId,
           deptHeadDecisionAt: new Date(),
           deptHeadDecisionByAccountId: session.user.id,
           deptHeadDecisionPositionId: decisionPositionId,
@@ -375,8 +241,8 @@ export async function submitDeptHeadRecommendation(
     reason: `Dept Head recommendation (${recommendation}) submitted for ${renewalCase.caseNumber}`,
   });
 
-  revalidatePath(`/contract-renewals/${caseId}`);
-  revalidatePath("/contract-renewals");
+  revalidatePath(`/contracts/${renewalCase.currentContractId}`);
+  revalidatePath("/contracts");
   revalidatePath("/movements");
 }
 
@@ -500,7 +366,7 @@ export async function decideRenewalCase(
             requesterEmployeeId: session.user.employeeId!,
             requesterPositionId: decisionPositionId,
             submittedByAccountId: session.user.id,
-            performanceEvaluationRef: `Perpanjangan Kontrak ${renewalCase.caseNumber} (FR-HC-01-07)`,
+            evaluationId: renewalCase.evaluationId,
             deptHeadDecisionAt: new Date(),
             deptHeadDecisionByAccountId: session.user.id,
             deptHeadDecisionPositionId: decisionPositionId,
@@ -577,9 +443,9 @@ export async function decideRenewalCase(
         generatedContractId = drafted.id;
       }
       // Mutasi/Demosi: contract generation stays disabled until HR Admin
-      // executes the (now-approved) linked Perubahan Posisi — see the case
-      // detail page's gating, which reads linkedMovementRequest.status
-      // live rather than storing a duplicate flag here (WF-12).
+      // executes the (now-approved) linked Perubahan Posisi — see the
+      // Contract detail page's gating, which reads linkedMovementRequest.
+      // status live rather than storing a duplicate flag here (WF-12).
     }
 
     const updatedCase = await tx.contractRenewalCase.update({
@@ -610,10 +476,9 @@ export async function decideRenewalCase(
     reason: decisionNote ?? `Renewal case ${renewalCase.caseNumber} ${decision.toLowerCase()}`,
   });
 
-  revalidatePath(`/contract-renewals/${caseId}`);
-  revalidatePath("/contract-renewals");
-  revalidatePath("/movements");
+  revalidatePath(`/contracts/${renewalCase.currentContractId}`);
   revalidatePath("/contracts");
+  revalidatePath("/movements");
 }
 
 // After HR Admin executes the now-approved linked Perubahan Posisi (via the
@@ -627,7 +492,7 @@ export async function createRenewalContractAfterMovementExecuted(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canReviewContractRenewalCase(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
 
   const renewalCase = await prisma.contractRenewalCase.findUnique({
     where: { id: caseId },
@@ -663,7 +528,6 @@ export async function createRenewalContractAfterMovementExecuted(
     data: { generatedContractId: drafted.id },
   });
 
-  revalidatePath(`/contract-renewals/${caseId}`);
-  revalidatePath("/contracts");
+  revalidatePath(`/contracts/${renewalCase.currentContractId}`);
   revalidatePath(`/contracts/${drafted.id}`);
 }

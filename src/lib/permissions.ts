@@ -250,34 +250,40 @@ export function canUploadEmployeeDocument(session: Session): boolean {
   return isHrAdmin(session);
 }
 
-// ---------- Contract Renewal Case (DM-15, WF-10..12, ACC-11, ACC-16) ----------
-// A separate, richer workflow layered next to the manual Contract-renewal
-// predicates above — HR Admin reviews/sends, the two assigned evaluators
-// (P1/P2) each see only their own evaluation, the primary Dept Head 3B
-// recommends, and the HR Manager makes the combined final decision.
+// ---------- Shared Evaluation (DM-26/27, WF-19, ACC-17, PER-07, DEC-020) ----------
+// One reusable FR-HC-01-07 workflow for every consumer — Contract Renewal
+// (draft at D-30), Perubahan Posisi (draft on Promosi/Mutasi/Demosi
+// submission) and HR-Admin-initiated Manual HR evaluations. HR Admin alone
+// creates Manual drafts and releases every evaluation regardless of source;
+// the two assigned evaluators (P1/P2) each see only their own slot; the
+// primary Dept Head and HR Manager see completed results only when their
+// own source workflow requires it.
 
-// ACC-11: "At D-30, HR Admin receives the case... selects two different
-// evaluators... and manually sends." Reviewing/sending is HR-Admin-only,
-// same operational latitude as the rest of the Contract lifecycle.
-export function canReviewContractRenewalCase(session: Session): boolean {
+// ACC-17: "HR Admin... is the only role that can assign P1/P2 and release
+// any evaluation" — also covers Manual HR draft creation.
+export function canCreateManualEvaluation(session: Session): boolean {
   return isHrAdmin(session);
 }
 
-// ACC-11: "P1 and P2 see only the assigned evaluation fields" — the acting
-// session must literally be the specific employee assigned to that slot,
-// not just any Level-3 holder or manager.
-export function canSubmitRenewalEvaluationAs(
+export function canReleaseEvaluation(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// ACC-17: "P1/P2 may view and edit only their own assigned slot" — the
+// acting session must literally be the specific employee assigned to that
+// slot, not just any Level-3 holder or manager.
+export function canSubmitEvaluationAs(
   actingEmployeeId: string | null | undefined,
   assignedEvaluatorEmployeeId: string | null
 ): boolean {
   return !!actingEmployeeId && !!assignedEvaluatorEmployeeId && actingEmployeeId === assignedEvaluatorEmployeeId;
 }
 
-// ACC-11/LIF-09: "The primary Department Head reviews both evaluations and
-// submits the recommendation" — same Level-3B-of-department gate as
-// Perubahan Posisi (dept-head.ts's getActiveDeptHeadPositions), reused here
-// rather than the direct-report canSubmitContractRecommendation predicate
-// the older manual Contract pipeline still uses.
+// ACC-11/LIF-09: "The primary Department Head reviews completed results and
+// recommends" — same Level-3B-of-department gate as Perubahan Posisi
+// (dept-head.ts's getActiveDeptHeadPositions), reused here rather than the
+// direct-report canSubmitContractRecommendation predicate the older manual
+// Contract pipeline still uses.
 export function canSubmitRenewalDeptHeadRecommendation(activeDeptHeadPositionIds: string[]): boolean {
   return isDeptHeadApprover(activeDeptHeadPositionIds);
 }
@@ -290,14 +296,15 @@ export function canDecideContractRenewalCase(activeHrManagerPositionIds: string[
   return isHrManager(activeHrManagerPositionIds);
 }
 
-// Case detail visibility: HR Admin, either assigned evaluator (own slot
-// only — field-level hiding of the *other* evaluator's scores still happens
-// at the page level), the primary Dept Head of the employee's department,
-// or an active HR Manager. The subject employee themself is deliberately
-// NOT included — ACC-11 gives them no view into the renewal case itself,
-// only their own released Contract once generated (existing /contracts
-// visibility already covers that).
-export function canViewContractRenewalCase(
+// ACC-17: evaluation detail visibility — HR Admin, either assigned
+// evaluator (own slot only — field-level hiding of the *other* evaluator's
+// scores still happens at the page level), the primary Dept Head and HR
+// Manager "may view completed results only when required by their
+// workflow" (approximated here as: holds the role at all; the page itself
+// only renders scores once the evaluation is Completed for these two).
+// The subject employee themself is deliberately NOT included — ACC-11/17
+// give them status only, never score access.
+export function canViewEvaluation(
   session: Session,
   actingEmployeeId: string | null | undefined,
   p1EmployeeId: string | null,
@@ -307,8 +314,8 @@ export function canViewContractRenewalCase(
 ): boolean {
   return (
     isHrAdmin(session) ||
-    canSubmitRenewalEvaluationAs(actingEmployeeId, p1EmployeeId) ||
-    canSubmitRenewalEvaluationAs(actingEmployeeId, p2EmployeeId) ||
+    canSubmitEvaluationAs(actingEmployeeId, p1EmployeeId) ||
+    canSubmitEvaluationAs(actingEmployeeId, p2EmployeeId) ||
     isDeptHeadApprover(activeDeptHeadPositionIds) ||
     isHrManager(activeHrManagerPositionIds)
   );

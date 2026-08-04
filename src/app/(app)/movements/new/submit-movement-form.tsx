@@ -47,7 +47,7 @@ export function SubmitMovementForm({
   const employee = useMemo(() => employees.find((e) => e.id === employeeId) ?? null, [employees, employeeId]);
   const assignments = employee?.assignments ?? [];
   const primaryAssignment = assignments.find((a) => a.assignmentType === "PRIMARY");
-  const isPromotion = movementType === "PROMOTION";
+  const isPerubahanPosisi = movementType === "PROMOTION" || movementType === "MUTATION" || movementType === "DEMOTION";
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-6 md:grid-cols-2">
@@ -173,13 +173,12 @@ export function SubmitMovementForm({
         />
       </div>
 
-      {isPromotion && (
+      {isPerubahanPosisi && (
         <div className="md:col-span-2">
           <label className="mb-1 block text-xs text-slate-500">{t("movement.performanceEvaluationRef")}</label>
           <input
             type="text"
             name="performanceEvaluationRef"
-            required={isPromotion}
             placeholder="FR-HC-05-01 — ..."
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />

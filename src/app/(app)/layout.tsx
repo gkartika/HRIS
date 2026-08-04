@@ -58,14 +58,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // nav (see src/app/(app)/approvals/page.tsx, which now serves both).
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
   const isDeptHeadAnywhere = deptHeadDepartmentIds.length > 0;
-  // DM-15/WF-10..12: a plain employee with no HR Manager/Dept Head position
-  // can still be assigned as a Contract Renewal Case P1/P2 evaluator — they
-  // need the Approval Inbox link too, since that's their only in-app
-  // notification surface (no email channel — DSH-10).
-  const hasPendingRenewalEvaluation = session.user.employeeId
-    ? (await prisma.contractRenewalCase.count({
+  // DM-27/WF-19: a plain employee with no HR Manager/Dept Head position can
+  // still be assigned P1/P2 on any shared Evaluation (Contract Renewal,
+  // Perubahan Posisi or Manual HR) — they need the Approval Inbox link too,
+  // since that's their only in-app notification surface (no email channel —
+  // DSH-10).
+  const hasPendingEvaluation = session.user.employeeId
+    ? (await prisma.evaluation.count({
         where: {
-          status: "EVALUATION_SENT",
+          status: "RELEASED",
           OR: [
             { p1EmployeeId: session.user.employeeId, p1SubmittedAt: null },
             { p2EmployeeId: session.user.employeeId, p2SubmittedAt: null },
@@ -108,12 +109,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (isHrAdmin(session) || session.user.employeeId) {
     navItems.push({ href: "/contracts", label: t("contract.navLabel"), icon: FileSignature });
   }
-  // DM-15/WF-10..12: same broad visibility rationale as Contracts — HR Admin
-  // reviews/sends every case, any employee-linked account may be assigned
-  // as a P1/P2 evaluator or be the primary Dept Head/HR Manager for one;
-  // the list page itself scopes what's actually shown.
-  if (isHrAdmin(session) || session.user.employeeId) {
-    navItems.push({ href: "/contract-renewals", label: t("contractRenewal.navLabel"), icon: FileSignature });
+  // DM-27/WF-19/ACC-17: Contract Renewal's D-30 case now renders inline on
+  // its Contract (one module, never a separate nav item — see
+  // docs/DECISIONS.md). The shared Evaluation entity gets its own two
+  // entries instead: the HR-Admin-only operational list, and "Evaluasi
+  // Saya" for any employee-linked account that might be assigned P1/P2.
+  if (isHrAdmin(session)) {
+    navItems.push({ href: "/evaluations", label: t("evaluation.navLabel"), icon: FileSignature });
+  }
+  if (session.user.employeeId) {
+    navItems.push({ href: "/my-evaluations", label: t("evaluation.myEvaluationsTitle"), icon: FileSignature });
   }
   // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
   // Admin operational nav below, and only visible while the login currently
@@ -123,7 +128,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     navItems.push({ href: "/hr-dashboard", label: t("nav.hrManagerDashboard"), icon: LayoutDashboard });
     navItems.push({ href: "/hr-reports", label: t("nav.hrReports"), icon: BarChart3 });
   }
-  if (isHrManagerNow || isDeptHeadAnywhere || hasPendingRenewalEvaluation) {
+  if (isHrManagerNow || isDeptHeadAnywhere || hasPendingEvaluation) {
     navItems.push({ href: "/approvals", label: t("nav.approvalInbox"), icon: Inbox });
   }
   if (isHrAdmin(session)) {

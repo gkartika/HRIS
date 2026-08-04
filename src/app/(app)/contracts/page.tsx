@@ -4,6 +4,7 @@ import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { computeExpiryUrgency } from "@/lib/contract";
+import { triggerDueRenewalCases } from "./renewal-actions";
 import type { Prisma, ContractStatus } from "@/generated/prisma/client";
 
 const CONTRACT_STATUSES: ContractStatus[] = [
@@ -26,6 +27,11 @@ export default async function ContractListPage({
   const session = await requireSession();
   const { status, orgUnitId } = await searchParams;
 
+  // LIF-08: idempotent D-30 scan — Contract and its automated renewal case
+  // are one module, so this page's own load is the trigger point (same
+  // "derive/act on read" pattern as computeExpiryUrgency below).
+  await triggerDueRenewalCases();
+
   const where: Prisma.ContractWhereInput = isHrAdmin(session)
     ? {}
     : { employeeId: session.user.employeeId ?? "__none__" };
@@ -35,7 +41,10 @@ export default async function ContractListPage({
   const [contracts, orgUnits] = await Promise.all([
     prisma.contract.findMany({
       where,
-      include: { employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } } },
+      include: {
+        employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
+        renewalCaseAsCurrentContract: { select: { caseNumber: true, status: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     isHrAdmin(session) ? prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }) : Promise.resolve([]),
@@ -107,6 +116,7 @@ export default async function ContractListPage({
                 <th className="px-4 py-3 font-medium">{t("contract.endDate")}</th>
                 <th className="px-4 py-3 font-medium">{t("contract.expiryUrgency")}</th>
                 <th className="px-4 py-3 font-medium">{t("recruitment.status")}</th>
+                <th className="px-4 py-3 font-medium">{t("contractRenewal.caseNumber")}</th>
               </tr>
             </thead>
             <tbody>
@@ -145,6 +155,13 @@ export default async function ContractListPage({
                       <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                         {t(`contractStatus.${c.status}`)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {c.renewalCaseAsCurrentContract && (
+                        <span className="rounded-md bg-indigo-50 px-2 py-1 font-mono text-xs font-medium text-indigo-700">
+                          {c.renewalCaseAsCurrentContract.caseNumber} — {t(`contractRenewalCaseStatus.${c.renewalCaseAsCurrentContract.status}`)}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

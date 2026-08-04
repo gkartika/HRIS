@@ -322,6 +322,115 @@ enum ContractRenewalCaseStatus {
   CANCELLED
 }
 
+// ---------- Phase 2: Shared Evaluation (DM-26, DM-27, WF-19, ACC-17, LIF-14) ----------
+// PER-07/DEC-020: one reusable FR-HC-01-07 record and P1/P2 workflow shared
+// by every consumer — Contract Renewal (draft at D-30), Perubahan Posisi
+// (draft on Promosi/Mutasi/Demosi submission), and HR-Admin-initiated Manual
+// HR evaluations. "Do not keep an embedded renewal-only evaluation
+// implementation" (WF-19) — this replaces the P1/P2/attendance fields that
+// briefly lived directly on ContractRenewalCase (see docs/DECISIONS.md for
+// the non-destructive backfill that moved that data here).
+//
+// The blueprint describes linkage as generic source_type/source_id — this
+// schema already reuses concrete typed FKs for source disambiguation
+// everywhere else (e.g. MovementRequest.renewalCaseId), so the same idiom is
+// used here: the FK lives on the SOURCE record (ContractRenewalCase.
+// evaluationId, MovementRequest.evaluationId), not on Evaluation itself.
+// That's what makes LIF-13's "renewal-linked Mutasi/Demotasi reuses the
+// completed renewal evaluation" representable at all — a renewal case and
+// its linked Perubahan Posisi draft can point at the very same Evaluation
+// row simultaneously, which a single owning FK on Evaluation could not do.
+enum EvaluationPurpose {
+  CONTRACT_RENEWAL
+  PROMOTION
+  MUTATION
+  DEMOTION
+  MANUAL_HR
+}
+
+// WF-19: Draft > Released > [Waiting P1 / Waiting P2 / Waiting Both is
+// derived live from p1SubmittedAt/p2SubmittedAt while RELEASED, not a
+// separate stored state — same "derive, don't duplicate" pattern already
+// used for ContractRenewalCaseStatus] > Completed, with Returned/Cancelled/
+// Voided when authorized.
+enum EvaluationStatus {
+  DRAFT
+  RELEASED
+  COMPLETED
+  RETURNED
+  CANCELLED
+  VOIDED
+}
+
+model Evaluation {
+  id                String            @id @default(cuid())
+  evaluationNumber  String            @unique
+  employeeId        String
+  employee          Employee          @relation("EvaluationEmployee", fields: [employeeId], references: [id])
+  purpose           EvaluationPurpose
+  status            EvaluationStatus  @default(DRAFT)
+
+  // DM-27 "primary_assignment_id and organization snapshot" — department/
+  // section/position label are re-derived live from snapshotPositionId via
+  // the existing level3-scope.ts helpers, same as ContractRenewalCase did.
+  primaryAssignmentId String?
+  primaryAssignment   Assignment?     @relation(fields: [primaryAssignmentId], references: [id])
+  snapshotPositionId  String?
+  snapshotPosition    Position?       @relation("EvaluationSnapshotPosition", fields: [snapshotPositionId], references: [id])
+
+  createdByAccountId String?
+  createdByAccount   Account?         @relation("EvaluationCreatedBy", fields: [createdByAccountId], references: [id])
+  draftCreatedAt     DateTime         @default(now())
+
+  // ACC-17: HR Admin alone assigns P1/P2 and releases — no other role has a
+  // release control, regardless of which workflow created the Draft.
+  responsibleHrAdminAccountId String?
+  responsibleHrAdminAccount   Account? @relation("EvaluationResponsibleHrAdmin", fields: [responsibleHrAdminAccountId], references: [id])
+  releasedByAccountId String?
+  releasedByAccount   Account?        @relation("EvaluationReleasedBy", fields: [releasedByAccountId], references: [id])
+  releasedAt          DateTime?
+  evaluationDueDate   DateTime?
+
+  // FR-HC-01-07 HR-owned prefilled attendance snapshot (DM-26).
+  attendanceSakit       Int?
+  attendanceIjin        Int?
+  attendanceAlpha       Int?
+  attendanceIjinHalfDay Int?
+
+  // P1/P2 evaluators — must be two different people, each sees/submits only
+  // their own assigned evaluation. Itemized FR-HC-01-07 criteria are stored
+  // as JSON rather than ~13 mostly-null columns per evaluator, since
+  // KPI/Productivity and its 5 alternative criteria are mutually exclusive.
+  p1EmployeeId  String?
+  p1Employee    Employee? @relation("EvaluationP1Evaluator", fields: [p1EmployeeId], references: [id])
+  p1PositionId  String?
+  p1Position    Position? @relation("EvaluationP1Position", fields: [p1PositionId], references: [id])
+  p1SubmittedAt DateTime?
+  p1Scores      Json?
+  p1Total       Int?
+
+  p2EmployeeId  String?
+  p2Employee    Employee? @relation("EvaluationP2Evaluator", fields: [p2EmployeeId], references: [id])
+  p2PositionId  String?
+  p2Position    Position? @relation("EvaluationP2Position", fields: [p2PositionId], references: [id])
+  p2SubmittedAt DateTime?
+  p2Scores      Json?
+  p2Total       Int?
+
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  cancelledReason String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Reverse of the owning source records' evaluationId FKs — see the note
+  // above on why the FK lives on the source, not here.
+  contractRenewalCase ContractRenewalCase?
+  movementRequest     MovementRequest?
+}
+
 model ContractRenewalCase {
   id                String                    @id @default(cuid())
   caseNumber        String                    @unique
@@ -342,39 +451,13 @@ model ContractRenewalCase {
   status      ContractRenewalCaseStatus       @default(TRIGGERED)
   triggerDate DateTime                        @default(now())
 
-  // HR Admin review + manual send (DM-15, ACC-11).
-  responsibleHrAdminAccountId String?
-  responsibleHrAdminAccount  Account?          @relation("RenewalResponsibleHrAdmin", fields: [responsibleHrAdminAccountId], references: [id])
-  sentAt                     DateTime?
-  evaluationDueDate          DateTime?
-
-  // FR-HC-01-07 HR-owned prefilled attendance snapshot (DM-26) — Sakit,
-  // Ijin, Alfa, Ijin 1/2 Hari only (no Cuti, unlike Movement's 5-field set).
-  attendanceSakit       Int?
-  attendanceIjin        Int?
-  attendanceAlpha       Int?
-  attendanceIjinHalfDay Int?
-
-  // P1/P2 evaluators (DM-15/DM-26/ACC-11: must be two different people, each
-  // sees/submits only their own assigned evaluation, both auditable and
-  // separate). Itemized FR-HC-01-07 criteria scores are stored as JSON
-  // rather than ~13 mostly-null columns per evaluator, since KPI/Productivity
-  // and its 5 alternative criteria are mutually exclusive on the real form.
-  p1EmployeeId  String?
-  p1Employee    Employee?                     @relation("RenewalP1Evaluator", fields: [p1EmployeeId], references: [id])
-  p1PositionId  String?
-  p1Position    Position?                     @relation("RenewalP1Position", fields: [p1PositionId], references: [id])
-  p1SubmittedAt DateTime?
-  p1Scores      Json?
-  p1Total       Int?
-
-  p2EmployeeId  String?
-  p2Employee    Employee?                     @relation("RenewalP2Evaluator", fields: [p2EmployeeId], references: [id])
-  p2PositionId  String?
-  p2Position    Position?                     @relation("RenewalP2Position", fields: [p2PositionId], references: [id])
-  p2SubmittedAt DateTime?
-  p2Scores      Json?
-  p2Total       Int?
+  // DM-27/WF-19: the shared Evaluation this case created at D-30 (or, for a
+  // pre-migration row, backfilled from the fields below during the
+  // non-destructive migration — see docs/DECISIONS.md). Every renewal case
+  // has exactly one; a linked Mutasi/Demosi Perubahan Posisi draft reuses
+  // this same row via its own evaluationId rather than creating another.
+  evaluationId String?     @unique
+  evaluation   Evaluation? @relation(fields: [evaluationId], references: [id])
 
   // Primary Department Head recommendation — LIF-09/DEC-019: this
   // recommendation counts as the Dept Head approval for any linked
@@ -457,8 +540,10 @@ model Account {
   onboardingTrainingCompletedBy  OnboardingCase[] @relation("OnboardingTrainingCompletedBy")
   onboardingAssetsCompletedBy    OnboardingCase[] @relation("OnboardingAssetsCompletedBy")
   contractDecisionsMade          Contract[] @relation("ContractDecisionBy")
-  renewalCasesResponsibleAsHrAdmin ContractRenewalCase[] @relation("RenewalResponsibleHrAdmin")
   renewalCasesDecidedBy            ContractRenewalCase[] @relation("RenewalDecisionBy")
+  evaluationsCreatedBy            Evaluation[] @relation("EvaluationCreatedBy")
+  evaluationsResponsibleAsHrAdmin Evaluation[] @relation("EvaluationResponsibleHrAdmin")
+  evaluationsReleasedBy           Evaluation[] @relation("EvaluationReleasedBy")
 }
 
 model AccountRole {
@@ -537,9 +622,10 @@ model Employee {
   contracts                    Contract[] @relation("EmployeeContracts")
   contractRecommendationsGiven Contract[] @relation("ContractRecommendationBy")
   renewalCases                 ContractRenewalCase[] @relation("RenewalCaseEmployee")
-  renewalP1Evaluations         ContractRenewalCase[] @relation("RenewalP1Evaluator")
-  renewalP2Evaluations         ContractRenewalCase[] @relation("RenewalP2Evaluator")
   renewalDeptHeadRecommendations ContractRenewalCase[] @relation("RenewalDeptHeadEmployee")
+  evaluations                  Evaluation[] @relation("EvaluationEmployee")
+  evaluationsAsP1              Evaluation[] @relation("EvaluationP1Evaluator")
+  evaluationsAsP2              Evaluation[] @relation("EvaluationP2Evaluator")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -644,11 +730,12 @@ model Position {
   contractRecommendations    Contract[] @relation("ContractRecommendationPosition")
   contractDecisions          Contract[] @relation("ContractDecisionPosition")
   renewalSnapshotOf              ContractRenewalCase[] @relation("RenewalSnapshotPosition")
-  renewalP1PositionOf             ContractRenewalCase[] @relation("RenewalP1Position")
-  renewalP2PositionOf             ContractRenewalCase[] @relation("RenewalP2Position")
   renewalDeptHeadPositionOf       ContractRenewalCase[] @relation("RenewalDeptHeadPosition")
   renewalDeptHeadProposedPositionOf ContractRenewalCase[] @relation("RenewalDeptHeadProposedPosition")
   renewalDecisionPositionOf       ContractRenewalCase[] @relation("RenewalDecisionPosition")
+  evaluationsAsSnapshotPosition Evaluation[] @relation("EvaluationSnapshotPosition")
+  evaluationsAsP1Position       Evaluation[] @relation("EvaluationP1Position")
+  evaluationsAsP2Position       Evaluation[] @relation("EvaluationP2Position")
 }
 
 model Assignment {
@@ -668,6 +755,7 @@ model Assignment {
   movementImplementation MovementRequest?
   movementCurrentAssignmentOf MovementRequest[] @relation("MovementCurrentAssignment")
   renewalCasesAsPrimaryAssignment ContractRenewalCase[]
+  evaluationsAsPrimaryAssignment  Evaluation[]
 }
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
@@ -844,10 +932,22 @@ model MovementRequest {
   attendanceIjin              Int?
   attendanceIjinHalfDay        Int?
   attendanceCuti               Int?
+  // Superseded by the shared Evaluation below (WF-19/DEC-020) — kept only as
+  // an optional HR-only supplementary note/legacy field for pre-refactor
+  // rows, no longer required or treated as "the evaluation" for any type.
   performanceEvaluationRef      String?
   performanceEvaluationFileId   String?               @unique
   performanceEvaluationFile     FileObject?           @relation(fields: [performanceEvaluationFileId], references: [id])
   hrConfidentialNotes           String?
+
+  // DM-27/WF-17/LIF-14: every Promosi, Mutasi or Demotasi auto-creates one
+  // linked Evaluation Draft on submission (never a requester trigger) —
+  // except a renewal-linked draft, which reuses its Contract Renewal Case's
+  // already-existing Evaluation instead of creating a new one (LIF-13).
+  // Department Head 3B and HR Manager approval both wait for this
+  // Evaluation to reach Completed.
+  evaluationId String?     @unique
+  evaluation   Evaluation? @relation(fields: [evaluationId], references: [id])
 
   // LIF-04: "HR Admin executes the future/effective-dated Position
   // Assignment and preserves previous records" — implementedAssignmentId

@@ -1,6 +1,8 @@
-// Pure business logic for the Contract Renewal Case flow (DM-15, DM-26,
-// WF-10..12, LIF-08..13). No Prisma/Next imports — unit testable with plain
-// values, same pattern as contract.ts/movement.ts.
+// Pure business logic for the Contract Renewal Case flow (DM-15, WF-10..12,
+// LIF-08..13). No Prisma/Next imports — unit testable with plain values,
+// same pattern as contract.ts/movement.ts. FR-HC-01-07 evaluation logic
+// (scores, release/submit guards) now lives in the shared src/lib/
+// evaluation.ts, reused by this flow rather than duplicated here (WF-19).
 import type { ContractRenewalCaseStatus, RenewalRecommendation, MovementType } from "@/generated/prisma/enums";
 
 export function formatRenewalCaseNumber(sequence: number, year: number): string {
@@ -17,23 +19,13 @@ export function isRenewalDue(endDate: Date | null, now: Date = new Date()): bool
   return daysRemaining <= 30;
 }
 
-export function canSendRenewalEvaluation(status: ContractRenewalCaseStatus): boolean {
-  return status === "TRIGGERED";
-}
-
-export function canSubmitRenewalEvaluation(
-  status: ContractRenewalCaseStatus,
-  alreadySubmittedAt: Date | null
-): boolean {
-  return status === "EVALUATION_SENT" && !alreadySubmittedAt;
-}
-
-export function canSubmitDeptHeadRecommendation(
-  status: ContractRenewalCaseStatus,
-  p1SubmittedAt: Date | null,
-  p2SubmittedAt: Date | null
-): boolean {
-  return status === "EVALUATION_SENT" && !!p1SubmittedAt && !!p2SubmittedAt;
+// LIF-09: the primary Department Head may recommend once the case has been
+// released for evaluation — AND only once the linked Evaluation itself
+// reaches Completed (see evaluation.ts's isEvaluationComplete, checked by
+// the caller against the linked Evaluation's own status; this case-status
+// check alone is not sufficient).
+export function canSubmitDeptHeadRecommendation(status: ContractRenewalCaseStatus): boolean {
+  return status === "EVALUATION_SENT";
 }
 
 export function canDecideRenewalCase(status: ContractRenewalCaseStatus): boolean {
@@ -73,44 +65,4 @@ export function requiresChangeReason(
   finalRecommendation: RenewalRecommendation
 ): boolean {
   return deptHeadRecommendation !== null && deptHeadRecommendation !== finalRecommendation;
-}
-
-// FR-HC-01-07's form scale — every itemized criterion is scored 2/4/6/8.
-export const RENEWAL_SCORE_SCALE = [2, 4, 6, 8] as const;
-
-export function isValidScoreValue(value: number): boolean {
-  return (RENEWAL_SCORE_SCALE as readonly number[]).includes(value);
-}
-
-// DM-26: "KPI/Productivity... When no KPI/Productivity applies, use Quality
-// Orientation, Problem Solving, Communication/Leadership, Technical
-// Expertise and Work Discipline" — mutually exclusive, so the itemized
-// scores are stored as a single JSON object with whichever branch applies
-// left populated (the other's fields stay undefined) rather than ~13
-// mostly-null Prisma columns per evaluator.
-export interface RenewalEvaluationScores {
-  kpiProductivity?: number;
-  qualityOrientation?: number;
-  problemSolving?: number;
-  communicationLeadership?: number;
-  technicalExpertise?: number;
-  workDiscipline?: number;
-  absensi?: number;
-  tugasKhusus?: number;
-  sp?: number;
-  kompetensi?: number;
-  companyValues?: number[];
-}
-
-/**
- * Total is a straight sum of every populated criterion (company values
- * counted individually) — the form's exact weighting formula isn't known
- * until the real FR-HC-01-07 DOCX is supplied (deferred per WF-12's note
- * that DOCX templates are added later); this is a documented simplification.
- */
-export function computeEvaluationTotal(scores: RenewalEvaluationScores): number {
-  const { companyValues, ...singleValues } = scores;
-  const singles = Object.values(singleValues).filter((v): v is number => typeof v === "number");
-  const values = companyValues?.filter((v) => typeof v === "number") ?? [];
-  return [...singles, ...values].reduce((sum, v) => sum + v, 0);
 }

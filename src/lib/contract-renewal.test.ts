@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   formatRenewalCaseNumber,
   isRenewalDue,
-  canSendRenewalEvaluation,
-  canSubmitRenewalEvaluation,
   canSubmitDeptHeadRecommendation,
   canDecideRenewalCase,
   requiresLinkedMovement,
@@ -11,8 +9,6 @@ import {
   recommendationDurationMonths,
   isRenewalRecommendation,
   requiresChangeReason,
-  isValidScoreValue,
-  computeEvaluationTotal,
 } from "./contract-renewal";
 
 describe("formatRenewalCaseNumber", () => {
@@ -40,21 +36,10 @@ describe("isRenewalDue (LIF-08)", () => {
 });
 
 describe("case status guards", () => {
-  it("only TRIGGERED can send evaluation", () => {
-    expect(canSendRenewalEvaluation("TRIGGERED")).toBe(true);
-    expect(canSendRenewalEvaluation("EVALUATION_SENT")).toBe(false);
-  });
-
-  it("evaluation submission requires EVALUATION_SENT and no prior submission", () => {
-    expect(canSubmitRenewalEvaluation("EVALUATION_SENT", null)).toBe(true);
-    expect(canSubmitRenewalEvaluation("EVALUATION_SENT", new Date())).toBe(false);
-    expect(canSubmitRenewalEvaluation("TRIGGERED", null)).toBe(false);
-  });
-
-  it("dept head recommendation requires both evaluations submitted", () => {
-    expect(canSubmitDeptHeadRecommendation("EVALUATION_SENT", new Date(), new Date())).toBe(true);
-    expect(canSubmitDeptHeadRecommendation("EVALUATION_SENT", new Date(), null)).toBe(false);
-    expect(canSubmitDeptHeadRecommendation("EVALUATION_SENT", null, null)).toBe(false);
+  it("dept head recommendation requires EVALUATION_SENT status (linked Evaluation completeness is checked separately via evaluation.ts)", () => {
+    expect(canSubmitDeptHeadRecommendation("EVALUATION_SENT")).toBe(true);
+    expect(canSubmitDeptHeadRecommendation("TRIGGERED")).toBe(false);
+    expect(canSubmitDeptHeadRecommendation("PENDING_HR_MANAGER")).toBe(false);
   });
 
   it("HR Manager decision only from PENDING_HR_MANAGER", () => {
@@ -103,46 +88,5 @@ describe("requiresChangeReason (WF-12)", () => {
   it("true when the HR Manager changes the recommendation", () => {
     expect(requiresChangeReason("MUTASI", "TIDAK_DIPERPANJANG")).toBe(true);
     expect(requiresChangeReason("PERPANJANG_3", "PERPANJANG_6")).toBe(true);
-  });
-});
-
-describe("isValidScoreValue (FR-HC-01-07 form scale)", () => {
-  it("accepts exactly 2/4/6/8", () => {
-    expect(isValidScoreValue(2)).toBe(true);
-    expect(isValidScoreValue(4)).toBe(true);
-    expect(isValidScoreValue(6)).toBe(true);
-    expect(isValidScoreValue(8)).toBe(true);
-  });
-
-  it("rejects anything off-scale", () => {
-    expect(isValidScoreValue(0)).toBe(false);
-    expect(isValidScoreValue(5)).toBe(false);
-    expect(isValidScoreValue(10)).toBe(false);
-  });
-});
-
-describe("computeEvaluationTotal", () => {
-  it("sums the KPI/Productivity branch", () => {
-    expect(computeEvaluationTotal({ kpiProductivity: 8, absensi: 6, tugasKhusus: 4, sp: 8, kompetensi: 6 })).toBe(32);
-  });
-
-  it("sums the 5-alternative-criteria branch when no KPI applies", () => {
-    expect(
-      computeEvaluationTotal({
-        qualityOrientation: 8,
-        problemSolving: 6,
-        communicationLeadership: 6,
-        technicalExpertise: 8,
-        workDiscipline: 4,
-      })
-    ).toBe(32);
-  });
-
-  it("includes all five company-value scores individually", () => {
-    expect(computeEvaluationTotal({ companyValues: [2, 4, 6, 8, 2] })).toBe(22);
-  });
-
-  it("is 0 for an empty scores object", () => {
-    expect(computeEvaluationTotal({})).toBe(0);
   });
 });

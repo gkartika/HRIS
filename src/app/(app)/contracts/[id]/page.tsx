@@ -8,14 +8,17 @@ import {
   canDecideContractRenewal,
   canSignContract,
   isHrAdmin,
+  canSubmitRenewalDeptHeadRecommendation,
+  canDecideContractRenewalCase,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
+import { getActiveDeptHeadPositions } from "@/lib/dept-head";
+import { resolveDepartmentId } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import {
   computeExpiryUrgency,
-  canStartContractReview,
   canSubmitContractRecommendation as canSubmitRecommendationStatus,
   canDecideContractRenewal as canDecideRenewalStatus,
   canCreateRenewalDraft,
@@ -23,8 +26,9 @@ import {
   canSignContractStatus,
   canActivateContract,
 } from "@/lib/contract";
+import { canSubmitDeptHeadRecommendation, canDecideRenewalCase, requiresLinkedMovement } from "@/lib/contract-renewal";
+import { isEvaluationComplete } from "@/lib/evaluation";
 import {
-  StartReviewButton,
   RecommendationForm,
   RenewalDecisionButtons,
   CreateRenewalDraftForm,
@@ -32,6 +36,9 @@ import {
   SignButton,
   ActivateButton,
 } from "./decision-forms";
+import { DeptHeadRecommendationForm, HrManagerDecisionButtons, GenerateContractForm } from "./renewal-decision-forms";
+import { EvaluationPanel } from "../../evaluations/evaluation-panel";
+import type { Position, Job, OrgUnit } from "@/generated/prisma/client";
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
@@ -52,6 +59,18 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       recommendationByPosition: { include: { job: true } },
       decisionByAccount: true,
       decisionPosition: { include: { job: true } },
+      renewalCaseAsCurrentContract: {
+        include: {
+          deptHeadEmployee: true,
+          deptHeadPosition: { include: { job: true } },
+          deptHeadProposedPosition: { include: { job: true } },
+          decisionByAccount: true,
+          decisionPosition: { include: { job: true } },
+          linkedMovementRequest: true,
+          generatedContract: true,
+          employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
+        },
+      },
     },
   });
   if (!contract) notFound();
@@ -73,7 +92,14 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const urgency = computeExpiryUrgency(contract.status, contract.endDate);
 
   const canManage = canManageContracts(session);
-  const canStartReview = canManage && canStartContractReview(contract.status);
+  // The old manual "Mulai Tinjauan Perpanjangan" entry point is retired —
+  // the D-30 automated Renewal Case (below) is now the one canonical
+  // renewal workflow (never two separate modules). These later-stage
+  // manual-pipeline controls are kept only so a contract already mid-flow
+  // under the old REVIEW_REQUESTED/RECOMMENDATION_SUBMITTED/
+  // APPROVED_FOR_RENEWAL states (none exist as of this change) can still be
+  // completed and displayed — non-destructive to history, not a new entry
+  // point.
   const canRecommend =
     canSubmitContractRecommendation(session, isManager) && canSubmitRecommendationStatus(contract.status);
   const canDecide =
@@ -84,6 +110,44 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const canActivate = canManage && canActivateContract(contract.status);
 
   const employees = canRecommend && isHrAdmin(session) ? await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" } }) : [];
+
+  // Contract + its D-30 Renewal Case are one module/workflow — render the
+  // whole case inline on this same page rather than a separate route.
+  const renewalCase = contract.renewalCaseAsCurrentContract;
+  let deptHeadPositions: { positionId: string; positionCode: string; jobTitle: string }[] = [];
+  let renewalPositions: (Position & { job: Job; orgUnit: OrgUnit })[] = [];
+  let canSubmitDeptHead = false;
+  let canDecideCombined = false;
+  let canGenerateContract = false;
+
+  if (renewalCase) {
+    const departmentId = renewalCase.employee.currentPosition
+      ? await resolveDepartmentId(renewalCase.employee.currentPosition.orgUnitId)
+      : null;
+    deptHeadPositions = departmentId ? await getActiveDeptHeadPositions(session.user.employeeId, departmentId) : [];
+
+    const evaluationStatus = renewalCase.evaluationId
+      ? (await prisma.evaluation.findUnique({ where: { id: renewalCase.evaluationId }, select: { status: true } }))?.status ?? "DRAFT"
+      : "DRAFT";
+
+    canSubmitDeptHead =
+      canSubmitRenewalDeptHeadRecommendation(deptHeadPositions.map((p) => p.positionId)) &&
+      canSubmitDeptHeadRecommendation(renewalCase.status) &&
+      isEvaluationComplete(evaluationStatus);
+    canDecideCombined =
+      canDecideContractRenewalCase(hrManagerPositions.map((p) => p.positionId)) && canDecideRenewalCase(renewalCase.status);
+    canGenerateContract =
+      canManage &&
+      renewalCase.status === "APPROVED" &&
+      !!renewalCase.finalRecommendation &&
+      requiresLinkedMovement(renewalCase.finalRecommendation) &&
+      renewalCase.linkedMovementRequest?.status === "IMPLEMENTED" &&
+      !renewalCase.generatedContractId;
+
+    if (canSubmitDeptHead || canDecideCombined) {
+      renewalPositions = await prisma.position.findMany({ include: { job: true, orgUnit: true }, orderBy: { positionCode: "asc" } });
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -165,12 +229,6 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
         )}
       </div>
 
-      {canStartReview && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <StartReviewButton contractId={contract.id} />
-        </div>
-      )}
-
       {canRecommend && (
         <RecommendationForm
           contractId={contract.id}
@@ -205,6 +263,110 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       {canActivate && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <ActivateButton contractId={contract.id} />
+        </div>
+      )}
+
+      {/* D-30 automated Renewal Case — same module, rendered inline. */}
+      {renewalCase && (
+        <div className="space-y-4 border-t border-slate-200 pt-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-slate-900">
+              {t("contractRenewal.caseNumber")}: <span className="font-mono">{renewalCase.caseNumber}</span>
+            </h2>
+            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+              {t(`contractRenewalCaseStatus.${renewalCase.status}`)}
+            </span>
+          </div>
+
+          {renewalCase.evaluationId && <EvaluationPanel evaluationId={renewalCase.evaluationId} linkToDetail />}
+
+          {renewalCase.deptHeadRecommendation && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <p className="text-xs text-slate-500">{t("contractRenewal.deptHeadRecommendationTitle")}</p>
+              <p className="text-sm text-slate-900">
+                {t(`renewalRecommendation.${renewalCase.deptHeadRecommendation}`)} —{" "}
+                {renewalCase.deptHeadEmployee?.preferredName ?? renewalCase.deptHeadEmployee?.fullLegalName}
+                {renewalCase.deptHeadPosition ? ` (${renewalCase.deptHeadPosition.job.jobTitle})` : ""}
+              </p>
+              {renewalCase.deptHeadProposedPosition && (
+                <p className="mt-1 text-sm text-slate-600">
+                  {t("contractRenewal.proposedPosition")}: {renewalCase.deptHeadProposedPosition.job.jobTitle} (
+                  {renewalCase.deptHeadProposedPosition.positionCode})
+                </p>
+              )}
+              {renewalCase.deptHeadNote && <p className="mt-1 text-sm text-slate-600">{renewalCase.deptHeadNote}</p>}
+            </div>
+          )}
+
+          {canSubmitDeptHead && (
+            <DeptHeadRecommendationForm
+              caseId={renewalCase.id}
+              positions={renewalPositions}
+              decisionPositions={deptHeadPositions.map((p) => ({ positionId: p.positionId, positionCode: p.positionCode, jobTitle: p.jobTitle }))}
+            />
+          )}
+
+          {renewalCase.linkedMovementRequest && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <p className="text-xs text-slate-500">{t("contractRenewal.linkedMovementTitle")}</p>
+              <Link href={`/movements/${renewalCase.linkedMovementRequest.id}`} className="font-mono text-sm text-indigo-600 hover:underline">
+                {renewalCase.linkedMovementRequest.requestNumber}
+              </Link>{" "}
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                {t(`movementStatus.${renewalCase.linkedMovementRequest.status}`)}
+              </span>
+            </div>
+          )}
+
+          {canDecideCombined && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <p className="mb-3 text-sm font-medium text-slate-900">{t("contractRenewal.hrManagerDecisionTitle")}</p>
+              <HrManagerDecisionButtons
+                caseId={renewalCase.id}
+                positions={renewalPositions}
+                decisionPositions={hrManagerPositions.map((p) => ({ positionId: p.positionId, positionCode: p.positionCode, jobTitle: p.jobTitle }))}
+                deptHeadRecommendation={renewalCase.deptHeadRecommendation}
+              />
+            </div>
+          )}
+
+          {renewalCase.decisionByAccount && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <p className="text-xs text-slate-500">{t("contractRenewal.hrManagerDecisionTitle")}</p>
+              <p className="text-sm text-slate-900">
+                {renewalCase.finalRecommendation && t(`renewalRecommendation.${renewalCase.finalRecommendation}`)} —{" "}
+                {renewalCase.decisionByAccount.usernameOrEmail} ({formatDate(renewalCase.decisionAt)})
+                {renewalCase.decisionPosition && ` (${renewalCase.decisionPosition.job.jobTitle})`}
+              </p>
+              {renewalCase.changeReason && (
+                <p className="mt-1 text-sm text-slate-600">
+                  {t("contractRenewal.changeReason")}: {renewalCase.changeReason}
+                </p>
+              )}
+              {renewalCase.decisionNote && <p className="mt-1 text-sm text-slate-600">{renewalCase.decisionNote}</p>}
+            </div>
+          )}
+
+          {renewalCase.status === "APPROVED" &&
+            renewalCase.finalRecommendation &&
+            requiresLinkedMovement(renewalCase.finalRecommendation) &&
+            !renewalCase.generatedContractId &&
+            renewalCase.linkedMovementRequest?.status !== "IMPLEMENTED" && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                {t("contractRenewal.generateContractButtonBlocked")}
+              </p>
+            )}
+
+          {canGenerateContract && <GenerateContractForm caseId={renewalCase.id} />}
+
+          {renewalCase.generatedContract && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <p className="text-xs text-slate-500">{t("contractRenewal.generatedContract")}</p>
+              <Link href={`/contracts/${renewalCase.generatedContract.id}`} className="font-mono text-sm text-indigo-600 hover:underline">
+                {renewalCase.generatedContract.contractNumber}
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

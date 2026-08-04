@@ -17,22 +17,23 @@ export default async function ApprovalsPage() {
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
   const employeeId = session.user.employeeId ?? "__none__";
 
-  // Contract Renewal Case (DM-15/WF-10..12): any employee-linked account may
-  // be assigned as a P1/P2 evaluator regardless of whether they hold an HR
-  // Manager or Dept Head position, so this inbox's own gate below is widened
-  // to also admit "I have a pending evaluation assigned to me" — otherwise a
-  // plain evaluator would have no notification surface at all (this app has
-  // no email channel; see DSH-10).
-  const pendingOwnEvaluations = await prisma.contractRenewalCase.findMany({
+  // Shared Evaluation (DM-26/27, WF-19, ACC-17): any employee-linked account
+  // may be assigned as a P1/P2 evaluator on any evaluation source (Contract
+  // Renewal, Perubahan Posisi or Manual HR) regardless of whether they hold
+  // an HR Manager or Dept Head position, so this inbox's own gate below is
+  // widened to also admit "I have a pending evaluation assigned to me" —
+  // otherwise a plain evaluator would have no notification surface at all
+  // (this app has no email channel; see DSH-10).
+  const pendingOwnEvaluations = await prisma.evaluation.findMany({
     where: {
-      status: "EVALUATION_SENT",
+      status: "RELEASED",
       OR: [
         { p1EmployeeId: employeeId, p1SubmittedAt: null },
         { p2EmployeeId: employeeId, p2SubmittedAt: null },
       ],
     },
     include: { employee: true },
-    orderBy: { sentAt: "asc" },
+    orderBy: { releasedAt: "asc" },
   });
 
   if (hrManagerPositions.length === 0 && deptHeadDepartmentIds.length === 0 && pendingOwnEvaluations.length === 0) {
@@ -87,23 +88,22 @@ export default async function ApprovalsPage() {
           orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
-    // Dept Head's own renewal recommendation queue: both evaluations in,
-    // scoped to this viewer's department(s) the same way the Movement
-    // dept-head queue above is (currentPositionId isn't on
-    // ContractRenewalCase directly — derived from snapshotPositionId's
-    // orgUnit, itself or its Section-tier parent).
+    // Dept Head's own renewal recommendation queue: linked Evaluation must be
+    // Completed (WF-17/ACC-16), scoped to this viewer's department(s) the
+    // same way the Movement dept-head queue above is (currentPositionId
+    // isn't on ContractRenewalCase directly — derived from
+    // snapshotPositionId's orgUnit, itself or its Section-tier parent).
     deptHeadDepartmentIds.length > 0
       ? prisma.contractRenewalCase.findMany({
           where: {
             status: "EVALUATION_SENT",
-            p1SubmittedAt: { not: null },
-            p2SubmittedAt: { not: null },
+            evaluation: { status: "COMPLETED" },
             snapshotPosition: {
               orgUnit: { OR: [{ id: { in: deptHeadDepartmentIds } }, { parentUnitId: { in: deptHeadDepartmentIds } }] },
             },
           },
           include: { employee: true },
-          orderBy: { sentAt: "asc" },
+          orderBy: { createdAt: "asc" },
         })
       : Promise.resolve([]),
     // HR Manager's combined-decision queue (ACC-16/DEC-019).
@@ -287,27 +287,27 @@ export default async function ApprovalsPage() {
 
       {pendingOwnEvaluations.length > 0 && (
         <div>
-          <h2 className="mb-2 text-sm font-medium text-slate-700">{t("contractRenewal.navLabel")} — {t("contractRenewal.p1Label")}/{t("contractRenewal.p2Label")}</h2>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">{t("evaluation.navLabel")} — {t("evaluation.p1Label")}/{t("evaluation.p2Label")}</h2>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">{t("contractRenewal.caseNumber")}</th>
+                  <th className="px-4 py-3 font-medium">{t("evaluation.evaluationNumber")}</th>
                   <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
-                  <th className="px-4 py-3 font-medium">{t("contractRenewal.evaluationDueDate")}</th>
+                  <th className="px-4 py-3 font-medium">{t("evaluation.dueDate")}</th>
                 </tr>
               </thead>
               <tbody>
-                {pendingOwnEvaluations.map((c) => (
-                  <tr key={c.id} className="border-t border-slate-100">
+                {pendingOwnEvaluations.map((e) => (
+                  <tr key={e.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">
-                      <Link href={`/contract-renewals/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
-                        {c.caseNumber}
+                      <Link href={`/evaluations/${e.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                        {e.evaluationNumber}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                    <td className="px-4 py-3 text-slate-600">{e.employee.preferredName ?? e.employee.fullLegalName}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      {c.evaluationDueDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(c.evaluationDueDate) : "—"}
+                      {e.evaluationDueDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(e.evaluationDueDate) : "—"}
                     </td>
                   </tr>
                 ))}
@@ -337,7 +337,7 @@ export default async function ApprovalsPage() {
                   {pendingDeptHeadRenewals.map((c) => (
                     <tr key={c.id} className="border-t border-slate-100">
                       <td className="px-4 py-3">
-                        <Link href={`/contract-renewals/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                        <Link href={`/contracts/${c.currentContractId}`} className="font-mono text-xs text-indigo-600 hover:underline">
                           {c.caseNumber}
                         </Link>
                       </td>
@@ -369,7 +369,7 @@ export default async function ApprovalsPage() {
                   {pendingHrManagerRenewals.map((c) => (
                     <tr key={c.id} className="border-t border-slate-100">
                       <td className="px-4 py-3">
-                        <Link href={`/contract-renewals/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                        <Link href={`/contracts/${c.currentContractId}`} className="font-mono text-xs text-indigo-600 hover:underline">
                           {c.caseNumber}
                         </Link>
                       </td>

@@ -2,14 +2,12 @@
 
 import { useActionState, useState } from "react";
 import {
-  sendRenewalEvaluation,
-  submitRenewalEvaluation,
   submitDeptHeadRecommendation,
   decideRenewalCase,
   createRenewalContractAfterMovementExecuted,
-} from "../actions";
+} from "../renewal-actions";
 import { t } from "@/lib/i18n/id";
-import type { Employee, Position, Job, OrgUnit } from "@/generated/prisma/client";
+import type { Position, Job, OrgUnit } from "@/generated/prisma/client";
 import type { RenewalRecommendation } from "@/generated/prisma/enums";
 
 type PositionOption = Position & { job: Job; orgUnit: OrgUnit };
@@ -20,7 +18,6 @@ export interface DecisionPositionOption {
   jobTitle: string;
 }
 
-const SCORE_OPTIONS = [2, 4, 6, 8] as const;
 const RECOMMENDATIONS: RenewalRecommendation[] = [
   "PERPANJANG_3",
   "PERPANJANG_6",
@@ -32,22 +29,6 @@ const RECOMMENDATIONS: RenewalRecommendation[] = [
 
 function requiresPosition(rec: RenewalRecommendation | ""): boolean {
   return rec === "MUTASI" || rec === "DEMOSI";
-}
-
-function ScoreField({ name, label }: { name: string; label: string }) {
-  return (
-    <div>
-      <label className="mb-1 block text-xs text-slate-500">{label}</label>
-      <select name={name} required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-        <option value="">— Pilih —</option>
-        {SCORE_OPTIONS.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
 }
 
 function DecisionPositionField({ positions }: { positions: DecisionPositionOption[] }) {
@@ -66,115 +47,6 @@ function DecisionPositionField({ positions }: { positions: DecisionPositionOptio
         ))}
       </select>
     </div>
-  );
-}
-
-export function SendEvaluationForm({ caseId, employees }: { caseId: string; employees: Employee[] }) {
-  const action = sendRenewalEvaluation.bind(null, caseId);
-  const [error, formAction, isPending] = useActionState(action, undefined);
-
-  return (
-    <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
-      <p className="text-sm font-medium text-slate-900">{t("contractRenewal.sendEvaluationTitle")}</p>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("contractRenewal.p1Label")}</label>
-          <select name="p1EmployeeId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">— Pilih Karyawan —</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("contractRenewal.p2Label")}</label>
-          <select name="p2EmployeeId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">— Pilih Karyawan —</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("contractRenewal.attendanceSakit")}</label>
-          <input name="attendanceSakit" type="number" min={0} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("contractRenewal.attendanceIjin")}</label>
-          <input name="attendanceIjin" type="number" min={0} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("contractRenewal.attendanceAlpha")}</label>
-          <input name="attendanceAlpha" type="number" min={0} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("contractRenewal.attendanceIjinHalfDay")}</label>
-          <input name="attendanceIjinHalfDay" type="number" min={0} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-        </div>
-      </div>
-      {error && <p className="text-xs text-rose-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-      >
-        {isPending ? t("common.loading") : t("contractRenewal.sendEvaluationButton")}
-      </button>
-    </form>
-  );
-}
-
-export function EvaluationForm({ caseId, slot }: { caseId: string; slot: "P1" | "P2" }) {
-  const action = submitRenewalEvaluation.bind(null, caseId, slot);
-  const [error, formAction, isPending] = useActionState(action, undefined);
-  const [useKpi, setUseKpi] = useState(false);
-
-  return (
-    <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
-      <p className="text-sm font-medium text-slate-900">
-        {t(slot === "P1" ? "contractRenewal.p1EvaluationTitle" : "contractRenewal.p2EvaluationTitle")}
-      </p>
-      <label className="flex items-center gap-2 text-xs text-slate-600">
-        <input type="checkbox" name="useKpi" checked={useKpi} onChange={(e) => setUseKpi(e.target.checked)} />
-        {t("contractRenewal.useKpiLabel")}
-      </label>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {useKpi ? (
-          <ScoreField name="kpiProductivity" label={t("contractRenewal.kpiProductivity")} />
-        ) : (
-          <>
-            <ScoreField name="qualityOrientation" label={t("contractRenewal.qualityOrientation")} />
-            <ScoreField name="problemSolving" label={t("contractRenewal.problemSolving")} />
-            <ScoreField name="communicationLeadership" label={t("contractRenewal.communicationLeadership")} />
-            <ScoreField name="technicalExpertise" label={t("contractRenewal.technicalExpertise")} />
-            <ScoreField name="workDiscipline" label={t("contractRenewal.workDiscipline")} />
-          </>
-        )}
-        <ScoreField name="absensi" label={t("contractRenewal.absensi")} />
-        <ScoreField name="tugasKhusus" label={t("contractRenewal.tugasKhusus")} />
-        <ScoreField name="sp" label={t("contractRenewal.sp")} />
-        <ScoreField name="kompetensi" label={t("contractRenewal.kompetensi")} />
-        <ScoreField name="companyValue1" label={t("contractRenewal.companyValue1")} />
-        <ScoreField name="companyValue2" label={t("contractRenewal.companyValue2")} />
-        <ScoreField name="companyValue3" label={t("contractRenewal.companyValue3")} />
-        <ScoreField name="companyValue4" label={t("contractRenewal.companyValue4")} />
-        <ScoreField name="companyValue5" label={t("contractRenewal.companyValue5")} />
-      </div>
-
-      {error && <p className="text-xs text-rose-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-      >
-        {isPending ? t("common.loading") : t("contractRenewal.submitEvaluationButton")}
-      </button>
-    </form>
   );
 }
 

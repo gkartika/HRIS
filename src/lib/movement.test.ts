@@ -7,7 +7,6 @@ import {
   requiresProposedEmploymentStatus,
   validateProposedPosition,
   isPerubahanPosisiType,
-  requiresPerformanceEvaluation,
   compareJobLevels,
   validateJobLevelDirection,
 } from "./movement";
@@ -87,16 +86,6 @@ describe("isPerubahanPosisiType (Perubahan Posisi refactor)", () => {
   it("excludes the legacy Rotasi and Perubahan Status types", () => {
     expect(isPerubahanPosisiType("ROTATION")).toBe(false);
     expect(isPerubahanPosisiType("STATUS_CHANGE")).toBe(false);
-  });
-});
-
-describe("requiresPerformanceEvaluation", () => {
-  it("is true only for Promosi", () => {
-    expect(requiresPerformanceEvaluation("PROMOTION")).toBe(true);
-    expect(requiresPerformanceEvaluation("MUTATION")).toBe(false);
-    expect(requiresPerformanceEvaluation("DEMOTION")).toBe(false);
-    expect(requiresPerformanceEvaluation("ROTATION")).toBe(false);
-    expect(requiresPerformanceEvaluation("STATUS_CHANGE")).toBe(false);
   });
 });
 

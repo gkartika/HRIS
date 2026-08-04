@@ -18,6 +18,7 @@ import {
   canCancelMovementRequestStatus,
   isPerubahanPosisiType,
 } from "@/lib/movement";
+import { isEvaluationGateSatisfied } from "@/lib/evaluation";
 import {
   MovementDecisionButtons,
   DeptHeadDecisionButtons,
@@ -25,6 +26,7 @@ import {
   CancelMovementForm,
   MovementHrFieldsForm,
 } from "./decision-forms";
+import { EvaluationPanel } from "../../evaluations/evaluation-panel";
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
@@ -52,6 +54,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
       implementedAssignment: true,
       cancelledByAccount: true,
       cancelledByEmployee: true,
+      evaluation: { select: { status: true } },
     },
   });
   if (!request) notFound();
@@ -80,14 +83,27 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
   const canSeeConfidential = isHrAdminUser || isHrManagerNow || isDeptHeadNow;
   const isLegacyType = !isPerubahanPosisiType(request.movementType);
 
+  // WF-17/ACC-16: Dept Head and HR Manager completion is blocked until the
+  // linked Evaluation (auto-created on submission for Promosi/Mutasi/Demosi)
+  // reaches Completed — same gate the shared evaluations/actions.ts already
+  // enforces server-side; mirrored here so the button doesn't appear only to
+  // fail, matching the Contract Renewal detail page's pattern.
+  const evaluationGateSatisfied = isEvaluationGateSatisfied(request.evaluation?.status ?? null);
   const canDecide =
     !isLegacyType &&
     canApproveMovementRequest(activeHrManagerPositionIds) &&
-    canDecideMovementRequestStatus(request.status);
+    canDecideMovementRequestStatus(request.status) &&
+    evaluationGateSatisfied;
   const canDecideAsDeptHead =
     !isLegacyType &&
     canApproveMovementRequestAsDeptHead(activeDeptHeadPositionIds) &&
-    request.status === "PENDING_DEPT_HEAD";
+    request.status === "PENDING_DEPT_HEAD" &&
+    evaluationGateSatisfied;
+  const decisionBlockedByEvaluation =
+    !isLegacyType &&
+    !evaluationGateSatisfied &&
+    (request.status === "PENDING_DEPT_HEAD" || request.status === "SUBMITTED") &&
+    (canApproveMovementRequestAsDeptHead(activeDeptHeadPositionIds) || canApproveMovementRequest(activeHrManagerPositionIds));
   const canExecute =
     !isLegacyType && canExecuteMovementRequest(session) && canExecuteMovementRequestStatus(request.status);
   const canCancel =
@@ -174,7 +190,17 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
             <p className="text-sm text-slate-900">{request.performanceEvaluationRef}</p>
           </div>
         )}
+      </div>
 
+      {request.evaluationId && <EvaluationPanel evaluationId={request.evaluationId} linkToDetail />}
+
+      {decisionBlockedByEvaluation && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          {t("evaluation.completionRequiredNotice")}
+        </p>
+      )}
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
         {canSeeConfidential && (
           <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
             <p className="mb-2 text-xs font-medium text-slate-600">{t("movement.hrOnlySectionTitle")}</p>

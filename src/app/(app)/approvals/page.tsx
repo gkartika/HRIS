@@ -47,6 +47,7 @@ export default async function ApprovalsPage() {
     pendingDeptHeadMovements,
     pendingDeptHeadRenewals,
     pendingHrManagerRenewals,
+    pendingHrManagerOffboarding,
   ] = await Promise.all([
     // HR-Manager-only queues (WF-15: only the active HR Manager Position may
     // approve/reject/return) — must not be fetched at all for a viewer who
@@ -112,6 +113,14 @@ export default async function ApprovalsPage() {
           where: { status: "PENDING_HR_MANAGER" },
           include: { employee: true },
           orderBy: { deptHeadRecommendedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // LIF-06: HR Manager's offboarding decision queue.
+    hrManagerPositions.length > 0
+      ? prisma.offboardingCase.findMany({
+          where: { status: "PENDING_HR_MANAGER" },
+          include: { employee: true },
+          orderBy: { reportedAt: "asc" },
         })
       : Promise.resolve([]),
   ]);
@@ -374,6 +383,40 @@ export default async function ApprovalsPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hrManagerPositions.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">{t("offboarding.navLabel")}</h2>
+          {pendingHrManagerOffboarding.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">{t("offboarding.caseNumber")}</th>
+                    <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                    <th className="px-4 py-3 font-medium">{t("offboarding.reason")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingHrManagerOffboarding.map((c) => (
+                    <tr key={c.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/offboarding/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {c.caseNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{t(`offboardingReason.${c.reason}`)}</td>
                     </tr>
                   ))}
                 </tbody>

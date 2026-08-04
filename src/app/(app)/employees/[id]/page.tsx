@@ -13,8 +13,10 @@ import {
   canSubmitMovementRequest,
   canViewContract,
   canManageContracts,
+  canReportResignation,
 } from "@/lib/permissions";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
+import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { EmployeeProfileView } from "@/components/employee-profile-view";
@@ -76,6 +78,8 @@ export default async function EmployeeDetailPage({
   const isLevel3InDepartment = await isLevel3ForEmployeeDepartment(session.user.employeeId, employee.id);
   const canSubmitMovement =
     !!employee.currentPositionId && canSubmitMovementRequest(session, isLevel3InDepartment);
+  const isEmployeesManager = await isDirectManagerOfEmployee(session.user.employeeId, employee.id);
+  const canReportThisResignation = canReportResignation(session, isEmployeesManager);
 
   // noKk/namaIbuKandung/ptkpStatusCode are already stripped by projectEmployee
   // for roles that shouldn't see them. educationLevel isn't in that restricted
@@ -114,7 +118,7 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="space-y-6">
-      {(canEdit || canSubmitMovement) && (
+      {(canEdit || canSubmitMovement || canReportThisResignation) && (
         <div className="flex justify-end gap-4">
           {canSubmitMovement && (
             <Link
@@ -122,6 +126,14 @@ export default async function EmployeeDetailPage({
               className="text-sm text-indigo-600 hover:underline"
             >
               {t("movement.newRequest")}
+            </Link>
+          )}
+          {canReportThisResignation && (
+            <Link
+              href={`/offboarding/new?employeeId=${employee.id}`}
+              className="text-sm text-indigo-600 hover:underline"
+            >
+              {t("offboarding.reportButton")}
             </Link>
           )}
           {canEdit && (

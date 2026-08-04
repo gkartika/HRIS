@@ -36,7 +36,12 @@ import {
   SignButton,
   ActivateButton,
 } from "./decision-forms";
-import { DeptHeadRecommendationForm, HrManagerDecisionButtons, GenerateContractForm } from "./renewal-decision-forms";
+import {
+  DeptHeadRecommendationForm,
+  HrManagerDecisionButtons,
+  GenerateContractForm,
+  CreateOffboardingHandoffForm,
+} from "./renewal-decision-forms";
 import { EvaluationPanel } from "../../evaluations/evaluation-panel";
 import type { Position, Job, OrgUnit } from "@/generated/prisma/client";
 
@@ -68,6 +73,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
           decisionPosition: { include: { job: true } },
           linkedMovementRequest: true,
           generatedContract: true,
+          offboardingCase: true,
           employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
         },
       },
@@ -77,13 +83,23 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   const isManager = await isDirectManagerOfEmployee(session.user.employeeId, contract.employeeId);
+  // Resolved once, up front, so both the view gate below and the D-30 case
+  // section further down (which needs the exact same department/Dept-Head
+  // lookup) share one computation instead of duplicating it.
+  const contractDepartmentId = contract.employee.currentPosition
+    ? await resolveDepartmentId(contract.employee.currentPosition.orgUnitId)
+    : null;
+  const deptHeadPositions = contractDepartmentId
+    ? await getActiveDeptHeadPositions(session.user.employeeId, contractDepartmentId)
+    : [];
 
   if (
     !canViewContractDetail(
       session,
       contract.employeeId,
       hrManagerPositions.map((p) => p.positionId),
-      isManager
+      isManager,
+      deptHeadPositions.map((p) => p.positionId)
     )
   ) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
@@ -114,18 +130,16 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   // Contract + its D-30 Renewal Case are one module/workflow — render the
   // whole case inline on this same page rather than a separate route.
   const renewalCase = contract.renewalCaseAsCurrentContract;
-  let deptHeadPositions: { positionId: string; positionCode: string; jobTitle: string }[] = [];
   let renewalPositions: (Position & { job: Job; orgUnit: OrgUnit })[] = [];
   let canSubmitDeptHead = false;
   let canDecideCombined = false;
   let canGenerateContract = false;
+  let canCreateOffboardingHandoff = false;
 
   if (renewalCase) {
-    const departmentId = renewalCase.employee.currentPosition
-      ? await resolveDepartmentId(renewalCase.employee.currentPosition.orgUnitId)
-      : null;
-    deptHeadPositions = departmentId ? await getActiveDeptHeadPositions(session.user.employeeId, departmentId) : [];
-
+    // renewalCase.employeeId === contract.employeeId always (the case is
+    // for this same contract's employee) — deptHeadPositions was already
+    // resolved for this exact department above, for the view gate.
     const evaluationStatus = renewalCase.evaluationId
       ? (await prisma.evaluation.findUnique({ where: { id: renewalCase.evaluationId }, select: { status: true } }))?.status ?? "DRAFT"
       : "DRAFT";
@@ -143,6 +157,11 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       requiresLinkedMovement(renewalCase.finalRecommendation) &&
       renewalCase.linkedMovementRequest?.status === "IMPLEMENTED" &&
       !renewalCase.generatedContractId;
+    canCreateOffboardingHandoff =
+      canManage &&
+      renewalCase.status === "APPROVED" &&
+      renewalCase.finalRecommendation === "TIDAK_DIPERPANJANG" &&
+      !renewalCase.offboardingCase;
 
     if (canSubmitDeptHead || canDecideCombined) {
       renewalPositions = await prisma.position.findMany({ include: { job: true, orgUnit: true }, orderBy: { positionCode: "asc" } });
@@ -365,6 +384,20 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
               <Link href={`/contracts/${renewalCase.generatedContract.id}`} className="font-mono text-sm text-indigo-600 hover:underline">
                 {renewalCase.generatedContract.contractNumber}
               </Link>
+            </div>
+          )}
+
+          {canCreateOffboardingHandoff && <CreateOffboardingHandoffForm caseId={renewalCase.id} />}
+
+          {renewalCase.offboardingCase && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <p className="text-xs text-slate-500">{t("offboarding.linkedCase")}</p>
+              <Link href={`/offboarding/${renewalCase.offboardingCase.id}`} className="font-mono text-sm text-indigo-600 hover:underline">
+                {renewalCase.offboardingCase.caseNumber}
+              </Link>{" "}
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                {t(`offboardingCaseStatus.${renewalCase.offboardingCase.status}`)}
+              </span>
             </div>
           )}
         </div>

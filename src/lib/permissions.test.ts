@@ -26,6 +26,11 @@ import {
   canSignContract,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
+  canReportResignation,
+  canDecideOffboardingCase,
+  canExecuteExitClearance,
+  canCancelOffboardingCase,
+  canViewOffboardingCase,
   projectEmployee,
 } from "./permissions";
 
@@ -340,5 +345,63 @@ describe("projectEmployee field-level scope (ACC-10 / DM-17 sensitivity)", () =>
     expect(result.noKk).toBeUndefined();
     expect(result.namaIbuKandung).toBeUndefined();
     expect(result.ptkpStatusCode).toBeUndefined();
+  });
+});
+
+describe("canReportResignation (LIF-06)", () => {
+  it("allows the employee's direct manager or HR Admin", () => {
+    expect(canReportResignation(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
+    expect(canReportResignation(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(true);
+  });
+
+  it("denies anyone else", () => {
+    expect(canReportResignation(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
+  });
+});
+
+describe("canDecideOffboardingCase", () => {
+  it("only an active HR Manager Position holder", () => {
+    expect(canDecideOffboardingCase(["pos-hr-manager"])).toBe(true);
+    expect(canDecideOffboardingCase([])).toBe(false);
+  });
+});
+
+describe("canExecuteExitClearance (LIF-06)", () => {
+  it("HR Admin only", () => {
+    expect(canExecuteExitClearance(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canExecuteExitClearance(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
+  });
+});
+
+describe("canCancelOffboardingCase", () => {
+  it("allows the reporter (matching Account id), an active HR Manager, or HR Admin", () => {
+    expect(canCancelOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "account-1", [])).toBe(true);
+    expect(canCancelOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "someone-else", ["pos-hr-manager"])).toBe(
+      true
+    );
+    expect(canCancelOffboardingCase(mockSession({ roles: ["HR_ADMIN"] }), "someone-else", [])).toBe(true);
+  });
+
+  it("denies a bystander", () => {
+    expect(canCancelOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "someone-else", [])).toBe(false);
+  });
+});
+
+describe("canViewOffboardingCase", () => {
+  it("allows HR Admin, an active HR Manager, the subject employee, or their direct manager", () => {
+    expect(canViewOffboardingCase(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", [], false)).toBe(true);
+    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", ["pos-hr-manager"], false)).toBe(
+      true
+    );
+    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1", [], false)).toBe(
+      true
+    );
+    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", [], true)).toBe(true);
+  });
+
+  it("denies a bystander", () => {
+    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", [], false)).toBe(
+      false
+    );
   });
 });

@@ -100,7 +100,10 @@ export async function releaseEvaluation(
   const session = await requireSession();
   if (!canReleaseEvaluation(session)) return "Anda tidak memiliki akses.";
 
-  const evaluation = await prisma.evaluation.findUnique({ where: { id: evaluationId } });
+  const evaluation = await prisma.evaluation.findUnique({
+    where: { id: evaluationId },
+    include: { contractRenewalCase: true },
+  });
   if (!evaluation) return "Evaluasi tidak ditemukan.";
   if (!canReleaseEvaluationStatus(evaluation.status)) return "Evaluasi ini sudah diproses.";
 
@@ -141,6 +144,19 @@ export async function releaseEvaluation(
       p2PositionId: p2.currentPositionId,
     },
   });
+
+  // WF-10: "Upcoming Expiry (D-30) > HR Admin Review > Evaluation Sent" —
+  // the Contract Renewal Case's own status is a separate field from the
+  // shared Evaluation's, so releasing the Evaluation doesn't automatically
+  // move it; do so explicitly here, the one place every source's "release"
+  // click passes through. Only TRIGGERED ever needs to move (a case starts
+  // there and only this transition ever occurs).
+  if (evaluation.contractRenewalCase?.status === "TRIGGERED") {
+    await prisma.contractRenewalCase.update({
+      where: { id: evaluation.contractRenewalCase.id },
+      data: { status: "EVALUATION_SENT" },
+    });
+  }
 
   await logAudit({
     actorAccountId: session.user.id,

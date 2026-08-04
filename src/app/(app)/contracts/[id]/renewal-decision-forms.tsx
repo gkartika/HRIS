@@ -5,6 +5,7 @@ import {
   submitDeptHeadRecommendation,
   decideRenewalCase,
   createRenewalContractAfterMovementExecuted,
+  createOffboardingHandoff,
 } from "../renewal-actions";
 import { t } from "@/lib/i18n/id";
 import type { Position, Job, OrgUnit } from "@/generated/prisma/client";
@@ -285,5 +286,31 @@ export function GenerateContractForm({ caseId }: { caseId: string }) {
         {isPending ? t("common.loading") : t("contractRenewal.generateContractButton")}
       </button>
     </form>
+  );
+}
+
+export function CreateOffboardingHandoffForm({ caseId }: { caseId: string }) {
+  const [error, setError] = useState<string | undefined>();
+  const [isPending, setIsPending] = useState(false);
+
+  const handleClick = async () => {
+    setIsPending(true);
+    const result = await createOffboardingHandoff(caseId);
+    setIsPending(false);
+    setError(result);
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <p className="mb-3 text-sm font-medium text-slate-900">{t("offboarding.handoffTitle")}</p>
+      {error && <p className="mb-2 text-xs text-rose-600">{error}</p>}
+      <button
+        onClick={handleClick}
+        disabled={isPending}
+        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+      >
+        {isPending ? t("common.loading") : t("offboarding.handoffButton")}
+      </button>
+    </div>
   );
 }

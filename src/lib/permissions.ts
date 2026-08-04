@@ -196,17 +196,30 @@ export function canViewContract(session: Session, employeeId: string): boolean {
 }
 
 // The contract *detail* page also needs to be reachable by whoever must act
-// on it mid-workflow — the employee's direct manager (to submit the
-// Department Manager recommendation) and the active HR Manager (to decide
-// Renew/Not Renew) — neither of whom is "self" or HR Admin. Missing this
-// widening would silently lock both of them out of a page they need to use.
+// on it mid-workflow — the employee's direct manager (to submit the old
+// manual Department Manager recommendation), the active HR Manager (to
+// decide Renew/Not Renew), and an active Dept Head 3B for the employee's
+// own department (to submit the D-30 Renewal Case's own recommendation) —
+// none of whom is "self" or HR Admin. The Dept Head widening matters even
+// when nobody is that employee's literal isDirectManagerOfEmployee — e.g.
+// the Dept Head's *own* renewal case has no one reporting to them directly,
+// but another active 3B holder in the same department must still reach
+// this page to decide it. Missing any of these would silently lock that
+// person out of a page they need to use (same class of bug as
+// recruitment/[id]/page.tsx's original isHrManagerNow gap).
 export function canViewContractDetail(
   session: Session,
   employeeId: string,
   activeHrManagerPositionIds: string[],
-  isEmployeesManager: boolean
+  isEmployeesManager: boolean,
+  activeDeptHeadPositionIds: string[] = []
 ): boolean {
-  return canViewContract(session, employeeId) || isHrManager(activeHrManagerPositionIds) || isEmployeesManager;
+  return (
+    canViewContract(session, employeeId) ||
+    isHrManager(activeHrManagerPositionIds) ||
+    isEmployeesManager ||
+    isDeptHeadApprover(activeDeptHeadPositionIds)
+  );
 }
 
 // Contracts' Primary Owner is People & Payroll Admin throughout — creating
@@ -318,6 +331,59 @@ export function canViewEvaluation(
     canSubmitEvaluationAs(actingEmployeeId, p2EmployeeId) ||
     isDeptHeadApprover(activeDeptHeadPositionIds) ||
     isHrManager(activeHrManagerPositionIds)
+  );
+}
+
+// ---------- Offboarding (LIF-06/07/12, WF-10, GA-05, DSH-08/09/14) ----------
+
+// LIF-06: "manager input when required" — the employee's own direct
+// manager (resolved live via manager-scope.ts, same pattern as
+// canSubmitContractRecommendation) reports a resignation, or HR Admin does
+// on their behalf with the same administrative latitude used elsewhere.
+export function canReportResignation(session: Session, isEmployeesManager: boolean): boolean {
+  return isHrAdmin(session) || isEmployeesManager;
+}
+
+// LIF-06: "HR Manager decision/oversight" — same Position-derived-only
+// authority as every other HR Manager decision in this app.
+export function canDecideOffboardingCase(activeHrManagerPositionIds: string[]): boolean {
+  return isHrManager(activeHrManagerPositionIds);
+}
+
+// LIF-06: "HR Admin exit-clearance execution > Account Disable" — Primary
+// Owner is People & Payroll Admin, same latitude as canManageContracts.
+export function canExecuteExitClearance(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// Same DM-25-style exception as Recruitment/Movement/Contract cancellation:
+// whoever reported the case, an active HR Manager, or HR Admin may cancel
+// an eligible (not yet Completed/Cancelled) Offboarding Case.
+export function canCancelOffboardingCase(
+  session: Session,
+  reportedByAccountId: string | null,
+  activeHrManagerPositionIds: string[]
+): boolean {
+  const isReporter = !!reportedByAccountId && session.user.id === reportedByAccountId;
+  return isReporter || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
+}
+
+// Visibility for the case detail/list: HR Admin, an active HR Manager, the
+// subject employee themself, or their direct manager (isEmployeesManager,
+// same resolver as canReportResignation) — no separate ACC-xx entry exists
+// for this, so scoped the same broad-but-self-or-decision-relevant way as
+// canViewContractDetail.
+export function canViewOffboardingCase(
+  session: Session,
+  employeeId: string,
+  activeHrManagerPositionIds: string[],
+  isEmployeesManager: boolean
+): boolean {
+  return (
+    isHrAdmin(session) ||
+    session.user.employeeId === employeeId ||
+    isHrManager(activeHrManagerPositionIds) ||
+    isEmployeesManager
   );
 }
 

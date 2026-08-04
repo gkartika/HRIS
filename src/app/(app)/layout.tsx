@@ -14,6 +14,7 @@ import {
   ArrowLeftRight,
   ClipboardCheck,
   FileSignature,
+  UserMinus,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -119,6 +120,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   if (session.user.employeeId) {
     navItems.push({ href: "/my-evaluations", label: t("evaluation.myEvaluationsTitle"), icon: FileSignature });
+  }
+  // LIF-06/DSH-14: same broad list-nav visibility as Contract/Movement —
+  // HR Admin (full operational access) or any employee-linked account (who
+  // may need to report a direct report's resignation, or view their own
+  // case), scoped further on the list page itself.
+  if (isHrAdmin(session) || session.user.employeeId) {
+    navItems.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: UserMinus });
   }
   // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
   // Admin operational nav below, and only visible while the login currently

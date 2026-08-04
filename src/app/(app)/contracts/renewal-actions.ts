@@ -18,6 +18,7 @@ import { createRenewalDraftContract } from "@/lib/contract-mutations";
 import { formatMovementRequestNumber, validateProposedPosition, validateJobLevelDirection } from "@/lib/movement";
 import { isEvaluationComplete } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/app/(app)/evaluations/actions";
+import { createOffboardingCaseInternal } from "@/app/(app)/offboarding/actions";
 import {
   formatRenewalCaseNumber,
   isRenewalDue,
@@ -530,4 +531,40 @@ export async function createRenewalContractAfterMovementExecuted(
 
   revalidatePath(`/contracts/${renewalCase.currentContractId}`);
   revalidatePath(`/contracts/${drafted.id}`);
+}
+
+// LIF-12: "An approved non-renewal decision... HR Admin then creates the
+// contract-end separation process without re-entering Employee data and
+// manages exit clearance. No new contract is generated." The Dept-Head/
+// HR-Manager rationale already lives on this case's own combined decision
+// (decisionNote/changeReason) — createOffboardingCaseInternal starts the
+// case directly at PENDING_CLEARANCE, skipping a second HR Manager
+// decision on the same outcome. The unique sourceRenewalCaseId FK is the
+// idempotency guard (same pattern as the D-30 trigger's own unique
+// constraint) — a second click simply returns the already-created case.
+export async function createOffboardingHandoff(caseId: string): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+
+  const renewalCase = await prisma.contractRenewalCase.findUnique({
+    where: { id: caseId },
+    include: { currentContract: true, offboardingCase: true },
+  });
+  if (!renewalCase) return "Kasus tidak ditemukan.";
+  if (renewalCase.status !== "APPROVED" || renewalCase.finalRecommendation !== "TIDAK_DIPERPANJANG") {
+    return "Kasus ini bukan keputusan Tidak Diperpanjang yang disetujui.";
+  }
+  if (renewalCase.offboardingCase) return "Proses Offboarding untuk kasus ini sudah dibuat.";
+  if (!renewalCase.currentContract.endDate) return "Kontrak ini tidak memiliki Tanggal Berakhir.";
+
+  await createOffboardingCaseInternal({
+    employeeId: renewalCase.employeeId,
+    reason: "CONTRACT_NON_RENEWAL",
+    lastWorkingDay: renewalCase.currentContract.endDate,
+    reportedByAccountId: session.user.id,
+    sourceRenewalCaseId: renewalCase.id,
+  });
+
+  revalidatePath(`/contracts/${renewalCase.currentContractId}`);
+  revalidatePath("/offboarding");
 }

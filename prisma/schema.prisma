@@ -25,11 +25,16 @@
 //   Department-Manager-recommends -> HR-Manager-decides states; an
 //   approved renewal creates a NEW Contract row that moves through
 //   Draft -> Released -> Signed -> Active while the old one ends).
+// - Shared Evaluation (DM-26/27, WF-19, ACC-17, LIF-14): one FR-HC-01-07
+//   entity reused by Contract Renewal, Perubahan Posisi and Manual HR.
+// - Offboarding (LIF-06/07/12, WF-10, GA-05, DSH-08/09/14): a resignation
+//   report or a non-renewal handoff from ContractRenewalCase moves through
+//   HR Manager decision -> HR Admin exit-clearance execution + Account
+//   Disable, closing (never deleting) the employee's Assignments.
 // Explicitly NOT modeled: Manpower, Candidate, Selected Person (DEC-013
-// excludes them), and the rest of Phase 2 (resignation, exit clearance)
-// plus later phases (Competency, Training, Assets, Payroll-slip import) —
-// these belong to later increments and will
-// be added when those increments start.
+// excludes them), plus later phases (Competency, Training, Assets,
+// Payroll-slip import) — these belong to later increments and will be
+// added when those increments start.
 
 generator client {
   provider = "prisma-client"
@@ -363,33 +368,33 @@ enum EvaluationStatus {
 }
 
 model Evaluation {
-  id                String            @id @default(cuid())
-  evaluationNumber  String            @unique
-  employeeId        String
-  employee          Employee          @relation("EvaluationEmployee", fields: [employeeId], references: [id])
-  purpose           EvaluationPurpose
-  status            EvaluationStatus  @default(DRAFT)
+  id               String            @id @default(cuid())
+  evaluationNumber String            @unique
+  employeeId       String
+  employee         Employee          @relation("EvaluationEmployee", fields: [employeeId], references: [id])
+  purpose          EvaluationPurpose
+  status           EvaluationStatus  @default(DRAFT)
 
   // DM-27 "primary_assignment_id and organization snapshot" — department/
   // section/position label are re-derived live from snapshotPositionId via
   // the existing level3-scope.ts helpers, same as ContractRenewalCase did.
   primaryAssignmentId String?
-  primaryAssignment   Assignment?     @relation(fields: [primaryAssignmentId], references: [id])
+  primaryAssignment   Assignment? @relation(fields: [primaryAssignmentId], references: [id])
   snapshotPositionId  String?
-  snapshotPosition    Position?       @relation("EvaluationSnapshotPosition", fields: [snapshotPositionId], references: [id])
+  snapshotPosition    Position?   @relation("EvaluationSnapshotPosition", fields: [snapshotPositionId], references: [id])
 
   createdByAccountId String?
-  createdByAccount   Account?         @relation("EvaluationCreatedBy", fields: [createdByAccountId], references: [id])
-  draftCreatedAt     DateTime         @default(now())
+  createdByAccount   Account? @relation("EvaluationCreatedBy", fields: [createdByAccountId], references: [id])
+  draftCreatedAt     DateTime @default(now())
 
   // ACC-17: HR Admin alone assigns P1/P2 and releases — no other role has a
   // release control, regardless of which workflow created the Draft.
   responsibleHrAdminAccountId String?
-  responsibleHrAdminAccount   Account? @relation("EvaluationResponsibleHrAdmin", fields: [responsibleHrAdminAccountId], references: [id])
-  releasedByAccountId String?
-  releasedByAccount   Account?        @relation("EvaluationReleasedBy", fields: [releasedByAccountId], references: [id])
-  releasedAt          DateTime?
-  evaluationDueDate   DateTime?
+  responsibleHrAdminAccount   Account?  @relation("EvaluationResponsibleHrAdmin", fields: [responsibleHrAdminAccountId], references: [id])
+  releasedByAccountId         String?
+  releasedByAccount           Account?  @relation("EvaluationReleasedBy", fields: [releasedByAccountId], references: [id])
+  releasedAt                  DateTime?
+  evaluationDueDate           DateTime?
 
   // FR-HC-01-07 HR-owned prefilled attendance snapshot (DM-26).
   attendanceSakit       Int?
@@ -432,24 +437,24 @@ model Evaluation {
 }
 
 model ContractRenewalCase {
-  id                String                    @id @default(cuid())
-  caseNumber        String                    @unique
-  currentContractId String                    @unique
-  currentContract   Contract                  @relation("RenewalCurrentContract", fields: [currentContractId], references: [id])
-  employeeId        String
-  employee          Employee                  @relation("RenewalCaseEmployee", fields: [employeeId], references: [id])
+  id                  String     @id @default(cuid())
+  caseNumber          String     @unique
+  currentContractId   String     @unique
+  currentContract     Contract   @relation("RenewalCurrentContract", fields: [currentContractId], references: [id])
+  employeeId          String
+  employee            Employee   @relation("RenewalCaseEmployee", fields: [employeeId], references: [id])
   // DM-15 "primary_assignment_id and organization snapshot" — department/
   // section are re-derived live via level3-scope.ts's resolveDepartmentId/
   // resolveSectionId from snapshotPositionId, same pattern as
   // MovementRequest's currentPositionId/currentAssignmentId, rather than
   // duplicating department/section text fields that could drift.
   primaryAssignmentId String
-  primaryAssignment   Assignment              @relation(fields: [primaryAssignmentId], references: [id])
+  primaryAssignment   Assignment @relation(fields: [primaryAssignmentId], references: [id])
   snapshotPositionId  String
-  snapshotPosition    Position                @relation("RenewalSnapshotPosition", fields: [snapshotPositionId], references: [id])
+  snapshotPosition    Position   @relation("RenewalSnapshotPosition", fields: [snapshotPositionId], references: [id])
 
-  status      ContractRenewalCaseStatus       @default(TRIGGERED)
-  triggerDate DateTime                        @default(now())
+  status      ContractRenewalCaseStatus @default(TRIGGERED)
+  triggerDate DateTime                  @default(now())
 
   // DM-27/WF-19: the shared Evaluation this case created at D-30 (or, for a
   // pre-migration row, backfilled from the fields below during the
@@ -463,14 +468,14 @@ model ContractRenewalCase {
   // recommendation counts as the Dept Head approval for any linked
   // Perubahan Posisi it creates.
   deptHeadEmployeeId             String?
-  deptHeadEmployee               Employee?               @relation("RenewalDeptHeadEmployee", fields: [deptHeadEmployeeId], references: [id])
+  deptHeadEmployee               Employee?              @relation("RenewalDeptHeadEmployee", fields: [deptHeadEmployeeId], references: [id])
   deptHeadPositionId             String?
-  deptHeadPosition               Position?               @relation("RenewalDeptHeadPosition", fields: [deptHeadPositionId], references: [id])
+  deptHeadPosition               Position?              @relation("RenewalDeptHeadPosition", fields: [deptHeadPositionId], references: [id])
   deptHeadRecommendedAt          DateTime?
   deptHeadRecommendation         RenewalRecommendation?
   deptHeadProposedDurationMonths Int?
   deptHeadProposedPositionId     String?
-  deptHeadProposedPosition       Position?               @relation("RenewalDeptHeadProposedPosition", fields: [deptHeadProposedPositionId], references: [id])
+  deptHeadProposedPosition       Position?              @relation("RenewalDeptHeadProposedPosition", fields: [deptHeadProposedPositionId], references: [id])
   deptHeadNote                   String?
 
   // Linked Perubahan Posisi draft (DM-10/LIF-13/DEC-019) — created or
@@ -491,7 +496,7 @@ model ContractRenewalCase {
   decisionPosition    Position?              @relation("RenewalDecisionPosition", fields: [decisionPositionId], references: [id])
   finalRecommendation RenewalRecommendation?
   changeReason        String?
-  decisionNote         String?
+  decisionNote        String?
 
   // Contract-generation gating (WF-12: disabled until the linked Perubahan
   // Posisi is approved/executed, then uses the approved new Position) — the
@@ -499,6 +504,85 @@ model ContractRenewalCase {
   // renewal path uses, never a duplicated mutation.
   generatedContractId String?   @unique
   generatedContract   Contract? @relation("RenewalGeneratedContract", fields: [generatedContractId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Reverse of OffboardingCase.sourceRenewalCaseId — see the note there on
+  // why a non-renewal handoff never re-runs this case's own decision.
+  offboardingCase OffboardingCase?
+}
+
+enum OffboardingReason {
+  RESIGNATION
+  CONTRACT_NON_RENEWAL
+}
+
+// LIF-06: "Resignation or contract-end case > manager input when required >
+// HR Manager decision/oversight > HR Admin exit-clearance execution >
+// Account Disable." Manager input is captured as data at report time (see
+// OffboardingCase.managerNote), not a separate stored stage — so a
+// RESIGNATION case starts at PENDING_HR_MANAGER. LIF-12: a
+// CONTRACT_NON_RENEWAL handoff's Dept-Head/HR-Manager rationale was already
+// recorded on the source ContractRenewalCase's own combined decision, so
+// that case starts directly at PENDING_CLEARANCE — it never re-runs the
+// same decision a second time.
+enum OffboardingCaseStatus {
+  PENDING_HR_MANAGER
+  PENDING_CLEARANCE
+  COMPLETED
+  CANCELLED
+}
+
+// ---------- Phase 2: Offboarding (LIF-06/07/12, WF-10, GA-05, DSH-08/09/14) ----------
+// GA-05 ("Exit Clearance cannot complete while employee-assigned assets
+// remain open") cannot be enforced yet — Assets (Phase 4) isn't modeled in
+// this schema at all. Exit-clearance completion is HR-Admin-attested for
+// now; revisit once Phase 4 ships an Asset model to check against (flagged
+// in docs/DECISIONS.md rather than built as a speculative placeholder).
+model OffboardingCase {
+  id         String                @id @default(cuid())
+  caseNumber String                @unique
+  employeeId String
+  employee   Employee              @relation("OffboardingCaseEmployee", fields: [employeeId], references: [id])
+  reason     OffboardingReason
+  status     OffboardingCaseStatus @default(PENDING_HR_MANAGER)
+
+  lastWorkingDay   DateTime
+  // No explicit day-count rule is given for offboarding anywhere in the
+  // Build Guide (unlike Evaluation's WF-18 "5 working days") — documented
+  // simplification: clearance is due by the last working day itself.
+  clearanceDueDate DateTime
+
+  reportedAt          DateTime @default(now())
+  reportedByAccountId String?
+  reportedByAccount   Account? @relation("OffboardingReportedBy", fields: [reportedByAccountId], references: [id])
+  managerNote         String?
+
+  // LIF-12: traceback to the Contract Renewal Case whose combined HR
+  // Manager decision already carries the non-renewal rationale.
+  sourceRenewalCaseId String?              @unique
+  sourceRenewalCase   ContractRenewalCase? @relation(fields: [sourceRenewalCaseId], references: [id])
+
+  hrManagerDecisionAt          DateTime?
+  hrManagerDecisionByAccountId String?
+  hrManagerDecisionByAccount   Account?  @relation("OffboardingHrManagerDecisionBy", fields: [hrManagerDecisionByAccountId], references: [id])
+  hrManagerDecisionPositionId  String?
+  hrManagerDecisionPosition    Position? @relation("OffboardingHrManagerDecisionPosition", fields: [hrManagerDecisionPositionId], references: [id])
+  hrManagerNote                String?
+
+  // LIF-06's "exit-clearance execution > Account Disable" is one combined
+  // HR Admin action, not two gated steps — nothing in the spec describes an
+  // intermediate state between them.
+  clearanceCompletedAt          DateTime?
+  clearanceCompletedByAccountId String?
+  clearanceCompletedByAccount   Account?  @relation("OffboardingClearanceCompletedBy", fields: [clearanceCompletedByAccountId], references: [id])
+  clearanceNote                 String?
+
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelledByAccount   Account?  @relation("OffboardingCancelledBy", fields: [cancelledByAccountId], references: [id])
+  cancellationReason   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -523,27 +607,31 @@ model Account {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 
-  auditEvents           AuditLog[]
-  importBatches         ImportBatch[]
-  uploadedFiles         FileObject[]
-  recruitmentRequestsSubmittedBy RecruitmentRequest[] @relation("RecruitmentSubmittedBy")
-  recruitmentRequestsApprovedBy RecruitmentRequest[] @relation("RecruitmentApprovedBy")
-  recruitmentRequestsDeptHeadDecisionsBy RecruitmentRequest[] @relation("RecruitmentDeptHeadDecisionBy")
-  recruitmentFulfillmentsLinked RecruitmentRequestFulfillment[]
-  recruitmentRequestsCancelledBy RecruitmentRequest[] @relation("RecruitmentCancelledByAccount")
-  movementRequestsSubmittedBy   MovementRequest[] @relation("MovementSubmittedBy")
-  movementRequestsDecidedBy     MovementRequest[] @relation("MovementDecisionBy")
-  movementRequestsDeptHeadDecisionsBy MovementRequest[] @relation("MovementDeptHeadDecisionBy")
-  movementRequestsImplementedBy MovementRequest[] @relation("MovementImplementedBy")
-  movementRequestsCancelledBy   MovementRequest[] @relation("MovementCancelledByAccount")
-  onboardingContractsCompletedBy OnboardingCase[] @relation("OnboardingContractCompletedBy")
-  onboardingTrainingCompletedBy  OnboardingCase[] @relation("OnboardingTrainingCompletedBy")
-  onboardingAssetsCompletedBy    OnboardingCase[] @relation("OnboardingAssetsCompletedBy")
-  contractDecisionsMade          Contract[] @relation("ContractDecisionBy")
-  renewalCasesDecidedBy            ContractRenewalCase[] @relation("RenewalDecisionBy")
-  evaluationsCreatedBy            Evaluation[] @relation("EvaluationCreatedBy")
-  evaluationsResponsibleAsHrAdmin Evaluation[] @relation("EvaluationResponsibleHrAdmin")
-  evaluationsReleasedBy           Evaluation[] @relation("EvaluationReleasedBy")
+  auditEvents                            AuditLog[]
+  importBatches                          ImportBatch[]
+  uploadedFiles                          FileObject[]
+  recruitmentRequestsSubmittedBy         RecruitmentRequest[]            @relation("RecruitmentSubmittedBy")
+  recruitmentRequestsApprovedBy          RecruitmentRequest[]            @relation("RecruitmentApprovedBy")
+  recruitmentRequestsDeptHeadDecisionsBy RecruitmentRequest[]            @relation("RecruitmentDeptHeadDecisionBy")
+  recruitmentFulfillmentsLinked          RecruitmentRequestFulfillment[]
+  recruitmentRequestsCancelledBy         RecruitmentRequest[]            @relation("RecruitmentCancelledByAccount")
+  movementRequestsSubmittedBy            MovementRequest[]               @relation("MovementSubmittedBy")
+  movementRequestsDecidedBy              MovementRequest[]               @relation("MovementDecisionBy")
+  movementRequestsDeptHeadDecisionsBy    MovementRequest[]               @relation("MovementDeptHeadDecisionBy")
+  movementRequestsImplementedBy          MovementRequest[]               @relation("MovementImplementedBy")
+  movementRequestsCancelledBy            MovementRequest[]               @relation("MovementCancelledByAccount")
+  onboardingContractsCompletedBy         OnboardingCase[]                @relation("OnboardingContractCompletedBy")
+  onboardingTrainingCompletedBy          OnboardingCase[]                @relation("OnboardingTrainingCompletedBy")
+  onboardingAssetsCompletedBy            OnboardingCase[]                @relation("OnboardingAssetsCompletedBy")
+  contractDecisionsMade                  Contract[]                      @relation("ContractDecisionBy")
+  renewalCasesDecidedBy                  ContractRenewalCase[]           @relation("RenewalDecisionBy")
+  evaluationsCreatedBy                   Evaluation[]                    @relation("EvaluationCreatedBy")
+  evaluationsResponsibleAsHrAdmin        Evaluation[]                    @relation("EvaluationResponsibleHrAdmin")
+  evaluationsReleasedBy                  Evaluation[]                    @relation("EvaluationReleasedBy")
+  offboardingCasesReportedBy             OffboardingCase[]               @relation("OffboardingReportedBy")
+  offboardingCasesHrManagerDecisionBy    OffboardingCase[]               @relation("OffboardingHrManagerDecisionBy")
+  offboardingCasesClearanceCompletedBy   OffboardingCase[]               @relation("OffboardingClearanceCompletedBy")
+  offboardingCasesCancelledBy            OffboardingCase[]               @relation("OffboardingCancelledBy")
 }
 
 model AccountRole {
@@ -558,8 +646,8 @@ model AccountRole {
 // ---------- Employee & Organization (Phase 1 core data model) ----------
 
 model Employee {
-  id                       String            @id @default(cuid())
-  employeeNumber           String            @unique
+  id                       String           @id @default(cuid())
+  employeeNumber           String           @unique
   fullLegalName            String
   preferredName            String?
   nationalIdNumber         String?
@@ -567,7 +655,7 @@ model Employee {
   birthDate                DateTime?
   gender                   Gender?
   personalEmail            String?
-  workEmail                String?           @unique
+  workEmail                String?          @unique
   mobileNumber             String?
   currentAddress           String?
   emergencyContactName     String?
@@ -594,64 +682,65 @@ model Employee {
   // A new upload creates a new FileObject and repoints this FK — the
   // superseded FileObject row is kept (still linked via FileObject.employeeId)
   // so replacement history isn't lost.
-  ktpFileId                String?           @unique
-  ktpFile                  FileObject?       @relation("EmployeeKtpFile", fields: [ktpFileId], references: [id])
-  kkFileId                 String?           @unique
-  kkFile                   FileObject?       @relation("EmployeeKkFile", fields: [kkFileId], references: [id])
+  ktpFileId                String?          @unique
+  ktpFile                  FileObject?      @relation("EmployeeKtpFile", fields: [ktpFileId], references: [id])
+  kkFileId                 String?          @unique
+  kkFile                   FileObject?      @relation("EmployeeKkFile", fields: [kkFileId], references: [id])
   hireDate                 DateTime
   employmentStatus         EmploymentStatus
   // Denormalized pointer to the Position of this employee's current Primary
   // Assignment, kept in sync by application code. Source of truth for history
   // and for "who holds what" is always the Assignment table, never this field.
   currentPositionId        String?
-  currentPosition          Position?         @relation("PositionHolder", fields: [currentPositionId], references: [id])
-  activeFlag               Boolean           @default(true)
-  createdAt                DateTime          @default(now())
-  updatedAt                DateTime          @updatedAt
+  currentPosition          Position?        @relation("PositionHolder", fields: [currentPositionId], references: [id])
+  activeFlag               Boolean          @default(true)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
 
-  account                  Account?
-  assignments              Assignment[]      @relation("EmployeeAssignments")
-  files                    FileObject[]
-  recruitmentRequestsSubmitted RecruitmentRequest[] @relation("RecruitmentRequester")
-  recruitmentFulfillment   RecruitmentRequestFulfillment?
-  recruitmentRequestsCancelled RecruitmentRequest[] @relation("RecruitmentCancelledByEmployee")
-  movementRequests             MovementRequest[] @relation("MovementEmployee")
-  movementRequestsSubmitted    MovementRequest[] @relation("MovementRequester")
-  movementRequestsCancelled    MovementRequest[] @relation("MovementCancelledByEmployee")
-  onboardingCase               OnboardingCase?
-  contracts                    Contract[] @relation("EmployeeContracts")
-  contractRecommendationsGiven Contract[] @relation("ContractRecommendationBy")
-  renewalCases                 ContractRenewalCase[] @relation("RenewalCaseEmployee")
-  renewalDeptHeadRecommendations ContractRenewalCase[] @relation("RenewalDeptHeadEmployee")
-  evaluations                  Evaluation[] @relation("EvaluationEmployee")
-  evaluationsAsP1              Evaluation[] @relation("EvaluationP1Evaluator")
-  evaluationsAsP2              Evaluation[] @relation("EvaluationP2Evaluator")
+  account                        Account?
+  assignments                    Assignment[]                   @relation("EmployeeAssignments")
+  files                          FileObject[]
+  recruitmentRequestsSubmitted   RecruitmentRequest[]           @relation("RecruitmentRequester")
+  recruitmentFulfillment         RecruitmentRequestFulfillment?
+  recruitmentRequestsCancelled   RecruitmentRequest[]           @relation("RecruitmentCancelledByEmployee")
+  movementRequests               MovementRequest[]              @relation("MovementEmployee")
+  movementRequestsSubmitted      MovementRequest[]              @relation("MovementRequester")
+  movementRequestsCancelled      MovementRequest[]              @relation("MovementCancelledByEmployee")
+  onboardingCase                 OnboardingCase?
+  contracts                      Contract[]                     @relation("EmployeeContracts")
+  contractRecommendationsGiven   Contract[]                     @relation("ContractRecommendationBy")
+  renewalCases                   ContractRenewalCase[]          @relation("RenewalCaseEmployee")
+  renewalDeptHeadRecommendations ContractRenewalCase[]          @relation("RenewalDeptHeadEmployee")
+  evaluations                    Evaluation[]                   @relation("EvaluationEmployee")
+  evaluationsAsP1                Evaluation[]                   @relation("EvaluationP1Evaluator")
+  evaluationsAsP2                Evaluation[]                   @relation("EvaluationP2Evaluator")
+  offboardingCases               OffboardingCase[]              @relation("OffboardingCaseEmployee")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
 // /admin/education-levels — never hand-edited in the database.
 model EducationLevel {
-  id           String     @id @default(cuid())
-  label        String     @unique
-  displayOrder Int        @default(0)
-  activeFlag   Boolean    @default(true)
-  createdAt    DateTime   @default(now())
+  id           String   @id @default(cuid())
+  label        String   @unique
+  displayOrder Int      @default(0)
+  activeFlag   Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
-  employees    Employee[]
+  employees Employee[]
 }
 
 // DM-20: admin-maintained PTKP (Indonesian income-tax status) codes. The
 // code itself is stable (regulatory), but the list of codes/labels is
 // editable by HR Admin without a code change — managed via /admin/ptkp-status.
 model PtkpStatus {
-  id           String     @id @default(cuid())
-  code         String     @unique
+  id           String   @id @default(cuid())
+  code         String   @unique
   label        String
-  displayOrder Int        @default(0)
-  activeFlag   Boolean    @default(true)
-  createdAt    DateTime   @default(now())
+  displayOrder Int      @default(0)
+  activeFlag   Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
-  employees    Employee[]
+  employees Employee[]
 }
 
 model OrgUnit {
@@ -667,7 +756,7 @@ model OrgUnit {
   effectiveFrom DateTime  @default(now())
   effectiveTo   DateTime?
 
-  positions     Position[]
+  positions           Position[]
   recruitmentRequests RecruitmentRequest[]
 }
 
@@ -688,54 +777,55 @@ model Job {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  positions         Position[]
+  positions           Position[]
   recruitmentRequests RecruitmentRequest[]
 }
 
 model Position {
-  id                   String         @id @default(cuid())
-  positionCode         String         @unique
-  jobId                String
-  job                  Job            @relation(fields: [jobId], references: [id])
-  orgUnitId            String
-  orgUnit              OrgUnit        @relation(fields: [orgUnitId], references: [id])
-  positionType         PositionType
-  approvedFte          Float          @default(1)
-  positionStatus       PositionStatus @default(VACANT)
+  id                    String         @id @default(cuid())
+  positionCode          String         @unique
+  jobId                 String
+  job                   Job            @relation(fields: [jobId], references: [id])
+  orgUnitId             String
+  orgUnit               OrgUnit        @relation(fields: [orgUnitId], references: [id])
+  positionType          PositionType
+  approvedFte           Float          @default(1)
+  positionStatus        PositionStatus @default(VACANT)
   // ACC-14/DEC-015: functional flag, independent of positionType's hierarchy
   // tier. An Employee holding an ACTIVE Assignment (any type) to a Position
   // with this flag set derives HR Manager authority live — never a stored
   // AccountRole, so access starts/ends automatically with the Assignment's
   // effective dates. See src/lib/hr-manager.ts.
-  grantsHrManagerAccess Boolean       @default(false)
+  grantsHrManagerAccess Boolean        @default(false)
   // Sole saved parent-child authority for the org chart (ORG-01). Never inferred
   // from names or job levels.
-  reportsToPositionId  String?
-  reportsToPosition    Position?      @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id])
-  subordinatePositions Position[]     @relation("PositionHierarchy")
-  effectiveFrom        DateTime       @default(now())
-  effectiveTo          DateTime?
+  reportsToPositionId   String?
+  reportsToPosition     Position?      @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id])
+  subordinatePositions  Position[]     @relation("PositionHierarchy")
+  effectiveFrom         DateTime       @default(now())
+  effectiveTo           DateTime?
 
-  currentHolders       Employee[]     @relation("PositionHolder")
-  assignments          Assignment[]
-  requestedForRecruitment RecruitmentRequest[] @relation("RequestedPosition")
-  requesterForRecruitment RecruitmentRequest[] @relation("RequesterPosition")
-  recruitmentDecisions RecruitmentRequest[] @relation("RecruitmentDecisionPosition")
-  recruitmentDeptHeadDecisions RecruitmentRequest[] @relation("RecruitmentDeptHeadDecisionPosition")
-  movementRequestsAsCurrent  MovementRequest[] @relation("MovementCurrentPosition")
-  movementRequestsAsProposed MovementRequest[] @relation("MovementProposedPosition")
-  movementRequestsAsRequesterPosition MovementRequest[] @relation("MovementRequesterPosition")
-  movementRequestsDecisions  MovementRequest[] @relation("MovementDecisionPosition")
-  movementRequestsDeptHeadDecisions MovementRequest[] @relation("MovementDeptHeadDecisionPosition")
-  contractRecommendations    Contract[] @relation("ContractRecommendationPosition")
-  contractDecisions          Contract[] @relation("ContractDecisionPosition")
-  renewalSnapshotOf              ContractRenewalCase[] @relation("RenewalSnapshotPosition")
-  renewalDeptHeadPositionOf       ContractRenewalCase[] @relation("RenewalDeptHeadPosition")
-  renewalDeptHeadProposedPositionOf ContractRenewalCase[] @relation("RenewalDeptHeadProposedPosition")
-  renewalDecisionPositionOf       ContractRenewalCase[] @relation("RenewalDecisionPosition")
-  evaluationsAsSnapshotPosition Evaluation[] @relation("EvaluationSnapshotPosition")
-  evaluationsAsP1Position       Evaluation[] @relation("EvaluationP1Position")
-  evaluationsAsP2Position       Evaluation[] @relation("EvaluationP2Position")
+  currentHolders                              Employee[]            @relation("PositionHolder")
+  assignments                                 Assignment[]
+  requestedForRecruitment                     RecruitmentRequest[]  @relation("RequestedPosition")
+  requesterForRecruitment                     RecruitmentRequest[]  @relation("RequesterPosition")
+  recruitmentDecisions                        RecruitmentRequest[]  @relation("RecruitmentDecisionPosition")
+  recruitmentDeptHeadDecisions                RecruitmentRequest[]  @relation("RecruitmentDeptHeadDecisionPosition")
+  movementRequestsAsCurrent                   MovementRequest[]     @relation("MovementCurrentPosition")
+  movementRequestsAsProposed                  MovementRequest[]     @relation("MovementProposedPosition")
+  movementRequestsAsRequesterPosition         MovementRequest[]     @relation("MovementRequesterPosition")
+  movementRequestsDecisions                   MovementRequest[]     @relation("MovementDecisionPosition")
+  movementRequestsDeptHeadDecisions           MovementRequest[]     @relation("MovementDeptHeadDecisionPosition")
+  contractRecommendations                     Contract[]            @relation("ContractRecommendationPosition")
+  contractDecisions                           Contract[]            @relation("ContractDecisionPosition")
+  renewalSnapshotOf                           ContractRenewalCase[] @relation("RenewalSnapshotPosition")
+  renewalDeptHeadPositionOf                   ContractRenewalCase[] @relation("RenewalDeptHeadPosition")
+  renewalDeptHeadProposedPositionOf           ContractRenewalCase[] @relation("RenewalDeptHeadProposedPosition")
+  renewalDecisionPositionOf                   ContractRenewalCase[] @relation("RenewalDecisionPosition")
+  evaluationsAsSnapshotPosition               Evaluation[]          @relation("EvaluationSnapshotPosition")
+  evaluationsAsP1Position                     Evaluation[]          @relation("EvaluationP1Position")
+  evaluationsAsP2Position                     Evaluation[]          @relation("EvaluationP2Position")
+  offboardingCasesHrManagerDecisionPositionOf OffboardingCase[]     @relation("OffboardingHrManagerDecisionPosition")
 }
 
 model Assignment {
@@ -751,9 +841,9 @@ model Assignment {
   effectiveTo           DateTime?
   createdAt             DateTime         @default(now())
 
-  fulfillment           RecruitmentRequestFulfillment?
-  movementImplementation MovementRequest?
-  movementCurrentAssignmentOf MovementRequest[] @relation("MovementCurrentAssignment")
+  fulfillment                     RecruitmentRequestFulfillment?
+  movementImplementation          MovementRequest?
+  movementCurrentAssignmentOf     MovementRequest[]              @relation("MovementCurrentAssignment")
   renewalCasesAsPrimaryAssignment ContractRenewalCase[]
   evaluationsAsPrimaryAssignment  Evaluation[]
 }
@@ -790,16 +880,16 @@ model RecruitmentRequest {
   specialCriteria          String?
   status                   RecruitmentRequestStatus @default(DRAFT)
 
-  requesterEmployeeId      String
-  requesterEmployee        Employee                 @relation("RecruitmentRequester", fields: [requesterEmployeeId], references: [id])
+  requesterEmployeeId String
+  requesterEmployee   Employee  @relation("RecruitmentRequester", fields: [requesterEmployeeId], references: [id])
   // The Position through which the requester was acting when submitting —
   // authority/approvals must retain Position context, never just the person.
-  requesterPositionId      String?
-  requesterPosition        Position?                @relation("RequesterPosition", fields: [requesterPositionId], references: [id])
+  requesterPositionId String?
+  requesterPosition   Position? @relation("RequesterPosition", fields: [requesterPositionId], references: [id])
 
-  submittedAt              DateTime?
-  submittedByAccountId     String?
-  submittedByAccount       Account?                 @relation("RecruitmentSubmittedBy", fields: [submittedByAccountId], references: [id])
+  submittedAt                 DateTime?
+  submittedByAccountId        String?
+  submittedByAccount          Account?  @relation("RecruitmentSubmittedBy", fields: [submittedByAccountId], references: [id])
   // Department Manager/Head (Job level 3B, scoped to this request's own
   // department) decision — runs before the HR Manager ever sees the
   // request. Same evidence shape as HR Manager's own decision fields below,
@@ -807,39 +897,39 @@ model RecruitmentRequest {
   // though they share the same REJECTED/RETURNED status outcomes.
   deptHeadDecisionAt          DateTime?
   deptHeadDecisionByAccountId String?
-  deptHeadDecisionByAccount   Account?                 @relation("RecruitmentDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
+  deptHeadDecisionByAccount   Account?  @relation("RecruitmentDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
   deptHeadDecisionPositionId  String?
-  deptHeadDecisionPosition    Position?                @relation("RecruitmentDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
+  deptHeadDecisionPosition    Position? @relation("RecruitmentDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
   deptHeadDecisionNote        String?
   // WF-15: only the Employee occupying an active HR Manager Position may
   // decide (approve/reject/return). approvedByAccountId records who (the
   // login used); decisionPositionId records the specific HR Manager Position
   // that gave them authority for THIS decision (WF-02/WF-05 — required when
   // an Employee holds more than one qualifying Position).
-  approvedAt               DateTime?
-  approvedByAccountId      String?
-  approvedByAccount        Account?                 @relation("RecruitmentApprovedBy", fields: [approvedByAccountId], references: [id])
-  decisionPositionId       String?
-  decisionPosition         Position?                @relation("RecruitmentDecisionPosition", fields: [decisionPositionId], references: [id])
-  decisionNote             String?
+  approvedAt                  DateTime?
+  approvedByAccountId         String?
+  approvedByAccount           Account?  @relation("RecruitmentApprovedBy", fields: [approvedByAccountId], references: [id])
+  decisionPositionId          String?
+  decisionPosition            Position? @relation("RecruitmentDecisionPosition", fields: [decisionPositionId], references: [id])
+  decisionNote                String?
 
   // DM-25: cancellation is a distinct action from Approve/Reject/Return.
   // Requester, HR Manager or HR Admin may cancel from an eligible state
   // (never Filled/Closed/already-Cancelled); the request row is never
   // deleted and existing fulfillment links are always preserved.
-  cancelledAt              DateTime?
-  cancelledByAccountId     String?
-  cancelledByAccount       Account?                 @relation("RecruitmentCancelledByAccount", fields: [cancelledByAccountId], references: [id])
-  cancelledByEmployeeId    String?
-  cancelledByEmployee      Employee?                @relation("RecruitmentCancelledByEmployee", fields: [cancelledByEmployeeId], references: [id])
-  cancellationAuthority    CancellationAuthority?
-  cancellationReason       String?
-  previousStatus           RecruitmentRequestStatus?
+  cancelledAt           DateTime?
+  cancelledByAccountId  String?
+  cancelledByAccount    Account?                  @relation("RecruitmentCancelledByAccount", fields: [cancelledByAccountId], references: [id])
+  cancelledByEmployeeId String?
+  cancelledByEmployee   Employee?                 @relation("RecruitmentCancelledByEmployee", fields: [cancelledByEmployeeId], references: [id])
+  cancellationAuthority CancellationAuthority?
+  cancellationReason    String?
+  previousStatus        RecruitmentRequestStatus?
 
-  createdAt                DateTime                 @default(now())
-  updatedAt                DateTime                 @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  fulfillments             RecruitmentRequestFulfillment[]
+  fulfillments RecruitmentRequestFulfillment[]
 }
 
 // DM-23: supports multiple Employees per request, up to requestedHeadcount.
@@ -895,33 +985,33 @@ model MovementRequest {
   requestReason            String
   status                   MovementRequestStatus @default(SUBMITTED)
 
-  requesterEmployeeId      String
-  requesterEmployee        Employee              @relation("MovementRequester", fields: [requesterEmployeeId], references: [id])
-  requesterPositionId      String?
-  requesterPosition        Position?             @relation("MovementRequesterPosition", fields: [requesterPositionId], references: [id])
-  submittedAt              DateTime              @default(now())
-  submittedByAccountId     String
-  submittedByAccount       Account               @relation("MovementSubmittedBy", fields: [submittedByAccountId], references: [id])
+  requesterEmployeeId  String
+  requesterEmployee    Employee  @relation("MovementRequester", fields: [requesterEmployeeId], references: [id])
+  requesterPositionId  String?
+  requesterPosition    Position? @relation("MovementRequesterPosition", fields: [requesterPositionId], references: [id])
+  submittedAt          DateTime  @default(now())
+  submittedByAccountId String
+  submittedByAccount   Account   @relation("MovementSubmittedBy", fields: [submittedByAccountId], references: [id])
 
   // Perubahan Posisi refactor: Department Head 3B decision (first stage),
   // same evidence shape as the HR Manager's own decision fields below —
   // kept separate so both stages' evidence survive independently.
   deptHeadDecisionAt          DateTime?
   deptHeadDecisionByAccountId String?
-  deptHeadDecisionByAccount   Account?              @relation("MovementDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
+  deptHeadDecisionByAccount   Account?  @relation("MovementDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
   deptHeadDecisionPositionId  String?
-  deptHeadDecisionPosition    Position?             @relation("MovementDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
+  deptHeadDecisionPosition    Position? @relation("MovementDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
   deptHeadDecisionNote        String?
 
   // LIF-04: "HR Manager approves or rejects" (second/final stage) —
   // decisionPositionId records which active HR Manager Position gave
   // authority (WF-02/WF-05), same pattern as RecruitmentRequest.
-  decisionAt               DateTime?
-  decisionByAccountId      String?
-  decisionByAccount        Account?              @relation("MovementDecisionBy", fields: [decisionByAccountId], references: [id])
-  decisionPositionId       String?
-  decisionPosition         Position?             @relation("MovementDecisionPosition", fields: [decisionPositionId], references: [id])
-  decisionNote             String?
+  decisionAt          DateTime?
+  decisionByAccountId String?
+  decisionByAccount   Account?  @relation("MovementDecisionBy", fields: [decisionByAccountId], references: [id])
+  decisionPositionId  String?
+  decisionPosition    Position? @relation("MovementDecisionPosition", fields: [decisionPositionId], references: [id])
+  decisionNote        String?
 
   // Perubahan Posisi refactor: HR-only supporting fields (FR-HC-01-09's
   // "Absensi 3 Bulan Terakhir" + evaluation reference) — added/verified by
@@ -930,15 +1020,15 @@ model MovementRequest {
   attendanceAlpha             Int?
   attendanceSakit             Int?
   attendanceIjin              Int?
-  attendanceIjinHalfDay        Int?
-  attendanceCuti               Int?
+  attendanceIjinHalfDay       Int?
+  attendanceCuti              Int?
   // Superseded by the shared Evaluation below (WF-19/DEC-020) — kept only as
   // an optional HR-only supplementary note/legacy field for pre-refactor
   // rows, no longer required or treated as "the evaluation" for any type.
-  performanceEvaluationRef      String?
-  performanceEvaluationFileId   String?               @unique
-  performanceEvaluationFile     FileObject?           @relation(fields: [performanceEvaluationFileId], references: [id])
-  hrConfidentialNotes           String?
+  performanceEvaluationRef    String?
+  performanceEvaluationFileId String?     @unique
+  performanceEvaluationFile   FileObject? @relation(fields: [performanceEvaluationFileId], references: [id])
+  hrConfidentialNotes         String?
 
   // DM-27/WF-17/LIF-14: every Promosi, Mutasi or Demotasi auto-creates one
   // linked Evaluation Draft on submission (never a requester trigger) —
@@ -953,30 +1043,30 @@ model MovementRequest {
   // Assignment and preserves previous records" — implementedAssignmentId
   // points at the new Assignment row created by execution (old Assignment
   // is closed, never overwritten, same as the direct Movement action).
-  implementedAt            DateTime?
-  implementedByAccountId   String?
-  implementedByAccount     Account?              @relation("MovementImplementedBy", fields: [implementedByAccountId], references: [id])
-  implementedAssignmentId  String?               @unique
-  implementedAssignment    Assignment?           @relation(fields: [implementedAssignmentId], references: [id])
+  implementedAt           DateTime?
+  implementedByAccountId  String?
+  implementedByAccount    Account?    @relation("MovementImplementedBy", fields: [implementedByAccountId], references: [id])
+  implementedAssignmentId String?     @unique
+  implementedAssignment   Assignment? @relation(fields: [implementedAssignmentId], references: [id])
 
   // DM-25-style cancellation, reusing the same CancellationAuthority enum
   // as Recruitment for consistency. Only eligible from SUBMITTED/APPROVED.
-  cancelledAt              DateTime?
-  cancelledByAccountId     String?
-  cancelledByAccount       Account?              @relation("MovementCancelledByAccount", fields: [cancelledByAccountId], references: [id])
-  cancelledByEmployeeId    String?
-  cancelledByEmployee      Employee?             @relation("MovementCancelledByEmployee", fields: [cancelledByEmployeeId], references: [id])
-  cancellationAuthority    CancellationAuthority?
-  cancellationReason       String?
-  previousStatus           MovementRequestStatus?
+  cancelledAt           DateTime?
+  cancelledByAccountId  String?
+  cancelledByAccount    Account?               @relation("MovementCancelledByAccount", fields: [cancelledByAccountId], references: [id])
+  cancelledByEmployeeId String?
+  cancelledByEmployee   Employee?              @relation("MovementCancelledByEmployee", fields: [cancelledByEmployeeId], references: [id])
+  cancellationAuthority CancellationAuthority?
+  cancellationReason    String?
+  previousStatus        MovementRequestStatus?
 
-  createdAt                DateTime              @default(now())
-  updatedAt                DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // DM-10/LIF-13: set only for a draft auto-created by the Contract Renewal
   // workflow (Mutasi/Demosi outcome) — reverse of ContractRenewalCase's
   // linkedMovementRequestId.
-  renewalCase              ContractRenewalCase?  @relation("RenewalLinkedMovement")
+  renewalCase ContractRenewalCase? @relation("RenewalLinkedMovement")
 }
 
 // ---------- Phase 2: Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding") ----------
@@ -989,35 +1079,35 @@ model MovementRequest {
 // deliberately not modeled — same reasoning as Movement Request's deferred
 // Evaluation/Competency fields.
 model OnboardingCase {
-  id                       String    @id @default(cuid())
-  caseNumber               String    @unique
-  employeeId               String    @unique
-  employee                 Employee  @relation(fields: [employeeId], references: [id])
-  plannedStartDate         DateTime
+  id               String   @id @default(cuid())
+  caseNumber       String   @unique
+  employeeId       String   @unique
+  employee         Employee @relation(fields: [employeeId], references: [id])
+  plannedStartDate DateTime
 
   contractComplete             Boolean   @default(false)
   contractCompletedAt          DateTime?
-  contractCompletedByAccountId  String?
-  contractCompletedByAccount    Account? @relation("OnboardingContractCompletedBy", fields: [contractCompletedByAccountId], references: [id])
+  contractCompletedByAccountId String?
+  contractCompletedByAccount   Account?  @relation("OnboardingContractCompletedBy", fields: [contractCompletedByAccountId], references: [id])
 
-  mandatoryMaterialComplete        Boolean   @default(false)
-  mandatoryMaterialDueDate         DateTime?
-  mandatoryMaterialCompletedAt     DateTime?
+  mandatoryMaterialComplete             Boolean   @default(false)
+  mandatoryMaterialDueDate              DateTime?
+  mandatoryMaterialCompletedAt          DateTime?
   mandatoryMaterialCompletedByAccountId String?
-  mandatoryMaterialCompletedByAccount   Account? @relation("OnboardingTrainingCompletedBy", fields: [mandatoryMaterialCompletedByAccountId], references: [id])
+  mandatoryMaterialCompletedByAccount   Account?  @relation("OnboardingTrainingCompletedBy", fields: [mandatoryMaterialCompletedByAccountId], references: [id])
 
   assetsComplete             Boolean   @default(false)
   assetsCompletedAt          DateTime?
-  assetsCompletedByAccountId  String?
-  assetsCompletedByAccount    Account? @relation("OnboardingAssetsCompletedBy", fields: [assetsCompletedByAccountId], references: [id])
+  assetsCompletedByAccountId String?
+  assetsCompletedByAccount   Account?  @relation("OnboardingAssetsCompletedBy", fields: [assetsCompletedByAccountId], references: [id])
 
   // Set automatically the moment all three flags become true — never
   // hand-set, and overall_status (Not Started/In Progress/Overdue/Complete)
   // is computed live from these fields, never stored (src/lib/onboarding.ts).
-  completedAt              DateTime?
+  completedAt DateTime?
 
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ---------- Phase 2: Contract + renewal pipeline (WF-10, LIF-08..12) ----------
@@ -1032,20 +1122,20 @@ model OnboardingCase {
 // records the reason (LIF-12) but does not create an actual offboarding
 // handoff — Offboarding doesn't exist yet in this app; revisit when it does.
 model Contract {
-  id                  String                         @id @default(cuid())
-  contractNumber      String                         @unique
-  employeeId          String
-  employee            Employee                       @relation("EmployeeContracts", fields: [employeeId], references: [id])
-  contractType        EmploymentStatus
-  startDate           DateTime
+  id             String           @id @default(cuid())
+  contractNumber String           @unique
+  employeeId     String
+  employee       Employee         @relation("EmployeeContracts", fields: [employeeId], references: [id])
+  contractType   EmploymentStatus
+  startDate      DateTime
   // Blueprint: "blank for indefinite contract" — null means PKWTT/indefinite.
-  endDate             DateTime?
-  status              ContractStatus                 @default(DRAFT)
+  endDate        DateTime?
+  status         ContractStatus   @default(DRAFT)
 
   // Set when this Contract is a renewal — the Contract it replaces.
-  renewedFromContractId String?                       @unique
-  renewedFromContract   Contract?                     @relation("ContractRenewalChain", fields: [renewedFromContractId], references: [id])
-  renewedByContract     Contract?                     @relation("ContractRenewalChain")
+  renewedFromContractId String?   @unique
+  renewedFromContract   Contract? @relation("ContractRenewalChain", fields: [renewedFromContractId], references: [id])
+  renewedByContract     Contract? @relation("ContractRenewalChain")
 
   // Department Manager recommendation (WF-10/LIF-09 step 1). WF-02:
   // "approval evidence" always records the Position context too, not just
@@ -1061,13 +1151,13 @@ model Contract {
 
   // HR Manager decision (WF-10/LIF-09 step 2) — same Position-derived-only
   // authority as Recruitment (WF-15) and Movement, reused for consistency.
-  decisionAt           DateTime?
-  decisionByAccountId  String?
-  decisionByAccount    Account?  @relation("ContractDecisionBy", fields: [decisionByAccountId], references: [id])
-  decisionPositionId   String?
-  decisionPosition     Position? @relation("ContractDecisionPosition", fields: [decisionPositionId], references: [id])
-  decisionNote         String?
-  notRenewedReason     String?
+  decisionAt          DateTime?
+  decisionByAccountId String?
+  decisionByAccount   Account?  @relation("ContractDecisionBy", fields: [decisionByAccountId], references: [id])
+  decisionPositionId  String?
+  decisionPosition    Position? @relation("ContractDecisionPosition", fields: [decisionPositionId], references: [id])
+  decisionNote        String?
+  notRenewedReason    String?
 
   // HR Admin prepares/releases/administers (WF-10/LIF-09 step 3); Employee
   // signs their own contract (blueprint: signed_at's Primary Owner is
@@ -1120,7 +1210,7 @@ model ImportBatch {
   previewConfirmedAt  DateTime?
   postedAt            DateTime?
 
-  rows                ImportRow[]
+  rows ImportRow[]
 }
 
 model ImportRow {
@@ -1156,8 +1246,8 @@ model FileObject {
   confidential        Boolean     @default(true)
   createdAt           DateTime    @default(now())
 
-  employeeKtpOf       Employee?   @relation("EmployeeKtpFile")
-  employeeKkOf        Employee?   @relation("EmployeeKkFile")
-  contractOf          Contract?
+  employeeKtpOf                   Employee?        @relation("EmployeeKtpFile")
+  employeeKkOf                    Employee?        @relation("EmployeeKkFile")
+  contractOf                      Contract?
   movementPerformanceEvaluationOf MovementRequest?
 }

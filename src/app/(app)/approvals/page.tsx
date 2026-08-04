@@ -47,16 +47,24 @@ export default async function ApprovalsPage() {
     pendingDeptHeadRenewals,
     pendingHrManagerRenewals,
   ] = await Promise.all([
-    prisma.recruitmentRequest.findMany({
-      where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
-      include: { department: true, job: true },
-      orderBy: { submittedAt: "asc" },
-    }),
-    prisma.movementRequest.findMany({
-      where: { status: "SUBMITTED" },
-      include: { employee: true, currentPosition: { include: { job: true } } },
-      orderBy: { submittedAt: "asc" },
-    }),
+    // HR-Manager-only queues (WF-15: only the active HR Manager Position may
+    // approve/reject/return) — must not be fetched at all for a viewer who
+    // isn't currently an HR Manager, since this page is now also reachable
+    // by a plain Dept Head or renewal evaluator with neither authority.
+    hrManagerPositions.length > 0
+      ? prisma.recruitmentRequest.findMany({
+          where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
+          include: { department: true, job: true },
+          orderBy: { submittedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    hrManagerPositions.length > 0
+      ? prisma.movementRequest.findMany({
+          where: { status: "SUBMITTED" },
+          include: { employee: true, currentPosition: { include: { job: true } } },
+          orderBy: { submittedAt: "asc" },
+        })
+      : Promise.resolve([]),
     deptHeadDepartmentIds.length > 0
       ? prisma.recruitmentRequest.findMany({
           where: { status: "PENDING_DEPT_HEAD", departmentId: { in: deptHeadDepartmentIds } },
@@ -197,6 +205,7 @@ export default async function ApprovalsPage() {
         </div>
       )}
 
+      {hrManagerPositions.length > 0 && (
       <div>
         <h2 className="mb-2 text-sm font-medium text-slate-700">{t("recruitment.navLabel")}</h2>
         {pendingRequests.length === 0 ? (
@@ -234,7 +243,9 @@ export default async function ApprovalsPage() {
           </div>
         )}
       </div>
+      )}
 
+      {hrManagerPositions.length > 0 && (
       <div>
         <h2 className="mb-2 text-sm font-medium text-slate-700">{t("movement.navLabel")}</h2>
         {pendingMovements.length === 0 ? (
@@ -272,6 +283,7 @@ export default async function ApprovalsPage() {
           </div>
         )}
       </div>
+      )}
 
       {pendingOwnEvaluations.length > 0 && (
         <div>

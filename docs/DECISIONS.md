@@ -3,6 +3,37 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-05 (later same day) — First real-data migration: demo dataset replaced with the real org chart + 183-employee UAT dataset
+
+All demo/seed data (Employees, OrgUnits/Jobs/Positions, Assignments, Contracts, and every downstream workflow record — Recruitment/Movement/Evaluation/ContractRenewalCase/OffboardingCase/ShiftAssignment/OnboardingCase/FileObject/AuditLog) was wiped and replaced with the real organization structure and a 183-employee UAT dataset from the user's "HR App Real Data Migration – Phase 2 UAT" Google Sheet — the same spreadsheet reviewed tab-by-tab over the preceding several turns (`11_FIELD_MAP`, `01_IMPORT_CONTROL`, `02_ORG_UNITS`/`03_JOBS`/`04_POSITIONS`/`05_EMPLOYEES`/`06_ASSIGNMENTS`/`07_CONTRACTS`).
+
+### What was loaded
+
+6 Departments (Finance & Procurement, Human Capital, Management, Production, Quality Development, Sales & Marketing), 61 deduped Jobs, 157 Positions, 183 Employees, 183 Assignments, 183 Contracts. The 3 `ADMIN` accounts (hr.admin/training.admin/ga.admin) were preserved — they carry no `Employee` link and are still needed to operate the app. The 3 fictional `EMPLOYEE_LOGIN` demo accounts and their Employee rows were deleted along with the rest of the demo data; real employee login accounts remain explicitly out of scope for this round (`08_USER_ACCOUNTS` was put on hold earlier in this same review). `AuditLog` was cleared too, for a genuinely clean start rather than 570+ stale events about deleted demo records.
+
+### No "Company" root OrgUnit — Departments rooted at `parentUnitId=null`
+
+The sheet's `02_ORG_UNITS` had a root `ORG-CBP` row typed `"Company"` — a value my `UnitType` enum (`DEPARTMENT | SECTION | GROUP | TEAM`) has no slot for. Rather than widen the enum, the import skips that row entirely and roots all 6 Departments directly (same as the pre-migration demo data already did) — nothing in the app actually needs a modeled "Company" node, since `Position.reportsToPositionId` (not `OrgUnit` nesting) drives the real reporting chain and org chart. This was briefly reopened when a synthetic Harian-employee pool Position needed *some* org-unit home and was initially pointed at `ORG-CBP` — resolved by pointing it at a real Department (Production) instead once the user clarified Harian Lepas employees should hold a real Position like everyone else ("harian is like magang, PKWT... put all harian in operator first"), not a company-wide placeholder. That pool Position (`POS-UAT-GENERAL-OPERATOR`, capacity 27, job `JOB-072` "Operator Assembly &Finishing") now sits under Production like every other seat.
+
+### `Job.jobLevel` derived from Position at import time
+
+The sheet moved `job_level_code` off `03_JOBS` entirely and onto `04_POSITIONS` only (each of the 61 canonical Jobs can now be held at a different grade per seat — e.g. "Operator CNC (CNC Lathe)" spans 1A/1B/1C across different Positions). Per direct user instruction ("keep job level separate not position" — i.e. don't add a new `Position.jobLevel` column to the app schema), `Job.jobLevel` (still a required field) is instead derived once at import time from whichever Position with the lowest `position_code` references that Job. Exact for the ~47 Jobs held at only one grade; an approximation for the 14 previously multi-graded job names — functionally inconsequential either way, since no authority check (`dept-head.ts`/`level3-scope.ts`) reads any level below `3A`/`3B`, and none of those 14 groups reach that tier.
+
+### Jobs deduped by the user directly in the sheet, not by me
+
+An earlier plan to have me dedupe `03_JOBS` (81 rows → 61 canonical, collapsing 14 duplicate-name groups down to one Job each) was overtaken by the user doing it themselves directly in the live sheet — faster and more reliable than the alternative I was about to attempt (blind browser automation on a real shared document; the Browser pane wasn't compositing frames for screenshot verification, and Google Sheets renders its grid/dropdowns on canvas, invisible to the accessibility tree — flagged as unsafe to proceed with rather than guessing). Their rule ("keep the lowest job_code number" per duplicate name) independently produced the identical correct result to the tie-break I'd proposed for the two trial-status exceptions (Specialist Procurement → 2B, Team Leader Quality Control → 2A — both employees were mid-probation at a lower grade when the duplicate rows were first created), since those two survivors happened to already be the lowest-numbered code either way.
+
+### How the import was actually run
+
+A one-off `prisma/migrate-real-data.ts` script (deleted after use, same throwaway-script precedent as the 2026-08-04 evaluation backfill) fetched all 6 source tabs **directly over HTTP** (`fetch()` + `papaparse`) rather than through the WebFetch tool — WebFetch's own LLM-summarization step proved unreliable for exact, complete data at this scale (row counts drifted across repeated calls on `05_EMPLOYEES`, with one fetch silently truncating around row 176 of ~183). The script ran a referential-integrity dry-run pass first (org_unit_code/job_code/position_code/employee_number/assignment_code all resolve) — zero errors, zero orphaned rows — before wiping anything. Any future re-import of this sheet should follow the same pattern: fetch the gviz CSV export URL directly in code, never rely on a summarized fetch for data that gets written to the database.
+
+### Two cosmetic data quirks, not app bugs
+
+1. The sheet's `preferred_name` column is a synthetic placeholder (`"UAT-0001"` etc.) for every single row, not a real nickname — so every employee currently displays as "UAT-NNNN" in the list/detail header (existing `preferredName ?? fullLegalName` behavior, unchanged and correct); the real name is intact in `fullLegalName`, shown further down the detail page. Flagged to the user rather than silently overridden.
+2. After the wipe+reload, the already-running dev server process started silently failing to log in (no error, no request even firing) — a full process restart (kill + fresh `npm run dev`) fixed it immediately. Worth remembering: restart the dev server after any direct-database write of this kind before assuming a login/behavior regression is a real app bug.
+
+Live-verified post-migration: dashboard shows 183 active employees / 0 vacant positions; org chart renders the full real reporting chain (Komisaris → Direktur → Managers → ... down to Operators) with correct job-level labels; a real employee detail page shows the correct name/position/department; the contract list shows real Harian Lepas contracts with correct end dates and department filters. No console errors beyond expected dev-server HMR reconnect noise from the restart.
+
 ## 2026-08-05 (later same day) — Employee lifecycle display status derived, not stored; Contract.primaryAssignmentId added
 
 Two more decisions surfaced by the migration template's `11_FIELD_MAP` tab (source-to-canonical field mapping), reviewed together against the app's actual schema.

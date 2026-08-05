@@ -8,7 +8,13 @@ import { t } from "@/lib/i18n/id";
 import type { Prisma, OffboardingCaseStatus, OffboardingReason } from "@/generated/prisma/client";
 
 const REASONS: OffboardingReason[] = ["RESIGNATION", "CONTRACT_NON_RENEWAL"];
-const STATUSES: OffboardingCaseStatus[] = ["PENDING_HR_MANAGER", "PENDING_CLEARANCE", "COMPLETED", "CANCELLED"];
+const STATUSES: OffboardingCaseStatus[] = [
+  "PENDING_DEPT_HEAD",
+  "PENDING_HR_MANAGER",
+  "PENDING_CLEARANCE",
+  "COMPLETED",
+  "CANCELLED",
+];
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";

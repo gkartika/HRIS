@@ -46,6 +46,7 @@ export default async function ApprovalsPage() {
     pendingDeptHeadRequests,
     pendingDeptHeadMovements,
     pendingDeptHeadRenewals,
+    pendingDeptHeadOffboarding,
     pendingHrManagerRenewals,
     pendingHrManagerOffboarding,
   ] = await Promise.all([
@@ -105,6 +106,25 @@ export default async function ApprovalsPage() {
           },
           include: { employee: true },
           orderBy: { createdAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // Dept Head's offboarding queue (new, per direct user request): a
+    // RESIGNATION case now starts at PENDING_DEPT_HEAD, scoped by the
+    // employee's department the same way the Movement dept-head queue above
+    // is (Employee has no direct departmentId — derived from
+    // currentPosition.orgUnit, itself or its Section-tier parent).
+    deptHeadDepartmentIds.length > 0
+      ? prisma.offboardingCase.findMany({
+          where: {
+            status: "PENDING_DEPT_HEAD",
+            employee: {
+              currentPosition: {
+                orgUnit: { OR: [{ id: { in: deptHeadDepartmentIds } }, { parentUnitId: { in: deptHeadDepartmentIds } }] },
+              },
+            },
+          },
+          include: { employee: true },
+          orderBy: { reportedAt: "asc" },
         })
       : Promise.resolve([]),
     // HR Manager's combined-decision queue (ACC-16/DEC-019).
@@ -383,6 +403,42 @@ export default async function ApprovalsPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {deptHeadDepartmentIds.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">
+            {t("recruitment.deptHeadApprovalSectionTitle")} — {t("offboarding.navLabel")}
+          </h2>
+          {pendingDeptHeadOffboarding.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">{t("offboarding.caseNumber")}</th>
+                    <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                    <th className="px-4 py-3 font-medium">{t("offboarding.reason")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingDeptHeadOffboarding.map((c) => (
+                    <tr key={c.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/offboarding/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {c.caseNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{t(`offboardingReason.${c.reason}`)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -508,6 +508,8 @@ export const strings = {
     linkedCase: "Kasus Offboarding Terkait",
     handoffTitle: "Buat Proses Offboarding",
     handoffButton: "Buat Proses Offboarding",
+    deptHeadDecisionTitle: "Keputusan Kepala Departemen/Manajer",
+    deptHeadNote: "Catatan Kepala Departemen/Manajer",
     hrManagerDecisionTitle: "Keputusan HR Manager",
     hrManagerNote: "Catatan HR Manager",
     approveButton: "Setujui untuk Exit Clearance",
@@ -520,6 +522,7 @@ export const strings = {
     cancellationReason: "Alasan Pembatalan",
   },
   offboardingCaseStatus: {
+    PENDING_DEPT_HEAD: "Menunggu Kepala Departemen/Manajer",
     PENDING_HR_MANAGER: "Menunggu HR Manager",
     PENDING_CLEARANCE: "Menunggu Exit Clearance",
     COMPLETED: "Selesai",
@@ -528,6 +531,22 @@ export const strings = {
   offboardingReason: {
     RESIGNATION: "Pengunduran Diri",
     CONTRACT_NON_RENEWAL: "Kontrak Tidak Diperpanjang",
+  },
+  shiftAssignment: {
+    navLabel: "Jadwal Shift",
+    listSubtitle: "Penugasan shift mingguan per karyawan — diajukan oleh Level 3, dapat diubah oleh Admin SDM.",
+    weekOf: "Minggu",
+    emptyState: "Tidak ada karyawan pada cakupan Anda.",
+    currentShift: "Shift Minggu Ini",
+    pickShift: "Pilih Shift",
+    note: "Catatan (opsional)",
+    hrOverrideBadge: "Diubah oleh Admin SDM",
+  },
+  shiftAssignmentType: {
+    SHIFT_1: "Shift 1",
+    SHIFT_2: "Shift 2",
+    SHIFT_3: "Shift 3",
+    NON_SHIFT: "Non Shift",
   },
   hrManagerUi: {
     myPositionsTitle: "Posisi Saya",

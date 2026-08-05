@@ -6,6 +6,7 @@ import {
   canManageContracts,
   canSubmitContractRecommendation,
   canDecideContractRenewal,
+  canApproveContractRelease,
   canSignContract,
   isHrAdmin,
   canSubmitRenewalDeptHeadRecommendation,
@@ -32,7 +33,7 @@ import {
   RecommendationForm,
   RenewalDecisionButtons,
   CreateRenewalDraftForm,
-  ReleaseButton,
+  ReleaseContractForm,
   SignButton,
   ActivateButton,
 } from "./decision-forms";
@@ -121,7 +122,8 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const canDecide =
     canDecideContractRenewal(hrManagerPositions.map((p) => p.positionId)) && canDecideRenewalStatus(contract.status);
   const canDraft = canManage && canCreateRenewalDraft(contract.status);
-  const canRelease = canManage && canReleaseContract(contract.status);
+  const canRelease =
+    canApproveContractRelease(hrManagerPositions.map((p) => p.positionId)) && canReleaseContract(contract.status);
   const canSign = canSignContract(session, contract.employeeId) && canSignContractStatus(contract.status);
   const canActivate = canManage && canActivateContract(contract.status);
 
@@ -269,7 +271,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
       {canRelease && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <ReleaseButton contractId={contract.id} />
+          <ReleaseContractForm contractId={contract.id} positions={hrManagerPositions} />
         </div>
       )}
 

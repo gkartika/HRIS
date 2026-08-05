@@ -8,6 +8,7 @@ import {
   canManageContracts,
   canSubmitContractRecommendation,
   canDecideContractRenewal,
+  canApproveContractRelease,
   canSignContract,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -228,9 +229,21 @@ export async function createRenewalDraft(
   redirect(`/contracts/${newContract.id}`);
 }
 
-export async function releaseContract(contractId: string): Promise<string | undefined> {
+export async function releaseContract(
+  contractId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  if (!canApproveContractRelease(hrManagerPositions.map((p) => p.positionId))) {
+    return "Anda tidak memiliki akses. Hanya HR Manager aktif yang dapat merilis kontrak.";
+  }
+
+  const decisionPositionId = formData.get("decisionPositionId") as string;
+  if (!hrManagerPositions.some((p) => p.positionId === decisionPositionId)) {
+    return "Posisi HR Manager yang dipilih tidak valid atau tidak lagi aktif.";
+  }
 
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) return "Kontrak tidak ditemukan.";
@@ -238,7 +251,12 @@ export async function releaseContract(contractId: string): Promise<string | unde
 
   await prisma.contract.update({
     where: { id: contractId },
-    data: { status: "RELEASED", releasedAt: new Date() },
+    data: {
+      status: "RELEASED",
+      releasedAt: new Date(),
+      releasedByAccountId: session.user.id,
+      releasedByPositionId: decisionPositionId,
+    },
   });
 
   await logAudit({

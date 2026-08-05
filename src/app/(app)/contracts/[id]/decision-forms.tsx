@@ -59,15 +59,34 @@ export function StartReviewButton({ contractId }: { contractId: string }) {
     />
   );
 }
-export function ReleaseButton({ contractId }: { contractId: string }) {
+// Per direct user request: releasing a Draft now needs an active HR
+// Manager Position's approval (WF-02 evidence), so unlike the other simple
+// buttons on this page it's a form, not a zero-arg SimpleActionButton.
+export function ReleaseContractForm({
+  contractId,
+  positions,
+}: {
+  contractId: string;
+  positions: DecisionPositionOption[];
+}) {
+  const action = releaseContract.bind(null, contractId);
+  const [error, formAction, isPending] = useActionState(action, undefined);
+
   return (
-    <SimpleActionButton
-      action={() => releaseContract(contractId)}
-      label={t("contract.releaseButton")}
-      tone="bg-indigo-600 text-white hover:bg-indigo-700"
-    />
+    <form action={formAction} className="space-y-3">
+      <DecisionPositionField positions={positions} />
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={isPending}
+        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+      >
+        {isPending ? t("common.loading") : t("contract.releaseButton")}
+      </button>
+    </form>
   );
 }
+
 export function SignButton({ contractId }: { contractId: string }) {
   return (
     <SimpleActionButton

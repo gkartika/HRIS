@@ -6,18 +6,22 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import {
   canReportResignation,
+  canDecideOffboardingCaseAsDeptHead,
   canDecideOffboardingCase,
   canExecuteExitClearance,
   canCancelOffboardingCase,
   isSelfApprovalAttempt,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
+import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
+import { resolveDepartmentId } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { syncPositionStatus } from "@/lib/position-occupancy";
 import {
   formatOffboardingCaseNumber,
   initialOffboardingCaseStatus,
+  canDecideOffboardingCaseAsDeptHeadStatus,
   canDecideOffboardingCaseStatus,
   canExecuteExitClearanceStatus,
   canCancelOffboardingCaseStatus,
@@ -94,7 +98,7 @@ export async function reportResignation(
   }
 
   const existingActiveCase = await prisma.offboardingCase.findFirst({
-    where: { employeeId, status: { in: ["PENDING_HR_MANAGER", "PENDING_CLEARANCE"] } },
+    where: { employeeId, status: { in: ["PENDING_DEPT_HEAD", "PENDING_HR_MANAGER", "PENDING_CLEARANCE"] } },
   });
   if (existingActiveCase) {
     return `Karyawan ini sudah memiliki kasus Offboarding aktif (${existingActiveCase.caseNumber}).`;
@@ -111,6 +115,69 @@ export async function reportResignation(
   revalidatePath("/offboarding");
   revalidatePath(`/employees/${employeeId}`);
   redirect(`/offboarding/${created.id}`);
+}
+
+// Per direct user request: a RESIGNATION case's Dept Head (3B, scoped to
+// the employee's own department) approval stage — same "approve only, no
+// reject concept" shape as the HR Manager stage below (only cancellation,
+// see cancelOffboardingCase, is available as the negative outcome).
+export async function decideOffboardingCaseAsDeptHead(
+  caseId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  const offboardingCase = await prisma.offboardingCase.findUnique({
+    where: { id: caseId },
+    include: { employee: { include: { currentPosition: true } } },
+  });
+  if (!offboardingCase) return "Kasus tidak ditemukan.";
+  if (!canDecideOffboardingCaseAsDeptHeadStatus(offboardingCase.status)) {
+    return "Kasus ini belum siap untuk diputuskan atau sudah diproses.";
+  }
+  if (isSelfApprovalAttempt(session.user.employeeId, offboardingCase.employeeId)) {
+    return "Anda tidak dapat memutuskan kasus Offboarding Anda sendiri.";
+  }
+
+  const departmentId = offboardingCase.employee.currentPosition
+    ? await resolveDepartmentId(offboardingCase.employee.currentPosition.orgUnitId)
+    : null;
+  if (!departmentId) return "Department tidak dapat ditentukan dari Posisi karyawan ini.";
+
+  const deptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, departmentId);
+  if (!canDecideOffboardingCaseAsDeptHead(deptHeadPositions.map((p) => p.positionId))) {
+    return "Anda tidak memiliki akses. Hanya Kepala Departemen/Manajer (Level 3B) di department ini yang dapat memutuskan.";
+  }
+
+  const decisionPositionId = (formData.get("decisionPositionId") as string) || "";
+  if (!deptHeadPositions.some((p) => p.positionId === decisionPositionId)) {
+    return "Posisi Kepala Departemen/Manajer yang dipilih tidak valid atau tidak lagi aktif.";
+  }
+
+  const deptHeadNote = (formData.get("deptHeadNote") as string)?.trim() || null;
+
+  await prisma.offboardingCase.update({
+    where: { id: caseId },
+    data: {
+      status: "PENDING_HR_MANAGER",
+      deptHeadDecisionAt: new Date(),
+      deptHeadDecisionByAccountId: session.user.id,
+      deptHeadDecisionPositionId: decisionPositionId,
+      deptHeadNote,
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "APPROVE",
+    datasetName: "OffboardingCase",
+    recordId: caseId,
+    reason: deptHeadNote ?? `${offboardingCase.caseNumber} approved by dept head/manager`,
+  });
+
+  revalidatePath(`/offboarding/${caseId}`);
+  revalidatePath("/offboarding");
+  revalidatePath("/approvals");
 }
 
 // LIF-06: "HR Manager decision/oversight" — a resignation report has one

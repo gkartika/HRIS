@@ -527,7 +527,15 @@ enum OffboardingReason {
 // recorded on the source ContractRenewalCase's own combined decision, so
 // that case starts directly at PENDING_CLEARANCE — it never re-runs the
 // same decision a second time.
+// PENDING_DEPT_HEAD added ahead of PENDING_HR_MANAGER per direct user
+// request: a RESIGNATION case now needs the same Dept Head (3B, scoped to
+// the employee's own department) -> HR Manager two-stage chain already used
+// by Recruitment/Movement/Contract Renewal, instead of HR Manager alone.
+// CONTRACT_NON_RENEWAL is unaffected — its Dept-Head/HR-Manager rationale
+// already lives on the source ContractRenewalCase (see
+// initialOffboardingCaseStatus), so it still starts at PENDING_CLEARANCE.
 enum OffboardingCaseStatus {
+  PENDING_DEPT_HEAD
   PENDING_HR_MANAGER
   PENDING_CLEARANCE
   COMPLETED
@@ -564,6 +572,18 @@ model OffboardingCase {
   sourceRenewalCaseId String?              @unique
   sourceRenewalCase   ContractRenewalCase? @relation(fields: [sourceRenewalCaseId], references: [id])
 
+  // Dept Head (3B, scoped to the employee's own department) approval stage
+  // — same evidence shape as every other Dept-Head-then-HR-Manager chain in
+  // this app (Recruitment/Movement/Contract Renewal). Only ever populated
+  // for a RESIGNATION case; a CONTRACT_NON_RENEWAL handoff skips straight to
+  // PENDING_CLEARANCE and never touches these fields (LIF-12).
+  deptHeadDecisionAt          DateTime?
+  deptHeadDecisionByAccountId String?
+  deptHeadDecisionByAccount   Account?  @relation("OffboardingDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
+  deptHeadDecisionPositionId  String?
+  deptHeadDecisionPosition    Position? @relation("OffboardingDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
+  deptHeadNote                String?
+
   hrManagerDecisionAt          DateTime?
   hrManagerDecisionByAccountId String?
   hrManagerDecisionByAccount   Account?  @relation("OffboardingHrManagerDecisionBy", fields: [hrManagerDecisionByAccountId], references: [id])
@@ -586,6 +606,48 @@ model OffboardingCase {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------- Shift Assignment (new, per direct user request) ----------
+// One value per employee per calendar week: three rotating shifts plus a
+// Non Shift designation, matching the migration template's "shift" lookup
+// (Shift1/Shift2/Shift3/NonShift). No separate CUSTOM enum value — an HR
+// override just sets any of these four values freely and can add `note` for
+// anything the enum doesn't capture (e.g. a temporary WFH arrangement).
+enum ShiftAssignmentType {
+  SHIFT_1
+  SHIFT_2
+  SHIFT_3
+  NON_SHIFT
+}
+
+// Submitted weekly by a Level-3 (3A/3B) position holder scoped to the
+// employee's own department (src/lib/level3-scope.ts, same authority already
+// used for Perubahan Posisi submission) — or overridden directly by HR
+// Admin, flagged via isHrOverride rather than a second set of actor fields,
+// since only the single latest value per employee/week matters (upserted,
+// never a history of every past edit — same "current state, not full audit
+// trail" simplification as Employee.currentPositionId; full change history
+// still lives in AuditLog). @@unique enforces one row per employee per week.
+model ShiftAssignment {
+  id            String              @id @default(cuid())
+  employeeId    String
+  employee      Employee            @relation("ShiftAssignmentEmployee", fields: [employeeId], references: [id])
+  weekStartDate DateTime
+  shiftType     ShiftAssignmentType
+  note          String?
+  isHrOverride  Boolean             @default(false)
+
+  submittedAt            DateTime  @default(now())
+  submittedByAccountId   String
+  submittedByAccount     Account   @relation("ShiftAssignmentSubmittedBy", fields: [submittedByAccountId], references: [id])
+  submittedByPositionId  String?
+  submittedByPosition    Position? @relation("ShiftAssignmentSubmittedByPosition", fields: [submittedByPositionId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, weekStartDate])
 }
 
 // ---------- User Accounts (separate from Employee Master, per ACC-01) ----------
@@ -624,14 +686,17 @@ model Account {
   onboardingTrainingCompletedBy          OnboardingCase[]                @relation("OnboardingTrainingCompletedBy")
   onboardingAssetsCompletedBy            OnboardingCase[]                @relation("OnboardingAssetsCompletedBy")
   contractDecisionsMade                  Contract[]                      @relation("ContractDecisionBy")
+  contractsReleasedBy                    Contract[]                      @relation("ContractReleasedBy")
   renewalCasesDecidedBy                  ContractRenewalCase[]           @relation("RenewalDecisionBy")
   evaluationsCreatedBy                   Evaluation[]                    @relation("EvaluationCreatedBy")
   evaluationsResponsibleAsHrAdmin        Evaluation[]                    @relation("EvaluationResponsibleHrAdmin")
   evaluationsReleasedBy                  Evaluation[]                    @relation("EvaluationReleasedBy")
   offboardingCasesReportedBy             OffboardingCase[]               @relation("OffboardingReportedBy")
+  offboardingCasesDeptHeadDecisionBy     OffboardingCase[]               @relation("OffboardingDeptHeadDecisionBy")
   offboardingCasesHrManagerDecisionBy    OffboardingCase[]               @relation("OffboardingHrManagerDecisionBy")
   offboardingCasesClearanceCompletedBy   OffboardingCase[]               @relation("OffboardingClearanceCompletedBy")
   offboardingCasesCancelledBy            OffboardingCase[]               @relation("OffboardingCancelledBy")
+  shiftAssignmentsSubmittedBy            ShiftAssignment[]               @relation("ShiftAssignmentSubmittedBy")
 }
 
 model AccountRole {
@@ -715,6 +780,7 @@ model Employee {
   evaluationsAsP1                Evaluation[]                   @relation("EvaluationP1Evaluator")
   evaluationsAsP2                Evaluation[]                   @relation("EvaluationP2Evaluator")
   offboardingCases               OffboardingCase[]              @relation("OffboardingCaseEmployee")
+  shiftAssignments               ShiftAssignment[]               @relation("ShiftAssignmentEmployee")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -825,7 +891,10 @@ model Position {
   evaluationsAsSnapshotPosition               Evaluation[]          @relation("EvaluationSnapshotPosition")
   evaluationsAsP1Position                     Evaluation[]          @relation("EvaluationP1Position")
   evaluationsAsP2Position                     Evaluation[]          @relation("EvaluationP2Position")
+  offboardingCasesDeptHeadDecisionPositionOf  OffboardingCase[]     @relation("OffboardingDeptHeadDecisionPosition")
   offboardingCasesHrManagerDecisionPositionOf OffboardingCase[]     @relation("OffboardingHrManagerDecisionPosition")
+  contractsReleasedByPositionOf               Contract[]            @relation("ContractReleasedByPosition")
+  shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]     @relation("ShiftAssignmentSubmittedByPosition")
 }
 
 model Assignment {
@@ -1159,12 +1228,19 @@ model Contract {
   decisionNote        String?
   notRenewedReason    String?
 
-  // HR Admin prepares/releases/administers (WF-10/LIF-09 step 3); Employee
-  // signs their own contract (blueprint: signed_at's Primary Owner is
-  // "Employee"). No separate actor FK for these three — the audit log
-  // already records who, matching the blueprint's own thin field set here.
+  // HR Admin prepares (draft/sign/activate); Employee signs their own
+  // contract (blueprint: signed_at's Primary Owner is "Employee"). Release
+  // is the one exception — per direct user request, releasing a Draft to
+  // the employee now needs an active HR Manager Position's approval (same
+  // Position-derived-only authority as every other HR Manager decision in
+  // this app), not HR Admin alone, so unlike draft/sign/activate it carries
+  // its own actor+Position evidence fields (WF-02).
   draftedAt   DateTime?
   releasedAt  DateTime?
+  releasedByAccountId  String?
+  releasedByAccount    Account?  @relation("ContractReleasedBy", fields: [releasedByAccountId], references: [id])
+  releasedByPositionId String?
+  releasedByPosition   Position? @relation("ContractReleasedByPosition", fields: [releasedByPositionId], references: [id])
   signedAt    DateTime?
   activatedAt DateTime?
 

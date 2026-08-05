@@ -3,17 +3,30 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import {
   canViewOffboardingCase,
+  canDecideOffboardingCaseAsDeptHead,
   canDecideOffboardingCase,
   canExecuteExitClearance,
   canCancelOffboardingCase,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
+import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
-import { canDecideOffboardingCaseStatus, canExecuteExitClearanceStatus, canCancelOffboardingCaseStatus } from "@/lib/offboarding";
+import { resolveDepartmentId } from "@/lib/level3-scope";
+import {
+  canDecideOffboardingCaseAsDeptHeadStatus,
+  canDecideOffboardingCaseStatus,
+  canExecuteExitClearanceStatus,
+  canCancelOffboardingCaseStatus,
+} from "@/lib/offboarding";
 import { isOverdue } from "@/lib/work-calendar";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { DecideOffboardingCaseForm, ExecuteExitClearanceForm, CancelOffboardingCaseForm } from "./decision-forms";
+import {
+  DecideOffboardingCaseAsDeptHeadForm,
+  DecideOffboardingCaseForm,
+  ExecuteExitClearanceForm,
+  CancelOffboardingCaseForm,
+} from "./decision-forms";
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
@@ -31,6 +44,8 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
       reportedByAccount: true,
       hrManagerDecisionByAccount: true,
       hrManagerDecisionPosition: { include: { job: true } },
+      deptHeadDecisionByAccount: true,
+      deptHeadDecisionPosition: { include: { job: true } },
       clearanceCompletedByAccount: true,
       cancelledByAccount: true,
       sourceRenewalCase: true,
@@ -41,11 +56,29 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   const activeHrManagerPositionIds = hrManagerPositions.map((p) => p.positionId);
   const isEmployeesManager = await isDirectManagerOfEmployee(session.user.employeeId, offboardingCase.employeeId);
+  const employeeDepartmentId = offboardingCase.employee.currentPosition
+    ? await resolveDepartmentId(offboardingCase.employee.currentPosition.orgUnitId)
+    : null;
+  const deptHeadPositions = employeeDepartmentId
+    ? await getActiveDeptHeadPositions(session.user.employeeId, employeeDepartmentId)
+    : [];
+  const activeDeptHeadPositionIds = deptHeadPositions.map((p) => p.positionId);
 
-  if (!canViewOffboardingCase(session, offboardingCase.employeeId, activeHrManagerPositionIds, isEmployeesManager)) {
+  if (
+    !canViewOffboardingCase(
+      session,
+      offboardingCase.employeeId,
+      activeHrManagerPositionIds,
+      isEmployeesManager,
+      activeDeptHeadPositionIds
+    )
+  ) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
+  const canDecideAsDeptHead =
+    canDecideOffboardingCaseAsDeptHead(activeDeptHeadPositionIds) &&
+    canDecideOffboardingCaseAsDeptHeadStatus(offboardingCase.status);
   const canDecide =
     canDecideOffboardingCase(activeHrManagerPositionIds) && canDecideOffboardingCaseStatus(offboardingCase.status);
   const canExecute = canExecuteExitClearance(session) && canExecuteExitClearanceStatus(offboardingCase.status);
@@ -112,6 +145,24 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
           </div>
         )}
       </div>
+
+      {offboardingCase.deptHeadDecisionByAccount && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <p className="text-xs text-slate-500">{t("offboarding.deptHeadDecisionTitle")}</p>
+          <p className="text-sm text-slate-900">
+            {offboardingCase.deptHeadDecisionByAccount.usernameOrEmail} ({formatDate(offboardingCase.deptHeadDecisionAt)})
+            {offboardingCase.deptHeadDecisionPosition && ` — ${offboardingCase.deptHeadDecisionPosition.job.jobTitle}`}
+          </p>
+          {offboardingCase.deptHeadNote && <p className="mt-1 text-sm text-slate-600">{offboardingCase.deptHeadNote}</p>}
+        </div>
+      )}
+
+      {canDecideAsDeptHead && (
+        <DecideOffboardingCaseAsDeptHeadForm
+          caseId={offboardingCase.id}
+          decisionPositions={deptHeadPositions.map((p) => ({ positionId: p.positionId, positionCode: p.positionCode, jobTitle: p.jobTitle }))}
+        />
+      )}
 
       {offboardingCase.hrManagerDecisionByAccount && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">

@@ -21,16 +21,20 @@ import {
   canMarkOnboardingAssets,
   canViewContract,
   canManageContracts,
+  canApproveContractRelease,
   canSubmitContractRecommendation,
   canDecideContractRenewal,
   canSignContract,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
   canReportResignation,
+  canDecideOffboardingCaseAsDeptHead,
   canDecideOffboardingCase,
   canExecuteExitClearance,
   canCancelOffboardingCase,
   canViewOffboardingCase,
+  canSubmitShiftAssignment,
+  canViewShiftAssignments,
   projectEmployee,
 } from "./permissions";
 
@@ -258,6 +262,11 @@ describe("Contract permissions (WF-10, LIF-08..12, Data Fields Blueprint '08 Con
     expect(canManageContracts(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }))).toBe(false);
   });
 
+  it("canApproveContractRelease only an active HR Manager Position holder (not HR Admin alone)", () => {
+    expect(canApproveContractRelease(["pos-hr-manager"])).toBe(true);
+    expect(canApproveContractRelease([])).toBe(false);
+  });
+
   it("canSubmitContractRecommendation allows the employee's direct manager or HR Admin", () => {
     expect(canSubmitContractRecommendation(mockSession({ roles: ["EMPLOYEE"], employeeId: "mgr-1" }), true)).toBe(
       true
@@ -359,6 +368,13 @@ describe("canReportResignation (LIF-06)", () => {
   });
 });
 
+describe("canDecideOffboardingCaseAsDeptHead", () => {
+  it("only an active Dept Head (3B) Position holder", () => {
+    expect(canDecideOffboardingCaseAsDeptHead(["pos-dept-head"])).toBe(true);
+    expect(canDecideOffboardingCaseAsDeptHead([])).toBe(false);
+  });
+});
+
 describe("canDecideOffboardingCase", () => {
   it("only an active HR Manager Position holder", () => {
     expect(canDecideOffboardingCase(["pos-hr-manager"])).toBe(true);
@@ -388,7 +404,7 @@ describe("canCancelOffboardingCase", () => {
 });
 
 describe("canViewOffboardingCase", () => {
-  it("allows HR Admin, an active HR Manager, the subject employee, or their direct manager", () => {
+  it("allows HR Admin, an active HR Manager, an active Dept Head, the subject employee, or their direct manager", () => {
     expect(canViewOffboardingCase(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", [], false)).toBe(true);
     expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", ["pos-hr-manager"], false)).toBe(
       true
@@ -397,10 +413,34 @@ describe("canViewOffboardingCase", () => {
       true
     );
     expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", [], true)).toBe(true);
+    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", [], false, ["pos-dept-head"])).toBe(
+      true
+    );
   });
 
   it("denies a bystander", () => {
     expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", [], false)).toBe(
+      false
+    );
+  });
+});
+
+describe("canSubmitShiftAssignment", () => {
+  it("allows HR Admin or an active Level-3 in the employee's department", () => {
+    expect(canSubmitShiftAssignment(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(true);
+    expect(canSubmitShiftAssignment(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
+    expect(canSubmitShiftAssignment(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
+  });
+});
+
+describe("canViewShiftAssignments", () => {
+  it("allows HR Admin, the employee themself, or their department's Level-3", () => {
+    expect(canViewShiftAssignments(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", false)).toBe(true);
+    expect(canViewShiftAssignments(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1", false)).toBe(
+      true
+    );
+    expect(canViewShiftAssignments(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", true)).toBe(true);
+    expect(canViewShiftAssignments(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", false)).toBe(
       false
     );
   });

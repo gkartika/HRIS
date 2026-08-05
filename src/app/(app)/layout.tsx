@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   FileSignature,
   UserMinus,
+  CalendarClock,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
+import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
@@ -59,6 +61,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // nav (see src/app/(app)/approvals/page.tsx, which now serves both).
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
   const isDeptHeadAnywhere = deptHeadDepartmentIds.length > 0;
+  // New Shift Assignment module, per direct user request — same Level-3
+  // (3A/3B) submit eligibility already used for Perubahan Posisi.
+  const level3DepartmentIds = await getLevel3DepartmentIds(session.user.employeeId);
+  const isLevel3Anywhere = level3DepartmentIds.length > 0;
   // DM-27/WF-19: a plain employee with no HR Manager/Dept Head position can
   // still be assigned P1/P2 on any shared Evaluation (Contract Renewal,
   // Perubahan Posisi or Manual HR) — they need the Approval Inbox link too,
@@ -127,6 +133,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // case), scoped further on the list page itself.
   if (isHrAdmin(session) || session.user.employeeId) {
     navItems.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: UserMinus });
+  }
+  // New Shift Assignment module, per direct user request — HR Admin or any
+  // active Level-3 (3A/3B) holder (same eligibility as Perubahan Posisi
+  // submission); a plain employee with no Level-3 position has nothing to
+  // do on this page.
+  if (isHrAdmin(session) || isLevel3Anywhere) {
+    navItems.push({ href: "/shift-assignments", label: t("shiftAssignment.navLabel"), icon: CalendarClock });
   }
   // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
   // Admin operational nav below, and only visible while the login currently

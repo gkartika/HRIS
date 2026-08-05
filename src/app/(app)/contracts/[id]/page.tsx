@@ -59,6 +59,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
     where: { id },
     include: {
       employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
+      primaryAssignment: { include: { position: { include: { job: true, orgUnit: true } } } },
       renewedFromContract: true,
       renewedByContract: true,
       recommendationByEmployee: true,
@@ -201,6 +202,14 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
             <p className="text-xs text-slate-500">{t("contract.endDate")}</p>
             <p className="text-sm text-slate-900">
               {contract.endDate ? formatDate(contract.endDate) : t("contract.indefinite")}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">{t("contract.primaryAssignment")}</p>
+            <p className="text-sm text-slate-900">
+              {contract.primaryAssignment
+                ? `${contract.primaryAssignment.position.job.jobTitle} (${contract.primaryAssignment.position.positionCode}) — ${contract.primaryAssignment.position.orgUnit.unitName}`
+                : "—"}
             </p>
           </div>
           {urgency !== "NONE" && (

@@ -23,7 +23,7 @@ import {
   canSignContractStatus,
   canActivateContract,
 } from "@/lib/contract";
-import { nextContractNumber, createRenewalDraftContract } from "@/lib/contract-mutations";
+import { nextContractNumber, createRenewalDraftContract, getActivePrimaryAssignment } from "@/lib/contract-mutations";
 import type { EmploymentStatus, ContractRenewalRecommendation } from "@/generated/prisma/enums";
 
 // HR Admin establishes a baseline Contract for an existing Employee — goes
@@ -47,6 +47,11 @@ export async function createContract(
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return "Karyawan tidak ditemukan.";
 
+  const primaryAssignment = await getActivePrimaryAssignment(employeeId);
+  if (!primaryAssignment) {
+    return "Karyawan ini belum memiliki Penempatan Utama aktif — kontrak tidak dapat dibuat.";
+  }
+
   const contractNumber = await nextContractNumber(contractType);
   const contract = await prisma.contract.create({
     data: {
@@ -57,6 +62,7 @@ export async function createContract(
       endDate: endDate ? new Date(endDate) : null,
       status: "ACTIVE",
       activatedAt: new Date(),
+      primaryAssignmentId: primaryAssignment.id,
     },
   });
 
@@ -213,12 +219,18 @@ export async function createRenewalDraft(
   const endDate = (formData.get("endDate") as string) || null;
   if (!contractType || !startDate) return "Jenis kontrak dan tanggal mulai wajib diisi.";
 
+  const primaryAssignment = await getActivePrimaryAssignment(oldContract.employeeId);
+  if (!primaryAssignment) {
+    return "Karyawan ini belum memiliki Penempatan Utama aktif — draf perpanjangan tidak dapat dibuat.";
+  }
+
   const newContract = await createRenewalDraftContract({
     oldContractId: oldContract.id,
     employeeId: oldContract.employeeId,
     contractType,
     startDate: new Date(startDate),
     endDate: endDate ? new Date(endDate) : null,
+    primaryAssignmentId: primaryAssignment.id,
     actorAccountId: session.user.id,
     buildAuditReason: (contractNumber) => `Drafted renewal ${contractNumber} for ${oldContract.contractNumber}`,
   });

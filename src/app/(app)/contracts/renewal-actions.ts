@@ -14,7 +14,7 @@ import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { resolveDepartmentId } from "@/lib/level3-scope";
 import { isPositionOccupiedByPrimary } from "@/lib/position-occupancy";
 import { logAudit } from "@/lib/audit";
-import { createRenewalDraftContract } from "@/lib/contract-mutations";
+import { createRenewalDraftContract, getActivePrimaryAssignment } from "@/lib/contract-mutations";
 import { formatMovementRequestNumber, validateProposedPosition, validateJobLevelDirection } from "@/lib/movement";
 import { isEvaluationComplete } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/app/(app)/evaluations/actions";
@@ -431,12 +431,16 @@ export async function decideRenewalCase(
         const endDate = new Date(startDate);
         endDate.setMonth(endDate.getMonth() + durationMonths);
 
+        const primaryAssignment = await getActivePrimaryAssignment(renewalCase.employeeId);
+        if (!primaryAssignment) return { error: "Penempatan Utama aktif karyawan ini tidak ditemukan." };
+
         const drafted = await createRenewalDraftContract({
           oldContractId: renewalCase.currentContractId,
           employeeId: renewalCase.employeeId,
           contractType: renewalCase.currentContract.contractType,
           startDate,
           endDate,
+          primaryAssignmentId: primaryAssignment.id,
           actorAccountId: session.user.id,
           buildAuditReason: (contractNumber) =>
             `Drafted renewal ${contractNumber} for ${renewalCase.currentContract.contractNumber} via Contract Renewal Case ${renewalCase.caseNumber}`,
@@ -507,6 +511,14 @@ export async function createRenewalContractAfterMovementExecuted(
     return "Perubahan Posisi terkait belum dilaksanakan oleh Admin SDM.";
   }
   if (renewalCase.generatedContractId) return "Draf kontrak untuk kasus ini sudah dibuat.";
+  // Per direct user request: "Contract generation must use the Position
+  // attached to that Assignment" — the specific new Assignment the Movement
+  // itself created (implementedAssignmentId), not a fresh "current Primary"
+  // lookup, since both should coincide here but this is the more precise,
+  // directly-traceable reference to the exact assignment this contract is for.
+  if (!renewalCase.linkedMovementRequest.implementedAssignmentId) {
+    return "Penempatan hasil pelaksanaan Perubahan Posisi tidak ditemukan.";
+  }
 
   const contractType = renewalCase.currentContract.contractType;
   const startDate = (formData.get("startDate") as string) || null;
@@ -519,6 +531,7 @@ export async function createRenewalContractAfterMovementExecuted(
     contractType,
     startDate: new Date(startDate),
     endDate: endDate ? new Date(endDate) : null,
+    primaryAssignmentId: renewalCase.linkedMovementRequest.implementedAssignmentId,
     actorAccountId: session.user.id,
     buildAuditReason: (contractNumber) =>
       `Drafted renewal ${contractNumber} for ${renewalCase.currentContract.contractNumber} via Contract Renewal Case ${renewalCase.caseNumber} (post Perubahan Posisi execution)`,

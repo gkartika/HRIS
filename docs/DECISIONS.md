@@ -3,6 +3,23 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-05 (later same day) — Employee lifecycle display status derived, not stored; Contract.primaryAssignmentId added
+
+Two more decisions surfaced by the migration template's `11_FIELD_MAP` tab (source-to-canonical field mapping), reviewed together against the app's actual schema.
+
+### Employee lifecycle status (Akan Masuk / Active / OUT): no new stored field
+
+The sheet's `05_EMPLOYEES.active_flag` row named a 3-state display concept — "Display only: Akan Masuk when activeFlag is TRUE and hireDate is after today; Active when TRUE and hireDate is today/past; OUT when FALSE" — using the word "employment_status" in an earlier draft of the same tab, which collided with the *existing* `Employee.employmentStatus` field (contract type, synced from the active Contract — an unrelated concept). Rather than add a redundant stored column, `deriveEmployeeLifecycleStatus(activeFlag, hireDate, now)` in `src/lib/employee-lifecycle.ts` computes the 3-state label live from the two fields Employee already has — same "derive, don't duplicate" pattern as `computeExpiryUrgency`/`OnboardingOverallStatus`/etc. Shown as a badge on the Employee detail header (next to the existing contract-type badge) and a new "Status Karyawan" column on the Employee list. No schema change, no migration.
+
+### `Contract.primaryAssignmentId`: new optional FK, required by business validation for new contracts
+
+The sheet's `07_CONTRACTS.primary_assignment_code` row: "resolve Assignment.assignment_code to its internal Assignment ID... Database field is optional for legacy contracts; required by business validation for every new or generated contract." `Contract` previously only linked to `Employee`, with no way to record *which* Position/Assignment a given contract was for — a real gap once an Employee can hold different Positions over time across multiple contracts. Added `Contract.primaryAssignmentId String?` (nullable at the DB level, per "legacy contracts may remain blank") and a shared `getActivePrimaryAssignment(employeeId)` resolver in `contract-mutations.ts`. Every contract-creation action now resolves and requires it, returning a blocking error if the employee has no active Primary Assignment:
+- `createContract` (manual baseline) and `createRenewalDraft` (manual renewal) — both resolve the employee's current active Primary Assignment.
+- `decideRenewalCase`'s "Perpanjang 3/6/12" branch (D-30 case, no Position change) — same resolver.
+- `createRenewalContractAfterMovementExecuted` (post Mutasi/Demosi) — uses the just-executed Movement's own `implementedAssignmentId` instead of a fresh lookup, per the sheet's "Contract generation must use the Position attached to that Assignment" — more precisely traceable than re-deriving "current Primary" generically, even though both would coincide here.
+
+Displayed on the Contract detail page ("Penempatan Utama") when set. Live-verified: creating a contract for an employee with no active Primary Assignment was correctly blocked with an error; creating one for an employee who has one succeeded and the Position/department were displayed as expected.
+
 ## 2026-08-05 — Contract release now needs HR Manager approval; Offboarding resignation gets a Dept Head stage; new Shift Assignment module
 
 Three separate, direct user requests made while reviewing the real-data migration template's "Authority & Lifecycle" tab, in preparation for clearing demo data and loading the real 200-employee/org-chart dataset.

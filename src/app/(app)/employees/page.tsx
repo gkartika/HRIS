@@ -6,7 +6,14 @@ import { canListEmployees, canCreateEmployee, isHrAdmin, projectEmployee } from 
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { isEmployeeProfileIncomplete } from "@/lib/employee-completeness";
+import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
 import type { Prisma } from "@/generated/prisma/client";
+
+const LIFECYCLE_BADGE_TONE: Record<string, string> = {
+  AKAN_MASUK: "bg-amber-50 text-amber-700",
+  ACTIVE: "bg-emerald-50 text-emerald-700",
+  OUT: "bg-rose-50 text-rose-700",
+};
 
 const EMPLOYMENT_STATUSES = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"] as const;
 
@@ -163,6 +170,7 @@ export default async function EmployeesPage({
                 <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
                 <th className="px-4 py-3 font-medium">{t("employee.currentPosition")}</th>
                 <th className="px-4 py-3 font-medium">{t("employee.employmentStatus")}</th>
+                <th className="px-4 py-3 font-medium">{t("employee.lifecycleStatus")}</th>
                 {isHrAdmin(session) && <th className="px-4 py-3 font-medium">Kelengkapan Data</th>}
               </tr>
             </thead>
@@ -187,6 +195,16 @@ export default async function EmployeesPage({
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {row.employmentStatus ? t(`employmentStatus.${row.employmentStatus}`) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const lifecycleStatus = deriveEmployeeLifecycleStatus(employee.activeFlag, employee.hireDate);
+                        return (
+                          <span className={`rounded-md px-2 py-1 text-xs font-medium ${LIFECYCLE_BADGE_TONE[lifecycleStatus]}`}>
+                            {t(`employeeLifecycleStatus.${lifecycleStatus}`)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     {isHrAdmin(session) && (
                       <td className="px-4 py-3">

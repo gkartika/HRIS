@@ -70,6 +70,11 @@ export const strings = {
     HARIAN_LEPAS: "Harian Lepas",
     MAGANG: "Magang",
   },
+  employeeLifecycleStatus: {
+    AKAN_MASUK: "Akan Masuk",
+    ACTIVE: "Aktif",
+    OUT: "OUT",
+  },
   gender: {
     MALE: "Laki-laki",
     FEMALE: "Perempuan",
@@ -89,6 +94,7 @@ export const strings = {
     currentAddress: "Alamat Saat Ini",
     hireDate: "Tanggal Bergabung",
     employmentStatus: "Status Kepegawaian",
+    lifecycleStatus: "Status Karyawan",
     currentPosition: "Posisi Saat Ini",
     department: "Departemen",
     noPosition: "Belum ada penempatan",
@@ -344,6 +350,7 @@ export const strings = {
     endDate: "Tanggal Berakhir",
     indefinite: "Tidak Ditentukan (PKWTT)",
     expiryUrgency: "Sisa Waktu",
+    primaryAssignment: "Penempatan Utama",
     renewedFrom: "Perpanjangan Dari",
     renewedBy: "Diperpanjang Menjadi",
     startReviewButton: "Mulai Tinjauan Perpanjangan",

@@ -1,5 +1,12 @@
 import { t } from "@/lib/i18n/id";
+import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
 import type { Employee, Assignment, Position, Job, OrgUnit, FileObject } from "@/generated/prisma/client";
+
+const LIFECYCLE_BADGE_TONE: Record<string, string> = {
+  AKAN_MASUK: "bg-amber-50 text-amber-700",
+  ACTIVE: "bg-emerald-50 text-emerald-700",
+  OUT: "bg-rose-50 text-rose-700",
+};
 
 type AssignmentWithPosition = Assignment & {
   position: Position & { job: Job; orgUnit: OrgUnit };
@@ -40,6 +47,11 @@ export function EmployeeProfileView({
   educationLevelLabel?: string | null;
   ptkpLabel?: string | null;
 }) {
+  const lifecycleStatus =
+    employee.activeFlag !== undefined && employee.hireDate
+      ? deriveEmployeeLifecycleStatus(employee.activeFlag, new Date(employee.hireDate))
+      : null;
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -50,11 +62,18 @@ export function EmployeeProfileView({
             </h1>
             <p className="font-mono text-xs text-slate-400">{employee.employeeNumber}</p>
           </div>
-          {employee.employmentStatus && (
-            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-              {t(`employmentStatus.${employee.employmentStatus}`)}
-            </span>
-          )}
+          <div className="flex gap-2">
+            {lifecycleStatus && (
+              <span className={`rounded-md px-2 py-1 text-xs font-medium ${LIFECYCLE_BADGE_TONE[lifecycleStatus]}`}>
+                {t(`employeeLifecycleStatus.${lifecycleStatus}`)}
+              </span>
+            )}
+            {employee.employmentStatus && (
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                {t(`employmentStatus.${employee.employmentStatus}`)}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3">

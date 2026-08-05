@@ -915,6 +915,7 @@ model Assignment {
   movementCurrentAssignmentOf     MovementRequest[]              @relation("MovementCurrentAssignment")
   renewalCasesAsPrimaryAssignment ContractRenewalCase[]
   evaluationsAsPrimaryAssignment  Evaluation[]
+  contractsAsPrimaryAssignment    Contract[]                     @relation("ContractPrimaryAssignment")
 }
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
@@ -1200,6 +1201,17 @@ model Contract {
   // Blueprint: "blank for indefinite contract" — null means PKWTT/indefinite.
   endDate        DateTime?
   status         ContractStatus   @default(DRAFT)
+
+  // Per direct user request (migration 11_FIELD_MAP's primary_assignment_code):
+  // which Assignment/Position this contract belongs to, since an Employee
+  // may hold multiple Positions over time. Optional at the schema level —
+  // every new/generated contract must capture it (enforced in the action
+  // layer, e.g. resolved from the employee's active Primary Assignment, or
+  // from a Mutasi/Demosi's own implementedAssignmentId when contract
+  // generation follows a Movement's execution) — a legacy contract created
+  // before this field existed may remain blank.
+  primaryAssignmentId String?
+  primaryAssignment   Assignment? @relation("ContractPrimaryAssignment", fields: [primaryAssignmentId], references: [id])
 
   // Set when this Contract is a renewal — the Contract it replaces.
   renewedFromContractId String?   @unique

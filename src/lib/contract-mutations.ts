@@ -16,12 +16,27 @@ export async function nextContractNumber(contractType: EmploymentStatus): Promis
   return formatContractNumber(contractType, countThisYear + 1, year);
 }
 
+// Per direct user request (11_FIELD_MAP's primary_assignment_code): every
+// new/generated Contract must capture the Assignment it belongs to, since
+// an Employee may hold multiple Positions. This is the default resolver —
+// the employee's current active Primary Assignment — used wherever a
+// contract is created for the employee's existing Position; the one
+// exception is contract generation right after a Mutasi/Demosi Movement
+// executes, which uses that Movement's own implementedAssignmentId instead
+// (the specific new Assignment the Movement created), not this lookup.
+export async function getActivePrimaryAssignment(employeeId: string) {
+  return prisma.assignment.findFirst({
+    where: { employeeId, assignmentType: "PRIMARY", status: "ACTIVE" },
+  });
+}
+
 export async function createRenewalDraftContract(params: {
   oldContractId: string;
   employeeId: string;
   contractType: EmploymentStatus;
   startDate: Date;
   endDate: Date | null;
+  primaryAssignmentId: string;
   actorAccountId: string;
   buildAuditReason: (contractNumber: string) => string;
 }): Promise<{ id: string; contractNumber: string }> {
@@ -36,6 +51,7 @@ export async function createRenewalDraftContract(params: {
       status: "DRAFT",
       draftedAt: new Date(),
       renewedFromContractId: params.oldContractId,
+      primaryAssignmentId: params.primaryAssignmentId,
     },
   });
 

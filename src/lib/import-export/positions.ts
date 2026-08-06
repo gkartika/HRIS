@@ -6,6 +6,7 @@ export const label = "Posisi Organisasi";
 export const templateHeaders = [
   "positionCode",
   "jobCode",
+  "jobLevel",
   "orgUnitCode",
   "positionType",
   "approvedFte",
@@ -14,6 +15,7 @@ export const templateHeaders = [
 export const templateExampleRow = {
   positionCode: "POS-CONTOH-01",
   jobCode: "JOB-CONTOH",
+  jobLevel: "2A",
   orgUnitCode: "DEPT-CONTOH",
   positionType: "STAFF",
   approvedFte: "1",
@@ -37,6 +39,7 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const rowNumber = index + 2;
     const positionCode = raw.positionCode?.trim();
     const jobCode = raw.jobCode?.trim();
+    const jobLevel = raw.jobLevel?.trim();
     const orgUnitCode = raw.orgUnitCode?.trim();
     const positionType = raw.positionType?.trim().toUpperCase();
     const approvedFte = raw.approvedFte?.trim();
@@ -46,6 +49,7 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     if (!positionCode) reasons.push("Kode posisi (positionCode) wajib diisi");
     else if (seenInFile.has(positionCode)) reasons.push(`Kode posisi ${positionCode} duplikat dalam berkas`);
     if (!jobCode || !jobByCode.has(jobCode)) reasons.push(`Jabatan (jobCode) "${jobCode}" tidak ditemukan`);
+    if (!jobLevel) reasons.push("Level (jobLevel) wajib diisi");
     if (!orgUnitCode || !orgUnitByCode.has(orgUnitCode)) {
       reasons.push(`Unit organisasi (orgUnitCode) "${orgUnitCode}" tidak ditemukan`);
     }
@@ -90,6 +94,7 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
 
   const data = {
     jobId: job.id,
+    jobLevel: raw.jobLevel.trim(),
     orgUnitId: orgUnit.id,
     positionType: raw.positionType.trim().toUpperCase() as PositionType,
     approvedFte,
@@ -117,6 +122,7 @@ export async function exportData(): Promise<ExportResult> {
     rows: positions.map((p) => ({
       positionCode: p.positionCode,
       jobCode: p.job.jobCode,
+      jobLevel: p.jobLevel,
       orgUnitCode: p.orgUnit.unitCode,
       positionType: p.positionType,
       approvedFte: String(p.approvedFte),

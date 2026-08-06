@@ -30,7 +30,6 @@ export default async function JobsPage() {
             <tr>
               <th className="px-4 py-3 font-medium">Kode</th>
               <th className="px-4 py-3 font-medium">Nama Jabatan</th>
-              <th className="px-4 py-3 font-medium">Level</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3" />
             </tr>
@@ -40,7 +39,6 @@ export default async function JobsPage() {
               <tr key={j.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-mono text-xs">{j.jobCode}</td>
                 <td className="px-4 py-3">{j.jobTitle}</td>
-                <td className="px-4 py-3 text-slate-600">{j.jobLevel}</td>
                 <td className="px-4 py-3 text-slate-600">{j.approvalStatus}</td>
                 <td className="px-4 py-3 text-right">
                   <Link href={`/admin/jobs/${j.id}`} className="text-xs text-indigo-600 hover:underline">

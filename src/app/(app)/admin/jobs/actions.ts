@@ -16,18 +16,17 @@ export async function createJob(
 
   const jobCode = (formData.get("jobCode") as string)?.trim();
   const jobTitle = (formData.get("jobTitle") as string)?.trim();
-  const jobLevel = (formData.get("jobLevel") as string)?.trim();
   const jobPurpose = (formData.get("jobPurpose") as string)?.trim() || null;
 
-  if (!jobCode || !jobTitle || !jobLevel) {
-    return "Kode, nama, dan level jabatan wajib diisi.";
+  if (!jobCode || !jobTitle) {
+    return "Kode dan nama jabatan wajib diisi.";
   }
 
   const existing = await prisma.job.findUnique({ where: { jobCode } });
   if (existing) return `Kode jabatan ${jobCode} sudah digunakan.`;
 
   const job = await prisma.job.create({
-    data: { jobCode, jobTitle, jobLevel, jobPurpose },
+    data: { jobCode, jobTitle, jobPurpose },
   });
 
   await logAudit({
@@ -51,15 +50,14 @@ export async function updateJob(
   if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
 
   const jobTitle = (formData.get("jobTitle") as string)?.trim();
-  const jobLevel = (formData.get("jobLevel") as string)?.trim();
   const jobPurpose = (formData.get("jobPurpose") as string)?.trim() || null;
   const approvalStatus = (formData.get("approvalStatus") as string)?.trim();
 
-  if (!jobTitle || !jobLevel) return "Nama dan level jabatan wajib diisi.";
+  if (!jobTitle) return "Nama jabatan wajib diisi.";
 
   await prisma.job.update({
     where: { id: jobId },
-    data: { jobTitle, jobLevel, jobPurpose, approvalStatus },
+    data: { jobTitle, jobPurpose, approvalStatus },
   });
 
   await logAudit({

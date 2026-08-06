@@ -99,7 +99,6 @@ async function main() {
     create: {
       jobCode: "DIREKTUR-UTAMA",
       jobTitle: "Direktur Utama",
-      jobLevel: "5",
       jobPurpose: "Memimpin arah strategis perusahaan secara keseluruhan.",
     },
   });
@@ -109,7 +108,6 @@ async function main() {
     create: {
       jobCode: "PROD-DEPTHEAD",
       jobTitle: "Kepala Departemen Produksi",
-      jobLevel: "4",
       jobPurpose: "Memimpin seluruh operasional Departemen Produksi.",
     },
   });
@@ -119,7 +117,6 @@ async function main() {
     create: {
       jobCode: "PROD-SECHEAD",
       jobTitle: "Kepala Seksi Produksi",
-      jobLevel: "3A",
       jobPurpose: "Memimpin operasional harian seksi produksi dan memastikan target output tercapai.",
     },
   });
@@ -129,7 +126,6 @@ async function main() {
     create: {
       jobCode: "PROD-STAFF",
       jobTitle: "Staf Produksi",
-      jobLevel: "2A",
       jobPurpose: "Menjalankan proses produksi sesuai standar kerja dan target kualitas.",
     },
   });
@@ -143,7 +139,6 @@ async function main() {
     create: {
       jobCode: "SDM-HRMANAGER",
       jobTitle: "HR Manager",
-      jobLevel: "4",
       jobPurpose: "Memimpin fungsi SDM: keputusan rekrutmen, mutasi, kontrak, dan pengunduran diri karyawan.",
     },
   });
@@ -160,6 +155,7 @@ async function main() {
     create: {
       positionCode: "POS-DIREKTUR-01",
       jobId: jobDirector.id,
+      jobLevel: "5",
       orgUnitId: direksi.id,
       positionType: "DIRECTOR",
       positionStatus: "VACANT",
@@ -171,6 +167,7 @@ async function main() {
     create: {
       positionCode: "POS-PROD-DEPTHEAD-01",
       jobId: jobDeptHeadProduksi.id,
+      jobLevel: "4",
       orgUnitId: produksi.id,
       positionType: "DEPARTMENT_HEAD",
       positionStatus: "VACANT",
@@ -183,6 +180,7 @@ async function main() {
     create: {
       positionCode: "POS-PROD-SECHEAD-01",
       jobId: jobSectionHead.id,
+      jobLevel: "3A",
       orgUnitId: produksi.id,
       positionType: "SECTION_HEAD",
       positionStatus: "FILLED",
@@ -205,6 +203,7 @@ async function main() {
     create: {
       positionCode: "POS-PROD-STAFF-01",
       jobId: jobStaff.id,
+      jobLevel: "2A",
       orgUnitId: produksi.id,
       positionType: "STAFF",
       positionStatus: "FILLED",
@@ -219,6 +218,7 @@ async function main() {
     create: {
       positionCode: "POS-PROD-STAFF-02",
       jobId: jobStaff.id,
+      jobLevel: "2A",
       orgUnitId: produksi.id,
       positionType: "STAFF",
       positionStatus: "VACANT",
@@ -235,6 +235,7 @@ async function main() {
     create: {
       positionCode: "POS-SDM-HRMANAGER-01",
       jobId: jobHrManager.id,
+      jobLevel: "4",
       orgUnitId: sdm.id,
       positionType: "DEPARTMENT_HEAD",
       positionStatus: "VACANT",

@@ -162,7 +162,7 @@ export async function submitDeptHeadRecommendation(
     ]);
     if (!currentPosition || !proposedPosition) return "Posisi tidak ditemukan.";
 
-    const levelError = validateJobLevelDirection(movementType, currentPosition.job.jobLevel, proposedPosition.job.jobLevel);
+    const levelError = validateJobLevelDirection(movementType, currentPosition.jobLevel, proposedPosition.jobLevel);
     if (levelError) return levelError;
 
     if (await isPositionOccupiedByPrimary(proposedPositionId, renewalCase.employeeId)) {

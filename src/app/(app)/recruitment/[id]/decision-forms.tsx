@@ -20,7 +20,6 @@ export interface DecisionPositionOption {
 export interface DecisionJobOption {
   id: string;
   jobTitle: string;
-  jobLevel: string;
 }
 
 export function StartReviewButton({ requestId }: { requestId: string }) {
@@ -70,7 +69,7 @@ function DecisionJobField({ jobs }: { jobs: DecisionJobOption[] }) {
         <option value="">— Pilih —</option>
         {jobs.map((j) => (
           <option key={j.id} value={j.id}>
-            {j.jobTitle} ({j.jobLevel})
+            {j.jobTitle}
           </option>
         ))}
       </select>

@@ -147,7 +147,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           <div>
             <p className="text-xs text-slate-500">{t("movement.currentPosition")}</p>
             <p className="text-sm text-slate-900">
-              {request.currentPosition.job.jobTitle} / {request.currentPosition.job.jobLevel} (
+              {request.currentPosition.jobLevel} {request.currentPosition.job.jobTitle} (
               {request.currentPosition.positionCode})
             </p>
             <p className="text-xs text-slate-400">{request.currentPosition.orgUnit.unitName}</p>
@@ -155,7 +155,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           <div>
             <p className="text-xs text-slate-500">{t("movement.proposedPosition")}</p>
             <p className="text-sm text-slate-900">
-              {request.proposedPosition.job.jobTitle} / {request.proposedPosition.job.jobLevel} (
+              {request.proposedPosition.jobLevel} {request.proposedPosition.job.jobTitle} (
               {request.proposedPosition.positionCode})
             </p>
             <p className="text-xs text-slate-400">{request.proposedPosition.orgUnit.unitName}</p>

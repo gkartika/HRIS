@@ -22,15 +22,6 @@ export function EditJobForm({ job }: { job: Job }) {
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">Level</label>
-        <input
-          name="jobLevel"
-          required
-          defaultValue={job.jobLevel}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
         <label className="mb-1 block text-xs text-slate-500">Tujuan Jabatan</label>
         <textarea
           name="jobPurpose"

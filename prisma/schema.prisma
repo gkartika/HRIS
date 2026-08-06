@@ -830,7 +830,6 @@ model Job {
   id                String   @id @default(cuid())
   jobCode           String   @unique
   jobTitle          String
-  jobLevel          String
   jobPurpose        String?
   pdcaPlan          String?
   pdcaDo            String?
@@ -852,6 +851,14 @@ model Position {
   positionCode          String         @unique
   jobId                 String
   job                   Job            @relation(fields: [jobId], references: [id])
+  // Per direct user request: level is a per-seat attribute, not a property
+  // of the abstract Job — the same Job (e.g. "Operator CNC") is held at
+  // different grades across different Positions (e.g. "1B Operator CNC" vs
+  // "1C Operator CNC"), matching the real org data and the migration
+  // template's own 04_POSITIONS.job_level_code column (03_JOBS carries no
+  // level at all). Deliberately not duplicated onto Job too — one place to
+  // hold level, not two.
+  jobLevel              String
   orgUnitId             String
   orgUnit               OrgUnit        @relation(fields: [orgUnitId], references: [id])
   positionType          PositionType

@@ -126,7 +126,7 @@ export async function getOrgChartData(asOfDate: Date): Promise<OrgChartData> {
     id: p.id,
     positionCode: p.positionCode,
     jobTitle: p.job.jobTitle,
-    jobLevel: p.job.jobLevel,
+    jobLevel: p.jobLevel,
     orgUnitId: p.orgUnitId,
     orgUnitName: p.orgUnit.unitName,
     positionType: p.positionType,

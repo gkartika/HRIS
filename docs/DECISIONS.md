@@ -3,6 +3,26 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-06 — `jobLevel` moved from `Job` to `Position`; Jobs/Positions admin forms and every picker updated to match
+
+Reverses part of the previous day's real-data migration decision. `Job.jobLevel` was a derived approximation (first-seen Position's level, backfilled once at import time) — a workaround for not having a real per-seat level field. The user proposed the cleaner model directly: **level is a property of the seat, not the abstract role** — the same Job (e.g. "Operator CNC") is legitimately held at different grades across different Positions ("1B Operator CNC" vs "1C Operator CNC"), matching the migration sheet's own real structure (`04_POSITIONS.job_level_code`; `03_JOBS` carries no level at all). Motivated directly by a real problem: the Recruitment Request form's "Posisi yang Diminta" picker listed all 157 real Positions, many with identical-looking job titles and no way to tell them apart without opening each one.
+
+### Schema: two-phase migration, same pattern as the 2026-08-04 Evaluation entity
+
+Phase A: added `Position.jobLevel` (nullable), dropped `Job.jobLevel`. Phase B (after backfill): tightened `Position.jobLevel` to required. `prisma migrate dev` couldn't run non-interactively in this environment once it detected the data-loss warning on dropping `Job.jobLevel` (61 non-null values) — worked around it by generating the SQL via `prisma migrate diff --script`, writing it into a migration folder by hand, and applying with `prisma migrate deploy` (non-interactive). Re-fetched `04_POSITIONS.job_level_code` directly over HTTP (same reliable pattern as the original migration script — bypasses the WebFetch tool's summarization) and backfilled all 157 Positions with their real, exact level — recovering the precision the original derivation had approximated away for the 14 previously-duplicate-graded job names.
+
+### Every consumer updated, including the two authority-derivation files
+
+`src/lib/dept-head.ts` and `src/lib/level3-scope.ts` — the Dept Head (3B) and Level-3 (3A/3B) authority checks used by Recruitment, Movement, Contract Renewal, Offboarding, and Shift Assignment — queried `position: { job: { jobLevel: ... } }`; changed to `position: { jobLevel: ... }` directly. Verified directly against real data post-migration: `POS-0034` (Manager Human Capital, held by the real employee "Gayatri Kartika") still resolves with `jobLevel: "3B"` and 6 Positions company-wide sit at 3A/3B, matching pre-change expectations exactly. Also updated: `org-chart.ts`/`org-chart-client.tsx` (org chart still shows the right level per card), `movement.ts`'s `validateJobLevelDirection` callers (Movement and Contract Renewal's Promosi/Demosi direction check now reads `position.jobLevel` instead of `position.job.jobLevel`), the Jobs admin form (level field removed), the Positions admin form (level field added, required), and both CSV import/export modules (`jobs.ts` column removed, `positions.ts` column added).
+
+### New display convention: `"{level} {jobTitle}"`, applied to the duplicate-heavy pickers specifically
+
+Per the user's example (`1B Operator CNC`), applied to every dropdown that lists Positions for selection — Movement's proposed-Position picker, Contract Renewal's proposed-Position picker, the Positions admin list — since those are exactly the "which of these identical-looking rows is the right one" pickers the whole change was motivated by. The Recruitment Request form's Job-only picker (HR Manager sets `jobId` at Approve time, before any Position exists) lost its level suffix entirely rather than showing a stale one, since Job no longer carries a single level to show. The org chart's own card layout (`{department} · {level}`) was left as-is — an established visual design, not part of the motivating problem, just repointed to the correct new data source.
+
+### Explicitly not done yet
+
+Redesigning the Recruitment Request submit form itself (replacing the 157-row Position picker with a Job picker + a level field the requester fills in) was discussed as a natural next step but not built — only the schema/display groundwork was confirmed and shipped. `Employee.preferredName` removal (raised in the same session, ~205 references across 40 files) was started and explicitly paused by the user ("we can do this later on final version") — the schema field was restored and no files were left half-migrated; this is a separate, still-open item.
+
 ## 2026-08-05 (later same day) — First real-data migration: demo dataset replaced with the real org chart + 183-employee UAT dataset
 
 All demo/seed data (Employees, OrgUnits/Jobs/Positions, Assignments, Contracts, and every downstream workflow record — Recruitment/Movement/Evaluation/ContractRenewalCase/OffboardingCase/ShiftAssignment/OnboardingCase/FileObject/AuditLog) was wiped and replaced with the real organization structure and a 183-employee UAT dataset from the user's "HR App Real Data Migration – Phase 2 UAT" Google Sheet — the same spreadsheet reviewed tab-by-tab over the preceding several turns (`11_FIELD_MAP`, `01_IMPORT_CONTROL`, `02_ORG_UNITS`/`03_JOBS`/`04_POSITIONS`/`05_EMPLOYEES`/`06_ASSIGNMENTS`/`07_CONTRACTS`).

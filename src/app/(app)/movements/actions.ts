@@ -113,8 +113,8 @@ export async function submitMovementRequest(
 
   const levelError = validateJobLevelDirection(
     movementType,
-    employee.currentPosition.job.jobLevel,
-    proposedPosition.job.jobLevel
+    employee.currentPosition.jobLevel,
+    proposedPosition.jobLevel
   );
   if (levelError) return levelError;
 

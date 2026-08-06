@@ -32,10 +32,19 @@ export function EditPositionForm({
         >
           {jobs.map((j) => (
             <option key={j.id} value={j.id}>
-              {j.jobTitle} ({j.jobLevel})
+              {j.jobTitle}
             </option>
           ))}
         </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">Level</label>
+        <input
+          name="jobLevel"
+          required
+          defaultValue={position.jobLevel}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        />
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">Unit Organisasi</label>

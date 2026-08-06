@@ -2,11 +2,10 @@ import { prisma } from "@/lib/db";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
 
 export const label = "Jabatan Standar";
-export const templateHeaders = ["jobCode", "jobTitle", "jobLevel", "jobPurpose"];
+export const templateHeaders = ["jobCode", "jobTitle", "jobPurpose"];
 export const templateExampleRow = {
   jobCode: "JOB-CONTOH",
   jobTitle: "Staf Contoh",
-  jobLevel: "2A",
   jobPurpose: "Deskripsi singkat tujuan jabatan.",
 };
 
@@ -19,13 +18,11 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const rowNumber = index + 2;
     const jobCode = raw.jobCode?.trim();
     const jobTitle = raw.jobTitle?.trim();
-    const jobLevel = raw.jobLevel?.trim();
 
     const reasons: string[] = [];
     if (!jobCode) reasons.push("Kode jabatan (jobCode) wajib diisi");
     else if (seenInFile.has(jobCode)) reasons.push(`Kode jabatan ${jobCode} duplikat dalam berkas`);
     if (!jobTitle) reasons.push("Nama jabatan (jobTitle) wajib diisi");
-    if (!jobLevel) reasons.push("Level (jobLevel) wajib diisi");
 
     if (jobCode) seenInFile.add(jobCode);
     const existingId = jobCode ? existingByCode.get(jobCode) : undefined;
@@ -45,7 +42,6 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
   const jobCode = raw.jobCode.trim();
   const data = {
     jobTitle: raw.jobTitle.trim(),
-    jobLevel: raw.jobLevel.trim(),
     jobPurpose: raw.jobPurpose?.trim() || null,
   };
 
@@ -66,7 +62,6 @@ export async function exportData(): Promise<ExportResult> {
     rows: jobs.map((j) => ({
       jobCode: j.jobCode,
       jobTitle: j.jobTitle,
-      jobLevel: j.jobLevel,
       jobPurpose: j.jobPurpose ?? "",
     })),
   };

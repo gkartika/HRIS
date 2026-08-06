@@ -92,7 +92,7 @@ export function DeptHeadRecommendationForm({
             <option value="">— Pilih —</option>
             {positions.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.positionCode} — {p.job.jobTitle} / {p.job.jobLevel} ({p.orgUnit.unitName})
+                {p.positionCode} — {p.jobLevel} {p.job.jobTitle} ({p.orgUnit.unitName})
               </option>
             ))}
           </select>
@@ -175,7 +175,7 @@ function HrManagerDecisionButton({
                 <option value="">— Pilih —</option>
                 {positions.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.positionCode} — {p.job.jobTitle} / {p.job.jobLevel} ({p.orgUnit.unitName})
+                    {p.positionCode} — {p.jobLevel} {p.job.jobTitle} ({p.orgUnit.unitName})
                   </option>
                 ))}
               </select>

@@ -47,7 +47,7 @@ export default async function PositionsPage() {
             {positions.map((p) => (
               <tr key={p.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-mono text-xs">{p.positionCode}</td>
-                <td className="px-4 py-3">{p.job.jobTitle}</td>
+                <td className="px-4 py-3">{p.jobLevel} {p.job.jobTitle}</td>
                 <td className="px-4 py-3 text-slate-600">{p.orgUnit.unitName}</td>
                 <td className="px-4 py-3 text-slate-600">
                   {p.reportsToPosition ? p.reportsToPosition.job.jobTitle : "—"}

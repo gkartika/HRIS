@@ -17,14 +17,15 @@ export async function createPosition(
 
   const positionCode = (formData.get("positionCode") as string)?.trim();
   const jobId = formData.get("jobId") as string;
+  const jobLevel = (formData.get("jobLevel") as string)?.trim();
   const orgUnitId = formData.get("orgUnitId") as string;
   const positionType = formData.get("positionType") as PositionType;
   const reportsToPositionId = (formData.get("reportsToPositionId") as string) || null;
   const approvedFte = Number(formData.get("approvedFte") ?? 1);
   const grantsHrManagerAccess = formData.get("grantsHrManagerAccess") === "on";
 
-  if (!positionCode || !jobId || !orgUnitId || !positionType) {
-    return "Kode posisi, jabatan, unit organisasi, dan jenis posisi wajib diisi.";
+  if (!positionCode || !jobId || !jobLevel || !orgUnitId || !positionType) {
+    return "Kode posisi, jabatan, level, unit organisasi, dan jenis posisi wajib diisi.";
   }
 
   const existing = await prisma.position.findUnique({ where: { positionCode } });
@@ -34,6 +35,7 @@ export async function createPosition(
     data: {
       positionCode,
       jobId,
+      jobLevel,
       orgUnitId,
       positionType,
       approvedFte: Number.isFinite(approvedFte) && approvedFte > 0 ? approvedFte : 1,
@@ -65,6 +67,7 @@ export async function updatePosition(
   if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
 
   const jobId = formData.get("jobId") as string;
+  const jobLevel = (formData.get("jobLevel") as string)?.trim();
   const orgUnitId = formData.get("orgUnitId") as string;
   const positionType = formData.get("positionType") as PositionType;
   const positionStatus = formData.get("positionStatus") as PositionStatus;
@@ -72,8 +75,8 @@ export async function updatePosition(
   const approvedFte = Number(formData.get("approvedFte") ?? 1);
   const grantsHrManagerAccess = formData.get("grantsHrManagerAccess") === "on";
 
-  if (!jobId || !orgUnitId || !positionType || !positionStatus) {
-    return "Jabatan, unit organisasi, jenis, dan status posisi wajib diisi.";
+  if (!jobId || !jobLevel || !orgUnitId || !positionType || !positionStatus) {
+    return "Jabatan, level, unit organisasi, jenis, dan status posisi wajib diisi.";
   }
   if (reportsToPositionId === positionId) {
     return "Posisi tidak dapat melapor ke dirinya sendiri.";
@@ -83,6 +86,7 @@ export async function updatePosition(
     where: { id: positionId },
     data: {
       jobId,
+      jobLevel,
       orgUnitId,
       positionType,
       positionStatus,

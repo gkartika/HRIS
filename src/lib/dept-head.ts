@@ -32,7 +32,7 @@ export async function getActiveDeptHeadPositions(
       status: "ACTIVE",
       effectiveFrom: { lte: asOf },
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { orgUnitId: departmentId, job: { jobLevel: DEPT_HEAD_JOB_LEVEL } },
+      position: { orgUnitId: departmentId, jobLevel: DEPT_HEAD_JOB_LEVEL },
     },
     include: { position: { include: { job: true } } },
   });
@@ -61,7 +61,7 @@ export async function getDeptHeadApprovers(
       status: "ACTIVE",
       effectiveFrom: { lte: asOf },
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { orgUnitId: departmentId, job: { jobLevel: DEPT_HEAD_JOB_LEVEL } },
+      position: { orgUnitId: departmentId, jobLevel: DEPT_HEAD_JOB_LEVEL },
     },
     select: { employeeId: true, positionId: true },
   });
@@ -85,7 +85,7 @@ export async function getDeptHeadDepartmentIds(
       status: "ACTIVE",
       effectiveFrom: { lte: asOf },
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { job: { jobLevel: DEPT_HEAD_JOB_LEVEL } },
+      position: { jobLevel: DEPT_HEAD_JOB_LEVEL },
     },
     select: { position: { select: { orgUnitId: true } } },
   });

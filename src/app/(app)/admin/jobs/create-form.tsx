@@ -29,15 +29,6 @@ export function CreateJobForm() {
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
         />
       </div>
-      <div>
-        <label className="mb-1 block text-xs text-slate-500">Level</label>
-        <input
-          name="jobLevel"
-          required
-          placeholder="2A"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        />
-      </div>
       <div className="flex items-end">
         <button
           type="submit"

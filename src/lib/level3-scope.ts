@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 
 // Perubahan Posisi refactor: "Level 3" submit eligibility is broader than
 // the Department Head 3B approval tier (src/lib/dept-head.ts) — it's
-// literally Job.jobLevel "3A" or "3B", matching both Section Head and
+// literally Position.jobLevel "3A" or "3B", matching both Section Head and
 // Department Head/Manager tiers in the current org data. Kept in its own
 // file for the same Prisma-backed/dependency-free-permissions.ts reason as
 // hr-manager.ts and dept-head.ts.
@@ -29,7 +29,7 @@ export async function getActiveLevel3Positions(
       status: "ACTIVE",
       effectiveFrom: { lte: asOf },
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { job: { jobLevel: { in: LEVEL_3_JOB_LEVELS } } },
+      position: { jobLevel: { in: LEVEL_3_JOB_LEVELS } },
     },
     include: { position: { include: { job: true } } },
   });
@@ -39,7 +39,7 @@ export async function getActiveLevel3Positions(
     positionId: a.positionId,
     positionCode: a.position.positionCode,
     jobTitle: a.position.job.jobTitle,
-    jobLevel: a.position.job.jobLevel,
+    jobLevel: a.position.jobLevel,
     orgUnitId: a.position.orgUnitId,
   }));
 }

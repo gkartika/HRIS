@@ -54,8 +54,20 @@ export default async function ContractListPage({
 
   return (
     <div>
-      <h1 className="text-lg font-medium text-slate-900">{t("contract.listTitle")}</h1>
-      <p className="mt-1 text-sm text-slate-500">{t("contract.listSubtitle")}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-medium text-slate-900">{t("contract.listTitle")}</h1>
+          <p className="mt-1 text-sm text-slate-500">{t("contract.listSubtitle")}</p>
+        </div>
+        {isHrAdmin(session) && (
+          <Link
+            href="/contracts/new"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t("contract.newContract")}
+          </Link>
+        )}
+      </div>
 
       <form className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <div>
@@ -130,7 +142,7 @@ export default async function ContractListPage({
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-600">
-                      {c.employee.preferredName ?? c.employee.fullLegalName}
+                      {c.employee.fullLegalName}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{t(`employmentStatus.${c.contractType}`)}</td>
                     <td className="px-4 py-3 text-slate-600">

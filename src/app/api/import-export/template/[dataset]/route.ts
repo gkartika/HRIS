@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
-import { canManageOrgStructure, canCreateEmployee, isHrAdmin } from "@/lib/permissions";
+import { canManageOrgStructure, canCreateEmployee, isHrAdmin, canImportFingerprintAttendance } from "@/lib/permissions";
 import { DATASET_REGISTRY, isDatasetKey } from "@/lib/import-export/registry";
 import { templateCsv } from "@/lib/import-export/csv";
 
 function canAccessDataset(session: Session, dataset: string): boolean {
   if (dataset === "employees") return canCreateEmployee(session);
   if (dataset === "assignments") return isHrAdmin(session);
+  if (dataset === "fingerprint-attendance") return canImportFingerprintAttendance(session);
   return canManageOrgStructure(session);
 }
 

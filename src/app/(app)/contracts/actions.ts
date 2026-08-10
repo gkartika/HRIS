@@ -31,21 +31,33 @@ import type { EmploymentStatus, ContractRenewalRecommendation } from "@/generate
 // contract entry (only a renewal of an existing one goes through the
 // Draft/Released/Signed pipeline).
 export async function createContract(
-  employeeId: string,
   _prevState: string | undefined,
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
   if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
 
+  const employeeId = formData.get("employeeId") as string;
   const contractType = formData.get("contractType") as EmploymentStatus;
   const startDate = formData.get("startDate") as string;
   const endDate = (formData.get("endDate") as string) || null;
 
-  if (!contractType || !startDate) return "Jenis kontrak dan tanggal mulai wajib diisi.";
+  if (!employeeId || !contractType || !startDate) {
+    return "Karyawan, jenis kontrak, dan tanggal mulai wajib diisi.";
+  }
 
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return "Karyawan tidak ditemukan.";
+
+  // A second concurrent ACTIVE contract for the same employee is never
+  // valid — the Renewal flow (which replaces one contract with the next) is
+  // the only path to more than one contract per employee over time.
+  const existingActiveContract = await prisma.contract.findFirst({
+    where: { employeeId, status: "ACTIVE" },
+  });
+  if (existingActiveContract) {
+    return `Karyawan ini sudah memiliki kontrak aktif (${existingActiveContract.contractNumber}) — gunakan proses Perpanjangan Kontrak untuk menggantinya.`;
+  }
 
   const primaryAssignment = await getActivePrimaryAssignment(employeeId);
   if (!primaryAssignment) {

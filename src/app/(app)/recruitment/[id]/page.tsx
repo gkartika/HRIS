@@ -219,13 +219,13 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
             <StartReviewButton requestId={request.id} />
           </div>
           <div className="mt-3">
-            <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} />
+            <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} defaultJobId={request.jobId} />
           </div>
         </div>
       )}
       {canApprove && request.status === "UNDER_REVIEW" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} />
+          <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} defaultJobId={request.jobId} />
         </div>
       )}
       {canCancel && (

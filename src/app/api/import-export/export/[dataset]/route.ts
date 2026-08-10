@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
-import { canManageOrgStructure, canListEmployees, isHrAdmin } from "@/lib/permissions";
+import { canManageOrgStructure, canListEmployees, isHrAdmin, canExportAttendanceData } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { DATASET_REGISTRY, isDatasetKey } from "@/lib/import-export/registry";
 import { rowsToCsv } from "@/lib/import-export/csv";
@@ -9,6 +9,7 @@ import { rowsToCsv } from "@/lib/import-export/csv";
 function canAccessDataset(session: Session, dataset: string): boolean {
   if (dataset === "employees") return canListEmployees(session);
   if (dataset === "assignments") return isHrAdmin(session);
+  if (dataset === "fingerprint-attendance") return canExportAttendanceData(session);
   return canManageOrgStructure(session);
 }
 

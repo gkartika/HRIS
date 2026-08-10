@@ -16,31 +16,48 @@ const LIFECYCLE_BADGE_TONE: Record<string, string> = {
 };
 
 const EMPLOYMENT_STATUSES = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"] as const;
+const PAGE_SIZE = 25;
 
 export default async function EmployeesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; orgUnitId?: string; employmentStatus?: string; activeFlag?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    orgUnitId?: string;
+    jobLevel?: string;
+    employmentStatus?: string;
+    activeFlag?: string;
+    page?: string;
+  }>;
 }) {
   const session = await requireSession();
   if (!canListEmployees(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const { q, orgUnitId, employmentStatus, activeFlag } = await searchParams;
+  const { q, orgUnitId, jobLevel, employmentStatus, activeFlag, page: pageRaw } = await searchParams;
+  const page = Math.max(1, Number(pageRaw) || 1);
 
   const where: Prisma.EmployeeWhereInput = {};
   if (q?.trim()) {
+    // Search also matches preferredName (the name shown almost everywhere
+    // else in the app — org chart, shift assignments, movements — so a
+    // search for what a user actually sees elsewhere must not come up
+    // empty just because it differs from fullLegalName) and the employee's
+    // current job title — with 180+ people, typing "Operator CNC" is often
+    // faster than hunting through a long Department/Level combination.
     const query = q.trim();
     where.OR = [
       { employeeNumber: { contains: query } },
       { fullLegalName: { contains: query } },
       { preferredName: { contains: query } },
+      { currentPosition: { job: { jobTitle: { contains: query } } } },
     ];
   }
-  if (orgUnitId) {
-    where.currentPosition = { orgUnitId };
-  }
+  const positionFilter: Prisma.PositionWhereInput = {};
+  if (orgUnitId) positionFilter.orgUnitId = orgUnitId;
+  if (jobLevel) positionFilter.jobLevel = jobLevel;
+  if (Object.keys(positionFilter).length > 0) where.currentPosition = positionFilter;
   if (employmentStatus) {
     where.employmentStatus = employmentStatus as (typeof EMPLOYMENT_STATUSES)[number];
   }
@@ -48,13 +65,17 @@ export default async function EmployeesPage({
     where.activeFlag = activeFlag === "true";
   }
 
-  const [employees, orgUnits, totalCount] = await Promise.all([
+  const [employees, filteredCount, orgUnits, jobLevels, totalCount] = await Promise.all([
     prisma.employee.findMany({
       where,
       orderBy: { employeeNumber: "asc" },
       include: { currentPosition: { include: { job: true, orgUnit: true } } },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
+    prisma.employee.count({ where }),
     prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+    prisma.position.findMany({ distinct: ["jobLevel"], select: { jobLevel: true }, orderBy: { jobLevel: "asc" } }),
     prisma.employee.count(),
   ]);
 
@@ -66,12 +87,23 @@ export default async function EmployeesPage({
   });
 
   const rows = employees.map((e) => projectEmployee(e, session));
-  const hasFilters = !!(q || orgUnitId || employmentStatus || activeFlag);
+  const hasFilters = !!(q || orgUnitId || jobLevel || employmentStatus || activeFlag);
+  const totalPages = Math.max(1, Math.ceil(filteredCount / PAGE_SIZE));
+  const carryParams = {
+    ...(q ? { q } : {}),
+    ...(orgUnitId ? { orgUnitId } : {}),
+    ...(jobLevel ? { jobLevel } : {}),
+    ...(employmentStatus ? { employmentStatus } : {}),
+    ...(activeFlag ? { activeFlag } : {}),
+  };
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-medium text-slate-900">{t("employee.listTitle")}</h1>
+        <div>
+          <h1 className="text-lg font-medium text-slate-900">{t("employee.listTitle")}</h1>
+          <p className="mt-1 text-xs text-slate-400">{t("common.filteredCount", { shown: filteredCount, total: totalCount })}</p>
+        </div>
         {canCreateEmployee(session) && (
           <Link
             href="/employees/new"
@@ -90,7 +122,7 @@ export default async function EmployeesPage({
             type="text"
             name="q"
             defaultValue={q ?? ""}
-            placeholder={t("employee.employeeNumber")}
+            placeholder="Nomor, nama, atau jabatan"
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
@@ -105,6 +137,21 @@ export default async function EmployeesPage({
             {orgUnits.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.unitName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Level</label>
+          <select
+            name="jobLevel"
+            defaultValue={jobLevel ?? ""}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">{t("common.allOption")}</option>
+            {jobLevels.map((p) => (
+              <option key={p.jobLevel} value={p.jobLevel}>
+                {p.jobLevel}
               </option>
             ))}
           </select>
@@ -151,80 +198,100 @@ export default async function EmployeesPage({
         </div>
       </form>
 
-      {hasFilters && (
-        <p className="mb-3 text-xs text-slate-400">
-          {t("common.filteredCount", { shown: employees.length, total: totalCount })}
-        </p>
-      )}
-
       {employees.length === 0 ? (
         <p className="text-sm text-slate-400">
           {hasFilters ? t("common.noFilteredResults") : t("employee.emptyState")}
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">{t("employee.employeeNumber")}</th>
-                <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
-                <th className="px-4 py-3 font-medium">{t("employee.currentPosition")}</th>
-                <th className="px-4 py-3 font-medium">{t("employee.employmentStatus")}</th>
-                <th className="px-4 py-3 font-medium">{t("employee.lifecycleStatus")}</th>
-                {isHrAdmin(session) && <th className="px-4 py-3 font-medium">Kelengkapan Data</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {employees.map((employee, idx) => {
-                const row = rows[idx];
-                return (
-                  <tr key={employee.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/employees/${employee.id}`}
-                        className="font-mono text-xs text-indigo-600 hover:underline"
-                      >
-                        {row.employeeNumber}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">{row.preferredName ?? row.fullLegalName}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {employee.currentPosition
-                        ? `${employee.currentPosition.job.jobTitle} — ${employee.currentPosition.orgUnit.unitName}`
-                        : t("employee.noPosition")}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {row.employmentStatus ? t(`employmentStatus.${row.employmentStatus}`) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const lifecycleStatus = deriveEmployeeLifecycleStatus(employee.activeFlag, employee.hireDate);
-                        return (
-                          <span className={`rounded-md px-2 py-1 text-xs font-medium ${LIFECYCLE_BADGE_TONE[lifecycleStatus]}`}>
-                            {t(`employeeLifecycleStatus.${lifecycleStatus}`)}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    {isHrAdmin(session) && (
+        <>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">{t("employee.employeeNumber")}</th>
+                  <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                  <th className="px-4 py-3 font-medium">{t("employee.currentPosition")}</th>
+                  <th className="px-4 py-3 font-medium">{t("employee.employmentStatus")}</th>
+                  <th className="px-4 py-3 font-medium">{t("employee.lifecycleStatus")}</th>
+                  {isHrAdmin(session) && <th className="px-4 py-3 font-medium">Kelengkapan Data</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map((employee, idx) => {
+                  const row = rows[idx];
+                  return (
+                    <tr key={employee.id} className="border-t border-slate-100">
                       <td className="px-4 py-3">
-                        {isEmployeeProfileIncomplete(employee) ? (
-                          <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                            Belum Lengkap
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-                            Lengkap
-                          </span>
-                        )}
+                        <Link
+                          href={`/employees/${employee.id}`}
+                          className="font-mono text-xs text-indigo-600 hover:underline"
+                        >
+                          {row.employeeNumber}
+                        </Link>
                       </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      <td className="px-4 py-3">{row.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {employee.currentPosition
+                          ? `${employee.currentPosition.jobLevel} ${employee.currentPosition.job.jobTitle} — ${employee.currentPosition.orgUnit.unitName}`
+                          : t("employee.noPosition")}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {row.employmentStatus ? t(`employmentStatus.${row.employmentStatus}`) : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const lifecycleStatus = deriveEmployeeLifecycleStatus(employee.activeFlag, employee.hireDate);
+                          return (
+                            <span className={`rounded-md px-2 py-1 text-xs font-medium ${LIFECYCLE_BADGE_TONE[lifecycleStatus]}`}>
+                              {t(`employeeLifecycleStatus.${lifecycleStatus}`)}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      {isHrAdmin(session) && (
+                        <td className="px-4 py-3">
+                          {isEmployeeProfileIncomplete(employee) ? (
+                            <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                              Belum Lengkap
+                            </span>
+                          ) : (
+                            <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                              Lengkap
+                            </span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-xs text-slate-400">{t("common.pageOf", { page, totalPages })}</p>
+              <div className="flex gap-2">
+                {page > 1 && (
+                  <Link
+                    href={`/employees?${new URLSearchParams({ ...carryParams, page: String(page - 1) }).toString()}`}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                  >
+                    {t("common.previousPage")}
+                  </Link>
+                )}
+                {page < totalPages && (
+                  <Link
+                    href={`/employees?${new URLSearchParams({ ...carryParams, page: String(page + 1) }).toString()}`}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                  >
+                    {t("common.nextPage")}
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

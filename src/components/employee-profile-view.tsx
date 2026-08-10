@@ -40,12 +40,14 @@ export function EmployeeProfileView({
   files = [],
   educationLevelLabel,
   ptkpLabel,
+  reportsTo,
 }: {
   employee: Partial<Employee>;
   assignments: AssignmentWithPosition[];
   files?: FileObject[];
   educationLevelLabel?: string | null;
   ptkpLabel?: string | null;
+  reportsTo?: { label: string; holderName: string | null } | null;
 }) {
   const lifecycleStatus =
     employee.activeFlag !== undefined && employee.hireDate
@@ -110,6 +112,12 @@ export function EmployeeProfileView({
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="text-sm font-medium text-slate-900">{t("assignmentUi.title")}</h2>
+        {reportsTo !== undefined && (
+          <p className="mt-1 text-xs text-slate-500">
+            {t("assignmentUi.reportsTo")}:{" "}
+            {reportsTo ? `${reportsTo.label}${reportsTo.holderName ? ` — ${reportsTo.holderName}` : ""}` : "—"}
+          </p>
+        )}
         {assignments.length === 0 ? (
           <p className="mt-2 text-sm text-slate-400">{t("employee.noPosition")}</p>
         ) : (
@@ -120,7 +128,9 @@ export function EmployeeProfileView({
                 className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-3"
               >
                 <div>
-                  <p className="text-sm font-medium text-slate-900">{a.position.job.jobTitle}</p>
+                  <p className="text-sm font-medium text-slate-900">
+                    {a.position.jobLevel} {a.position.job.jobTitle}
+                  </p>
                   <p className="text-xs text-slate-500">{a.position.orgUnit.unitName}</p>
                   <p className="mt-1 text-xs text-slate-400">
                     {t("assignmentUi.effectiveFrom")} {formatDate(a.effectiveFrom)}

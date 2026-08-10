@@ -3,9 +3,7 @@
 import { useActionState } from "react";
 import { submitRecruitmentRequest } from "../actions";
 import { t } from "@/lib/i18n/id";
-import type { OrgUnit, Job, Position, Employee } from "@/generated/prisma/client";
-
-type PositionOption = Position & { job: Job; orgUnit: OrgUnit };
+import type { OrgUnit, Job, Employee } from "@/generated/prisma/client";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -13,13 +11,13 @@ function todayIso() {
 
 export function CreateRequestForm({
   departments,
-  positions,
+  jobs,
   employees,
   currentEmployeeId,
   isHrAdmin,
 }: {
   departments: OrgUnit[];
-  positions: PositionOption[];
+  jobs: Job[];
   employees: Employee[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
@@ -83,11 +81,11 @@ export function CreateRequestForm({
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.requestedPosition")}</label>
-          <select name="requestedPositionId" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">— Belum ada posisi spesifik —</option>
-            {positions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.positionCode} — {p.job.jobTitle} ({p.orgUnit.unitName})
+          <select name="jobId" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">— Belum ada jabatan spesifik —</option>
+            {jobs.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.jobCode} {j.jobTitle}
               </option>
             ))}
           </select>

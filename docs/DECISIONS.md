@@ -3,6 +3,42 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-10 — Phase 2 Extension: Attendance & Absence (Mobile GPS+selfie check-in, Fingerprint import, daily reconciliation with live-derived exceptions, two-stage Cuti/Izin/Sakit/Lainnya workflow)
+
+New module, additive-only (no existing accepted functionality touched). Schema: 4 enums (`AttendanceMethod`, `AttendanceEventType`, `AttendanceSource`, `AbsenceType`) + 1 enum (`AbsenceStatus`, 5 values) + 7 models (`AttendanceGeofence`, `AttendanceAssignment`, `AttendanceEvent`, `DailyAttendanceRecord`, `AbsenceApproverConfig`, `AbsenceEntitlementConfig`, `AbsenceRequest`), applied via forward-only migrations using the established `prisma migrate diff --script` → hand-written migration folder → `prisma migrate deploy` non-interactive workaround.
+
+### No per-employee/admin-configurable work schedule — one fixed company default
+
+Originally built with a full `WorkSchedule` admin model (HR Admin creates named schedules: start/end time, grace minutes, work days, assigns one per employee) — per direct user follow-up request, this was removed entirely. Every employee now shares one hardcoded policy in `lib/attendance.ts`: 07:30 start, Mon–Thu closes 16:30, Friday closes 17:00, 10-minute grace. The Friday/Mon-Thu end-time split doesn't need to be day-aware in the exception logic since end time is purely informational — only `LATE_CHECK_IN` and missing-punch exceptions are ever computed, and both depend only on start time + grace, which is the same every day. Removing `WorkSchedule` meant a second corrective migration (dropping the table and its two FK columns from `AttendanceAssignment`/`DailyAttendanceRecord`) plus deleting the `/admin/work-schedules` page outright — HR Admin's attendance-assignment form now only picks Method (Mobile/Fingerprint) and, for Mobile, an optional Geofence.
+
+### Exceptions are derived live, never stored
+
+Same "derive, don't store" convention as `deriveEmployeeLifecycleStatus`: `DailyAttendanceRecord` is purely a "this day has been swept by reconciliation" marker (linking whichever check-in/check-out events exist), not the source of exception data. `deriveDailyAttendanceExceptions()` in `lib/attendance.ts` always computes `MISSING_CHECK_IN`/`MISSING_CHECK_OUT`/`LATE_CHECK_IN`/`OUTSIDE_GEOFENCE_CHECK_IN`/`OUTSIDE_GEOFENCE_CHECK_OUT` fresh from the linked `AttendanceEvent` rows every time the Attendance Records page or its export loads — a stale record never lies about a fact that later became knowable differently.
+
+### Fingerprint import reuses the existing generic ImportBatch/ImportRow framework
+
+Rather than building a bespoke one-shot import (the ZIP-bundle precedent), `src/lib/import-export/fingerprint-attendance.ts` implements the same `DatasetModule` interface (`dryRun`/`commitRow`/`exportData`) as the Employee/OrgUnit/Job/Position/Assignment CSV importers and plugs into the same generic preview→commit pipeline and `/import` hub page. The only generalization needed to the shared framework: `uploadAndPreviewImport` now detects `.xlsx`/`.xls` by extension and converts via the newly-added `xlsx` (SheetJS) package before handing rows to the same `dryRun`. Dedup is enforced two ways — against rows already committed to the database, and against earlier rows in the same file — since a re-exported machine log commonly overlaps the previous export's date range. `AttendanceEvent` deliberately carries no FK back to the `ImportRow` that created it (removed after initially adding one) — the generic framework's own `ImportRow.createdRecordId` already gives full traceability, and `commitRow`'s signature never receives its own row id, so the reverse FK could never be populated.
+
+### Known risk: `xlsx` package has unpatched CVEs
+
+SheetJS's npm-registry `xlsx` package carries known prototype-pollution and ReDoS advisories that the maintainer only patches via their own CDN, not npm. Accepted as a reasonable risk here since the upload path is HR-Admin-only (already permission-gated), not public-facing — flagged to the user directly rather than silently accepted.
+
+### Absence first-approver is an explicitly HR-Admin-configured Position per Department, not derived
+
+Deliberately distinct from the Dept-Head-3B-derived-from-jobLevel pattern used by every other workflow in this app (Recruitment, Movement, Offboarding) — the spec calls for a configured Position, not one implied by org-chart level. `AbsenceApproverConfig` is a simple one-row-per-Department table; "who currently holds that Position" is resolved the same way `reportsToPosition.currentHolders` is displayed elsewhere (`Employee.currentPositionId` equality), pulled into a small shared `lib/position-holder.ts` helper reused by both the decide action and the detail page's visibility check.
+
+### HR Admin override is an in-place overwrite, not a correction record
+
+Per spec ("no separate correction record"): `AbsenceRequest.isHrOverride`/`hrOverrideReason`/`hrOverrideAt`/`hrOverrideByAccountId` overwrite the status field directly, only reachable from an already-decided (`APPROVED`/`REJECTED`) request, always requiring a reason. Verified live: an approved Cuti request corrected to Rejected retained the full original decision trail (first-approver + HR Admin decision) alongside the override, with a visible "Dikoreksi oleh HR Admin" badge.
+
+### Absence attachment file access widened to match who can decide the request
+
+`/api/files/[id]` originally only allowed the file's own employee or HR Admin (`canViewEmployeeDocument`) — for an Absence attachment (e.g. a Sakit doctor's note) this would have 403'd the exact people the approval workflow depends on (the configured first-approver, a Level-3 holder in the employee's department) even though they're authorized to view the request itself. Widened with a narrow, category-scoped check (`file.category === "ABSENCE_ATTACHMENT"`) that re-derives the same scope `canViewAbsenceRequest` uses, rather than loosening the route's general self-or-HR-Admin default.
+
+### Live-verified end to end
+
+Assigned Mobile+Geofence and Fingerprint methods via the Employee detail panel; confirmed the Fingerprint persona sees no manual check-in/out action; ran the Fingerprint dryRun/commitRow pipeline directly against valid, duplicate, and unregistered-device rows and confirmed correct accept/reject behavior; confirmed the Attendance Records page correctly shows "Belum ditugaskan" for unassigned employees, "Belum Check-in"/"Belum Check-out" for assigned-but-unpunched employees, and a clean "Tidak ada pengecualian" for an on-time in-window punch; ran a full Absence request through submit → first-approver approve → HR Admin approve → HR Admin override, and confirmed the overlap-validation rejection message names the conflicting request number. GPS/selfie capture itself couldn't be exercised end-to-end in the headless browser test environment (no real camera/GPS hardware) — the check-in/out UI, geolocation-capture flow, and server-side validation were verified by code review and by confirming the page correctly gates on `AttendanceAssignment.method` per persona.
+
 ## 2026-08-06 — `jobLevel` moved from `Job` to `Position`; Jobs/Positions admin forms and every picker updated to match
 
 Reverses part of the previous day's real-data migration decision. `Job.jobLevel` was a derived approximation (first-seen Position's level, backfilled once at import time) — a workaround for not having a real per-seat level field. The user proposed the cleaner model directly: **level is a property of the seat, not the abstract role** — the same Job (e.g. "Operator CNC") is legitimately held at different grades across different Positions ("1B Operator CNC" vs "1C Operator CNC"), matching the migration sheet's own real structure (`04_POSITIONS.job_level_code`; `03_JOBS` carries no level at all). Motivated directly by a real problem: the Recruitment Request form's "Posisi yang Diminta" picker listed all 157 real Positions, many with identical-looking job titles and no way to tell them apart without opening each one.

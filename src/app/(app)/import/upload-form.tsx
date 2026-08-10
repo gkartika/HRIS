@@ -9,6 +9,9 @@ import type { DatasetKey } from "@/lib/import-export/registry";
 export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: string }) {
   const action = uploadAndPreviewImport.bind(null, dataset);
   const [error, formAction, isPending] = useActionState(action, undefined);
+  // Fingerprint machine exports are commonly XLSX rather than CSV — every
+  // other dataset in this app stays CSV-only.
+  const acceptedTypes = dataset === "fingerprint-attendance" ? ".csv,.xlsx,.xls" : ".csv";
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -33,7 +36,7 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
         <input
           type="file"
           name="file"
-          accept=".csv"
+          accept={acceptedTypes}
           required
           className="flex-1 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm"
         />

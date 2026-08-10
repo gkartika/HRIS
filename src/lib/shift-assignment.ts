@@ -2,6 +2,14 @@
 // "assign shift or non shift for each employee... changes weekly, submitted
 // by level 3"). No Prisma/Next imports — unit testable with plain values,
 // same pattern as offboarding.ts/movement.ts.
+import type { ShiftAssignmentType } from "@/generated/prisma/enums";
+
+// Per direct user request: adding every employee explicitly every week was
+// the friction — most weeks, most people are simply Shift 1. A missing
+// ShiftAssignment row for a given employee/week is now read as this value
+// everywhere (UI display, exports, etc.), not "unknown" — only deviations
+// from it need an actual row.
+export const DEFAULT_SHIFT_TYPE: ShiftAssignmentType = "SHIFT_1";
 
 // One row per employee per calendar week (Monday-start), regardless of
 // which day within that week the submitter picks — half-open like every

@@ -621,6 +621,41 @@ enum ShiftAssignmentType {
   NON_SHIFT
 }
 
+// ---------- Phase 2 Extension: Attendance & Absence ----------
+
+enum AttendanceMethod {
+  MOBILE
+  FINGERPRINT
+}
+
+enum AttendanceEventType {
+  CHECK_IN
+  CHECK_OUT
+}
+
+enum AttendanceSource {
+  MOBILE
+  FINGERPRINT_IMPORT
+}
+
+enum AbsenceType {
+  CUTI
+  IZIN
+  SAKIT
+  LAINNYA
+}
+
+// No HR Manager stage anywhere in this flow, per direct spec ("Absence does
+// not route to HR Manager") — only the configured first-approver Position,
+// then HR Admin.
+enum AbsenceStatus {
+  SUBMITTED
+  PENDING_HR_ADMIN
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 // Submitted weekly by a Level-3 (3A/3B) position holder scoped to the
 // employee's own department (src/lib/level3-scope.ts, same authority already
 // used for Perubahan Posisi submission) — or overridden directly by HR
@@ -638,11 +673,11 @@ model ShiftAssignment {
   note          String?
   isHrOverride  Boolean             @default(false)
 
-  submittedAt            DateTime  @default(now())
-  submittedByAccountId   String
-  submittedByAccount     Account   @relation("ShiftAssignmentSubmittedBy", fields: [submittedByAccountId], references: [id])
-  submittedByPositionId  String?
-  submittedByPosition    Position? @relation("ShiftAssignmentSubmittedByPosition", fields: [submittedByPositionId], references: [id])
+  submittedAt           DateTime  @default(now())
+  submittedByAccountId  String
+  submittedByAccount    Account   @relation("ShiftAssignmentSubmittedBy", fields: [submittedByAccountId], references: [id])
+  submittedByPositionId String?
+  submittedByPosition   Position? @relation("ShiftAssignmentSubmittedByPosition", fields: [submittedByPositionId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -697,6 +732,12 @@ model Account {
   offboardingCasesClearanceCompletedBy   OffboardingCase[]               @relation("OffboardingClearanceCompletedBy")
   offboardingCasesCancelledBy            OffboardingCase[]               @relation("OffboardingCancelledBy")
   shiftAssignmentsSubmittedBy            ShiftAssignment[]               @relation("ShiftAssignmentSubmittedBy")
+  attendanceAssignmentsAssignedBy        AttendanceAssignment[]          @relation("AttendanceAssignmentAssignedBy")
+  absenceRequestsSubmittedBy             AbsenceRequest[]                @relation("AbsenceRequestSubmittedBy")
+  absenceRequestsFirstDecisionBy         AbsenceRequest[]                @relation("AbsenceFirstDecisionBy")
+  absenceRequestsHrAdminDecisionBy       AbsenceRequest[]                @relation("AbsenceHrAdminDecisionBy")
+  absenceRequestsHrOverrideBy            AbsenceRequest[]                @relation("AbsenceHrOverrideBy")
+  absenceRequestsCancelledBy             AbsenceRequest[]                @relation("AbsenceCancelledBy")
 }
 
 model AccountRole {
@@ -780,7 +821,11 @@ model Employee {
   evaluationsAsP1                Evaluation[]                   @relation("EvaluationP1Evaluator")
   evaluationsAsP2                Evaluation[]                   @relation("EvaluationP2Evaluator")
   offboardingCases               OffboardingCase[]              @relation("OffboardingCaseEmployee")
-  shiftAssignments               ShiftAssignment[]               @relation("ShiftAssignmentEmployee")
+  shiftAssignments               ShiftAssignment[]              @relation("ShiftAssignmentEmployee")
+  attendanceAssignments          AttendanceAssignment[]         @relation("AttendanceAssignmentEmployee")
+  attendanceEvents               AttendanceEvent[]              @relation("AttendanceEventEmployee")
+  dailyAttendanceRecords         DailyAttendanceRecord[]        @relation("DailyAttendanceRecordEmployee")
+  absenceRequests                AbsenceRequest[]               @relation("AbsenceRequestEmployee")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -822,8 +867,9 @@ model OrgUnit {
   effectiveFrom DateTime  @default(now())
   effectiveTo   DateTime?
 
-  positions           Position[]
-  recruitmentRequests RecruitmentRequest[]
+  positions             Position[]
+  recruitmentRequests   RecruitmentRequest[]
+  absenceApproverConfig AbsenceApproverConfig?
 }
 
 model Job {
@@ -878,30 +924,32 @@ model Position {
   effectiveFrom         DateTime       @default(now())
   effectiveTo           DateTime?
 
-  currentHolders                              Employee[]            @relation("PositionHolder")
+  currentHolders                              Employee[]              @relation("PositionHolder")
   assignments                                 Assignment[]
-  requestedForRecruitment                     RecruitmentRequest[]  @relation("RequestedPosition")
-  requesterForRecruitment                     RecruitmentRequest[]  @relation("RequesterPosition")
-  recruitmentDecisions                        RecruitmentRequest[]  @relation("RecruitmentDecisionPosition")
-  recruitmentDeptHeadDecisions                RecruitmentRequest[]  @relation("RecruitmentDeptHeadDecisionPosition")
-  movementRequestsAsCurrent                   MovementRequest[]     @relation("MovementCurrentPosition")
-  movementRequestsAsProposed                  MovementRequest[]     @relation("MovementProposedPosition")
-  movementRequestsAsRequesterPosition         MovementRequest[]     @relation("MovementRequesterPosition")
-  movementRequestsDecisions                   MovementRequest[]     @relation("MovementDecisionPosition")
-  movementRequestsDeptHeadDecisions           MovementRequest[]     @relation("MovementDeptHeadDecisionPosition")
-  contractRecommendations                     Contract[]            @relation("ContractRecommendationPosition")
-  contractDecisions                           Contract[]            @relation("ContractDecisionPosition")
-  renewalSnapshotOf                           ContractRenewalCase[] @relation("RenewalSnapshotPosition")
-  renewalDeptHeadPositionOf                   ContractRenewalCase[] @relation("RenewalDeptHeadPosition")
-  renewalDeptHeadProposedPositionOf           ContractRenewalCase[] @relation("RenewalDeptHeadProposedPosition")
-  renewalDecisionPositionOf                   ContractRenewalCase[] @relation("RenewalDecisionPosition")
-  evaluationsAsSnapshotPosition               Evaluation[]          @relation("EvaluationSnapshotPosition")
-  evaluationsAsP1Position                     Evaluation[]          @relation("EvaluationP1Position")
-  evaluationsAsP2Position                     Evaluation[]          @relation("EvaluationP2Position")
-  offboardingCasesDeptHeadDecisionPositionOf  OffboardingCase[]     @relation("OffboardingDeptHeadDecisionPosition")
-  offboardingCasesHrManagerDecisionPositionOf OffboardingCase[]     @relation("OffboardingHrManagerDecisionPosition")
-  contractsReleasedByPositionOf               Contract[]            @relation("ContractReleasedByPosition")
-  shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]     @relation("ShiftAssignmentSubmittedByPosition")
+  requestedForRecruitment                     RecruitmentRequest[]    @relation("RequestedPosition")
+  requesterForRecruitment                     RecruitmentRequest[]    @relation("RequesterPosition")
+  recruitmentDecisions                        RecruitmentRequest[]    @relation("RecruitmentDecisionPosition")
+  recruitmentDeptHeadDecisions                RecruitmentRequest[]    @relation("RecruitmentDeptHeadDecisionPosition")
+  movementRequestsAsCurrent                   MovementRequest[]       @relation("MovementCurrentPosition")
+  movementRequestsAsProposed                  MovementRequest[]       @relation("MovementProposedPosition")
+  movementRequestsAsRequesterPosition         MovementRequest[]       @relation("MovementRequesterPosition")
+  movementRequestsDecisions                   MovementRequest[]       @relation("MovementDecisionPosition")
+  movementRequestsDeptHeadDecisions           MovementRequest[]       @relation("MovementDeptHeadDecisionPosition")
+  contractRecommendations                     Contract[]              @relation("ContractRecommendationPosition")
+  contractDecisions                           Contract[]              @relation("ContractDecisionPosition")
+  renewalSnapshotOf                           ContractRenewalCase[]   @relation("RenewalSnapshotPosition")
+  renewalDeptHeadPositionOf                   ContractRenewalCase[]   @relation("RenewalDeptHeadPosition")
+  renewalDeptHeadProposedPositionOf           ContractRenewalCase[]   @relation("RenewalDeptHeadProposedPosition")
+  renewalDecisionPositionOf                   ContractRenewalCase[]   @relation("RenewalDecisionPosition")
+  evaluationsAsSnapshotPosition               Evaluation[]            @relation("EvaluationSnapshotPosition")
+  evaluationsAsP1Position                     Evaluation[]            @relation("EvaluationP1Position")
+  evaluationsAsP2Position                     Evaluation[]            @relation("EvaluationP2Position")
+  offboardingCasesDeptHeadDecisionPositionOf  OffboardingCase[]       @relation("OffboardingDeptHeadDecisionPosition")
+  offboardingCasesHrManagerDecisionPositionOf OffboardingCase[]       @relation("OffboardingHrManagerDecisionPosition")
+  contractsReleasedByPositionOf               Contract[]              @relation("ContractReleasedByPosition")
+  shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]       @relation("ShiftAssignmentSubmittedByPosition")
+  absenceApproverConfigOf                     AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
+  absenceRequestsAsFirstApproverPosition      AbsenceRequest[]        @relation("AbsenceFirstApproverPosition")
 }
 
 model Assignment {
@@ -1254,14 +1302,14 @@ model Contract {
   // Position-derived-only authority as every other HR Manager decision in
   // this app), not HR Admin alone, so unlike draft/sign/activate it carries
   // its own actor+Position evidence fields (WF-02).
-  draftedAt   DateTime?
-  releasedAt  DateTime?
+  draftedAt            DateTime?
+  releasedAt           DateTime?
   releasedByAccountId  String?
   releasedByAccount    Account?  @relation("ContractReleasedBy", fields: [releasedByAccountId], references: [id])
   releasedByPositionId String?
   releasedByPosition   Position? @relation("ContractReleasedByPosition", fields: [releasedByPositionId], references: [id])
-  signedAt    DateTime?
-  activatedAt DateTime?
+  signedAt             DateTime?
+  activatedAt          DateTime?
 
   contractFileId String?     @unique
   contractFile   FileObject? @relation(fields: [contractFileId], references: [id])
@@ -1345,4 +1393,163 @@ model FileObject {
   employeeKkOf                    Employee?        @relation("EmployeeKkFile")
   contractOf                      Contract?
   movementPerformanceEvaluationOf MovementRequest?
+  attendanceEventSelfieOf         AttendanceEvent? @relation("AttendanceEventSelfie")
+  absenceRequestAttachmentOf      AbsenceRequest?  @relation("AbsenceRequestAttachment")
+}
+
+// ---------- Phase 2 Extension: Attendance & Absence ----------
+
+// HR-Admin-managed master data: a named site with a center point + radius,
+// used for the Mobile check-in/out within-radius check.
+model AttendanceGeofence {
+  id           String   @id @default(cuid())
+  siteName     String   @unique
+  latitude     Float
+  longitude    Float
+  radiusMeters Int
+  activeFlag   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  attendanceAssignments AttendanceAssignment[]
+  attendanceEvents      AttendanceEvent[]
+}
+
+// Effective-dated, mirrors the Assignment/ShiftAssignment engines: which
+// capture Method (+ Geofence, only meaningful for MOBILE) an employee is
+// under over time. HR Admin only. There is no per-employee work schedule —
+// every employee shares the one fixed company default in lib/attendance.ts.
+model AttendanceAssignment {
+  id                      String              @id @default(cuid())
+  employeeId              String
+  employee                Employee            @relation("AttendanceAssignmentEmployee", fields: [employeeId], references: [id])
+  method                  AttendanceMethod
+  geofenceId              String?
+  geofence                AttendanceGeofence? @relation(fields: [geofenceId], references: [id])
+  // External device/badge identifier used to match a Fingerprint import row
+  // to this employee — only relevant when method = FINGERPRINT.
+  fingerprintDeviceUserId String?
+  effectiveFrom           DateTime
+  effectiveTo             DateTime?
+  assignedAt              DateTime            @default(now())
+  assignedByAccountId     String
+  assignedByAccount       Account             @relation("AttendanceAssignmentAssignedBy", fields: [assignedByAccountId], references: [id])
+  createdAt               DateTime            @default(now())
+
+  attendanceEvents AttendanceEvent[]
+}
+
+// A single check-in or check-out punch, from either source. Geofence
+// within-radius and lateness are never stored here — they're derived live
+// from this event + the linked Geofence, consistent with this app's
+// "derive, don't store" convention (deriveEmployeeLifecycleStatus etc).
+model AttendanceEvent {
+  id                     String                @id @default(cuid())
+  employeeId             String
+  employee               Employee              @relation("AttendanceEventEmployee", fields: [employeeId], references: [id])
+  attendanceAssignmentId String?
+  attendanceAssignment   AttendanceAssignment? @relation(fields: [attendanceAssignmentId], references: [id])
+  eventType              AttendanceEventType
+  eventSource            AttendanceSource
+  eventAt                DateTime
+  latitude               Float?
+  longitude              Float?
+  geofenceId             String?
+  geofence               AttendanceGeofence?   @relation(fields: [geofenceId], references: [id])
+  // Private file reference only (see FileObject/file-storage.ts) — never a
+  // public URL or base64 blob, same discipline as KTP/KK uploads.
+  selfieFileId           String?               @unique
+  selfieFile             FileObject?           @relation("AttendanceEventSelfie", fields: [selfieFileId], references: [id])
+  createdAt              DateTime              @default(now())
+
+  dailyRecordsAsCheckIn  DailyAttendanceRecord[] @relation("DailyRecordCheckInEvent")
+  dailyRecordsAsCheckOut DailyAttendanceRecord[] @relation("DailyRecordCheckOutEvent")
+}
+
+// One row per employee per calendar day, produced by the idempotent daily
+// reconciliation trigger (mirrors triggerDueRenewalCases()). Exceptions
+// (missing punch, late, outside geofence) are deliberately NOT columns here
+// — they're computed live from the linked events by lib/attendance.ts's
+// fixed default schedule, so this table is purely a "day swept" marker.
+model DailyAttendanceRecord {
+  id              String           @id @default(cuid())
+  employeeId      String
+  employee        Employee         @relation("DailyAttendanceRecordEmployee", fields: [employeeId], references: [id])
+  attendanceDate  DateTime
+  checkInEventId  String?          @unique
+  checkInEvent    AttendanceEvent? @relation("DailyRecordCheckInEvent", fields: [checkInEventId], references: [id])
+  checkOutEventId String?          @unique
+  checkOutEvent   AttendanceEvent? @relation("DailyRecordCheckOutEvent", fields: [checkOutEventId], references: [id])
+  reconciledAt    DateTime         @default(now())
+
+  @@unique([employeeId, attendanceDate])
+}
+
+// HR-Admin-configured first-approver Position per Department for Absence
+// requests — deliberately separate from the Dept-Head-3B-derived-from-
+// jobLevel pattern used elsewhere, because the spec calls for an explicitly
+// configured Position, not a derived one.
+model AbsenceApproverConfig {
+  id                 String   @id @default(cuid())
+  departmentId       String   @unique
+  department         OrgUnit  @relation(fields: [departmentId], references: [id])
+  approverPositionId String
+  approverPosition   Position @relation("AbsenceApproverPosition", fields: [approverPositionId], references: [id])
+  updatedAt          DateTime @updatedAt
+}
+
+// HR-Admin-configured annual entitlement (days/year) per Absence type.
+model AbsenceEntitlementConfig {
+  id          String      @id @default(cuid())
+  absenceType AbsenceType @unique
+  annualDays  Int
+  updatedAt   DateTime    @updatedAt
+}
+
+model AbsenceRequest {
+  id               String        @id @default(cuid())
+  requestNumber    String        @unique
+  employeeId       String
+  employee         Employee      @relation("AbsenceRequestEmployee", fields: [employeeId], references: [id])
+  absenceType      AbsenceType
+  startDate        DateTime
+  endDate          DateTime
+  reason           String
+  attachmentFileId String?       @unique
+  attachmentFile   FileObject?   @relation("AbsenceRequestAttachment", fields: [attachmentFileId], references: [id])
+  status           AbsenceStatus @default(SUBMITTED)
+
+  submittedAt          DateTime @default(now())
+  submittedByAccountId String
+  submittedByAccount   Account  @relation("AbsenceRequestSubmittedBy", fields: [submittedByAccountId], references: [id])
+
+  // First-approval stage: whichever Position was configured for the
+  // employee's Department (AbsenceApproverConfig) at submission time.
+  firstApproverPositionId  String?
+  firstApproverPosition    Position? @relation("AbsenceFirstApproverPosition", fields: [firstApproverPositionId], references: [id])
+  firstDecisionAt          DateTime?
+  firstDecisionByAccountId String?
+  firstDecisionByAccount   Account?  @relation("AbsenceFirstDecisionBy", fields: [firstDecisionByAccountId], references: [id])
+  firstDecisionNote        String?
+
+  hrAdminDecisionAt          DateTime?
+  hrAdminDecisionByAccountId String?
+  hrAdminDecisionByAccount   Account?  @relation("AbsenceHrAdminDecisionBy", fields: [hrAdminDecisionByAccountId], references: [id])
+  hrAdminDecisionNote        String?
+
+  // HR Admin override: in-place overwrite of an already-decided request per
+  // spec ("no separate correction record") — always carries a mandatory
+  // reason/identity/timestamp when used.
+  isHrOverride          Boolean   @default(false)
+  hrOverrideReason      String?
+  hrOverrideAt          DateTime?
+  hrOverrideByAccountId String?
+  hrOverrideByAccount   Account?  @relation("AbsenceHrOverrideBy", fields: [hrOverrideByAccountId], references: [id])
+
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelledByAccount   Account?  @relation("AbsenceCancelledBy", fields: [cancelledByAccountId], references: [id])
+  cancellationReason   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

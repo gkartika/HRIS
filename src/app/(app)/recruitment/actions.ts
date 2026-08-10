@@ -47,7 +47,7 @@ export async function submitRecruitmentRequest(
   const requestDate = formData.get("requestDate") as string;
   const reasonCode = formData.get("reasonCode") as RecruitmentReasonCode;
   const departmentId = formData.get("departmentId") as string;
-  const requestedPositionId = (formData.get("requestedPositionId") as string) || null;
+  const jobId = (formData.get("jobId") as string) || null;
   const shiftCode = formData.get("shiftCode") as ShiftCode;
   const requestedHeadcount = Number(formData.get("requestedHeadcount"));
   const jobDescriptionSnapshot = (formData.get("jobDescriptionSnapshot") as string)?.trim();
@@ -95,7 +95,7 @@ export async function submitRecruitmentRequest(
       requestDate: new Date(requestDate),
       reasonCode,
       departmentId,
-      requestedPositionId,
+      jobId,
       shiftCode,
       requestedHeadcount,
       jobDescriptionSnapshot,
@@ -240,10 +240,10 @@ export async function decideRecruitmentRequest(
     return "Catatan keputusan wajib diisi untuk Tolak/Kembalikan.";
   }
 
-  // Jabatan is no longer picked by the requester (removed from the submit
-  // form on direct request) — the HR Manager sets it here as part of
-  // Approve, since createEmployeeFromRecruitmentRequest still needs it to
-  // filter candidate Positions. Not required for Reject/Return.
+  // The requester may already set Jabatan Standar on submit; the HR Manager
+  // can confirm or override it here as part of Approve, since
+  // createEmployeeFromRecruitmentRequest still needs it to filter candidate
+  // Positions. Not required for Reject/Return.
   const jobId = (formData.get("jobId") as string) || request.jobId;
   if (decision === "APPROVED" && !jobId) {
     return "Jabatan wajib dipilih sebelum menyetujui permintaan ini.";

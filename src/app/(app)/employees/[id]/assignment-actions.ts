@@ -26,9 +26,29 @@ export async function addAssignment(
   if (assignmentType === "PRIMARY") {
     return "Gunakan 'Pindahkan ke Posisi Baru' untuk mengubah Penempatan Utama.";
   }
+  // Plt. (ACTING) is no longer offered from this form per direct user
+  // request — only Tambahan/Sementara. Enforced here too, not just hidden
+  // from the dropdown, in case of a stale client.
+  if (assignmentType !== "ADDITIONAL" && assignmentType !== "TEMPORARY") {
+    return "Jenis penempatan tidak valid.";
+  }
 
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";
+
+  // Extra (Additional/Temporary) seats must stay in the employee's own
+  // department — cross-department placement belongs to a real Mutasi via
+  // "Pindahkan ke Posisi Baru" instead.
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { currentPosition: { select: { orgUnitId: true } } },
+  });
+  if (!employee?.currentPosition) {
+    return "Karyawan ini belum memiliki Penempatan Utama — tidak dapat menambahkan penempatan tambahan.";
+  }
+  if (position.orgUnitId !== employee.currentPosition.orgUnitId) {
+    return "Penempatan tambahan harus berada di departemen yang sama dengan Penempatan Utama karyawan.";
+  }
 
   const assignment = await prisma.assignment.create({
     data: {
@@ -153,6 +173,50 @@ export async function endAssignment(
     datasetName: "Assignment",
     recordId: assignmentId,
     reason: "Assignment ended",
+  });
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/organization");
+  revalidatePath("/team");
+}
+
+// Lets HR Admin fix an employee's reporting line straight from the Employee
+// page, instead of navigating to Admin > Organisasi > Posisi to edit the
+// Position record directly. This changes the underlying Position's
+// reportsToPositionId — since Position:Employee is effectively 1:1 for a
+// filled seat, that's equivalent to "who this employee reports to."
+export async function updatePositionReportsTo(
+  employeeId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageAssignments(session)) return "Anda tidak memiliki akses.";
+
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { currentPositionId: true },
+  });
+  if (!employee?.currentPositionId) {
+    return "Karyawan ini belum memiliki Penempatan Utama.";
+  }
+
+  const reportsToPositionId = (formData.get("reportsToPositionId") as string) || null;
+  if (reportsToPositionId === employee.currentPositionId) {
+    return "Posisi tidak dapat melapor ke dirinya sendiri.";
+  }
+
+  await prisma.position.update({
+    where: { id: employee.currentPositionId },
+    data: { reportsToPositionId },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "Position",
+    recordId: employee.currentPositionId,
+    reason: `Changed reporting line via Employee page (${employeeId})`,
   });
 
   revalidatePath(`/employees/${employeeId}`);

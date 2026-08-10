@@ -61,11 +61,16 @@ function DecisionPositionField({ positions }: { positions: DecisionPositionOptio
   );
 }
 
-function DecisionJobField({ jobs }: { jobs: DecisionJobOption[] }) {
+function DecisionJobField({ jobs, defaultJobId }: { jobs: DecisionJobOption[]; defaultJobId?: string | null }) {
   return (
     <div>
       <label className="block text-xs text-slate-500">{t("recruitment.setJobToApprove")}</label>
-      <select name="jobId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+      <select
+        name="jobId"
+        required
+        defaultValue={defaultJobId ?? ""}
+        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+      >
         <option value="">— Pilih —</option>
         {jobs.map((j) => (
           <option key={j.id} value={j.id}>
@@ -85,6 +90,7 @@ function DecisionButton({
   requireNote,
   positions,
   jobs,
+  defaultJobId,
   decideAction = decideRecruitmentRequest,
 }: {
   requestId: string;
@@ -94,6 +100,7 @@ function DecisionButton({
   requireNote: boolean;
   positions: DecisionPositionOption[];
   jobs?: DecisionJobOption[];
+  defaultJobId?: string | null;
   decideAction?: DecideAction;
 }) {
   const [open, setOpen] = useState(false);
@@ -114,7 +121,7 @@ function DecisionButton({
   return (
     <form action={formAction} className="w-full space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <DecisionPositionField positions={positions} />
-      {decision === "APPROVED" && jobs && <DecisionJobField jobs={jobs} />}
+      {decision === "APPROVED" && jobs && <DecisionJobField jobs={jobs} defaultJobId={defaultJobId} />}
       <label className="block text-xs text-slate-500">
         {t("recruitment.decisionNote")} {requireNote && "(wajib)"}
       </label>
@@ -147,10 +154,12 @@ export function DecisionButtons({
   requestId,
   positions,
   jobs,
+  defaultJobId,
 }: {
   requestId: string;
   positions: DecisionPositionOption[];
   jobs: DecisionJobOption[];
+  defaultJobId?: string | null;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -162,6 +171,7 @@ export function DecisionButtons({
         requireNote={false}
         positions={positions}
         jobs={jobs}
+        defaultJobId={defaultJobId}
       />
       <DecisionButton
         requestId={requestId}

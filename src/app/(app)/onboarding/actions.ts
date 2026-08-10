@@ -3,13 +3,63 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
+import { redirect } from "next/navigation";
 import {
+  canCreateOnboardingCase,
   canMarkOnboardingContract,
   canMarkOnboardingTraining,
   canMarkOnboardingAssets,
 } from "@/lib/permissions";
-import { isOnboardingFullyComplete } from "@/lib/onboarding";
+import { isOnboardingFullyComplete, formatOnboardingCaseNumber } from "@/lib/onboarding";
 import { logAudit } from "@/lib/audit";
+
+// Manual entry point — every other Onboarding Case is auto-created inside
+// createEmployee/createEmployeeFromRecruitmentRequest (LIF-03). This covers
+// an existing Employee who never got one (legacy/imported data, or a case
+// that predates this app). OnboardingCase.employeeId is @unique, so the DB
+// itself is the final guard against a duplicate — checked here first too,
+// for a clean error message instead of a raw constraint failure.
+export async function createOnboardingCaseManually(
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canCreateOnboardingCase(session)) return "Anda tidak memiliki akses.";
+
+  const employeeId = formData.get("employeeId") as string;
+  const plannedStartDate = formData.get("plannedStartDate") as string;
+  if (!employeeId || !plannedStartDate) return "Karyawan dan tanggal mulai wajib diisi.";
+
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!employee) return "Karyawan tidak ditemukan.";
+
+  const existing = await prisma.onboardingCase.findUnique({ where: { employeeId } });
+  if (existing) return `Karyawan ini sudah memiliki kasus Onboarding (${existing.caseNumber}).`;
+
+  const plannedStartDateObj = new Date(plannedStartDate);
+  const year = plannedStartDateObj.getFullYear();
+  const countThisYear = await prisma.onboardingCase.count({
+    where: { caseNumber: { startsWith: `ONB-${year}-` } },
+  });
+  const onboardingCase = await prisma.onboardingCase.create({
+    data: {
+      caseNumber: formatOnboardingCaseNumber(countThisYear + 1, year),
+      employeeId,
+      plannedStartDate: plannedStartDateObj,
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "CREATE",
+    datasetName: "OnboardingCase",
+    recordId: onboardingCase.id,
+    reason: `Manually created onboarding case ${onboardingCase.caseNumber} for employee ${employeeId}`,
+  });
+
+  revalidatePath("/onboarding");
+  redirect(`/onboarding/${onboardingCase.id}`);
+}
 
 type OnboardingFlag = "contractComplete" | "mandatoryMaterialComplete" | "assetsComplete";
 

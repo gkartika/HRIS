@@ -19,7 +19,6 @@ export async function createEmployee(
 
   const employeeNumber = (formData.get("employeeNumber") as string)?.trim();
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
-  const preferredName = (formData.get("preferredName") as string)?.trim() || null;
   const gender = (formData.get("gender") as string) || null;
   const workEmail = (formData.get("workEmail") as string)?.trim() || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
@@ -53,7 +52,6 @@ export async function createEmployee(
       data: {
         employeeNumber,
         fullLegalName,
-        preferredName,
         gender: gender ? (gender as Gender) : null,
         workEmail,
         mobileNumber,
@@ -104,7 +102,6 @@ export async function updateEmployee(
   if (!isSelf && !isHrAdmin(session)) return "Anda tidak memiliki akses.";
 
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
-  const preferredName = (formData.get("preferredName") as string)?.trim() || null;
   const personalEmail = (formData.get("personalEmail") as string)?.trim() || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
   const currentAddress = (formData.get("currentAddress") as string)?.trim() || null;
@@ -119,7 +116,6 @@ export async function updateEmployee(
   // edit the legal name and the DM-17/DM-19/DM-20 identity/compliance fields
   // (ACC-10: field-level scope even when editing, not just when viewing).
   const data: Record<string, unknown> = {
-    preferredName,
     personalEmail,
     mobileNumber,
     currentAddress,

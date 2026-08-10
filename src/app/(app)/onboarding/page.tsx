@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
-import { canViewOnboarding } from "@/lib/permissions";
+import { canViewOnboarding, canCreateOnboardingCase } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
@@ -57,8 +57,20 @@ export default async function OnboardingListPage({
 
   return (
     <div>
-      <h1 className="text-lg font-medium text-slate-900">{t("onboarding.listTitle")}</h1>
-      <p className="mt-1 text-sm text-slate-500">{t("onboarding.listSubtitle")}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-medium text-slate-900">{t("onboarding.listTitle")}</h1>
+          <p className="mt-1 text-sm text-slate-500">{t("onboarding.listSubtitle")}</p>
+        </div>
+        {canCreateOnboardingCase(session) && (
+          <Link
+            href="/onboarding/new"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t("onboarding.newCase")}
+          </Link>
+        )}
+      </div>
 
       <form className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <div>

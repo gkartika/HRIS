@@ -4,46 +4,60 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canSubmitShiftAssignment, isHrAdmin } from "@/lib/permissions";
-import { isLevel3ForEmployeeDepartment, getActiveLevel3Positions } from "@/lib/level3-scope";
+import { getActiveLevel3Positions, getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { normalizeWeekStart } from "@/lib/shift-assignment";
 import { logAudit } from "@/lib/audit";
 import type { ShiftAssignmentType } from "@/generated/prisma/enums";
 
-// New module, per direct user request: "assign shift or non shift for each
-// employee... changes weekly and will be submitted by level 3." One upsert
-// per employee/week (see ShiftAssignment.@@unique in schema.prisma) — a
-// resubmission for the same week just overwrites the current value, same
-// "current state, not a full history of edits" simplification already used
-// for Employee.currentPositionId (full change history still lives in
-// AuditLog). Unlike the formal Dept-Head/HR-Manager approval chains
-// elsewhere in this app, this is a lightweight operational task with no
-// decision-position picker — the submitter's first active Level-3 Position
-// is recorded automatically as evidence.
-export async function submitShiftAssignment(
+// Bulk-only, per direct user request ("hard every week to add for
+// everyone... choose multiple at once"): one shift type applied to every
+// selected employee for one week, in a single upsert transaction. Replaces
+// the earlier one-row-at-a-time form entirely — a single selected employee
+// is just the n=1 case of the same flow, so there's no separate "single"
+// action anymore.
+export async function bulkSubmitShiftAssignment(
   _prevState: string | undefined,
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
 
-  const employeeId = formData.get("employeeId") as string;
+  const employeeIds = formData.getAll("employeeIds") as string[];
   const weekStartDateRaw = formData.get("weekStartDate") as string;
   const shiftType = formData.get("shiftType") as ShiftAssignmentType;
   const note = (formData.get("note") as string)?.trim() || null;
 
-  if (!employeeId || !weekStartDateRaw || !shiftType) {
-    return "Karyawan, minggu berlaku, dan jenis shift wajib diisi.";
+  if (employeeIds.length === 0) return "Pilih minimal satu karyawan.";
+  if (!weekStartDateRaw || !shiftType) return "Minggu berlaku dan jenis shift wajib diisi.";
+
+  const isHrOverride = isHrAdmin(session);
+  const level3DepartmentIds = isHrOverride ? [] : await getLevel3DepartmentIds(session.user.employeeId);
+  if (!canSubmitShiftAssignment(session, level3DepartmentIds.length > 0)) {
+    return "Anda tidak memiliki akses. Hanya Level 3 (Kepala Seksi/Departemen) atau Admin SDM yang dapat mengatur shift.";
   }
 
-  const isLevel3 = await isLevel3ForEmployeeDepartment(session.user.employeeId, employeeId);
-  if (!canSubmitShiftAssignment(session, isLevel3)) {
-    return "Anda tidak memiliki akses. Hanya Level 3 (Kepala Seksi/Departemen) di department karyawan ini atau Admin SDM yang dapat mengatur shift.";
-  }
-
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-  if (!employee) return "Karyawan tidak ditemukan.";
+  // Re-derive the caller's legitimate scope server-side rather than
+  // trusting which checkboxes the client submitted — same defense-in-depth
+  // as every other multi-target action in this app. Silently drops any id
+  // outside scope instead of failing the whole batch.
+  const authorizedEmployees = await prisma.employee.findMany({
+    where: {
+      id: { in: employeeIds },
+      activeFlag: true,
+      ...(isHrOverride
+        ? {}
+        : {
+            currentPosition: {
+              orgUnit: {
+                OR: [{ id: { in: level3DepartmentIds } }, { parentUnitId: { in: level3DepartmentIds } }],
+              },
+            },
+          }),
+    },
+    select: { id: true },
+  });
+  if (authorizedEmployees.length === 0) return "Tidak ada karyawan yang valid untuk diubah.";
 
   const weekStartDate = normalizeWeekStart(new Date(weekStartDateRaw));
-  const isHrOverride = isHrAdmin(session);
 
   let submittedByPositionId: string | null = null;
   if (!isHrOverride) {
@@ -51,39 +65,37 @@ export async function submitShiftAssignment(
     submittedByPositionId = level3Positions[0]?.positionId ?? null;
   }
 
-  const existing = await prisma.shiftAssignment.findUnique({
-    where: { employeeId_weekStartDate: { employeeId, weekStartDate } },
-  });
-
-  await prisma.shiftAssignment.upsert({
-    where: { employeeId_weekStartDate: { employeeId, weekStartDate } },
-    create: {
-      employeeId,
-      weekStartDate,
-      shiftType,
-      note,
-      isHrOverride,
-      submittedByAccountId: session.user.id,
-      submittedByPositionId,
-    },
-    update: {
-      shiftType,
-      note,
-      isHrOverride,
-      submittedAt: new Date(),
-      submittedByAccountId: session.user.id,
-      submittedByPositionId,
-    },
-  });
+  await prisma.$transaction(
+    authorizedEmployees.map((emp) =>
+      prisma.shiftAssignment.upsert({
+        where: { employeeId_weekStartDate: { employeeId: emp.id, weekStartDate } },
+        create: {
+          employeeId: emp.id,
+          weekStartDate,
+          shiftType,
+          note,
+          isHrOverride,
+          submittedByAccountId: session.user.id,
+          submittedByPositionId,
+        },
+        update: {
+          shiftType,
+          note,
+          isHrOverride,
+          submittedAt: new Date(),
+          submittedByAccountId: session.user.id,
+          submittedByPositionId,
+        },
+      })
+    )
+  );
 
   await logAudit({
     actorAccountId: session.user.id,
-    action: existing ? "UPDATE" : "CREATE",
+    action: "UPDATE",
     datasetName: "ShiftAssignment",
-    recordId: employeeId,
-    reason: `${employee.employeeNumber} shift for week of ${weekStartDate.toISOString().slice(0, 10)} set to ${shiftType}${isHrOverride ? " (HR override)" : ""}`,
+    reason: `Bulk update: ${authorizedEmployees.length} employee(s) set to ${shiftType} for week of ${weekStartDate.toISOString().slice(0, 10)}${isHrOverride ? " (HR override)" : ""}`,
   });
 
   revalidatePath("/shift-assignments");
-  revalidatePath(`/employees/${employeeId}`);
 }

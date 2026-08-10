@@ -7,7 +7,6 @@ import {
   canSubmitRenewalDeptHeadRecommendation,
   canDecideContractRenewalCase,
   canManageContracts,
-  isSelfApprovalAttempt,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
@@ -114,9 +113,6 @@ export async function submitDeptHeadRecommendation(
   });
   if (!renewalCase) return "Kasus tidak ditemukan.";
 
-  if (isSelfApprovalAttempt(session.user.employeeId, renewalCase.employeeId)) {
-    return "Anda tidak dapat memberikan rekomendasi untuk perpanjangan kontrak Anda sendiri.";
-  }
   if (!renewalCase.employee.currentPosition || !renewalCase.employee.currentPositionId) {
     return "Karyawan ini belum memiliki Posisi saat ini.";
   }
@@ -273,9 +269,6 @@ export async function decideRenewalCase(
   });
   if (!renewalCase) return "Kasus tidak ditemukan.";
   if (!canDecideRenewalCase(renewalCase.status)) return "Kasus ini belum siap untuk diputuskan atau sudah diproses.";
-  if (isSelfApprovalAttempt(session.user.employeeId, renewalCase.employeeId)) {
-    return "Anda tidak dapat memutuskan perpanjangan kontrak Anda sendiri.";
-  }
 
   const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
   if ((decision === "REJECTED" || decision === "RETURNED") && !decisionNote) {

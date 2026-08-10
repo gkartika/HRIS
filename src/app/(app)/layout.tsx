@@ -16,6 +16,8 @@ import {
   FileSignature,
   UserMinus,
   CalendarClock,
+  Clock,
+  CalendarOff,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -140,6 +142,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // do on this page.
   if (isHrAdmin(session) || isLevel3Anywhere) {
     navItems.push({ href: "/shift-assignments", label: t("shiftAssignment.navLabel"), icon: CalendarClock });
+  }
+  // Phase 2 Extension: self-service Mobile check-in/out. Any employee-linked
+  // account can reach the page — it self-adapts to "no manual action" for a
+  // Fingerprint-assigned employee and "contact HR Admin" for one with no
+  // AttendanceAssignment yet, same pattern as Contract/Offboarding's broad
+  // nav visibility with page-level scoping.
+  if (session.user.employeeId) {
+    navItems.push({ href: "/attendance", label: t("attendance.navLabel"), icon: Clock });
+  }
+  // Rekap Absensi (records + exceptions): same HR-Admin-or-Level-3 visibility
+  // scope as Shift Assignment, since it's the same "who can see this team's
+  // operational data" authority.
+  if (isHrAdmin(session) || isLevel3Anywhere) {
+    navItems.push({ href: "/attendance/records", label: t("attendanceRecords.navLabel"), icon: Clock });
+  }
+  // Absence (Cuti/Izin/Sakit/Lainnya) — same broad list-nav visibility as
+  // Contract/Movement/Offboarding: HR Admin or any employee-linked account
+  // (who may need to submit their own or decide one they're the configured
+  // first approver for), scoped further on the list page itself.
+  if (isHrAdmin(session) || session.user.employeeId) {
+    navItems.push({ href: "/absences", label: t("absence.navLabel"), icon: CalendarOff });
   }
   // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
   // Admin operational nav below, and only visible while the login currently

@@ -15,19 +15,36 @@ export default async function NewContractPage({
   if (!canManageContracts(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
-  if (!employeeId) notFound();
 
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-  if (!employee) notFound();
+  if (employeeId) {
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!employee) notFound();
+
+    return (
+      <div>
+        <h1 className="text-lg font-medium text-slate-900">{t("contract.newContract")}</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {employee.fullLegalName} ({employee.employeeNumber})
+        </p>
+        <div className="mt-4 max-w-lg">
+          <CreateContractForm employeeId={employee.id} defaultContractType={employee.employmentStatus} />
+        </div>
+      </div>
+    );
+  }
+
+  // Reached from the Contracts list's own "Buat Kontrak Baru" entry point —
+  // no Employee context yet, so the form itself picks who this is for.
+  const employees = await prisma.employee.findMany({
+    where: { activeFlag: true },
+    orderBy: { fullLegalName: "asc" },
+  });
 
   return (
     <div>
       <h1 className="text-lg font-medium text-slate-900">{t("contract.newContract")}</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        {employee.preferredName ?? employee.fullLegalName} ({employee.employeeNumber})
-      </p>
       <div className="mt-4 max-w-lg">
-        <CreateContractForm employeeId={employee.id} defaultContractType={employee.employmentStatus} />
+        <CreateContractForm employees={employees} />
       </div>
     </div>
   );

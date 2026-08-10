@@ -32,14 +32,6 @@ export function EditEmployeeForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">{t("employee.preferredName")}</label>
-        <input
-          name="preferredName"
-          defaultValue={employee.preferredName ?? ""}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
         <label className="mb-1 block text-xs text-slate-500">{t("employee.personalEmail")}</label>
         <input
           name="personalEmail"

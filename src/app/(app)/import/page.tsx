@@ -8,7 +8,14 @@ import { EmployeeDocumentsZipForm } from "./employee-documents-zip-form";
 import { DATASET_REGISTRY, isDatasetKey, type DatasetKey } from "@/lib/import-export/registry";
 import { isHrAdmin } from "@/lib/permissions";
 
-const DATASET_ORDER: DatasetKey[] = ["employees", "org-units", "jobs", "positions", "assignments"];
+const DATASET_ORDER: DatasetKey[] = [
+  "employees",
+  "org-units",
+  "jobs",
+  "positions",
+  "assignments",
+  "fingerprint-attendance",
+];
 
 export default async function ImportPage() {
   const session = await requireSession();

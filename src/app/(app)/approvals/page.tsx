@@ -218,7 +218,7 @@ export default async function ApprovalsPage() {
                           {m.requestNumber}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{m.employee.preferredName ?? m.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{m.employee.fullLegalName}</td>
                       <td className="px-4 py-3 text-slate-600">{t(`movementType.${m.movementType}`)}</td>
                       <td className="px-4 py-3">
                         <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
@@ -298,7 +298,7 @@ export default async function ApprovalsPage() {
                         {m.requestNumber}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{m.employee.preferredName ?? m.employee.fullLegalName}</td>
+                    <td className="px-4 py-3 text-slate-600">{m.employee.fullLegalName}</td>
                     <td className="px-4 py-3 text-slate-600">{t(`movementType.${m.movementType}`)}</td>
                     <td className="px-4 py-3">
                       <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
@@ -334,7 +334,7 @@ export default async function ApprovalsPage() {
                         {e.evaluationNumber}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{e.employee.preferredName ?? e.employee.fullLegalName}</td>
+                    <td className="px-4 py-3 text-slate-600">{e.employee.fullLegalName}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {e.evaluationDueDate ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(e.evaluationDueDate) : "—"}
                     </td>
@@ -370,7 +370,7 @@ export default async function ApprovalsPage() {
                           {c.caseNumber}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.fullLegalName}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -402,7 +402,7 @@ export default async function ApprovalsPage() {
                           {c.caseNumber}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.fullLegalName}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -437,7 +437,7 @@ export default async function ApprovalsPage() {
                           {c.caseNumber}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.fullLegalName}</td>
                       <td className="px-4 py-3 text-slate-600">{t(`offboardingReason.${c.reason}`)}</td>
                     </tr>
                   ))}
@@ -471,7 +471,7 @@ export default async function ApprovalsPage() {
                           {c.caseNumber}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{c.employee.preferredName ?? c.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{c.employee.fullLegalName}</td>
                       <td className="px-4 py-3 text-slate-600">{t(`offboardingReason.${c.reason}`)}</td>
                     </tr>
                   ))}

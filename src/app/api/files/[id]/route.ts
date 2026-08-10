@@ -3,7 +3,9 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { readPrivateFile } from "@/lib/file-storage";
 import { logAudit } from "@/lib/audit";
-import { isHrAdmin, canViewEmployeeDocument } from "@/lib/permissions";
+import { isHrAdmin, canViewEmployeeDocument, canViewAbsenceRequest } from "@/lib/permissions";
+import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
+import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 
 // CTL-06: private file storage. No permanent public URL — every download goes
 // through this handler, which re-checks the current session's permission and
@@ -20,7 +22,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const canView = file.employeeId ? canViewEmployeeDocument(session, file.employeeId) : isHrAdmin(session);
+  let canView = file.employeeId ? canViewEmployeeDocument(session, file.employeeId) : isHrAdmin(session);
+  // An Absence attachment (e.g. a doctor's note for Sakit) must also be
+  // reachable by whoever is authorized to decide the request it's attached
+  // to — self-or-HR-Admin alone would otherwise lock out the exact people
+  // the approval workflow depends on (same class of gap as
+  // canViewContractDetail's Dept Head widening).
+  if (!canView && file.category === "ABSENCE_ATTACHMENT" && file.employeeId) {
+    const request = await prisma.absenceRequest.findFirst({ where: { attachmentFileId: file.id } });
+    if (request) {
+      const [isLevel3, holderIds] = await Promise.all([
+        isLevel3ForEmployeeDepartment(session.user.employeeId, file.employeeId),
+        getCurrentHolderEmployeeIds(request.firstApproverPositionId),
+      ]);
+      canView = canViewAbsenceRequest(session, file.employeeId, isLevel3, holderIds);
+    }
+  }
   if (!canView) {
     await logAudit({
       actorAccountId: session.user.id,

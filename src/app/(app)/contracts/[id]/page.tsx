@@ -179,7 +179,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
             <h1 className="font-mono text-lg font-medium text-slate-900">{contract.contractNumber}</h1>
             <p className="mt-1 text-sm text-slate-500">
               <Link href={`/employees/${contract.employeeId}`} className="text-indigo-600 hover:underline">
-                {contract.employee.preferredName ?? contract.employee.fullLegalName}
+                {contract.employee.fullLegalName}
               </Link>{" "}
               ({contract.employee.employeeNumber})
             </p>
@@ -241,7 +241,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
             <p className="text-xs text-slate-500">{t("contract.recommendationTitle")}</p>
             <p className="text-sm text-slate-900">
               {t(`contractRenewalRecommendation.${contract.recommendation}`)} —{" "}
-              {contract.recommendationByEmployee?.preferredName ?? contract.recommendationByEmployee?.fullLegalName}
+              {contract.recommendationByEmployee?.fullLegalName}
               {contract.recommendationByPosition ? ` (${contract.recommendationByPosition.job.jobTitle})` : ""}
             </p>
             {contract.recommendationNote && <p className="mt-1 text-sm text-slate-600">{contract.recommendationNote}</p>}
@@ -315,7 +315,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
               <p className="text-xs text-slate-500">{t("contractRenewal.deptHeadRecommendationTitle")}</p>
               <p className="text-sm text-slate-900">
                 {t(`renewalRecommendation.${renewalCase.deptHeadRecommendation}`)} —{" "}
-                {renewalCase.deptHeadEmployee?.preferredName ?? renewalCase.deptHeadEmployee?.fullLegalName}
+                {renewalCase.deptHeadEmployee?.fullLegalName}
                 {renewalCase.deptHeadPosition ? ` (${renewalCase.deptHeadPosition.job.jobTitle})` : ""}
               </p>
               {renewalCase.deptHeadProposedPosition && (

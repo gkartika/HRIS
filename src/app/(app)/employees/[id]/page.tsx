@@ -15,7 +15,11 @@ import {
   canManageContracts,
   canReportResignation,
   canSubmitShiftAssignment,
+  canManageAccountHold,
+  canManageAttendanceAssignment,
+  canViewAttendance,
 } from "@/lib/permissions";
+import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { logAudit } from "@/lib/audit";
@@ -23,6 +27,8 @@ import { t } from "@/lib/i18n/id";
 import { EmployeeProfileView } from "@/components/employee-profile-view";
 import { AssignmentManagementPanel } from "./assignment-panel";
 import { IdentityDocumentsPanel } from "./identity-documents-panel";
+import { AccountHoldPanel } from "./account-panel";
+import { AttendanceAssignmentPanel } from "./attendance-panel";
 import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
 
 export default async function EmployeeDetailPage({
@@ -41,7 +47,18 @@ export default async function EmployeeDetailPage({
   const employee = await prisma.employee.findUnique({
     where: { id },
     include: {
-      currentPosition: { include: { job: true, orgUnit: true } },
+      currentPosition: {
+        include: {
+          job: true,
+          orgUnit: true,
+          reportsToPosition: {
+            include: {
+              job: true,
+              currentHolders: { where: { activeFlag: true }, select: { fullLegalName: true, preferredName: true } },
+            },
+          },
+        },
+      },
       assignments: {
         include: { position: { include: { job: true, orgUnit: true } } },
         orderBy: { effectiveFrom: "desc" },
@@ -51,6 +68,7 @@ export default async function EmployeeDetailPage({
       ptkpStatus: true,
       ktpFile: true,
       kkFile: true,
+      account: { select: { accountStatus: true, usernameOrEmail: true } },
     },
   });
   if (!employee) notFound();
@@ -75,6 +93,8 @@ export default async function EmployeeDetailPage({
     : [];
   const canEdit = isSelf || isHrAdmin(session);
   const canManage = canManageAssignments(session);
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  const canHoldAccount = canManageAccountHold(session, hrManagerPositions.map((p) => p.positionId));
   const canUploadDocs = canUploadEmployeeDocument(session);
   const isLevel3InDepartment = await isLevel3ForEmployeeDepartment(session.user.employeeId, employee.id);
   const canSubmitMovement =
@@ -82,6 +102,20 @@ export default async function EmployeeDetailPage({
   const isEmployeesManager = await isDirectManagerOfEmployee(session.user.employeeId, employee.id);
   const canReportThisResignation = canReportResignation(session, isEmployeesManager);
   const canSetShift = !!employee.currentPositionId && canSubmitShiftAssignment(session, isLevel3InDepartment);
+  const canManageAttendance = canManageAttendanceAssignment(session);
+  const canSeeAttendance = canViewAttendance(session, employee.id, isLevel3InDepartment);
+  const [geofences, currentAttendanceAssignment] = canSeeAttendance
+    ? await Promise.all([
+        canManageAttendance
+          ? prisma.attendanceGeofence.findMany({ where: { activeFlag: true }, orderBy: { siteName: "asc" } })
+          : Promise.resolve([]),
+        prisma.attendanceAssignment.findFirst({
+          where: { employeeId: employee.id, effectiveTo: null },
+          include: { geofence: true },
+          orderBy: { effectiveFrom: "desc" },
+        }),
+      ])
+    : [[], null];
 
   // noKk/namaIbuKandung/ptkpStatusCode are already stripped by projectEmployee
   // for roles that shouldn't see them. educationLevel isn't in that restricted
@@ -104,6 +138,19 @@ export default async function EmployeeDetailPage({
         orderBy: { positionCode: "asc" },
       })
     : [];
+  // Extra (Additional/Temporary) assignments must stay within the employee's
+  // own department — cross-department "extra" seats belong to a real Mutasi
+  // via "Pindahkan ke Posisi Baru" instead, per direct user request.
+  const extraAssignmentPositions = employee.currentPosition
+    ? positions.filter((p) => p.orgUnitId === employee.currentPosition!.orgUnitId)
+    : [];
+  const reportsToHolder = employee.currentPosition?.reportsToPosition?.currentHolders[0];
+  const reportsTo = employee.currentPosition?.reportsToPosition
+    ? {
+        label: `${employee.currentPosition.reportsToPosition.jobLevel} ${employee.currentPosition.reportsToPosition.job.jobTitle}`,
+        holderName: reportsToHolder ? reportsToHolder.preferredName ?? reportsToHolder.fullLegalName : null,
+      }
+    : null;
   const activeNonPrimaryAssignments = employee.assignments
     .filter((a) => a.status === "ACTIVE" && a.assignmentType !== "PRIMARY")
     .map((a) => ({
@@ -164,7 +211,32 @@ export default async function EmployeeDetailPage({
         files={visibleFiles}
         educationLevelLabel={educationLevelLabel}
         ptkpLabel={ptkpLabel}
+        reportsTo={reportsTo}
       />
+      {canHoldAccount && employee.account && (
+        <AccountHoldPanel
+          employeeId={employee.id}
+          accountStatus={employee.account.accountStatus}
+          usernameOrEmail={employee.account.usernameOrEmail}
+        />
+      )}
+      {canSeeAttendance && (
+        <AttendanceAssignmentPanel
+          employeeId={employee.id}
+          canManage={canManageAttendance}
+          current={
+            currentAttendanceAssignment
+              ? {
+                  method: currentAttendanceAssignment.method,
+                  geofenceName: currentAttendanceAssignment.geofence?.siteName ?? null,
+                  fingerprintDeviceUserId: currentAttendanceAssignment.fingerprintDeviceUserId,
+                  effectiveFrom: currentAttendanceAssignment.effectiveFrom.toISOString().slice(0, 10),
+                }
+              : null
+          }
+          geofences={geofences}
+        />
+      )}
       {canViewDocs && (
         <IdentityDocumentsPanel
           employeeId={employee.id}
@@ -177,7 +249,10 @@ export default async function EmployeeDetailPage({
         <AssignmentManagementPanel
           employeeId={employee.id}
           positions={positions}
+          extraAssignmentPositions={extraAssignmentPositions}
           activeNonPrimaryAssignments={activeNonPrimaryAssignments}
+          hasCurrentPosition={!!employee.currentPositionId}
+          currentReportsToPositionId={employee.currentPosition?.reportsToPositionId ?? null}
         />
       )}
       {canViewContracts && (

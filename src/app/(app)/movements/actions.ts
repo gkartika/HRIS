@@ -10,11 +10,10 @@ import {
   canApproveMovementRequestAsDeptHead,
   canExecuteMovementRequest,
   canCancelMovementRequest,
-  isSelfApprovalAttempt,
   isHrManager,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
-import { getActiveDeptHeadPositions, getDeptHeadApprovers } from "@/lib/dept-head";
+import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { isLevel3ForEmployeeDepartment, resolveDepartmentId } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
@@ -128,29 +127,6 @@ export async function submitMovementRequest(
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
   if (!requester) return "Karyawan pengaju tidak ditemukan.";
 
-  // Perubahan Posisi refactor: Department Head 3B approval is never
-  // silently bypassed for the specific case the spec calls out — the
-  // requester being the *only* level-3B holder in this department, which
-  // would force them to approve their own submission. That's a narrower
-  // check than "does this department have a level-3B position at all":
-  // most departments don't have one yet (only Finance & Procurement and
-  // Produksi do, as of this writing), and blocking every submission until
-  // one exists everywhere would make the feature unusable company-wide.
-  // A request with no current approver simply sits at PENDING_DEPT_HEAD —
-  // same accepted, cancellable-in-the-meantime behavior as Recruitment's
-  // own dept-head gate — rather than being refused at submit time.
-  const departmentId = await resolveDepartmentId(employee.currentPosition.orgUnitId);
-  if (!departmentId) {
-    return "Department tidak dapat ditentukan dari Posisi karyawan ini — hubungi Admin SDM.";
-  }
-  const deptHeadApprovers = await getDeptHeadApprovers(departmentId);
-  const submitterIsOnlyDeptHead =
-    deptHeadApprovers.length > 0 &&
-    deptHeadApprovers.every((a) => a.employeeId === session.user.employeeId);
-  if (submitterIsOnlyDeptHead) {
-    return "Kesalahan konfigurasi routing: Anda adalah satu-satunya Kepala Departemen/Manajer (Level 3B) di department ini. Tetapkan Kepala Departemen/Manajer pengganti (Acting) sebelum mengajukan permintaan ini sendiri.";
-  }
-
   const year = new Date().getFullYear();
   const countThisYear = await prisma.movementRequest.count({
     where: { requestNumber: { startsWith: `MOV-${year}-` } },
@@ -227,10 +203,6 @@ export async function decideMovementRequestAsDeptHead(
   if (!request) return "Permintaan tidak ditemukan.";
   if (request.status !== "PENDING_DEPT_HEAD") return "Permintaan ini sudah diproses.";
 
-  if (isSelfApprovalAttempt(session.user.employeeId, request.requesterEmployeeId)) {
-    return "Anda tidak dapat memutuskan permintaan yang Anda ajukan sendiri.";
-  }
-
   // WF-17/ACC-16: "Block Department Head/HR Manager completion until
   // evaluation is Completed" — a null evaluation only occurs on a legacy
   // pre-refactor row and is never blocked.
@@ -303,10 +275,6 @@ export async function decideMovementRequest(
   const request = await prisma.movementRequest.findUnique({ where: { id: requestId }, include: { evaluation: true } });
   if (!request) return "Permintaan tidak ditemukan.";
   if (!canDecideMovementRequestStatus(request.status)) return "Permintaan ini sudah diproses.";
-
-  if (isSelfApprovalAttempt(session.user.employeeId, request.requesterEmployeeId)) {
-    return "Anda tidak dapat memutuskan permintaan yang Anda ajukan sendiri.";
-  }
 
   // WF-17/ACC-16: same Evaluation-Completed gate as the Dept Head stage —
   // checked again here since a request can only reach this stage after the

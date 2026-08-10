@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Briefcase, Network, GraduationCap, Receipt } from "lucide-react";
+import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, UserCheck, CalendarDays } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
@@ -34,6 +34,24 @@ const SECTIONS = [
     icon: Receipt,
     title: "PTKP Pajak",
     desc: "Daftar kode PTKP untuk data karyawan",
+  },
+  {
+    href: "/admin/attendance-geofences",
+    icon: MapPin,
+    title: "Lokasi Absensi",
+    desc: "Titik lokasi dan radius untuk Check-in/Check-out Mobile",
+  },
+  {
+    href: "/admin/absence-approvers",
+    icon: UserCheck,
+    title: "Penyetuju Absensi",
+    desc: "Posisi penyetuju pertama per Departemen untuk Cuti/Izin/Sakit/Lainnya",
+  },
+  {
+    href: "/admin/absence-entitlements",
+    icon: CalendarDays,
+    title: "Jatah Absensi Tahunan",
+    desc: "Jumlah hari per tahun untuk setiap jenis Absensi",
   },
 ];
 

@@ -1,5 +1,6 @@
 import type { Session } from "next-auth";
 import type { Employee } from "@/generated/prisma/client";
+import type { AttendanceMethod } from "@/generated/prisma/enums";
 
 // Backend-enforced RBAC (CTL: "enforce permissions in the backend, not only by
 // hiding buttons"). Every server action / route handler that touches HR data
@@ -145,13 +146,12 @@ export function canExecuteMovementRequest(session: Session): boolean {
   return isHrAdmin(session);
 }
 
-// Perubahan Posisi refactor: "Prevent self-approval" — neither approval
-// stage may be decided by the request's own Requester, even if they
-// otherwise hold a qualifying Position (Dept Head 3B or HR Manager) for
-// this department. Pure/session-agnostic so both decideMovementRequest and
-// decideMovementRequestAsDeptHead share the exact same check.
-export function isSelfApprovalAttempt(actingEmployeeId: string | null | undefined, requesterEmployeeId: string): boolean {
-  return !!actingEmployeeId && actingEmployeeId === requesterEmployeeId;
+// Emergency account suspension ("put on hold") — a lighter-weight action
+// than full Offboarding exit-clearance: it only blocks login, it never ends
+// Assignments/Contracts or changes Employee.activeFlag. HR Admin or an
+// active HR Manager may use it, same actor set as most decision stages.
+export function canManageAccountHold(session: Session, activeHrManagerPositionIds: string[]): boolean {
+  return isHrAdmin(session) || isHrManager(activeHrManagerPositionIds);
 }
 
 // Same DM-25-style exception as Recruitment cancellation: the original
@@ -173,6 +173,13 @@ export function canCancelMovementRequest(
 // dashboard").
 export function canViewOnboarding(session: Session, activeHrManagerPositionIds: string[]): boolean {
   return isHrAdmin(session) || isTrainingAdmin(session) || isGaAdmin(session) || isHrManager(activeHrManagerPositionIds);
+}
+
+// Manual entry point for an existing Employee who never got an Onboarding
+// Case automatically (e.g. legacy/imported data) — People & Payroll owns
+// this the same way it owns marking the flags below.
+export function canCreateOnboardingCase(session: Session): boolean {
+  return isHrAdmin(session);
 }
 
 // Each completion flag has its own Primary Owner in the blueprint; HR Admin
@@ -429,6 +436,114 @@ export function canViewShiftAssignments(
   isLevel3InDepartment: boolean
 ): boolean {
   return isHrAdmin(session) || session.user.employeeId === employeeId || isLevel3InDepartment;
+}
+
+// ---------- Phase 2 Extension: Attendance & Absence ----------
+
+// AttendanceGeofence/AbsenceApproverConfig/AbsenceEntitlementConfig admin
+// master data — HR Admin only, same EducationLevel/PtkpStatus admin-list
+// pattern used elsewhere. There is no per-employee work schedule to manage —
+// every employee shares the one fixed company default (lib/attendance.ts).
+export function canManageAttendanceMasterData(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// Per-employee, effective-dated Method (+ Geofence) assignment — HR Admin
+// only, same latitude as canManageAssignments.
+export function canManageAttendanceAssignment(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// Mobile GPS+selfie check-in/out is strictly self-service, and only for an
+// employee whose current AttendanceAssignment.method is MOBILE — a
+// FINGERPRINT-assigned employee (or one with no assignment yet) has no
+// manual action here at all, matching the spec's "Fingerprint employee has
+// no mobile action" checkpoint. attendanceMethod is resolved live by the
+// caller (the employee's current AttendanceAssignment), kept as plain data
+// so this predicate stays dependency-free for Vitest.
+export function canRecordOwnAttendance(
+  session: Session,
+  employeeId: string,
+  attendanceMethod: AttendanceMethod | null
+): boolean {
+  return session.user.employeeId === employeeId && attendanceMethod === "MOBILE";
+}
+
+// Bespoke Fingerprint XLSX/CSV bulk import — People & Payroll Admin owns
+// every import in this app (canAccessImport), reused here as its own named
+// predicate since it gates a distinct action (fingerprint import specifically,
+// not the generic dataset registry).
+export function canImportFingerprintAttendance(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// Visibility for Attendance records/exceptions: HR Admin, the employee
+// themself (self-view, same as Contract/Shift Assignment), or their Level-3
+// (3A/3B, own department — src/lib/level3-scope.ts) for team visibility.
+export function canViewAttendance(session: Session, employeeId: string, isLevel3InDepartment: boolean): boolean {
+  return isHrAdmin(session) || session.user.employeeId === employeeId || isLevel3InDepartment;
+}
+
+export function canExportAttendanceData(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// Absence submission is self-service, or HR Admin submitting on the
+// employee's behalf (spec: "employee/HR-Admin-offline submission" — e.g. a
+// factory-floor employee without app access phoning in a Sakit report).
+export function canSubmitAbsenceRequest(session: Session, employeeId: string): boolean {
+  return isHrAdmin(session) || session.user.employeeId === employeeId;
+}
+
+// First-approval stage: whichever Position is configured for the employee's
+// Department (AbsenceApproverConfig) at submission time — the acting
+// session must be a *current holder* of that specific Position, resolved
+// live by the caller (Position.currentHolders-style query), not a
+// department-wide Level-3/Dept-Head derivation like the other workflows.
+export function canDecideAbsenceRequestAsFirstApprover(
+  actingEmployeeId: string | null | undefined,
+  approverPositionHolderEmployeeIds: string[]
+): boolean {
+  return !!actingEmployeeId && approverPositionHolderEmployeeIds.includes(actingEmployeeId);
+}
+
+// Final stage — HR Admin only, no HR Manager step in this workflow.
+export function canDecideAbsenceRequestAsHrAdmin(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// In-place correction of an already-decided request — same actor as the
+// final decision stage.
+export function canOverrideAbsenceRequest(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// Same DM-25-style exception as every other cancellation in this app: the
+// subject employee, whoever submitted it, or HR Admin.
+export function canCancelAbsenceRequest(session: Session, employeeId: string, submittedByAccountId: string): boolean {
+  const isSubject = !!session.user.employeeId && session.user.employeeId === employeeId;
+  const isSubmitter = session.user.id === submittedByAccountId;
+  return isHrAdmin(session) || isSubject || isSubmitter;
+}
+
+// Visibility: HR Admin, the subject employee, their Level-3 (own
+// department), or the configured first-approver Position's current holder.
+export function canViewAbsenceRequest(
+  session: Session,
+  employeeId: string,
+  isLevel3InDepartment: boolean,
+  approverPositionHolderEmployeeIds: string[]
+): boolean {
+  return (
+    isHrAdmin(session) ||
+    session.user.employeeId === employeeId ||
+    isLevel3InDepartment ||
+    canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, approverPositionHolderEmployeeIds)
+  );
+}
+
+export function canExportAbsenceData(session: Session): boolean {
+  return isHrAdmin(session);
 }
 
 // ACC-10: field-level scope. Every field on Employee is tagged with the

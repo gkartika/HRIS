@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { addAssignment, movePrimaryAssignment, endAssignment } from "./assignment-actions";
+import { addAssignment, movePrimaryAssignment, endAssignment, updatePositionReportsTo } from "./assignment-actions";
 import { t } from "@/lib/i18n/id";
 import type { Position, Job, OrgUnit } from "@/generated/prisma/client";
 
@@ -42,7 +42,6 @@ function AddAssignmentForm({
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
         >
           <option value="ADDITIONAL">{t("assignmentType.ADDITIONAL")}</option>
-          <option value="ACTING">{t("assignmentType.ACTING")}</option>
           <option value="TEMPORARY">{t("assignmentType.TEMPORARY")}</option>
         </select>
       </div>
@@ -115,6 +114,49 @@ function MoveForm({ employeeId, positions }: { employeeId: string; positions: Po
   );
 }
 
+function ReportsToForm({
+  employeeId,
+  positions,
+  currentReportsToPositionId,
+}: {
+  employeeId: string;
+  positions: PositionOption[];
+  currentReportsToPositionId: string | null;
+}) {
+  const action = updatePositionReportsTo.bind(null, employeeId);
+  const [error, formAction, isPending] = useActionState(action, undefined);
+
+  return (
+    <form action={formAction} className="grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div className="md:col-span-2">
+        <label className="mb-1 block text-xs text-slate-500">Melapor Kepada</label>
+        <select
+          name="reportsToPositionId"
+          defaultValue={currentReportsToPositionId ?? ""}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
+          <option value="">— Puncak hierarki —</option>
+          {positions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.job.jobTitle} — {p.orgUnit.unitName} ({p.positionCode})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-end">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+        >
+          {isPending ? t("common.loading") : "Simpan"}
+        </button>
+      </div>
+      {error && <p className="text-xs text-rose-600 md:col-span-4">{error}</p>}
+    </form>
+  );
+}
+
 function EndAssignmentForm({ assignmentId, employeeId }: { assignmentId: string; employeeId: string }) {
   const action = endAssignment.bind(null, assignmentId, employeeId);
   const [, formAction, isPending] = useActionState(action, undefined);
@@ -136,23 +178,43 @@ function EndAssignmentForm({ assignmentId, employeeId }: { assignmentId: string;
 export function AssignmentManagementPanel({
   employeeId,
   positions,
+  extraAssignmentPositions,
   activeNonPrimaryAssignments,
+  hasCurrentPosition,
+  currentReportsToPositionId,
 }: {
   employeeId: string;
   positions: PositionOption[];
+  extraAssignmentPositions: PositionOption[];
   activeNonPrimaryAssignments: { id: string; positionCode: string; assignmentType: string }[];
+  hasCurrentPosition: boolean;
+  currentReportsToPositionId: string | null;
 }) {
   return (
     <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-6">
       <div>
         <h2 className="text-sm font-medium text-slate-900">Tambah Penempatan Tambahan</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Untuk Penempatan Tambahan, Plt., atau Sementara — tidak menutup Penempatan Utama.
+          Untuk Penempatan Tambahan atau Sementara di departemen yang sama — tidak menutup Penempatan Utama.
         </p>
         <div className="mt-3">
-          <AddAssignmentForm employeeId={employeeId} positions={positions} />
+          <AddAssignmentForm employeeId={employeeId} positions={extraAssignmentPositions} />
         </div>
       </div>
+
+      {hasCurrentPosition && (
+        <div className="border-t border-slate-100 pt-4">
+          <h2 className="text-sm font-medium text-slate-900">Ubah Melapor Kepada</h2>
+          <p className="mt-1 text-xs text-slate-500">Mengubah jalur pelaporan Posisi Utama karyawan ini secara langsung.</p>
+          <div className="mt-3">
+            <ReportsToForm
+              employeeId={employeeId}
+              positions={positions}
+              currentReportsToPositionId={currentReportsToPositionId}
+            />
+          </div>
+        </div>
+      )}
 
       {activeNonPrimaryAssignments.length > 0 && (
         <div className="border-t border-slate-100 pt-4">

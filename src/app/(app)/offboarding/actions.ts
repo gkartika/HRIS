@@ -10,7 +10,6 @@ import {
   canDecideOffboardingCase,
   canExecuteExitClearance,
   canCancelOffboardingCase,
-  isSelfApprovalAttempt,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
@@ -135,9 +134,6 @@ export async function decideOffboardingCaseAsDeptHead(
   if (!canDecideOffboardingCaseAsDeptHeadStatus(offboardingCase.status)) {
     return "Kasus ini belum siap untuk diputuskan atau sudah diproses.";
   }
-  if (isSelfApprovalAttempt(session.user.employeeId, offboardingCase.employeeId)) {
-    return "Anda tidak dapat memutuskan kasus Offboarding Anda sendiri.";
-  }
 
   const departmentId = offboardingCase.employee.currentPosition
     ? await resolveDepartmentId(offboardingCase.employee.currentPosition.orgUnitId)
@@ -204,9 +200,6 @@ export async function decideOffboardingCase(
   if (!offboardingCase) return "Kasus tidak ditemukan.";
   if (!canDecideOffboardingCaseStatus(offboardingCase.status)) {
     return "Kasus ini belum siap untuk diputuskan atau sudah diproses.";
-  }
-  if (isSelfApprovalAttempt(session.user.employeeId, offboardingCase.employeeId)) {
-    return "Anda tidak dapat memutuskan kasus Offboarding Anda sendiri.";
   }
 
   const hrManagerNote = (formData.get("hrManagerNote") as string)?.trim() || null;

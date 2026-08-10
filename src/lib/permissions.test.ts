@@ -14,7 +14,6 @@ import {
   canApproveMovementRequestAsDeptHead,
   canExecuteMovementRequest,
   canCancelMovementRequest,
-  isSelfApprovalAttempt,
   canViewOnboarding,
   canMarkOnboardingContract,
   canMarkOnboardingTraining,
@@ -176,17 +175,6 @@ describe("canApproveMovementRequestAsDeptHead (Perubahan Posisi refactor)", () =
 
   it("is true as soon as there's at least one active level-3B position there", () => {
     expect(canApproveMovementRequestAsDeptHead(["pos-dept-head"])).toBe(true);
-  });
-});
-
-describe("isSelfApprovalAttempt (Perubahan Posisi refactor)", () => {
-  it("is true when the acting employee is the request's own requester", () => {
-    expect(isSelfApprovalAttempt("emp-1", "emp-1")).toBe(true);
-  });
-
-  it("is false for a different employee, or no employeeId at all", () => {
-    expect(isSelfApprovalAttempt("emp-2", "emp-1")).toBe(false);
-    expect(isSelfApprovalAttempt(null, "emp-1")).toBe(false);
   });
 });
 

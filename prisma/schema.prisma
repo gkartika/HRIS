@@ -738,6 +738,7 @@ model Account {
   absenceRequestsHrAdminDecisionBy       AbsenceRequest[]                @relation("AbsenceHrAdminDecisionBy")
   absenceRequestsHrOverrideBy            AbsenceRequest[]                @relation("AbsenceHrOverrideBy")
   absenceRequestsCancelledBy             AbsenceRequest[]                @relation("AbsenceCancelledBy")
+  taskForceMembershipsAddedBy            TaskForceMembership[]           @relation("TaskForceMembershipAddedBy")
 }
 
 model AccountRole {
@@ -826,6 +827,7 @@ model Employee {
   attendanceEvents               AttendanceEvent[]              @relation("AttendanceEventEmployee")
   dailyAttendanceRecords         DailyAttendanceRecord[]        @relation("DailyAttendanceRecordEmployee")
   absenceRequests                AbsenceRequest[]               @relation("AbsenceRequestEmployee")
+  taskForceMemberships           TaskForceMembership[]          @relation("TaskForceMember")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -1552,4 +1554,29 @@ model AbsenceRequest {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------- Task Force membership (new, per direct user request) ----------
+
+// A lightweight, cross-department "also does this" tag — deliberately NOT a
+// Position/Assignment: a task force (e.g. Internal Audit) has no org-chart
+// placement, no reports-to line, and no jobLevel, so modeling it as a real
+// Position risked it accidentally being picked up by dept-head.ts/level3-
+// scope.ts's authority checks (which scan ACTIVE Assignments by
+// Position.jobLevel/orgUnitId). `name` is deliberately free text rather than
+// a separate admin-managed catalog — the UI offers a datalist of previously
+// used names for consistency, but doesn't force a config step before first
+// use, per direct user request ("don't need it in Struktur Organisasi,
+// anything easier").
+model TaskForceMembership {
+  id               String    @id @default(cuid())
+  employeeId       String
+  employee         Employee  @relation("TaskForceMember", fields: [employeeId], references: [id])
+  name             String
+  roleLabel        String?
+  startDate        DateTime
+  endDate          DateTime?
+  addedByAccountId String
+  addedByAccount   Account   @relation("TaskForceMembershipAddedBy", fields: [addedByAccountId], references: [id])
+  createdAt        DateTime  @default(now())
 }

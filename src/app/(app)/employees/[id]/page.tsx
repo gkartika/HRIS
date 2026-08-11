@@ -18,6 +18,7 @@ import {
   canManageAccountHold,
   canManageAttendanceAssignment,
   canViewAttendance,
+  canManageTaskForceMembership,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
@@ -29,6 +30,7 @@ import { AssignmentManagementPanel } from "./assignment-panel";
 import { IdentityDocumentsPanel } from "./identity-documents-panel";
 import { AccountHoldPanel } from "./account-panel";
 import { AttendanceAssignmentPanel } from "./attendance-panel";
+import { TaskForcePanel } from "./task-force-panel";
 import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
 
 export default async function EmployeeDetailPage({
@@ -116,6 +118,39 @@ export default async function EmployeeDetailPage({
         }),
       ])
     : [[], null];
+
+  const canManageTaskForce = canManageTaskForceMembership(session);
+  const canSeeTaskForce = isSelf || isHrAdmin(session);
+  const [taskForceMemberships, taskForceNameRows] = canSeeTaskForce
+    ? await Promise.all([
+        prisma.taskForceMembership.findMany({
+          where: { employeeId: employee.id },
+          orderBy: { startDate: "desc" },
+        }),
+        canManageTaskForce
+          ? prisma.taskForceMembership.findMany({ distinct: ["name"], select: { name: true }, orderBy: { name: "asc" } })
+          : Promise.resolve([]),
+      ])
+    : [[], []];
+  const activeTaskForceMemberships = taskForceMemberships
+    .filter((m) => !m.endDate)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      roleLabel: m.roleLabel,
+      startDate: m.startDate.toISOString().slice(0, 10),
+      endDate: null,
+    }));
+  const endedTaskForceMemberships = taskForceMemberships
+    .filter((m) => !!m.endDate)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      roleLabel: m.roleLabel,
+      startDate: m.startDate.toISOString().slice(0, 10),
+      endDate: m.endDate!.toISOString().slice(0, 10),
+    }));
+  const taskForceNames = taskForceNameRows.map((r) => r.name);
 
   // noKk/namaIbuKandung/ptkpStatusCode are already stripped by projectEmployee
   // for roles that shouldn't see them. educationLevel isn't in that restricted
@@ -235,6 +270,15 @@ export default async function EmployeeDetailPage({
               : null
           }
           geofences={geofences}
+        />
+      )}
+      {canSeeTaskForce && (
+        <TaskForcePanel
+          employeeId={employee.id}
+          canManage={canManageTaskForce}
+          active={activeTaskForceMemberships}
+          ended={endedTaskForceMemberships}
+          existingNames={taskForceNames}
         />
       )}
       {canViewDocs && (

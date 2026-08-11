@@ -672,6 +672,14 @@ export const strings = {
     noAssignmentBadge: "Belum ditugaskan",
     exportButton: "Ekspor CSV",
     showingCount: "Menampilkan {count} karyawan",
+    methodFilterLabel: "Metode Absensi",
+    methodFilterNoneOption: "Belum Ditugaskan",
+    shiftColumnLabel: "Shift",
+    absenceColumnLabel: "Absensi/Cuti",
+  },
+  attendanceMethod: {
+    MOBILE: "Mobile",
+    FINGERPRINT: "Fingerprint",
   },
   absenceStatus: {
     SUBMITTED: "Menunggu Penyetuju Pertama",

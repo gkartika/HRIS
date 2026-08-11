@@ -8,6 +8,19 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import type { Prisma } from "@/generated/prisma/client";
 
+const SHIFT_BADGE_TONE: Record<string, string> = {
+  SHIFT_1: "bg-slate-100 text-slate-600",
+  SHIFT_2: "bg-sky-50 text-sky-700",
+  SHIFT_3: "bg-indigo-50 text-indigo-700",
+  NON_SHIFT: "bg-slate-100 text-slate-500",
+};
+
+const ABSENCE_BADGE_TONE: Record<string, string> = {
+  SUBMITTED: "bg-amber-50 text-amber-700",
+  PENDING_HR_ADMIN: "bg-amber-50 text-amber-700",
+  APPROVED: "bg-emerald-50 text-emerald-700",
+};
+
 function isoOf(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -20,7 +33,13 @@ function formatTime(date: Date | null | undefined): string {
 export default async function AttendanceRecordsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; orgUnitId?: string; jobLevel?: string; exceptionsOnly?: string }>;
+  searchParams: Promise<{
+    date?: string;
+    orgUnitId?: string;
+    jobLevel?: string;
+    exceptionsOnly?: string;
+    method?: string;
+  }>;
 }) {
   const session = await requireSession();
   const isHrAdminUser = isHrAdmin(session);
@@ -32,7 +51,7 @@ export default async function AttendanceRecordsPage({
 
   await reconcileDueDailyAttendance();
 
-  const { date, orgUnitId, jobLevel, exceptionsOnly } = await searchParams;
+  const { date, orgUnitId, jobLevel, exceptionsOnly, method } = await searchParams;
   const selectedDate = date ? new Date(date) : new Date();
   const dayStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
   const dateIso = isoOf(dayStart);
@@ -61,9 +80,15 @@ export default async function AttendanceRecordsPage({
 
   const employeeIds = employees.map((e) => e.id);
   const allRows = await computeAttendanceRecordsForDate(employeeIds, dayStart);
-  const rows = allRows.filter((row) => !exceptionsOnly || row.exceptions.length > 0 || !row.hasAssignment);
+  const rows = allRows
+    .filter((row) => !exceptionsOnly || row.exceptions.length > 0 || !row.hasAssignment)
+    .filter((row) => {
+      if (!method) return true;
+      if (method === "NONE") return !row.hasAssignment;
+      return row.method === method;
+    });
 
-  const hasFilters = !!(orgUnitId || jobLevel || exceptionsOnly);
+  const hasFilters = !!(orgUnitId || jobLevel || exceptionsOnly || method);
 
   return (
     <div>
@@ -74,7 +99,7 @@ export default async function AttendanceRecordsPage({
         </div>
         {canExportAttendanceData(session) && (
           <a
-            href={`/api/attendance/export?${new URLSearchParams({ date: dateIso }).toString()}`}
+            href={`/api/attendance/export?${new URLSearchParams({ date: dateIso, ...(method ? { method } : {}) }).toString()}`}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
           >
             {t("attendanceRecords.exportButton")}
@@ -114,6 +139,15 @@ export default async function AttendanceRecordsPage({
             ))}
           </select>
         </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("attendanceRecords.methodFilterLabel")}</label>
+          <select name="method" defaultValue={method ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            <option value="MOBILE">{t("attendanceMethod.MOBILE")}</option>
+            <option value="FINGERPRINT">{t("attendanceMethod.FINGERPRINT")}</option>
+            <option value="NONE">{t("attendanceRecords.methodFilterNoneOption")}</option>
+          </select>
+        </div>
         <label className="flex items-center gap-1.5 pb-2 text-sm text-slate-700">
           <input type="checkbox" name="exceptionsOnly" value="1" defaultChecked={exceptionsOnly === "1"} />
           {t("attendanceRecords.exceptionsOnlyLabel")}
@@ -139,9 +173,11 @@ export default async function AttendanceRecordsPage({
               <th className="px-4 py-3 font-medium">{t("employee.employeeNumber")}</th>
               <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
               <th className="px-4 py-3 font-medium">{t("employee.department")}</th>
+              <th className="px-4 py-3 font-medium">{t("attendanceRecords.shiftColumnLabel")}</th>
               <th className="px-4 py-3 font-medium">Check-in</th>
               <th className="px-4 py-3 font-medium">Check-out</th>
               <th className="px-4 py-3 font-medium">Pengecualian</th>
+              <th className="px-4 py-3 font-medium">{t("attendanceRecords.absenceColumnLabel")}</th>
             </tr>
           </thead>
           <tbody>
@@ -150,6 +186,11 @@ export default async function AttendanceRecordsPage({
                 <td className="px-4 py-3 font-mono text-xs">{row.employeeNumber}</td>
                 <td className="px-4 py-3">{row.name}</td>
                 <td className="px-4 py-3 text-slate-600">{row.departmentName}</td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-md px-2 py-1 text-xs font-medium ${SHIFT_BADGE_TONE[row.shiftType]}`}>
+                    {t(`shiftAssignmentType.${row.shiftType}`)}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-slate-600">{formatTime(row.checkInAt)}</td>
                 <td className="px-4 py-3 text-slate-600">{formatTime(row.checkOutAt)}</td>
                 <td className="px-4 py-3">
@@ -169,6 +210,18 @@ export default async function AttendanceRecordsPage({
                         </span>
                       ))}
                     </div>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {row.activeAbsence ? (
+                    <Link
+                      href={`/absences/${row.activeAbsence.id}`}
+                      className={`inline-block rounded-md px-2 py-1 text-xs font-medium hover:underline ${ABSENCE_BADGE_TONE[row.activeAbsence.status] ?? "bg-slate-100 text-slate-600"}`}
+                    >
+                      {t(`absenceType.${row.activeAbsence.absenceType}`)} — {t(`absenceStatus.${row.activeAbsence.status}`)}
+                    </Link>
+                  ) : (
+                    <span className="text-slate-300">—</span>
                   )}
                 </td>
               </tr>

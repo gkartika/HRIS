@@ -3,6 +3,149 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-11 (later same day) — Phase 3A: Competency & Training Operations
+
+New phase, additive-only against every prior accepted phase (Phase 0/1/2,
+Attendance/Absence) — no existing model, migration, or page was rebuilt or
+altered beyond adding back-relation fields. Source of truth: the attached
+workflow PDF plus the Blueprint spreadsheet's "08 Competency"/"09 Training"/
+"03 Roles & Access"/"04 Data Model" tabs, and the real Competency Matrix +
+Company Values + historical Evaluation-data workbooks (fetched as XLSX via
+the same `.../export?format=xlsx` pattern used for the Phase 1 real-data
+migration).
+
+### Schema: 17 new models, purely additive
+
+`CompetencyFrameworkVersion`/`CompetencyDefinition`/`CompetencyLevelIndicator`,
+`CompanyValueFrameworkVersion`/`CompanyValueDefinition`/`CompanyValueRubricIndicator`,
+`PositionCompetencyRequirement`, `CompetencyAssessmentCycle`/`CompetencyAssessment`/
+`CompetencyAssessmentItem`/`CompanyValueAssessmentItem`/`CompetencyEvaluatorChange`,
+`TrainingCourse`/`TrainingSession`/`TrainingRequest`/`LearningAssignment`/
+`MandatoryTrainingRule`. Applied via the same forward-only
+`prisma migrate diff --from-config-datasource --to-schema` → hand-written
+migration folder → `prisma migrate deploy` non-interactive workaround used
+throughout this project. `PositionCompetencyRequirement` is scoped to **Job**,
+not individual Position seats — a documented simplification of COM-05's
+"per Position or inherited from Job with a Position-specific override": every
+real seat for a Job shares one requirement set in this build, and item-level
+snapshotting at cycle-open time already satisfies "never rewrite a completed
+result" (COM-17) regardless.
+
+### Real framework data loaded from source, not fictional
+
+`prisma/load-phase3a-competency-framework.ts` is a one-time, re-runnable
+(upsert-based) script that fetches the actual "Competency Matrix and Company
+Values" workbook, forward-fills Excel's merged-cell blanks, and inserts 81
+real competencies (3 General/17 Leadership/61 Work) plus the 5 real Company
+Values with their full 0/25/50/75/100 rubric text. Two known source-label
+typos (COM-18: "Innitiavite"→Initiative, "Adaptibility"→Adaptability) are
+corrected on load with the raw spelling preserved in `aliasesCsv` for the
+historical migration's alias resolution.
+
+### P1/P2 routing: derived live, never stored, same convention as every other authority check
+
+`lib/competency-routing.ts` resolves COM-15's routing (normal Employee:
+P1=Primary-Position supervisor, P2=Department Head; Level-3 Employee:
+P1=Director, P2=HR Manager) at cycle-open time from `Assignment`/
+`Position.reportsToPositionId`/existing `dept-head.ts`/`hr-manager.ts`/
+`org-chart.ts` helpers — the same "derive from Position/Assignment, never a
+stored role" pattern used everywhere else in this app. When an authority
+Position has more than one current occupant (e.g. Acting coverage),
+`pickSingleEvaluator()` deterministically prefers the PRIMARY-type holder,
+else the lowest employeeId, so re-resolving never flip-flops. Live-verified
+against real org data: a Level-3 employee's assessment correctly resolved
+P1 to the actual Director and P2 to the actual HR Manager position-holder
+(who, in this company's real structure, is the same person as the subject
+herself for one case — a legitimate self-evaluation outcome of the routing
+rule as literally specified, not a bug).
+
+### Gap is a report, never a trigger
+
+Competency gaps (COM-11) and Company Values scores never create a
+`TrainingRequest`, `LearningAssignment`, or any other record — the only two
+code paths that ever create a `LearningAssignment` are
+`scheduleTrainingRequest()` (an approved Training Request) and
+`applyMandatoryTrainingRule()` (an active Mandatory Training rule),
+confirmed by code inspection and by the historical migration test import
+producing zero training side effects.
+
+### Historical migration reuses the generic ImportBatch/ImportRow framework
+
+`src/lib/import-export/competency-migration.ts` implements the same
+`DatasetModule` interface (`dryRun`/`commitRow`/`exportData`) as every other
+CSV importer and plugs into the existing `/import` hub — HR-Admin-only
+(ACC-24), gated by `canRunCompetencyHistoricalMigration`. One row = one
+(Employee, Competency, Period) result; several rows for the same
+Employee+Period lazily create/attach to one `isHistoricalMigration=true`
+`CompetencyAssessment` (its own frozen, `isHistorical=true`
+`CompetencyAssessmentCycle`, keyed `HIST-<slug of periodLabel>`). Required
+extending `DatasetModule.commitRow` to optionally receive the acting
+`Session` (needed for `CompetencyAssessmentCycle.openedByAccountId`) — a
+backward-compatible, additive interface change; every existing importer
+still only declares the one-argument signature. Company Values are
+intentionally never created for historical rows (COM-19: "leave unavailable
+Company Values blank" — the source format has no Company Values data at
+all). Live-verified against all four named edge cases in one crafted CSV:
+valid, invalid employee number, invalid out-of-range required level, and an
+exact duplicate row — dry-run correctly flagged 3 of 5 rows with specific
+reasons and committed only the 2 valid ones, with achievement% recalculated
+correctly (83.33%, hand-verified) and source sheet/row preserved per item.
+
+### Training Request → Course/Session/LearningAssignment, fully live-verified
+
+`TrainingRequest.reason` is free text against a fixed option list (not a DB
+enum) — matches TRN-01's open-ended reason categories without a schema
+migration if the list changes. TRN-10's "Training Admin validates, selects
+or creates the course/session, schedules it and assigns the Employee" is
+modeled as two sequential Training Admin steps (`VALIDATED` picks the
+course, `SCHEDULED` picks the session and creates the `LearningAssignment`)
+so a course can be chosen before a specific date is committed to. Full
+lifecycle live-verified end to end: employee self-submission → Department
+Head approval (surfaced in the existing `/approvals` personal inbox, same
+pattern as every other Dept Head queue) → Training Admin validation →
+scheduling, which correctly created the `LearningAssignment` with
+`effectivenessRequiredSnapshot` copied from the course.
+
+### Mandatory Training: idempotent audience resolution, five target types
+
+`lib/mandatory-training.ts` resolves all five TRN-13 audience types
+(Employee/Department/Job/Primary Position/Everyone) live from current
+organization data — never cached. "Prevent duplicate active assignments" is
+enforced by checking for an existing non-CANCELLED `LearningAssignment` for
+(employee, course) *regardless of which rule or Training Request created
+it* before creating a new one. Live-verified: applying a Department-scoped
+rule against Production (136 employees) correctly skipped the one employee
+who already had a `LearningAssignment` for that exact course from an earlier
+Training Request, and re-applying the same rule assigned exactly 0 new
+employees.
+
+### LearningAssignment lifecycle and the D+30 effectiveness task
+
+Attendance confirmation, completion (+ optional certificate), and
+cancellation are Training/HR Admin actions; effectiveness recording (TRN-04/
+TRN-07) is restricted to the assigned Employee's actual Primary Position
+supervisor (`isDirectManagerOfEmployee`) or HR Admin — deliberately **not**
+Training Admin, matching the spec's literal "the Primary Position supervisor
+completes it." Training/HR Admin do get read-only visibility into the
+company-wide effectiveness queue (`/training/effectiveness-tasks`, ACC-22's
+"administers delivery") — this asymmetry (visible but not actionable) was a
+real bug caught during live verification: the page's access gate initially
+excluded Training Admin entirely, and the effectiveness-submission form was
+rendered unconditionally to every visible viewer regardless of actual write
+authority; both are now scoped separately (`canManageLearningAssignment` for
+view, `canRecordLearningEffectiveness` per row for the form). Full lifecycle
+live-verified: ASSIGNED → attendance confirmed → COMPLETED (effectiveness
+due date correctly computed as D+30) → effectiveness recorded as EFFECTIVE
+with evidence text, correctly disappearing from the pending queue afterward.
+
+### Permission-scoped exports added alongside every new list
+
+`/api/training-requests/export`, `/api/learning-assignments/export`, and
+`/api/competency/gaps/export` mirror the exact visibility scope of their
+respective list pages (own/department-scoped for non-admins, everything for
+HR/Training Admin) rather than being separately gated — same CTL-13 pattern
+as the Attendance/Absence exports.
+
 ## 2026-08-11 — Task Force membership: cross-department tag, deliberately not a Position
 
 Direct user request: reflect internal task forces (e.g. "Internal Audit") in employee data as something like a position, but explicitly **not** a Primary position, and explicitly not wanting Struktur Organisasi (Org Unit/Job/Position) setup for it ("anything easier for you"). New standalone `TaskForceMembership` model (employeeId, free-text `name`, optional `roleLabel`, `startDate`, nullable `endDate`, `addedByAccountId`) — deliberately **not** built on Position/Assignment: a task force has no org-chart placement, no reports-to line, and no jobLevel, so modeling it as a real Position risked it being silently picked up by `dept-head.ts`/`level3-scope.ts`'s authority checks (which scan ACTIVE Assignments by `Position.jobLevel`/`orgUnitId`) or by the Additional-Assignment same-department restriction (which would have blocked exactly the cross-department use case this exists for). `name` is free text rather than a separate admin-managed catalog, with a `<datalist>` of previously-used names for consistency — avoids requiring a setup step before first use. New panel on the Employee detail page (`TaskForcePanel`): HR Admin adds/ends memberships (ending sets `endDate`, never deletes — same non-destructive pattern as every other "close" action in this app), visible read-only to the employee themself. Live-verified: added "Internal Audit — Anggota" to an employee, confirmed the name appeared in another employee's autocomplete datalist, ended the membership (moved to a "Riwayat" history section with start/end dates), and confirmed the subject employee sees it read-only with no edit controls.

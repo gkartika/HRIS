@@ -34,6 +34,25 @@ import {
   canViewOffboardingCase,
   canSubmitShiftAssignment,
   canViewShiftAssignments,
+  isDirector,
+  canManageCompetencyFramework,
+  canOpenCompetencyCycle,
+  canScoreAsCompetencyP1,
+  canScoreAsCompetencyP2,
+  canReassignCompetencyEvaluator,
+  canViewOwnCompetencyResult,
+  canViewCompetencyAssessment,
+  canRunCompetencyHistoricalMigration,
+  canSubmitTrainingRequest,
+  canDecideTrainingRequestAsDeptHead,
+  canValidateTrainingRequest,
+  canScheduleTrainingRequest,
+  canCancelTrainingRequest,
+  canManageTrainingCourse,
+  canManageLearningAssignment,
+  canRecordLearningEffectiveness,
+  canManageMandatoryTrainingRule,
+  canViewTrainingRequest,
   projectEmployee,
 } from "./permissions";
 
@@ -431,5 +450,146 @@ describe("canViewShiftAssignments", () => {
     expect(canViewShiftAssignments(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", false)).toBe(
       false
     );
+  });
+});
+
+describe("isDirector", () => {
+  it("true only with at least one active Director position", () => {
+    expect(isDirector(["pos-director"])).toBe(true);
+    expect(isDirector([])).toBe(false);
+  });
+});
+
+describe("canManageCompetencyFramework / canOpenCompetencyCycle (ACC-03)", () => {
+  it("allows Training Admin or HR Admin, denies a plain employee", () => {
+    expect(canManageCompetencyFramework(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canManageCompetencyFramework(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canManageCompetencyFramework(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
+    expect(canOpenCompetencyCycle(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canOpenCompetencyCycle(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
+  });
+});
+
+describe("canScoreAsCompetencyP1 / canScoreAsCompetencyP2 (ACC-21)", () => {
+  it("only the exact assigned evaluator may score their own slot", () => {
+    expect(canScoreAsCompetencyP1("emp-p1", "emp-p1")).toBe(true);
+    expect(canScoreAsCompetencyP1("emp-other", "emp-p1")).toBe(false);
+    expect(canScoreAsCompetencyP1(null, "emp-p1")).toBe(false);
+    expect(canScoreAsCompetencyP2("emp-p2", "emp-p2")).toBe(true);
+    expect(canScoreAsCompetencyP2("emp-p1", "emp-p2")).toBe(false);
+  });
+});
+
+describe("canReassignCompetencyEvaluator (ACC-21)", () => {
+  it("HR Admin only", () => {
+    expect(canReassignCompetencyEvaluator(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canReassignCompetencyEvaluator(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+  });
+});
+
+describe("canViewOwnCompetencyResult (COM-10)", () => {
+  it("only the subject, and only once finalized", () => {
+    expect(canViewOwnCompetencyResult(mockSession({ employeeId: "emp-1" }), "emp-1", new Date())).toBe(true);
+    expect(canViewOwnCompetencyResult(mockSession({ employeeId: "emp-1" }), "emp-1", null)).toBe(false);
+    expect(canViewOwnCompetencyResult(mockSession({ employeeId: "emp-2" }), "emp-1", new Date())).toBe(false);
+  });
+});
+
+describe("canViewCompetencyAssessment (COM-10/ACC-21)", () => {
+  it("allows HR Admin, Training Admin, either evaluator, the finalized subject, Level-3 dept, or the Director", () => {
+    expect(canViewCompetencyAssessment(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", null, null, null, false, [])).toBe(
+      true
+    );
+    expect(
+      canViewCompetencyAssessment(mockSession({ roles: ["TRAINING_ADMIN"] }), "emp-1", null, null, null, false, [])
+    ).toBe(true);
+    expect(
+      canViewCompetencyAssessment(mockSession({ employeeId: "emp-p1" }), "emp-1", "emp-p1", null, null, false, [])
+    ).toBe(true);
+    expect(
+      canViewCompetencyAssessment(mockSession({ employeeId: "emp-1" }), "emp-1", null, null, new Date(), false, [])
+    ).toBe(true);
+    expect(canViewCompetencyAssessment(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", null, null, null, true, [])).toBe(
+      true
+    );
+    expect(
+      canViewCompetencyAssessment(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", null, null, null, false, ["pos-director"])
+    ).toBe(true);
+  });
+
+  it("denies a bystander", () => {
+    expect(
+      canViewCompetencyAssessment(mockSession({ employeeId: "bystander-1" }), "emp-1", null, null, null, false, [])
+    ).toBe(false);
+  });
+});
+
+describe("canRunCompetencyHistoricalMigration (ACC-24)", () => {
+  it("HR Admin only, not Training Admin", () => {
+    expect(canRunCompetencyHistoricalMigration(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canRunCompetencyHistoricalMigration(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+  });
+});
+
+describe("canSubmitTrainingRequest (TRN-09/ACC-22)", () => {
+  it("allows self, an active Level-3 in the employee's department, or HR Admin", () => {
+    expect(canSubmitTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), true, false)).toBe(true);
+    expect(canSubmitTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), false, true)).toBe(true);
+    expect(canSubmitTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }), false, false)).toBe(true);
+    expect(canSubmitTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), false, false)).toBe(false);
+  });
+});
+
+describe("canDecideTrainingRequestAsDeptHead / canValidateTrainingRequest / canScheduleTrainingRequest (TRN-10)", () => {
+  it("Department Head decides first; Training Admin/HR Admin validate and schedule", () => {
+    expect(canDecideTrainingRequestAsDeptHead(["pos-dept-head"])).toBe(true);
+    expect(canDecideTrainingRequestAsDeptHead([])).toBe(false);
+    expect(canValidateTrainingRequest(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canValidateTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
+    expect(canScheduleTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+  });
+});
+
+describe("canCancelTrainingRequest", () => {
+  it("allows the requester, Training Admin, or HR Admin", () => {
+    expect(canCancelTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
+    expect(canCancelTrainingRequest(mockSession({ roles: ["TRAINING_ADMIN"] }), false)).toBe(true);
+    expect(canCancelTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
+  });
+});
+
+describe("canManageTrainingCourse / canManageLearningAssignment / canManageMandatoryTrainingRule (ACC-22/23)", () => {
+  it("Training Admin or HR Admin only", () => {
+    expect(canManageTrainingCourse(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canManageTrainingCourse(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
+    expect(canManageLearningAssignment(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canManageMandatoryTrainingRule(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canManageMandatoryTrainingRule(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
+  });
+});
+
+describe("canRecordLearningEffectiveness (TRN-04)", () => {
+  it("the employee's supervisor or HR Admin", () => {
+    expect(canRecordLearningEffectiveness(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
+    expect(canRecordLearningEffectiveness(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(true);
+    expect(canRecordLearningEffectiveness(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
+  });
+});
+
+describe("canViewTrainingRequest (TRN-02/ACC-22)", () => {
+  it("allows HR Admin, Training Admin, the subject, the submitter, or an eligible Department Head", () => {
+    expect(canViewTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", "account-x", [])).toBe(true);
+    expect(canViewTrainingRequest(mockSession({ roles: ["TRAINING_ADMIN"] }), "emp-1", "account-x", [])).toBe(true);
+    expect(canViewTrainingRequest(mockSession({ employeeId: "emp-1" }), "emp-1", "account-x", [])).toBe(true);
+    expect(canViewTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", "account-1", [])).toBe(true);
+    expect(canViewTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", "account-x", ["pos-dept-head"])).toBe(
+      true
+    );
+  });
+
+  it("denies a bystander", () => {
+    expect(
+      canViewTrainingRequest(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", "account-x", [])
+    ).toBe(false);
   });
 });

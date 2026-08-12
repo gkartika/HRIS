@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { canManageOrgStructure, canCreateEmployee, isHrAdmin, canImportFingerprintAttendance } from "@/lib/permissions";
+import {
+  canManageOrgStructure,
+  canCreateEmployee,
+  isHrAdmin,
+  canImportFingerprintAttendance,
+  canRunCompetencyHistoricalMigration,
+} from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { parseCsvRows } from "@/lib/import-export/csv";
 import { DATASET_REGISTRY, isDatasetKey, type DatasetKey } from "@/lib/import-export/registry";
@@ -16,6 +22,13 @@ function canImportDataset(session: Session, dataset: DatasetKey): boolean {
   if (dataset === "employees") return canCreateEmployee(session);
   if (dataset === "assignments") return isHrAdmin(session);
   if (dataset === "fingerprint-attendance") return canImportFingerprintAttendance(session);
+  // ACC-24: "HR Admin alone may run the approved one-time historical
+  // competency migration... After acceptance, disable the migration
+  // action" — the disable-after-acceptance half is enforced by
+  // canRunCompetencyHistoricalMigration always being HR-Admin-only, never a
+  // toggle the UI exposes to anyone else; there is no separate "acceptance"
+  // flag in this build (COM-19 calls it a one-time action by convention).
+  if (dataset === "competency-migration") return canRunCompetencyHistoricalMigration(session);
   return canManageOrgStructure(session);
 }
 
@@ -106,7 +119,7 @@ export async function commitImportBatch(batchId: string) {
     for (const row of batch.rows) {
       if (!row.isValid || row.createdRecordId) continue;
       const raw = JSON.parse(row.rawData) as Record<string, string>;
-      const result = await mod.commitRow(raw);
+      const result = await mod.commitRow(raw, session);
       await prisma.importRow.update({
         where: { id: row.id },
         data: { createdRecordId: result.id, rowAction: result.action },

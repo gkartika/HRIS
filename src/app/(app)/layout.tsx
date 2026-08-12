@@ -18,6 +18,7 @@ import {
   CalendarClock,
   Clock,
   CalendarOff,
+  GraduationCap,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -26,10 +27,12 @@ import {
   isGaAdmin,
   canSubmitRecruitmentRequest,
   canViewOnboarding,
+  canManageCompetencyFramework,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
+import { getActiveDirectorCandidates } from "@/lib/org-chart";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
@@ -67,6 +70,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // (3A/3B) submit eligibility already used for Perubahan Posisi.
   const level3DepartmentIds = await getLevel3DepartmentIds(session.user.employeeId);
   const isLevel3Anywhere = level3DepartmentIds.length > 0;
+  // COM-10/COM-15: Director gap-report/P1 authority, resolved live from the
+  // org root Position's active Assignment — same pattern as every other
+  // Position-derived authority in this app.
+  const directorCandidates = await getActiveDirectorCandidates();
+  const isDirectorAnywhere = directorCandidates.some((c) => c.employeeId === session.user.employeeId);
   // DM-27/WF-19: a plain employee with no HR Manager/Dept Head position can
   // still be assigned P1/P2 on any shared Evaluation (Contract Renewal,
   // Perubahan Posisi or Manual HR) — they need the Approval Inbox link too,
@@ -179,6 +187,57 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     navItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: Settings });
     navItems.push({ href: "/import", label: t("nav.importData"), icon: Upload });
     navItems.push({ href: "/audit-log", label: t("nav.auditLog"), icon: ShieldCheck });
+  }
+  // ACC-03: Training & Competency Admin needs this master-data browse even
+  // without HR Admin's broader org-structure access — a separate nav entry
+  // rather than nested under the HR-Admin-only /admin section above.
+  if (canManageCompetencyFramework(session)) {
+    navItems.push({ href: "/admin/competency", label: t("competencyAdmin.navLabel"), icon: GraduationCap });
+  }
+  // COM-06/ACC-21: cycle operations (Training/HR Admin) plus anyone
+  // currently assigned P1/P2 on any assessment (their only in-app
+  // notification surface for a scoring task, same reasoning as the shared
+  // Evaluation entity's Approval Inbox entry above).
+  const hasPendingCompetencyEvaluation = session.user.employeeId
+    ? (await prisma.competencyAssessment.count({
+        where: {
+          OR: [
+            { p1EmployeeId: session.user.employeeId, p1SubmittedAt: null },
+            { p2EmployeeId: session.user.employeeId, p2SubmittedAt: null },
+          ],
+        },
+      })) > 0
+    : false;
+  if (isHrAdmin(session) || isTrainingAdmin(session) || hasPendingCompetencyEvaluation) {
+    navItems.push({ href: "/competency", label: t("competencyAdmin.cycleNavLabel"), icon: GraduationCap });
+  }
+  // COM-10: Department Level 3 gets its Department's gap report, the
+  // Director gets the Level-3 gap report — same broad-visibility-then-
+  // page-scoped pattern as every other report in this app.
+  if (isHrAdmin(session) || isTrainingAdmin(session) || isLevel3Anywhere || isDirectorAnywhere) {
+    navItems.push({ href: "/competency/gaps", label: t("competencyAdmin.gapsNavLabel"), icon: GraduationCap });
+  }
+  if (session.user.employeeId) {
+    navItems.push({ href: "/competency/my", label: t("competencyAdmin.myNavLabel"), icon: GraduationCap });
+  }
+  // TRN-09/ACC-22: same broad list-nav visibility as Contract/Movement/
+  // Absence — HR Admin, Training Admin, or any employee-linked account (who
+  // may submit for self, or for their Department if Level 3), scoped
+  // further on the list page itself.
+  if (isHrAdmin(session) || isTrainingAdmin(session) || session.user.employeeId) {
+    navItems.push({ href: "/training-requests", label: t("trainingRequest.navLabel"), icon: GraduationCap });
+  }
+  if (isHrAdmin(session) || isTrainingAdmin(session)) {
+    navItems.push({ href: "/training/courses", label: t("training.coursesNavLabel"), icon: GraduationCap });
+    navItems.push({ href: "/training/mandatory-rules", label: t("training.mandatoryRulesNavLabel"), icon: GraduationCap });
+    navItems.push({ href: "/training/learning-assignments", label: t("training.learningAssignmentsNavLabel"), icon: GraduationCap });
+  }
+  // TRN-04/TRN-07: any employee-linked account may hold a direct report's
+  // D+30 effectiveness task regardless of Dept Head/Level 3 status, plus
+  // Training/HR Admin get the company-wide queue (ACC-22) — same broad-
+  // then-page-scoped visibility pattern as Approval Inbox.
+  if (isHrAdmin(session) || isTrainingAdmin(session) || session.user.employeeId) {
+    navItems.push({ href: "/training/effectiveness-tasks", label: t("training.effectivenessTasksNavLabel"), icon: GraduationCap });
   }
 
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");

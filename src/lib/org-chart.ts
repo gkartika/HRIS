@@ -145,3 +145,32 @@ export async function getOrgChartData(asOfDate: Date): Promise<OrgChartData> {
     structureWarnings,
   };
 }
+
+export interface DirectorCandidate {
+  employeeId: string;
+  positionId: string;
+  assignmentType: string;
+}
+
+/**
+ * Current holder(s) of the single Director root Position (ORG-15/DEC-011:
+ * positionType DIRECTOR with no reportsToPositionId). Used by Phase 3A's
+ * Level-3-employee P1 routing (COM-15) — company-wide, not department-scoped.
+ */
+export async function getActiveDirectorCandidates(asOf: Date = new Date()): Promise<DirectorCandidate[]> {
+  const directorPositions = await prisma.position.findMany({
+    where: { positionType: "DIRECTOR", reportsToPositionId: null },
+    select: { id: true },
+  });
+  if (directorPositions.length === 0) return [];
+
+  return prisma.assignment.findMany({
+    where: {
+      status: "ACTIVE",
+      effectiveFrom: { lte: asOf },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+      positionId: { in: directorPositions.map((p) => p.id) },
+    },
+    select: { employeeId: true, positionId: true, assignmentType: true },
+  });
+}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, UserCheck, CalendarDays } from "lucide-react";
+import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, UserCheck, CalendarDays, Award } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
@@ -52,6 +52,12 @@ const SECTIONS = [
     icon: CalendarDays,
     title: "Jatah Absensi Tahunan",
     desc: "Jumlah hari per tahun untuk setiap jenis Absensi",
+  },
+  {
+    href: "/admin/competency",
+    icon: Award,
+    title: "Kerangka Kompetensi",
+    desc: "Matrik Kompetensi dan Tata Nilai Perusahaan (juga dapat diakses Admin Pelatihan & Kompetensi)",
   },
 ];
 

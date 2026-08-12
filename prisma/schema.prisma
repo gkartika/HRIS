@@ -739,6 +739,18 @@ model Account {
   absenceRequestsHrOverrideBy            AbsenceRequest[]                @relation("AbsenceHrOverrideBy")
   absenceRequestsCancelledBy             AbsenceRequest[]                @relation("AbsenceCancelledBy")
   taskForceMembershipsAddedBy            TaskForceMembership[]           @relation("TaskForceMembershipAddedBy")
+
+  positionCompetencyRequirementsUpdatedBy  PositionCompetencyRequirement[] @relation("PositionCompetencyRequirementUpdatedBy")
+  competencyCyclesOpenedBy                 CompetencyAssessmentCycle[]     @relation("CycleOpenedBy")
+  competencyEvaluatorChangesMadeBy         CompetencyEvaluatorChange[]     @relation("CompetencyEvaluatorChangeBy")
+  trainingCoursesCreatedBy                 TrainingCourse[]                @relation("TrainingCourseCreatedBy")
+  trainingSessionsCreatedBy                TrainingSession[]               @relation("TrainingSessionCreatedBy")
+  trainingRequestsSubmittedBy              TrainingRequest[]               @relation("TrainingRequestSubmittedBy")
+  trainingRequestsDeptHeadDecisionsBy      TrainingRequest[]               @relation("TrainingRequestDeptHeadDecisionBy")
+  trainingRequestsTrainingAdminDecisionsBy TrainingRequest[]               @relation("TrainingRequestTrainingAdminDecisionBy")
+  trainingRequestsCancelledBy              TrainingRequest[]               @relation("TrainingRequestCancelledBy")
+  learningAssignmentsAssignedBy            LearningAssignment[]            @relation("LearningAssignmentAssignedBy")
+  mandatoryTrainingRulesCreatedBy          MandatoryTrainingRule[]         @relation("MandatoryTrainingRuleCreatedBy")
 }
 
 model AccountRole {
@@ -828,6 +840,16 @@ model Employee {
   dailyAttendanceRecords         DailyAttendanceRecord[]        @relation("DailyAttendanceRecordEmployee")
   absenceRequests                AbsenceRequest[]               @relation("AbsenceRequestEmployee")
   taskForceMemberships           TaskForceMembership[]          @relation("TaskForceMember")
+
+  competencyAssessments                       CompetencyAssessment[]      @relation("CompetencyAssessmentEmployee")
+  competencyAssessmentsAsP1                   CompetencyAssessment[]      @relation("CompetencyAssessmentP1")
+  competencyAssessmentsAsP2                   CompetencyAssessment[]      @relation("CompetencyAssessmentP2")
+  competencyEvaluatorChangesAsOld             CompetencyEvaluatorChange[] @relation("CompetencyEvaluatorChangeOld")
+  competencyEvaluatorChangesAsNew             CompetencyEvaluatorChange[] @relation("CompetencyEvaluatorChangeNew")
+  trainingRequests                            TrainingRequest[]           @relation("TrainingRequestEmployee")
+  learningAssignments                         LearningAssignment[]        @relation("LearningAssignmentEmployee")
+  learningAssignmentsAsEffectivenessEvaluator LearningAssignment[]        @relation("LearningAssignmentEffectivenessEvaluator")
+  mandatoryTrainingRuleTargets                MandatoryTrainingRule[]     @relation("MandatoryTrainingRuleTargetEmployee")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -872,6 +894,10 @@ model OrgUnit {
   positions             Position[]
   recruitmentRequests   RecruitmentRequest[]
   absenceApproverConfig AbsenceApproverConfig?
+
+  competencyAssessments        CompetencyAssessment[]
+  trainingRequestsSnapshot     TrainingRequest[]
+  mandatoryTrainingRuleTargets MandatoryTrainingRule[]
 }
 
 model Job {
@@ -892,6 +918,10 @@ model Job {
 
   positions           Position[]
   recruitmentRequests RecruitmentRequest[]
+
+  competencyRequirements       PositionCompetencyRequirement[]
+  competencyAssessments        CompetencyAssessment[]          @relation("CompetencyAssessmentJob")
+  mandatoryTrainingRuleTargets MandatoryTrainingRule[]
 }
 
 model Position {
@@ -952,6 +982,13 @@ model Position {
   shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]       @relation("ShiftAssignmentSubmittedByPosition")
   absenceApproverConfigOf                     AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
   absenceRequestsAsFirstApproverPosition      AbsenceRequest[]        @relation("AbsenceFirstApproverPosition")
+
+  competencyAssessmentsAsSnapshotPosition    CompetencyAssessment[]  @relation("CompetencyAssessmentPosition")
+  competencyAssessmentsAsP1Position          CompetencyAssessment[]  @relation("CompetencyAssessmentP1Position")
+  competencyAssessmentsAsP2Position          CompetencyAssessment[]  @relation("CompetencyAssessmentP2Position")
+  trainingRequestsAsPositionSnapshot         TrainingRequest[]       @relation("TrainingRequestPositionSnapshot")
+  trainingRequestsAsDeptHeadDecisionPosition TrainingRequest[]       @relation("TrainingRequestDeptHeadDecisionPosition")
+  mandatoryTrainingRuleTargetPositionOf      MandatoryTrainingRule[] @relation("MandatoryTrainingRuleTargetPosition")
 }
 
 model Assignment {
@@ -967,12 +1004,13 @@ model Assignment {
   effectiveTo           DateTime?
   createdAt             DateTime         @default(now())
 
-  fulfillment                     RecruitmentRequestFulfillment?
-  movementImplementation          MovementRequest?
-  movementCurrentAssignmentOf     MovementRequest[]              @relation("MovementCurrentAssignment")
-  renewalCasesAsPrimaryAssignment ContractRenewalCase[]
-  evaluationsAsPrimaryAssignment  Evaluation[]
-  contractsAsPrimaryAssignment    Contract[]                     @relation("ContractPrimaryAssignment")
+  fulfillment                              RecruitmentRequestFulfillment?
+  movementImplementation                   MovementRequest?
+  movementCurrentAssignmentOf              MovementRequest[]              @relation("MovementCurrentAssignment")
+  renewalCasesAsPrimaryAssignment          ContractRenewalCase[]
+  evaluationsAsPrimaryAssignment           Evaluation[]
+  contractsAsPrimaryAssignment             Contract[]                     @relation("ContractPrimaryAssignment")
+  competencyAssessmentsAsPrimaryAssignment CompetencyAssessment[]
 }
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
@@ -1568,6 +1606,486 @@ model AbsenceRequest {
 // used names for consistency, but doesn't force a config step before first
 // use, per direct user request ("don't need it in Struktur Organisasi,
 // anything easier").
+// ---------- Phase 3A: Competency & Training Operations ----------
+// Assessed twice yearly against the Employee's Primary Position only.
+// Company Values are universal (same five, 20% each) for every eligible
+// Employee. Competency Achievement % and Company Values Score are kept
+// separate — no combined performance score in Phase 3A (COM-16).
+
+enum CompetencyCategory {
+  GENERAL
+  WORK
+  LEADERSHIP
+}
+
+enum FrameworkStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum CycleStatus {
+  OPEN
+  CLOSED
+}
+
+enum EvaluatorSlot {
+  P1
+  P2
+}
+
+enum TrainingRequesterType {
+  SELF
+  LEVEL_3
+}
+
+enum TrainingRequestStatus {
+  SUBMITTED
+  DEPT_HEAD_APPROVED
+  REJECTED
+  VALIDATED
+  SCHEDULED
+  CANCELLED
+}
+
+enum TrainingSessionStatus {
+  PLANNED
+  COMPLETED
+  CANCELLED
+}
+
+enum LearningAssignmentSourceType {
+  TRAINING_REQUEST
+  MANDATORY_RULE
+}
+
+enum LearningAssignmentStatus {
+  ASSIGNED
+  ATTENDED
+  COMPLETED
+  CANCELLED
+}
+
+enum EffectivenessResult {
+  EFFECTIVE
+  NOT_EFFECTIVE
+}
+
+enum MandatoryTargetType {
+  EMPLOYEE
+  DEPARTMENT
+  JOB
+  PRIMARY_POSITION
+  EVERYONE
+}
+
+// Versioned so a later master-data edit never rewrites a completed cycle's
+// results (COM-17) — each cycle snapshots the version in use at open time.
+model CompetencyFrameworkVersion {
+  id              String          @id @default(cuid())
+  versionLabel    String
+  sourceDocNumber String?
+  sourceDocDate   DateTime?
+  revision        String?
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  status          FrameworkStatus @default(ACTIVE)
+  createdAt       DateTime        @default(now())
+
+  definitions CompetencyDefinition[]
+  cycles      CompetencyAssessmentCycle[] @relation("CycleCompetencyFramework")
+}
+
+// Normalized from LI- General / LI- Work / LI-Leadership (not the broken
+// "List" helper tab) per COM-18 — stable `code`, with `aliasesCsv` recording
+// known source spelling variants (Innitiavite/Initiative, Adaptibility/
+// Adaptability, Troubleshooting/TPM variants) for the historical migration's
+// alias resolution, never re-imported live.
+model CompetencyDefinition {
+  id                 String                     @id @default(cuid())
+  frameworkVersionId String
+  frameworkVersion   CompetencyFrameworkVersion @relation(fields: [frameworkVersionId], references: [id])
+  code               String
+  category           CompetencyCategory
+  subcategory        String
+  name               String
+  description        String?
+  aliasesCsv         String?
+  activeFlag         Boolean                    @default(true)
+  displayOrder       Int                        @default(0)
+
+  levelIndicators CompetencyLevelIndicator[]
+  requirements    PositionCompetencyRequirement[]
+  assessmentItems CompetencyAssessmentItem[]
+
+  @@unique([frameworkVersionId, code])
+}
+
+model CompetencyLevelIndicator {
+  id                     String               @id @default(cuid())
+  competencyDefinitionId String
+  competencyDefinition   CompetencyDefinition @relation(fields: [competencyDefinitionId], references: [id])
+  level                  Int
+  indicatorText          String
+
+  @@unique([competencyDefinitionId, level])
+}
+
+model CompanyValueFrameworkVersion {
+  id              String          @id @default(cuid())
+  versionLabel    String
+  sourceDocNumber String?
+  sourceDocDate   DateTime?
+  revision        String?
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  status          FrameworkStatus @default(ACTIVE)
+  createdAt       DateTime        @default(now())
+
+  definitions CompanyValueDefinition[]
+  cycles      CompetencyAssessmentCycle[] @relation("CycleCompanyValueFramework")
+}
+
+// Exactly five values from the Tata Nilai source, each weighted 20%
+// (COM-14) — every eligible Employee in a cycle gets the identical set.
+model CompanyValueDefinition {
+  id                 String                       @id @default(cuid())
+  frameworkVersionId String
+  frameworkVersion   CompanyValueFrameworkVersion @relation(fields: [frameworkVersionId], references: [id])
+  code               String
+  name               String
+  weight             Int                          @default(20)
+  displayOrder       Int                          @default(0)
+
+  rubricIndicators CompanyValueRubricIndicator[]
+  assessmentItems  CompanyValueAssessmentItem[]
+
+  @@unique([frameworkVersionId, code])
+}
+
+model CompanyValueRubricIndicator {
+  id                       String                 @id @default(cuid())
+  companyValueDefinitionId String
+  companyValueDefinition   CompanyValueDefinition @relation(fields: [companyValueDefinitionId], references: [id])
+  score                    Int
+  indicatorText            String
+
+  @@unique([companyValueDefinitionId, score])
+}
+
+// Admin-configured per Job (not per individual Position seat — a documented
+// simplification of COM-05's "per Position or inherited from Job with
+// Position-specific override": every real seat for a Job shares the same
+// requirement in this build). `isRequired=false` is the sole N/A
+// representation — target level 0 is never overloaded to also mean N/A
+// (DM-43).
+model PositionCompetencyRequirement {
+  id                     String               @id @default(cuid())
+  jobId                  String
+  job                    Job                  @relation(fields: [jobId], references: [id])
+  competencyDefinitionId String
+  competencyDefinition   CompetencyDefinition @relation(fields: [competencyDefinitionId], references: [id])
+  isRequired             Boolean              @default(true)
+  targetLevel            Int?
+  updatedByAccountId     String
+  updatedByAccount       Account              @relation("PositionCompetencyRequirementUpdatedBy", fields: [updatedByAccountId], references: [id])
+  updatedAt              DateTime             @updatedAt
+  createdAt              DateTime             @default(now())
+
+  @@unique([jobId, competencyDefinitionId])
+}
+
+// Opened by Training Admin (COM-06); snapshots active Employees, Primary
+// Position and both framework versions at open time — never recomputed
+// live afterward.
+model CompetencyAssessmentCycle {
+  id                             String                       @id @default(cuid())
+  cycleCode                      String                       @unique
+  periodLabel                    String
+  cutoffDate                     DateTime
+  startDate                      DateTime
+  endDate                        DateTime?
+  competencyFrameworkVersionId   String
+  competencyFrameworkVersion     CompetencyFrameworkVersion   @relation("CycleCompetencyFramework", fields: [competencyFrameworkVersionId], references: [id])
+  companyValueFrameworkVersionId String
+  companyValueFrameworkVersion   CompanyValueFrameworkVersion @relation("CycleCompanyValueFramework", fields: [companyValueFrameworkVersionId], references: [id])
+  status                         CycleStatus                  @default(OPEN)
+  // One-time historical migration batches are modeled as their own closed,
+  // read-only cycles (COM-19) — reuses every downstream gap/report/display
+  // path rather than a parallel schema, and keeps them clearly out of the
+  // routine twice-yearly cadence.
+  isHistorical                   Boolean                      @default(false)
+  openedByAccountId              String
+  openedByAccount                Account                      @relation("CycleOpenedBy", fields: [openedByAccountId], references: [id])
+  openedAt                       DateTime                     @default(now())
+  closedAt                       DateTime?
+
+  assessments CompetencyAssessment[]
+}
+
+// One row per eligible Employee per cycle. P1/P2 routing per ACC-21/COM-15:
+// normal Employee P1=Primary-Position supervisor, P2=Department Head;
+// Level-3 Employee P1=Director, P2=HR Manager. HR Admin may reassign either
+// slot (see CompetencyEvaluatorChange) but never scores unless separately
+// assigned as P1/P2 themselves.
+model CompetencyAssessment {
+  id                  String                    @id @default(cuid())
+  cycleId             String
+  cycle               CompetencyAssessmentCycle @relation(fields: [cycleId], references: [id])
+  employeeId          String
+  employee            Employee                  @relation("CompetencyAssessmentEmployee", fields: [employeeId], references: [id])
+  primaryAssignmentId String?
+  primaryAssignment   Assignment?               @relation(fields: [primaryAssignmentId], references: [id])
+  positionId          String?
+  position            Position?                 @relation("CompetencyAssessmentPosition", fields: [positionId], references: [id])
+  jobId               String?
+  job                 Job?                      @relation("CompetencyAssessmentJob", fields: [jobId], references: [id])
+  orgUnitId           String?
+  orgUnit             OrgUnit?                  @relation(fields: [orgUnitId], references: [id])
+  isLevel3AtSnapshot  Boolean                   @default(false)
+
+  p1EmployeeId String?
+  p1Employee   Employee? @relation("CompetencyAssessmentP1", fields: [p1EmployeeId], references: [id])
+  p1PositionId String?
+  p1Position   Position? @relation("CompetencyAssessmentP1Position", fields: [p1PositionId], references: [id])
+  p2EmployeeId String?
+  p2Employee   Employee? @relation("CompetencyAssessmentP2", fields: [p2EmployeeId], references: [id])
+  p2PositionId String?
+  p2Position   Position? @relation("CompetencyAssessmentP2Position", fields: [p2PositionId], references: [id])
+
+  p1SubmittedAt            DateTime?
+  p2SubmittedAt            DateTime?
+  // Null until both required submissions are complete — always derived from
+  // the Items at that moment via lib/competency.ts, never recomputed later
+  // by a master-data edit (COM-17).
+  competencyAchievementPct Float?
+  companyValuesScore       Float?
+  completedAt              DateTime?
+
+  // True only for a row created by the one-time historical migration
+  // (COM-19) — read-only, no Company Values items, no P1/P2 tasks.
+  isHistoricalMigration Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  items            CompetencyAssessmentItem[]
+  valueItems       CompanyValueAssessmentItem[]
+  evaluatorChanges CompetencyEvaluatorChange[]
+
+  @@unique([cycleId, employeeId])
+}
+
+// Mandatory-reason, full-audit-trail HR Admin reassignment of P1 or P2
+// (COM-15/ACC-21). Reassigning an already-submitted slot voids/reopens only
+// that slot for a fresh submission — handled in the action, not the schema.
+model CompetencyEvaluatorChange {
+  id                 String               @id @default(cuid())
+  assessmentId       String
+  assessment         CompetencyAssessment @relation(fields: [assessmentId], references: [id])
+  slot               EvaluatorSlot
+  oldEmployeeId      String?
+  oldEmployee        Employee?            @relation("CompetencyEvaluatorChangeOld", fields: [oldEmployeeId], references: [id])
+  newEmployeeId      String
+  newEmployee        Employee             @relation("CompetencyEvaluatorChangeNew", fields: [newEmployeeId], references: [id])
+  reason             String
+  changedByAccountId String
+  changedByAccount   Account              @relation("CompetencyEvaluatorChangeBy", fields: [changedByAccountId], references: [id])
+  changedAt          DateTime             @default(now())
+}
+
+// Snapshotted at cycle-open from PositionCompetencyRequirement so a later
+// requirement edit never changes an already-open or completed assessment
+// (COM-17). `actualLevel` stays null until P1 submits; 0 explicitly means
+// "below Level 1 / not yet demonstrated" per COM-04, distinct from null
+// (not yet assessed) and from `isRequired=false` (N/A).
+model CompetencyAssessmentItem {
+  id                     String               @id @default(cuid())
+  assessmentId           String
+  assessment             CompetencyAssessment @relation(fields: [assessmentId], references: [id])
+  competencyDefinitionId String
+  competencyDefinition   CompetencyDefinition @relation(fields: [competencyDefinitionId], references: [id])
+  competencyNameSnapshot String
+  categorySnapshot       CompetencyCategory
+  isRequired             Boolean
+  requiredLevel          Int?
+  actualLevel            Int?
+  comment                String?
+
+  @@unique([assessmentId, competencyDefinitionId])
+}
+
+// Per-value result = average(P1,P2) × weight/100, summed for the Company
+// Values Score (COM-14/DM-46) — computed live in lib/competency.ts, never
+// stored. P1 and P2 score independently; neither can see the other's score
+// while entering their own (enforced at the page level).
+model CompanyValueAssessmentItem {
+  id                       String                 @id @default(cuid())
+  assessmentId             String
+  assessment               CompetencyAssessment   @relation(fields: [assessmentId], references: [id])
+  companyValueDefinitionId String
+  companyValueDefinition   CompanyValueDefinition @relation(fields: [companyValueDefinitionId], references: [id])
+  valueNameSnapshot        String
+  weightSnapshot           Int
+  p1Score                  Int?
+  p1Comment                String?
+  p2Score                  Int?
+  p2Comment                String?
+
+  @@unique([assessmentId, companyValueDefinitionId])
+}
+
+// Manually created by Training Admin (TRN-11) — creation alone enrolls no
+// one; a LearningAssignment still requires an approved TrainingRequest or
+// an active MandatoryTrainingRule (COM-11/TRN-09).
+model TrainingCourse {
+  id                        String   @id @default(cuid())
+  title                     String
+  category                  String?
+  provider                  String?
+  deliveryMethod            String?
+  plannedCost               Float?
+  actualCost                Float?
+  certificateRequired       Boolean  @default(false)
+  effectivenessRequired     Boolean  @default(false)
+  effectivenessFollowupDays Int      @default(30)
+  activeFlag                Boolean  @default(true)
+  createdByAccountId        String
+  createdByAccount          Account  @relation("TrainingCourseCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt                 DateTime @default(now())
+
+  sessions            TrainingSession[]
+  requests            TrainingRequest[]
+  learningAssignments LearningAssignment[]
+  mandatoryRules      MandatoryTrainingRule[]
+}
+
+model TrainingSession {
+  id                 String                @id @default(cuid())
+  courseId           String
+  course             TrainingCourse        @relation(fields: [courseId], references: [id])
+  startDate          DateTime
+  endDate            DateTime?
+  location           String?
+  capacity           Int?
+  status             TrainingSessionStatus @default(PLANNED)
+  createdByAccountId String
+  createdByAccount   Account               @relation("TrainingSessionCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt          DateTime              @default(now())
+
+  requests            TrainingRequest[]
+  learningAssignments LearningAssignment[]
+}
+
+// Employee self-request or a Level-3 Position requesting for its own
+// Department (TRN-09) — a gap reference is informative only and never
+// auto-creates a request (COM-11/TRN-02).
+model TrainingRequest {
+  id                    String                @id @default(cuid())
+  requestNumber         String                @unique
+  requesterType         TrainingRequesterType
+  employeeId            String
+  employee              Employee              @relation("TrainingRequestEmployee", fields: [employeeId], references: [id])
+  submittedByAccountId  String
+  submittedByAccount    Account               @relation("TrainingRequestSubmittedBy", fields: [submittedByAccountId], references: [id])
+  departmentIdSnapshot  String?
+  departmentSnapshot    OrgUnit?              @relation(fields: [departmentIdSnapshot], references: [id])
+  positionIdSnapshot    String?
+  positionSnapshot      Position?             @relation("TrainingRequestPositionSnapshot", fields: [positionIdSnapshot], references: [id])
+  reason                String
+  gapReferenceNote      String?
+  requestedTopic        String
+  businessJustification String?
+  preferredTiming       String?
+  status                TrainingRequestStatus @default(SUBMITTED)
+
+  deptHeadDecisionAt          DateTime?
+  deptHeadDecisionByAccountId String?
+  deptHeadDecisionByAccount   Account?  @relation("TrainingRequestDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
+  deptHeadDecisionPositionId  String?
+  deptHeadDecisionPosition    Position? @relation("TrainingRequestDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
+  deptHeadNote                String?
+
+  trainingAdminDecisionAt          DateTime?
+  trainingAdminDecisionByAccountId String?
+  trainingAdminDecisionByAccount   Account?  @relation("TrainingRequestTrainingAdminDecisionBy", fields: [trainingAdminDecisionByAccountId], references: [id])
+  trainingAdminNote                String?
+
+  courseId  String?
+  course    TrainingCourse?  @relation(fields: [courseId], references: [id])
+  sessionId String?
+  session   TrainingSession? @relation(fields: [sessionId], references: [id])
+
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelledByAccount   Account?  @relation("TrainingRequestCancelledBy", fields: [cancelledByAccountId], references: [id])
+  cancellationReason   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  learningAssignment LearningAssignment?
+}
+
+// Created only from an approved TrainingRequest or an active
+// MandatoryTrainingRule (COM-11/TRN-09) — never from a competency gap.
+model LearningAssignment {
+  id                            String                       @id @default(cuid())
+  employeeId                    String
+  employee                      Employee                     @relation("LearningAssignmentEmployee", fields: [employeeId], references: [id])
+  courseId                      String
+  course                        TrainingCourse               @relation(fields: [courseId], references: [id])
+  sessionId                     String?
+  session                       TrainingSession?             @relation(fields: [sessionId], references: [id])
+  sourceType                    LearningAssignmentSourceType
+  sourceTrainingRequestId       String?                      @unique
+  sourceTrainingRequest         TrainingRequest?             @relation(fields: [sourceTrainingRequestId], references: [id])
+  sourceMandatoryRuleId         String?
+  sourceMandatoryRule           MandatoryTrainingRule?       @relation(fields: [sourceMandatoryRuleId], references: [id])
+  assignedByAccountId           String
+  assignedByAccount             Account                      @relation("LearningAssignmentAssignedBy", fields: [assignedByAccountId], references: [id])
+  assignedAt                    DateTime                     @default(now())
+  status                        LearningAssignmentStatus     @default(ASSIGNED)
+  attendanceConfirmedAt         DateTime?
+  completedAt                   DateTime?
+  certificateNumber             String?
+  certificateIssueDate          DateTime?
+  // Per-course, not per-assignment (TRN-04) — snapshotted here so a later
+  // course edit never changes an already-assigned learner's obligation.
+  effectivenessRequiredSnapshot Boolean                      @default(false)
+  effectivenessDueDate          DateTime?
+  effectivenessCompletedAt      DateTime?
+  effectivenessResult           EffectivenessResult?
+  effectivenessEvaluatorId      String?
+  effectivenessEvaluator        Employee?                    @relation("LearningAssignmentEffectivenessEvaluator", fields: [effectivenessEvaluatorId], references: [id])
+  effectivenessEvidence         String?
+  createdAt                     DateTime                     @default(now())
+}
+
+// Exactly five target types (TRN-13/DM-41): Employee, Department, Job,
+// Primary Position or Everyone. "Apply" resolves the audience live from
+// current organization/Primary Assignment data and idempotently creates one
+// LearningAssignment per resolved Employee (never a duplicate active one).
+model MandatoryTrainingRule {
+  id                 String              @id @default(cuid())
+  courseId           String
+  course             TrainingCourse      @relation(fields: [courseId], references: [id])
+  targetType         MandatoryTargetType
+  targetEmployeeId   String?
+  targetEmployee     Employee?           @relation("MandatoryTrainingRuleTargetEmployee", fields: [targetEmployeeId], references: [id])
+  targetDepartmentId String?
+  targetDepartment   OrgUnit?            @relation(fields: [targetDepartmentId], references: [id])
+  targetJobId        String?
+  targetJob          Job?                @relation(fields: [targetJobId], references: [id])
+  targetPositionId   String?
+  targetPosition     Position?           @relation("MandatoryTrainingRuleTargetPosition", fields: [targetPositionId], references: [id])
+  activeFlag         Boolean             @default(true)
+  createdByAccountId String
+  createdByAccount   Account             @relation("MandatoryTrainingRuleCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt          DateTime            @default(now())
+
+  learningAssignments LearningAssignment[]
+}
+
 model TaskForceMembership {
   id               String    @id @default(cuid())
   employeeId       String

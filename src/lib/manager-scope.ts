@@ -29,3 +29,36 @@ export async function isDirectManagerOfEmployee(
   });
   return targetPosition?.reportsToPositionId === manager.currentPositionId;
 }
+
+export interface SupervisorCandidate {
+  employeeId: string;
+  positionId: string;
+  assignmentType: string;
+}
+
+/**
+ * Current holder(s) of the Position that `positionId` reports to (its direct
+ * supervisor's seat), via any ACTIVE Assignment covering `asOf`. Empty when
+ * the Position has no reportsToPositionId (the org root). Used by Phase 3A's
+ * normal-employee P1 routing — "Primary Position supervisor" (COM-15).
+ */
+export async function getSupervisorCandidatesForPosition(
+  positionId: string,
+  asOf: Date = new Date()
+): Promise<SupervisorCandidate[]> {
+  const position = await prisma.position.findUnique({
+    where: { id: positionId },
+    select: { reportsToPositionId: true },
+  });
+  if (!position?.reportsToPositionId) return [];
+
+  return prisma.assignment.findMany({
+    where: {
+      status: "ACTIVE",
+      effectiveFrom: { lte: asOf },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+      positionId: position.reportsToPositionId,
+    },
+    select: { employeeId: true, positionId: true, assignmentType: true },
+  });
+}

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 // Department Head/Manager tiers in the current org data. Kept in its own
 // file for the same Prisma-backed/dependency-free-permissions.ts reason as
 // hr-manager.ts and dept-head.ts.
-const LEVEL_3_JOB_LEVELS = ["3A", "3B"];
+export const LEVEL_3_JOB_LEVELS = ["3A", "3B"];
 
 export interface Level3Position {
   assignmentId: string;

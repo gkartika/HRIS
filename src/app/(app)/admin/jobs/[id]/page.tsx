@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
-import { canManageOrgStructure } from "@/lib/permissions";
+import { canManageOrgStructure, canManageCompetencyFramework } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EditJobForm } from "./edit-form";
@@ -22,6 +23,13 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
       <div className="mt-4 max-w-lg">
         <EditJobForm job={job} />
       </div>
+      {canManageCompetencyFramework(session) && (
+        <div className="mt-6">
+          <Link href={`/admin/jobs/${job.id}/competency`} className="text-sm text-indigo-600 hover:underline">
+            {t("competencyAdmin.requirementsNavHint")} →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

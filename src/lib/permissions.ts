@@ -552,6 +552,168 @@ export function canManageTaskForceMembership(session: Session): boolean {
   return isHrAdmin(session);
 }
 
+// ---------- Phase 3A: Competency (COM-06/10/15/17, ACC-03/21/24) ----------
+
+// ACC-21: Director authority for Level-3-employee P1 routing and Level-3
+// gap reporting — same Position-derived-only shape as isHrManager/
+// isDeptHeadApprover (resolved live via org-chart.ts's
+// getActiveDirectorCandidates, never a stored flag).
+export function isDirector(activeDirectorPositionIds: string[]): boolean {
+  return activeDirectorPositionIds.length > 0;
+}
+
+// ACC-03: "Training & Competency Admin" (the TRAINING_ADMIN role) owns
+// framework versions, Position/Job competency requirements and cycle
+// open/close — HR Admin keeps the same administrative latitude it has
+// everywhere else.
+export function canManageCompetencyFramework(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+export function canOpenCompetencyCycle(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+// ACC-21: "P1 is the Primary Position supervisor and completes the
+// competency levels plus Company Values." Acting session must literally be
+// the assigned P1 employee — same shape as evaluation.ts's
+// canSubmitEvaluationAs, this being the direct Phase 3A analog.
+export function canScoreAsCompetencyP1(actingEmployeeId: string | null | undefined, p1EmployeeId: string | null): boolean {
+  return !!actingEmployeeId && !!p1EmployeeId && actingEmployeeId === p1EmployeeId;
+}
+
+// ACC-21: "P2 is the Department Head [or, for a Level 3 subject, the HR
+// Manager] and completes Company Values" — independent of P1's submission.
+export function canScoreAsCompetencyP2(actingEmployeeId: string | null | undefined, p2EmployeeId: string | null): boolean {
+  return !!actingEmployeeId && !!p2EmployeeId && actingEmployeeId === p2EmployeeId;
+}
+
+// ACC-21: "HR Admin may manually replace P1 or P2 with a mandatory reason
+// and full audit history, but cannot score or approve unless separately
+// assigned as an evaluator" — reassignment authority is HR Admin only, and
+// deliberately does NOT also grant canScoreAsCompetencyP1/P2 above.
+export function canReassignCompetencyEvaluator(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// COM-10/ACC-21: "Employees may see only their own finalized results" — the
+// subject employee never sees an in-progress assessment, matching ACC-17's
+// "requesters see status only" pattern for the shared Evaluation entity.
+export function canViewOwnCompetencyResult(session: Session, subjectEmployeeId: string, completedAt: Date | null): boolean {
+  return !!session.user.employeeId && session.user.employeeId === subjectEmployeeId && completedAt !== null;
+}
+
+// COM-10/ACC-21: full assessment visibility — HR Admin, Training &
+// Competency Admin, either assigned evaluator (own slot; the OTHER
+// evaluator's scores stay hidden at the page level while their slot is
+// unsubmitted, same as canViewEvaluation), the subject's own finalized
+// result, the subject's Department Level 3 (department gap report, COM-10)
+// and the Director (Level 3 gap report, COM-10).
+export function canViewCompetencyAssessment(
+  session: Session,
+  subjectEmployeeId: string,
+  p1EmployeeId: string | null,
+  p2EmployeeId: string | null,
+  completedAt: Date | null,
+  isLevel3InSubjectDepartment: boolean,
+  activeDirectorPositionIds: string[]
+): boolean {
+  return (
+    isHrAdmin(session) ||
+    isTrainingAdmin(session) ||
+    canScoreAsCompetencyP1(session.user.employeeId, p1EmployeeId) ||
+    canScoreAsCompetencyP2(session.user.employeeId, p2EmployeeId) ||
+    canViewOwnCompetencyResult(session, subjectEmployeeId, completedAt) ||
+    isLevel3InSubjectDepartment ||
+    isDirector(activeDirectorPositionIds)
+  );
+}
+
+// ACC-24: "HR Admin alone may run the approved one-time historical
+// competency migration through preview, mapping, rejection and commit...
+// Training Admin may review migrated competency content after commit but
+// cannot bypass Employee/Position matching or edit source evidence" — that
+// post-commit review is read-only, so it's exactly
+// canViewCompetencyAssessment's admin branch; no separate predicate needed.
+export function canRunCompetencyHistoricalMigration(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// ---------- Phase 3A: Training (TRN-02/09/10/13, ACC-22/23) ----------
+
+// TRN-09/ACC-22: "An Employee may submit a request for self, and a Level 3
+// Position may submit for employees in its Department." HR Admin keeps the
+// same administrative submit-on-behalf latitude it has everywhere else in
+// this app (e.g. canSubmitMovementRequest).
+export function canSubmitTrainingRequest(session: Session, isSelf: boolean, isLevel3InEmployeeDepartment: boolean): boolean {
+  return isHrAdmin(session) || isSelf || isLevel3InEmployeeDepartment;
+}
+
+// TRN-10/ACC-22: "The Department Head approves first" — same Position-
+// derived gate as every other Department Head approval stage in this app.
+export function canDecideTrainingRequestAsDeptHead(activeDeptHeadPositionIds: string[]): boolean {
+  return isDeptHeadApprover(activeDeptHeadPositionIds);
+}
+
+// TRN-10/ACC-22: "Training Admin then validates, schedules and administers
+// delivery."
+export function canValidateTrainingRequest(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+export function canScheduleTrainingRequest(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+// TRN-10: "Returned/rejected/cancelled reasons are mandatory and audited" —
+// same DM-25-style cancel-eligibility exception used by Recruitment/
+// Movement/Absence: the original Requester, Training Admin or HR Admin.
+export function canCancelTrainingRequest(session: Session, isRequester: boolean): boolean {
+  return isHrAdmin(session) || isTrainingAdmin(session) || isRequester;
+}
+
+// ACC-22: "Training Admin may create courses and sessions manually" and
+// administers the resulting LearningAssignment lifecycle (attendance,
+// completion, certificate).
+export function canManageTrainingCourse(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+export function canManageLearningAssignment(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+// TRN-04: "the Primary Position supervisor completes it [the effectiveness
+// follow-up]" — the assigned Employee's live-resolved supervisor, or HR
+// Admin with the same administrative latitude used everywhere else.
+export function canRecordLearningEffectiveness(session: Session, isEmployeesSupervisor: boolean): boolean {
+  return isHrAdmin(session) || isEmployeesSupervisor;
+}
+
+// TRN-13/ACC-23: Mandatory Training rule authoring is Training Admin's
+// operational data, same as course/session creation.
+export function canManageMandatoryTrainingRule(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+// TRN-02/ACC-22: view access to a single Training Request — HR Admin,
+// Training Admin, the subject Employee, whoever submitted it, or an eligible
+// Department Head approver. Same shape as canViewAbsenceRequest.
+export function canViewTrainingRequest(
+  session: Session,
+  subjectEmployeeId: string,
+  submittedByAccountId: string,
+  activeDeptHeadPositionIds: string[]
+): boolean {
+  return (
+    isHrAdmin(session) ||
+    isTrainingAdmin(session) ||
+    session.user.employeeId === subjectEmployeeId ||
+    session.user.id === submittedByAccountId ||
+    isDeptHeadApprover(activeDeptHeadPositionIds)
+  );
+}
+
 // ACC-10: field-level scope. Every field on Employee is tagged with the
 // sensitivity tier from the Data Fields Blueprint. Rather than nulling values
 // (which still leaks "field exists"), we omit the key entirely so the UI

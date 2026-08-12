@@ -15,6 +15,7 @@ const DATASET_ORDER: DatasetKey[] = [
   "positions",
   "assignments",
   "fingerprint-attendance",
+  "competency-migration",
 ];
 
 export default async function ImportPage() {

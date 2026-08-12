@@ -48,3 +48,26 @@ export async function getActiveHrManagerPositions(
     assignmentType: a.assignmentType,
   }));
 }
+
+export interface HrManagerCandidate {
+  employeeId: string;
+  positionId: string;
+  assignmentType: string;
+}
+
+/**
+ * Reverse of getActiveHrManagerPositions: every Employee company-wide
+ * currently holding HR Manager authority, not just those held by one given
+ * Employee. Used by Phase 3A's Level-3-employee P2 routing (COM-15).
+ */
+export async function getActiveHrManagerCandidates(asOf: Date = new Date()): Promise<HrManagerCandidate[]> {
+  return prisma.assignment.findMany({
+    where: {
+      status: "ACTIVE",
+      effectiveFrom: { lte: asOf },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+      position: { grantsHrManagerAccess: true },
+    },
+    select: { employeeId: true, positionId: true, assignmentType: true },
+  });
+}

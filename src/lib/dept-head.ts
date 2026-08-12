@@ -55,7 +55,7 @@ export async function getActiveDeptHeadPositions(
 export async function getDeptHeadApprovers(
   departmentId: string,
   asOf: Date = new Date()
-): Promise<{ employeeId: string; positionId: string }[]> {
+): Promise<{ employeeId: string; positionId: string; assignmentType: string }[]> {
   const assignments = await prisma.assignment.findMany({
     where: {
       status: "ACTIVE",
@@ -63,7 +63,7 @@ export async function getDeptHeadApprovers(
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
       position: { orgUnitId: departmentId, jobLevel: DEPT_HEAD_JOB_LEVEL },
     },
-    select: { employeeId: true, positionId: true },
+    select: { employeeId: true, positionId: true, assignmentType: true },
   });
   return assignments;
 }

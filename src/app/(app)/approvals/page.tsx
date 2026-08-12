@@ -49,6 +49,7 @@ export default async function ApprovalsPage() {
     pendingDeptHeadOffboarding,
     pendingHrManagerRenewals,
     pendingHrManagerOffboarding,
+    pendingDeptHeadTrainingRequests,
   ] = await Promise.all([
     // HR-Manager-only queues (WF-15: only the active HR Manager Position may
     // approve/reject/return) — must not be fetched at all for a viewer who
@@ -141,6 +142,16 @@ export default async function ApprovalsPage() {
           where: { status: "PENDING_HR_MANAGER" },
           include: { employee: true },
           orderBy: { reportedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // TRN-10/ACC-22: Dept Head's Training Request decision queue, scoped by
+    // the request's snapshotted department the same way every other
+    // dept-head queue above is.
+    deptHeadDepartmentIds.length > 0
+      ? prisma.trainingRequest.findMany({
+          where: { status: "SUBMITTED", departmentIdSnapshot: { in: deptHeadDepartmentIds } },
+          include: { employee: true },
+          orderBy: { createdAt: "asc" },
         })
       : Promise.resolve([]),
   ]);
@@ -439,6 +450,42 @@ export default async function ApprovalsPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-600">{c.employee.fullLegalName}</td>
                       <td className="px-4 py-3 text-slate-600">{t(`offboardingReason.${c.reason}`)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {deptHeadDepartmentIds.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">
+            {t("recruitment.deptHeadApprovalSectionTitle")} — {t("trainingRequest.navLabel")}
+          </h2>
+          {pendingDeptHeadTrainingRequests.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">No.</th>
+                    <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
+                    <th className="px-4 py-3 font-medium">{t("trainingRequest.requestedTopicLabel")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingDeptHeadTrainingRequests.map((r) => (
+                    <tr key={r.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/training-requests/${r.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {r.requestNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{r.employee.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{r.requestedTopic}</td>
                     </tr>
                   ))}
                 </tbody>

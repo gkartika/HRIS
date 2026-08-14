@@ -8,6 +8,7 @@ import { canCreateEmployee, isHrAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { validateNoKk } from "@/lib/validation/employee-fields";
 import { formatOnboardingCaseNumber } from "@/lib/onboarding";
+import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";
 
 export async function createEmployee(
@@ -86,6 +87,14 @@ export async function createEmployee(
     recordId: employee.id,
     reason: `Created employee ${fullLegalName} (${employeeNumber})`,
   });
+
+  // Onboarding-compulsory course auto-assign (outside the transaction above,
+  // same as applyMandatoryTrainingRule elsewhere — not itself transactional).
+  // No currentPositionId is set yet on this path, so only EVERYONE/EMPLOYEE-
+  // targeted onboarding rules can resolve here; a Department/Job/Position-
+  // targeted onboarding rule only applies once Training Admin re-applies it
+  // manually after this employee is assigned a Position.
+  await applyOnboardingMandatoryTrainingForEmployee(employee.id, session.user.id);
 
   revalidatePath("/employees");
   revalidatePath("/onboarding");

@@ -4,7 +4,7 @@ import { canViewOnboarding, canCreateOnboardingCase } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { computeOnboardingStatus } from "@/lib/onboarding";
+import { computeOnboardingStatus, isOnboardingTrainingComplete, isOnboardingAssetsComplete } from "@/lib/onboarding";
 import type { Prisma, OnboardingOverallStatus } from "@/generated/prisma/client";
 
 const ONBOARDING_STATUSES: OnboardingOverallStatus[] = ["NOT_STARTED", "IN_PROGRESS", "OVERDUE", "COMPLETE"];
@@ -36,6 +36,40 @@ export default async function OnboardingListPage({
     prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
   ]);
 
+  // Batch-fetch every onboarding-required assignment for every case's
+  // employee in one query, then group in memory — avoids an N+1 per row.
+  const employeeIds = cases.map((c) => c.employeeId);
+  const trainingAssignments =
+    employeeIds.length > 0
+      ? await prisma.learningAssignment.findMany({
+          where: { employeeId: { in: employeeIds }, course: { isOnboardingRequired: true } },
+          select: { employeeId: true, status: true },
+        })
+      : [];
+  const trainingStatusesByEmployee = new Map<string, string[]>();
+  for (const a of trainingAssignments) {
+    const arr = trainingStatusesByEmployee.get(a.employeeId) ?? [];
+    arr.push(a.status);
+    trainingStatusesByEmployee.set(a.employeeId, arr);
+  }
+
+  // Same batch-fetch-then-group pattern for AssetCustody — avoids an N+1
+  // per row for the "Perlengkapan Selesai" derivation too.
+  const assetCustodies =
+    employeeIds.length > 0
+      ? await prisma.assetCustody.findMany({
+          where: { employeeId: { in: employeeIds } },
+          select: { employeeId: true, status: true },
+        })
+      : [];
+  const assetStatusesByEmployee = new Map<string, string[]>();
+  for (const c of assetCustodies) {
+    if (!c.employeeId) continue;
+    const arr = assetStatusesByEmployee.get(c.employeeId) ?? [];
+    arr.push(c.status);
+    assetStatusesByEmployee.set(c.employeeId, arr);
+  }
+
   const now = new Date();
   const rows = cases
     .map((c) => ({
@@ -43,8 +77,8 @@ export default async function OnboardingListPage({
       overallStatus: computeOnboardingStatus(
         {
           contractComplete: c.contractComplete,
-          mandatoryMaterialComplete: c.mandatoryMaterialComplete,
-          assetsComplete: c.assetsComplete,
+          mandatoryMaterialComplete: isOnboardingTrainingComplete(trainingStatusesByEmployee.get(c.employeeId) ?? []),
+          assetsComplete: isOnboardingAssetsComplete(assetStatusesByEmployee.get(c.employeeId) ?? []),
           plannedStartDate: c.plannedStartDate,
           mandatoryMaterialDueDate: c.mandatoryMaterialDueDate,
         },

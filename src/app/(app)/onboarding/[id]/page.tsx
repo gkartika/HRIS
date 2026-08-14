@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
-import {
-  canViewOnboarding,
-  canMarkOnboardingContract,
-  canMarkOnboardingTraining,
-  canMarkOnboardingAssets,
-} from "@/lib/permissions";
+import { canViewOnboarding, canMarkOnboardingContract, canMarkOnboardingTraining } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
+import { getOnboardingTrainingStatusesForEmployee } from "@/lib/mandatory-training";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { computeOnboardingStatus } from "@/lib/onboarding";
-import { ContractToggle, TrainingToggle, AssetsToggle, DueDateForm } from "./toggle-buttons";
+import { computeOnboardingStatus, isOnboardingTrainingComplete, isOnboardingAssetsComplete } from "@/lib/onboarding";
+import { ContractToggle, DueDateForm } from "./toggle-buttons";
+
+const LEARNING_STATUS_LABELS: Record<string, string> = {
+  ASSIGNED: "Berjalan",
+  ATTENDED: "Hadir",
+  COMPLETED: "Selesai",
+  CANCELLED: "Dibatalkan",
+};
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
@@ -34,19 +37,41 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
     include: {
       employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
       contractCompletedByAccount: true,
-      mandatoryMaterialCompletedByAccount: true,
-      assetsCompletedByAccount: true,
     },
   });
   if (!onboardingCase) notFound();
 
+  const trainingAssignments = await getOnboardingTrainingStatusesForEmployee(onboardingCase.employeeId);
+  const trainingComplete = isOnboardingTrainingComplete(trainingAssignments.map((a) => a.status));
+
+  // Phase 4A: "Perlengkapan Selesai" is derived live from real AssetCustody
+  // rows for the employee, same pattern as training above — no manual
+  // toggle, no GA-Admin gate on visibility (anyone who can view this case
+  // sees the same real custody list, same as the training block).
+  const assetCustodies = await prisma.assetCustody.findMany({
+    where: { employeeId: onboardingCase.employeeId },
+    orderBy: { assignedAt: "desc" },
+    include: { asset: { select: { assetCode: true, assetName: true } } },
+  });
+  const assetsComplete = isOnboardingAssetsComplete(assetCustodies.map((c) => c.status));
+
   const overallStatus = computeOnboardingStatus({
     contractComplete: onboardingCase.contractComplete,
-    mandatoryMaterialComplete: onboardingCase.mandatoryMaterialComplete,
-    assetsComplete: onboardingCase.assetsComplete,
+    mandatoryMaterialComplete: trainingComplete,
+    assetsComplete,
     plannedStartDate: onboardingCase.plannedStartDate,
     mandatoryMaterialDueDate: onboardingCase.mandatoryMaterialDueDate,
   });
+
+  // Derive-on-read, same precedent as ContractRenewalCase's D-30 trigger:
+  // training completion can happen entirely outside this page (e.g. the
+  // learner passes a quiz), so opportunistically stamp completedAt the
+  // next time this case is viewed after all three become true, rather than
+  // only on a contract toggle click.
+  if (!onboardingCase.completedAt && onboardingCase.contractComplete && trainingComplete && assetsComplete) {
+    await prisma.onboardingCase.update({ where: { id: onboardingCase.id }, data: { completedAt: new Date() } });
+    onboardingCase.completedAt = new Date();
+  }
 
   return (
     <div className="space-y-6">
@@ -104,33 +129,56 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
             </p>
           )}
 
-          <TrainingToggle
-            caseId={onboardingCase.id}
-            complete={onboardingCase.mandatoryMaterialComplete}
-            canToggle={canMarkOnboardingTraining(session)}
-          />
-          {onboardingCase.mandatoryMaterialCompletedByAccount && (
-            <p className="pl-1 text-xs text-slate-400">
-              {onboardingCase.mandatoryMaterialCompletedByAccount.usernameOrEmail} (
-              {formatDate(onboardingCase.mandatoryMaterialCompletedAt)})
-            </p>
-          )}
+          <div className="rounded-lg border border-slate-100 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                  trainingComplete ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"
+                }`}
+              >
+                {trainingComplete ? "✓" : "—"}
+              </span>
+              <span className="text-sm text-slate-900">{t("onboarding.mandatoryMaterialComplete")}</span>
+              <span className="text-xs text-slate-400">(berdasarkan penyelesaian pelatihan wajib onboarding)</span>
+            </div>
+            {trainingAssignments.length > 0 && (
+              <ul className="mt-2 space-y-1 pl-7 text-xs text-slate-500">
+                {trainingAssignments.map((a) => (
+                  <li key={a.id}>
+                    {a.course.title} — {LEARNING_STATUS_LABELS[a.status]}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <DueDateForm
             caseId={onboardingCase.id}
             dueDate={toDateInputValue(onboardingCase.mandatoryMaterialDueDate)}
             canEdit={canMarkOnboardingTraining(session)}
           />
 
-          <AssetsToggle
-            caseId={onboardingCase.id}
-            complete={onboardingCase.assetsComplete}
-            canToggle={canMarkOnboardingAssets(session)}
-          />
-          {onboardingCase.assetsCompletedByAccount && (
-            <p className="pl-1 text-xs text-slate-400">
-              {onboardingCase.assetsCompletedByAccount.usernameOrEmail} ({formatDate(onboardingCase.assetsCompletedAt)})
-            </p>
-          )}
+          <div className="rounded-lg border border-slate-100 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                  assetsComplete ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"
+                }`}
+              >
+                {assetsComplete ? "✓" : "—"}
+              </span>
+              <span className="text-sm text-slate-900">{t("onboarding.assetsComplete")}</span>
+              <span className="text-xs text-slate-400">(berdasarkan status penguasaan aset karyawan)</span>
+            </div>
+            {assetCustodies.length > 0 && (
+              <ul className="mt-2 space-y-1 pl-7 text-xs text-slate-500">
+                {assetCustodies.map((c) => (
+                  <li key={c.id}>
+                    {c.asset.assetName} ({c.asset.assetCode}) — {t(`assetCustodyStatus.${c.status}`)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </div>

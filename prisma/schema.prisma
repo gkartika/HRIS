@@ -718,8 +718,6 @@ model Account {
   movementRequestsImplementedBy          MovementRequest[]               @relation("MovementImplementedBy")
   movementRequestsCancelledBy            MovementRequest[]               @relation("MovementCancelledByAccount")
   onboardingContractsCompletedBy         OnboardingCase[]                @relation("OnboardingContractCompletedBy")
-  onboardingTrainingCompletedBy          OnboardingCase[]                @relation("OnboardingTrainingCompletedBy")
-  onboardingAssetsCompletedBy            OnboardingCase[]                @relation("OnboardingAssetsCompletedBy")
   contractDecisionsMade                  Contract[]                      @relation("ContractDecisionBy")
   contractsReleasedBy                    Contract[]                      @relation("ContractReleasedBy")
   renewalCasesDecidedBy                  ContractRenewalCase[]           @relation("RenewalDecisionBy")
@@ -751,6 +749,10 @@ model Account {
   trainingRequestsCancelledBy              TrainingRequest[]               @relation("TrainingRequestCancelledBy")
   learningAssignmentsAssignedBy            LearningAssignment[]            @relation("LearningAssignmentAssignedBy")
   mandatoryTrainingRulesCreatedBy          MandatoryTrainingRule[]         @relation("MandatoryTrainingRuleCreatedBy")
+
+  fixedAssetsCreatedBy     FixedAsset[]   @relation("FixedAssetCreatedBy")
+  assetCustodiesAssignedBy AssetCustody[] @relation("AssetCustodyAssignedBy")
+  assetCustodiesReturnedBy AssetCustody[] @relation("AssetCustodyReturnedBy")
 }
 
 model AccountRole {
@@ -826,6 +828,7 @@ model Employee {
   movementRequestsSubmitted      MovementRequest[]              @relation("MovementRequester")
   movementRequestsCancelled      MovementRequest[]              @relation("MovementCancelledByEmployee")
   onboardingCase                 OnboardingCase?
+  assetCustodies                 AssetCustody[]                 @relation("AssetCustodyEmployee")
   contracts                      Contract[]                     @relation("EmployeeContracts")
   contractRecommendationsGiven   Contract[]                     @relation("ContractRecommendationBy")
   renewalCases                   ContractRenewalCase[]          @relation("RenewalCaseEmployee")
@@ -898,6 +901,7 @@ model OrgUnit {
   competencyAssessments        CompetencyAssessment[]
   trainingRequestsSnapshot     TrainingRequest[]
   mandatoryTrainingRuleTargets MandatoryTrainingRule[]
+  assetCustodies               AssetCustody[]
 }
 
 model Job {
@@ -1255,20 +1259,22 @@ model OnboardingCase {
   contractCompletedByAccountId String?
   contractCompletedByAccount   Account?  @relation("OnboardingContractCompletedBy", fields: [contractCompletedByAccountId], references: [id])
 
-  mandatoryMaterialComplete             Boolean   @default(false)
-  mandatoryMaterialDueDate              DateTime?
-  mandatoryMaterialCompletedAt          DateTime?
-  mandatoryMaterialCompletedByAccountId String?
-  mandatoryMaterialCompletedByAccount   Account?  @relation("OnboardingTrainingCompletedBy", fields: [mandatoryMaterialCompletedByAccountId], references: [id])
+  // "Materi Wajib" completion is derived live from real LearningAssignment
+  // completion (see lib/mandatory-training.ts's
+  // getOnboardingTrainingStatusesForEmployee / lib/onboarding.ts's
+  // isOnboardingTrainingComplete) — never a manual toggle, unlike contract
+  // above. Only the checklist's own target date remains a real stored input
+  // (there's no per-course due-date concept anywhere in this app).
+  mandatoryMaterialDueDate DateTime?
 
-  assetsComplete             Boolean   @default(false)
-  assetsCompletedAt          DateTime?
-  assetsCompletedByAccountId String?
-  assetsCompletedByAccount   Account?  @relation("OnboardingAssetsCompletedBy", fields: [assetsCompletedByAccountId], references: [id])
+  // Phase 4A: "Perlengkapan Selesai" completion is likewise derived live
+  // from real AssetCustody rows for the employee (lib/onboarding.ts's
+  // isOnboardingAssetsComplete) — no stored flag, same reasoning as
+  // mandatoryMaterialDueDate above.
 
-  // Set automatically the moment all three flags become true — never
-  // hand-set, and overall_status (Not Started/In Progress/Overdue/Complete)
-  // is computed live from these fields, never stored (src/lib/onboarding.ts).
+  // Set automatically the moment all flags become true — never hand-set,
+  // and overall_status (Not Started/In Progress/Overdue/Complete) is
+  // computed live from these fields, never stored (src/lib/onboarding.ts).
   completedAt DateTime?
 
   createdAt DateTime @default(now())
@@ -1429,12 +1435,17 @@ model FileObject {
   confidential        Boolean     @default(true)
   createdAt           DateTime    @default(now())
 
-  employeeKtpOf                   Employee?        @relation("EmployeeKtpFile")
-  employeeKkOf                    Employee?        @relation("EmployeeKkFile")
-  contractOf                      Contract?
-  movementPerformanceEvaluationOf MovementRequest?
-  attendanceEventSelfieOf         AttendanceEvent? @relation("AttendanceEventSelfie")
-  absenceRequestAttachmentOf      AbsenceRequest?  @relation("AbsenceRequestAttachment")
+  employeeKtpOf                          Employee?           @relation("EmployeeKtpFile")
+  employeeKkOf                           Employee?           @relation("EmployeeKkFile")
+  contractOf                             Contract?
+  movementPerformanceEvaluationOf        MovementRequest?
+  attendanceEventSelfieOf                AttendanceEvent?    @relation("AttendanceEventSelfie")
+  absenceRequestAttachmentOf             AbsenceRequest?     @relation("AbsenceRequestAttachment")
+  courseMaterialOf                       CourseMaterial?     @relation("CourseMaterialFile")
+  learningAssignmentCertificateOf        LearningAssignment? @relation("LearningAssignmentCertificateFile")
+  learningAssignmentAttendanceEvidenceOf LearningAssignment? @relation("LearningAssignmentAttendanceEvidenceFile")
+  assetCustodyHandoverEvidenceOf         AssetCustody?       @relation("AssetCustodyHandoverEvidence")
+  assetCustodyReturnEvidenceOf           AssetCustody?       @relation("AssetCustodyReturnEvidence")
 }
 
 // ---------- Phase 2 Extension: Attendance & Absence ----------
@@ -1677,6 +1688,34 @@ enum MandatoryTargetType {
   JOB
   PRIMARY_POSITION
   EVERYONE
+}
+
+// ---------- Phase 3B: Learning Library / LMS ----------
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseDeliveryMode {
+  ONLINE
+  IN_PERSON
+  BLENDED
+}
+
+enum CourseMaterialType {
+  PDF
+  DOCX
+  PPTX
+  VIDEO
+  URL
+}
+
+enum QuizQuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
 }
 
 // Versioned so a later master-data edit never rewrites a completed cycle's
@@ -1938,25 +1977,45 @@ model CompanyValueAssessmentItem {
 // one; a LearningAssignment still requires an approved TrainingRequest or
 // an active MandatoryTrainingRule (COM-11/TRN-09).
 model TrainingCourse {
-  id                        String   @id @default(cuid())
+  id                        String             @id @default(cuid())
   title                     String
   category                  String?
   provider                  String?
   deliveryMethod            String?
+  // Phase 3B: structured delivery mode drives completion-rule branching
+  // (ONLINE: materials+quiz; IN_PERSON: attendance; BLENDED: both) — kept
+  // separate from the free-text `deliveryMethod` above (e.g. "Zoom" vs a
+  // physical location), which is still just descriptive detail.
+  mode                      CourseDeliveryMode @default(ONLINE)
+  objectives                String?
+  // TRN-12/ACC-23: authoring lifecycle. `activeFlag` (below) predates this
+  // and is left in place rather than removed — every Phase 3A consumer that
+  // filters courses now checks `status: PUBLISHED` instead; `activeFlag`
+  // itself is no longer read anywhere new.
+  status                    CourseStatus       @default(DRAFT)
+  // Marks this course as one of the "compulsory for onboarding" set — any
+  // active MandatoryTrainingRule pointing at an isOnboardingRequired course
+  // is auto-applied to a brand-new Employee the moment they're created
+  // (see lib/mandatory-training.ts's applyOnboardingMandatoryTrainingForEmployee),
+  // in addition to the normal manual Terapkan flow every other Mandatory
+  // Rule still uses.
+  isOnboardingRequired      Boolean            @default(false)
   plannedCost               Float?
   actualCost                Float?
-  certificateRequired       Boolean  @default(false)
-  effectivenessRequired     Boolean  @default(false)
-  effectivenessFollowupDays Int      @default(30)
-  activeFlag                Boolean  @default(true)
+  certificateRequired       Boolean            @default(false)
+  effectivenessRequired     Boolean            @default(false)
+  effectivenessFollowupDays Int                @default(30)
+  activeFlag                Boolean            @default(true)
   createdByAccountId        String
-  createdByAccount          Account  @relation("TrainingCourseCreatedBy", fields: [createdByAccountId], references: [id])
-  createdAt                 DateTime @default(now())
+  createdByAccount          Account            @relation("TrainingCourseCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt                 DateTime           @default(now())
 
   sessions            TrainingSession[]
   requests            TrainingRequest[]
   learningAssignments LearningAssignment[]
   mandatoryRules      MandatoryTrainingRule[]
+  materials           CourseMaterial[]
+  quiz                Quiz?
 }
 
 model TrainingSession {
@@ -2059,6 +2118,27 @@ model LearningAssignment {
   effectivenessEvaluator        Employee?                    @relation("LearningAssignmentEffectivenessEvaluator", fields: [effectivenessEvaluatorId], references: [id])
   effectivenessEvidence         String?
   createdAt                     DateTime                     @default(now())
+
+  // Phase 3B additions below — certificate expiry/upload, in-person
+  // attendance evidence, quiz-retry bonus, and the mandatory-reason text for
+  // an explicit refresher override (duplicate-active-assignment exception).
+  certificateExpiryDate    DateTime?
+  certificateFileId        String?     @unique
+  certificateFile          FileObject? @relation("LearningAssignmentCertificateFile", fields: [certificateFileId], references: [id])
+  attendanceEvidenceNote   String?
+  attendanceEvidenceFileId String?     @unique
+  attendanceEvidenceFile   FileObject? @relation("LearningAssignmentAttendanceEvidenceFile", fields: [attendanceEvidenceFileId], references: [id])
+  // Incremented only via the audited quiz-attempt-reset action (TRN-14) —
+  // canRetryQuiz() checks attempt count against quiz.maxAttempts PLUS this,
+  // so a reset never mutates historical QuizAttempt rows.
+  quizBonusAttempts        Int         @default(0)
+  // Set only when this row was created as an explicit Training-Admin-
+  // confirmed refresher despite an existing active assignment for the same
+  // (employee, course) — the ordinary path leaves this null.
+  overrideReason           String?
+
+  materialProgress LearningAssignmentMaterialProgress[]
+  quizAttempts     QuizAttempt[]
 }
 
 // Exactly five target types (TRN-13/DM-41): Employee, Department, Job,
@@ -2084,6 +2164,254 @@ model MandatoryTrainingRule {
   createdAt          DateTime            @default(now())
 
   learningAssignments LearningAssignment[]
+}
+
+// Ordered content within a Published course (TRN-12) — PDF/DOCX/PPTX are
+// file-backed (FileObject, same private-storage pattern as every other
+// document in this app); VIDEO/URL are external links. `isRequired=false`
+// materials don't gate "all required materials complete" for Online/
+// Blended completion but still appear in the course for reference.
+model CourseMaterial {
+  id           String             @id @default(cuid())
+  courseId     String
+  course       TrainingCourse     @relation(fields: [courseId], references: [id])
+  displayOrder Int                @default(0)
+  title        String
+  materialType CourseMaterialType
+  fileId       String?            @unique
+  file         FileObject?        @relation("CourseMaterialFile", fields: [fileId], references: [id])
+  externalUrl  String?
+  isRequired   Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+
+  progress LearningAssignmentMaterialProgress[]
+}
+
+model LearningAssignmentMaterialProgress {
+  id                   String             @id @default(cuid())
+  learningAssignmentId String
+  learningAssignment   LearningAssignment @relation(fields: [learningAssignmentId], references: [id])
+  materialId           String
+  material             CourseMaterial     @relation(fields: [materialId], references: [id])
+  completedAt          DateTime           @default(now())
+
+  @@unique([learningAssignmentId, materialId])
+}
+
+// One Quiz per Course (TRN-12/COM-06 pattern reuse: configured once at
+// authoring time, not per-assignment) — `maxAttempts` is the retry limit;
+// `passingScorePercent` is compared against a QuizAttempt's computed score.
+model Quiz {
+  id                  String         @id @default(cuid())
+  courseId            String         @unique
+  course              TrainingCourse @relation(fields: [courseId], references: [id])
+  passingScorePercent Int            @default(70)
+  maxAttempts         Int            @default(3)
+  createdAt           DateTime       @default(now())
+
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+}
+
+model QuizQuestion {
+  id           String           @id @default(cuid())
+  quizId       String
+  quiz         Quiz             @relation(fields: [quizId], references: [id])
+  displayOrder Int              @default(0)
+  questionText String
+  questionType QuizQuestionType
+  points       Int              @default(1)
+
+  options QuizOption[]
+  answers QuizAttemptAnswer[]
+}
+
+// TRUE_FALSE is modeled as exactly two options (no separate boolean field) —
+// scoring and rendering both reuse the same single/multi-select machinery
+// regardless of question type.
+model QuizOption {
+  id           String       @id @default(cuid())
+  questionId   String
+  question     QuizQuestion @relation(fields: [questionId], references: [id])
+  displayOrder Int          @default(0)
+  optionText   String
+  isCorrect    Boolean      @default(false)
+
+  selectedIn QuizAttemptAnswer[]
+}
+
+// One row per attempt, scored server-side and never recomputed client-side
+// (Key Control: "Server-side quiz scoring"). Retries beyond `Quiz.maxAttempts`
+// are only possible via `LearningAssignment.quizBonusAttempts`, itself only
+// ever incremented by an audited Training Admin action (Key Control:
+// "Audited retry reset") — there is no reset field on this model itself,
+// consistent with every other override in this app being tracked through
+// AuditLog rather than a duplicated schema field.
+model QuizAttempt {
+  id                   String             @id @default(cuid())
+  learningAssignmentId String
+  learningAssignment   LearningAssignment @relation(fields: [learningAssignmentId], references: [id])
+  quizId               String
+  quiz                 Quiz               @relation(fields: [quizId], references: [id])
+  attemptNumber        Int
+  startedAt            DateTime           @default(now())
+  submittedAt          DateTime?
+  scorePercent         Float?
+  passed               Boolean?
+
+  answers QuizAttemptAnswer[]
+
+  @@unique([learningAssignmentId, attemptNumber])
+}
+
+// One row per option the learner selected for a question on this attempt —
+// naturally supports MULTIPLE_CHOICE as several rows for the same question,
+// SINGLE_CHOICE/TRUE_FALSE as exactly one.
+model QuizAttemptAnswer {
+  id         String       @id @default(cuid())
+  attemptId  String
+  attempt    QuizAttempt  @relation(fields: [attemptId], references: [id])
+  questionId String
+  question   QuizQuestion @relation(fields: [questionId], references: [id])
+  optionId   String
+  option     QuizOption   @relation(fields: [optionId], references: [id])
+
+  @@unique([attemptId, questionId, optionId])
+}
+
+// ---------- Phase 4A: Employee Assets ----------
+// Source: phase_4a_employee_asset_workflow.pdf. GA Admin owns every asset
+// record end to end (Access boundary: "HR Admin receives only onboarding/
+// offboarding completion or blocker status and cannot create, assign,
+// return or edit GA records") — see canManageAssets/canViewAssetMaster in
+// permissions.ts, both isGaAdmin-only, deliberately never isHrAdmin.
+
+enum AssetTrackingType {
+  INDIVIDUAL
+  QUANTITY_TRACKED
+}
+
+// Authoritative only for INDIVIDUAL assets (one physical unit). A
+// QUANTITY_TRACKED asset's real "how much is left" signal is
+// availableQuantity vs totalQuantity below — its own status field stays
+// AVAILABLE by convention (a pooled item type doesn't have a single
+// instance state). UNDER_REPAIR/DISPOSED are terminal outcomes of a return
+// inspection; the actual repair/disposal workflows are explicitly Phase 4B
+// ("Phase 4B repair workflow" / "Phase 4B disposal" in the PDF) and out of
+// scope here — this schema only records the resulting state.
+enum AssetStatus {
+  AVAILABLE
+  IN_USE
+  UNDER_REPAIR
+  DISPOSED
+}
+
+enum AssetCustodyTargetType {
+  EMPLOYEE
+  DEPARTMENT
+  LOCATION
+}
+
+// Per direct user request, custody starts ACTIVE immediately for every
+// target type — no employee-acknowledgement step. (The PDF describes an
+// acknowledgement gate, but the user explicitly overrode it as unneeded.)
+enum AssetCustodyStatus {
+  ACTIVE
+  RETURNED
+}
+
+enum AssetInspectionResult {
+  GOOD
+  NEEDS_REPAIR
+  LOST_OR_BEYOND_REPAIR
+}
+
+// No generic "Location" master exists elsewhere in this schema
+// (AttendanceGeofence is purpose-built for GPS check-in, not a fit) — new,
+// GA-Admin-managed master data, same shape/convention as every other
+// admin-owned lookup table (AttendanceGeofence, EducationLevel, etc.).
+model AssetLocation {
+  id           String   @id @default(cuid())
+  locationName String   @unique
+  description  String?
+  activeFlag   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  custodies AssetCustody[]
+}
+
+model FixedAsset {
+  id                 String            @id @default(cuid())
+  assetCode          String            @unique
+  assetName          String
+  category           String?
+  trackingType       AssetTrackingType
+  status             AssetStatus       @default(AVAILABLE)
+  // Only meaningful for QUANTITY_TRACKED — null for INDIVIDUAL. Reduced
+  // permanently (not returned to the pool) when a returned quantity's
+  // inspectionResult isn't GOOD, since Phase 4B repair/disposal isn't built
+  // yet — a documented simplification, same spirit as every other
+  // "next phase not built, don't fake it" note in this app.
+  totalQuantity      Int?
+  availableQuantity  Int?
+  purchaseDate       DateTime?
+  purchaseCost       Float?
+  notes              String?
+  // Retires an asset *type* from the catalog/pickers — distinct from
+  // AssetStatus.DISPOSED, which is a single INDIVIDUAL unit's terminal
+  // state. Same activeFlag convention as every other master-data model.
+  activeFlag         Boolean           @default(true)
+  createdByAccountId String
+  createdByAccount   Account           @relation("FixedAssetCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt          DateTime          @default(now())
+
+  custodies AssetCustody[]
+}
+
+// One row per custody period — a return or transfer always creates a new
+// row rather than mutating this one ("Returns and reassignments create
+// history; prior records are never overwritten"). Exactly one of
+// employeeId/orgUnitId/locationId is set, matching targetType — enforced in
+// lib/assets.ts, the same app-layer-invariant convention as every other
+// "exactly one of N" rule in this app (Prisma/SQLite has no polymorphic
+// association).
+model AssetCustody {
+  id         String                 @id @default(cuid())
+  assetId    String
+  asset      FixedAsset             @relation(fields: [assetId], references: [id])
+  targetType AssetCustodyTargetType
+  employeeId String?
+  employee   Employee?              @relation("AssetCustodyEmployee", fields: [employeeId], references: [id])
+  orgUnitId  String?
+  orgUnit    OrgUnit?               @relation(fields: [orgUnitId], references: [id])
+  locationId String?
+  location   AssetLocation?         @relation(fields: [locationId], references: [id])
+  // Always 1 for INDIVIDUAL; the allocated amount (<= availableQuantity at
+  // creation time) for QUANTITY_TRACKED.
+  quantity   Int                    @default(1)
+  status     AssetCustodyStatus     @default(ACTIVE)
+
+  conditionAtHandover    String?
+  handoverEvidenceFileId String?     @unique
+  handoverEvidenceFile   FileObject? @relation("AssetCustodyHandoverEvidence", fields: [handoverEvidenceFileId], references: [id])
+  assignedAt             DateTime    @default(now())
+  assignedByAccountId    String
+  assignedByAccount      Account     @relation("AssetCustodyAssignedBy", fields: [assignedByAccountId], references: [id])
+
+  returnedAt             DateTime?
+  returnedByAccountId    String?
+  returnedByAccount      Account?               @relation("AssetCustodyReturnedBy", fields: [returnedByAccountId], references: [id])
+  returnConditionNote    String?
+  returnEvidenceFileId   String?                @unique
+  returnEvidenceFile     FileObject?            @relation("AssetCustodyReturnEvidence", fields: [returnEvidenceFileId], references: [id])
+  inspectionResult       AssetInspectionResult?
+  // Set only when this row was closed by transferAssetCustody (an atomic
+  // return-and-reassign to a new target) rather than a plain return — lets
+  // the history view distinguish "handed back to GA" from "moved straight
+  // to someone/somewhere else" without losing either record.
+  transferredToCustodyId String?                @unique
+
+  createdAt DateTime @default(now())
 }
 
 model TaskForceMembership {

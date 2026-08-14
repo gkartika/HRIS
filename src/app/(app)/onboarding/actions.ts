@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { redirect } from "next/navigation";
+import { canCreateOnboardingCase, canMarkOnboardingContract, canMarkOnboardingTraining } from "@/lib/permissions";
 import {
-  canCreateOnboardingCase,
-  canMarkOnboardingContract,
-  canMarkOnboardingTraining,
-  canMarkOnboardingAssets,
-} from "@/lib/permissions";
-import { isOnboardingFullyComplete, formatOnboardingCaseNumber } from "@/lib/onboarding";
+  isOnboardingFullyComplete,
+  isOnboardingTrainingComplete,
+  isOnboardingAssetsComplete,
+  formatOnboardingCaseNumber,
+} from "@/lib/onboarding";
+import { getOnboardingTrainingStatusesForEmployee } from "@/lib/mandatory-training";
 import { logAudit } from "@/lib/audit";
 
 // Manual entry point — every other Onboarding Case is auto-created inside
@@ -61,91 +62,49 @@ export async function createOnboardingCaseManually(
   redirect(`/onboarding/${onboardingCase.id}`);
 }
 
-type OnboardingFlag = "contractComplete" | "mandatoryMaterialComplete" | "assetsComplete";
+// "Materi Wajib" and "Perlengkapan" are no longer flags this function
+// toggles — both are derived live from real data (onboarding-required
+// LearningAssignment completion, AssetCustody status), so the overall
+// completedAt recompute below re-fetches their current values fresh every
+// time the contract flag changes, rather than trusting a stored boolean
+// that could go stale the moment a course completes or an asset gets
+// assigned outside this page.
+export async function toggleContractComplete(caseId: string): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canMarkOnboardingContract(session)) return "Anda tidak memiliki akses.";
 
-async function toggleOnboardingFlag(
-  caseId: string,
-  flag: OnboardingFlag,
-  completedAtField: "contractCompletedAt" | "mandatoryMaterialCompletedAt" | "assetsCompletedAt",
-  completedByField: "contractCompletedByAccountId" | "mandatoryMaterialCompletedByAccountId" | "assetsCompletedByAccountId",
-  accountId: string,
-  label: string
-): Promise<string | undefined> {
   const onboardingCase = await prisma.onboardingCase.findUnique({ where: { id: caseId } });
   if (!onboardingCase) return "Kasus onboarding tidak ditemukan.";
 
-  const nextValue = !onboardingCase[flag];
-  const flags = {
-    contractComplete: onboardingCase.contractComplete,
-    mandatoryMaterialComplete: onboardingCase.mandatoryMaterialComplete,
-    assetsComplete: onboardingCase.assetsComplete,
-    [flag]: nextValue,
-  };
-  const nowComplete = isOnboardingFullyComplete(
-    flags.contractComplete,
-    flags.mandatoryMaterialComplete,
-    flags.assetsComplete
-  );
+  const nextValue = !onboardingCase.contractComplete;
+  const [trainingAssignments, assetCustodies] = await Promise.all([
+    getOnboardingTrainingStatusesForEmployee(onboardingCase.employeeId),
+    prisma.assetCustody.findMany({ where: { employeeId: onboardingCase.employeeId }, select: { status: true } }),
+  ]);
+  const trainingComplete = isOnboardingTrainingComplete(trainingAssignments.map((a) => a.status));
+  const assetsComplete = isOnboardingAssetsComplete(assetCustodies.map((c) => c.status));
+  const nowComplete = isOnboardingFullyComplete(nextValue, trainingComplete, assetsComplete);
 
   await prisma.onboardingCase.update({
     where: { id: caseId },
     data: {
-      [flag]: nextValue,
-      [completedAtField]: nextValue ? new Date() : null,
-      [completedByField]: nextValue ? accountId : null,
+      contractComplete: nextValue,
+      contractCompletedAt: nextValue ? new Date() : null,
+      contractCompletedByAccountId: nextValue ? session.user.id : null,
       completedAt: nowComplete ? new Date() : null,
     },
   });
 
   await logAudit({
-    actorAccountId: accountId,
+    actorAccountId: session.user.id,
     action: "UPDATE",
     datasetName: "OnboardingCase",
     recordId: caseId,
-    reason: `${label} ${nextValue ? "marked complete" : "marked incomplete"} for ${onboardingCase.caseNumber}`,
+    reason: `Kontrak ${nextValue ? "marked complete" : "marked incomplete"} for ${onboardingCase.caseNumber}`,
   });
 
   revalidatePath(`/onboarding/${caseId}`);
   revalidatePath("/onboarding");
-}
-
-export async function toggleContractComplete(caseId: string): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canMarkOnboardingContract(session)) return "Anda tidak memiliki akses.";
-  return toggleOnboardingFlag(
-    caseId,
-    "contractComplete",
-    "contractCompletedAt",
-    "contractCompletedByAccountId",
-    session.user.id,
-    "Kontrak"
-  );
-}
-
-export async function toggleTrainingComplete(caseId: string): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canMarkOnboardingTraining(session)) return "Anda tidak memiliki akses.";
-  return toggleOnboardingFlag(
-    caseId,
-    "mandatoryMaterialComplete",
-    "mandatoryMaterialCompletedAt",
-    "mandatoryMaterialCompletedByAccountId",
-    session.user.id,
-    "Materi wajib"
-  );
-}
-
-export async function toggleAssetsComplete(caseId: string): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canMarkOnboardingAssets(session)) return "Anda tidak memiliki akses.";
-  return toggleOnboardingFlag(
-    caseId,
-    "assetsComplete",
-    "assetsCompletedAt",
-    "assetsCompletedByAccountId",
-    session.user.id,
-    "Perlengkapan"
-  );
 }
 
 export async function updateMandatoryMaterialDueDate(

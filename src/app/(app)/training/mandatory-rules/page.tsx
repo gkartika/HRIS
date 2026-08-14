@@ -2,8 +2,8 @@ import { requireSession } from "@/lib/require-session";
 import { canManageMandatoryTrainingRule } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import Link from "next/link";
 import { CreateRuleForm } from "./create-rule-form";
-import { ApplyRuleButton } from "./apply-rule-button";
 import { DeactivateRuleButton } from "./deactivate-rule-button";
 
 const TARGET_LABEL: Record<string, string> = {
@@ -14,15 +14,23 @@ const TARGET_LABEL: Record<string, string> = {
   EVERYONE: "Semua Karyawan",
 };
 
-export default async function MandatoryTrainingRulesPage({ searchParams }: { searchParams: Promise<{ applied?: string }> }) {
+export default async function MandatoryTrainingRulesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ applied?: string; status?: string; courseId?: string }>;
+}) {
   const session = await requireSession();
   if (!canManageMandatoryTrainingRule(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
-  const { applied } = await searchParams;
+  const { applied, status, courseId } = await searchParams;
 
   const [rules, courses, employees, departments, jobs, positions] = await Promise.all([
     prisma.mandatoryTrainingRule.findMany({
+      where: {
+        ...(status ? { activeFlag: status === "active" } : {}),
+        ...(courseId ? { courseId } : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: {
         course: { select: { title: true } },
@@ -33,7 +41,7 @@ export default async function MandatoryTrainingRulesPage({ searchParams }: { sea
         _count: { select: { learningAssignments: true } },
       },
     }),
-    prisma.trainingCourse.findMany({ where: { activeFlag: true }, orderBy: { title: "asc" }, select: { id: true, title: true } }),
+    prisma.trainingCourse.findMany({ where: { status: "PUBLISHED" }, orderBy: { title: "asc" }, select: { id: true, title: true } }),
     prisma.employee.findMany({ where: { activeFlag: true }, orderBy: { fullLegalName: "asc" }, select: { id: true, employeeNumber: true, fullLegalName: true } }),
     prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" }, select: { id: true, unitName: true } }),
     prisma.job.findMany({ orderBy: { jobTitle: "asc" }, select: { id: true, jobTitle: true } }),
@@ -57,6 +65,31 @@ export default async function MandatoryTrainingRulesPage({ searchParams }: { sea
       <div className="mt-4">
         <CreateRuleForm courses={courses} employees={employees} departments={departments} jobs={jobs} positions={positions} />
       </div>
+
+      <form className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Pelatihan</label>
+          <select name="courseId" defaultValue={courseId ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Status</label>
+          <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            <option value="active">Aktif</option>
+            <option value="inactive">Nonaktif</option>
+          </select>
+        </div>
+        <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+          {t("common.applyFilter")}
+        </button>
+      </form>
 
       <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
@@ -94,7 +127,9 @@ export default async function MandatoryTrainingRulesPage({ searchParams }: { sea
                 <td className="px-4 py-3 text-right">
                   {r.activeFlag && (
                     <div className="flex justify-end gap-3">
-                      <ApplyRuleButton ruleId={r.id} />
+                      <Link href={`/training/mandatory-rules/${r.id}`} className="text-xs text-indigo-600 hover:underline">
+                        Pratinjau &amp; Terapkan
+                      </Link>
                       <DeactivateRuleButton ruleId={r.id} />
                     </div>
                   )}

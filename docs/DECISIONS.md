@@ -3,6 +3,353 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-14 (later same day) — Remove asset acknowledgement gate
+
+Direct user feedback: "aset tidak butuh Menunggu Konfirmasi Penerimaan"
+("assets don't need [the] Waiting for Acknowledgement [status]"), given
+right after trying the assign-to-employee flow themselves — a stray
+`AssetCustody` row sitting in `PENDING_ACKNOWLEDGEMENT` on a real employee
+confirmed this was hit live, not hypothetical. This overrides the PDF's
+own "Employee acknowledges receipt → custody becomes Active" step, which
+the user judged unnecessary friction: GA Admin recording the handover
+(condition, evidence) at assignment time is sufficient, no separate
+employee confirmation click is needed.
+
+**Schema**: `AssetCustodyStatus` reduced from 3 values to 2
+(`ACTIVE`/`RETURNED` — `PENDING_ACKNOWLEDGEMENT` removed entirely); the
+now-meaningless `AssetCustody.acknowledgedAt` field dropped too. Migration
+`20260814000000_remove_asset_acknowledgement` does a data fix-up first
+(promotes any existing `PENDING_ACKNOWLEDGEMENT` row to `ACTIVE`, which
+caught exactly one real row from the user's own click-through) before the
+SQLite table-recreation that drops the column.
+
+**Code**: `initialCustodyStatus()` removed from `lib/assets.ts` — every
+custody target type (Employee/Department/Location) now starts `ACTIVE`
+directly in `createCustody`/`transferAssetCustody`
+(`src/app/(app)/assets/actions.ts`). `acknowledgeAssetCustody` action and
+its permission predicate (`canAcknowledgeAssetCustody`) deleted outright —
+no caller remains. `/my-assets`'s pending-acknowledgement notice/button
+removed (`AcknowledgeButton` component deleted).
+
+**Consequence for the earlier "Perlengkapan Selesai" derivation** (see the
+entry above, from earlier the same day): `isOnboardingAssetsComplete` is
+kept as a real predicate (correctness against `RETURNED`-filtered,
+all-`ACTIVE` custody), but since `AssetCustodyStatus` no longer has any
+value between "just assigned" and "returned," it now evaluates true the
+instant GA Admin assigns anything — there is no window where it can be
+false in practice anymore. This is accepted as a natural consequence of
+removing the acknowledgement step, not a bug — flagged here rather than
+silently left implicit.
+
+**Live-verified**: assigned a fresh asset to a real employee through the
+UI → custody row showed `Aktif` immediately, no pending state, no
+acknowledge button anywhere. Full suite (276 tests), `tsc --noEmit`,
+`eslint`, and `next build` all clean.
+
+## 2026-08-14 — Onboarding × Assets: fully derive "Perlengkapan Selesai"
+
+Direct user feedback right after the Phase 4A entry below: "assets is not
+link to on boarding yet." Correct — the Phase 4A build had deliberately
+left `OnboardingCase.assetsComplete` as a manual GA-Admin toggle (justified
+at the time by "no `isOnboardingRequired`-equivalent concept exists for
+assets"), with a real custody list rendered next to it only for context.
+That reasoning didn't hold up: the PDF's own workflow text — "Employee
+acknowledges receipt → Employee custody becomes Active → HR Admin sees
+requirement Completed" — describes exactly the same live-derivation the
+app had already built for training completion one step earlier in the same
+session. Fixed to match: added `isOnboardingAssetsComplete(assetCustodyStatuses)`
+to `src/lib/onboarding.ts` (RETURNED custodies are closed history and don't
+block; zero assets assigned is trivially complete; any open
+`PENDING_ACKNOWLEDGEMENT` custody blocks — same three-way shape as
+`isOnboardingTrainingComplete`). Removed `OnboardingCase.assetsComplete`/
+`assetsCompletedAt`/`assetsCompletedByAccountId` from the schema entirely
+(migration `20260813000000_derive_onboarding_assets_complete`, SQLite
+table-recreation; verified all rows had `assetsComplete=false` pre-migration
+— zero data loss) along with the now-dead `AssetsToggle` component and
+`canMarkOnboardingAssets` permission predicate (its only caller). The
+detail page's asset block now matches the training block exactly: no
+manual toggle, no GA-Admin visibility gate (anyone who can view the case
+sees the same real custody list), just a live ✓/— derived from
+`AssetCustody` rows. `toggleContractComplete` (the one flag that's still
+genuinely manual — no "contract complete" signal exists anywhere else)
+now fetches both training and asset status live to recompute
+`completedAt` correctly. Live-verified end to end: assigned an
+unacknowledged asset to a case with no prior assets → "Perlengkapan
+Selesai" flipped from ✓ to — showing the pending asset → acknowledged it
+→ flipped back to ✓ automatically, both on the detail page and the
+list page's batch-derived status column.
+
+## 2026-08-13 — Onboarding-Training auto-assign + Phase 4A: Employee Assets
+
+### Onboarding × Training integration (small follow-on to Phase 3B)
+
+Per direct user request ("some compulsory course will be use for on
+boarding"), clarified via 3 questions (all "Recommended" answers accepted):
+`TrainingCourse.isOnboardingRequired` (new checkbox) marks a published
+course as part of new-hire onboarding; `createEmployee`/
+`createEmployeeFromRecruitmentRequest` both call
+`applyOnboardingMandatoryTrainingForEmployee` right after the employee
+record commits, auto-assigning every active onboarding-required Mandatory
+Training rule the new hire's audience resolves into (only EVERYONE/EMPLOYEE
+target types resolve on the `createEmployee` path, since no
+`currentPositionId` is set there yet; all target types resolve on the
+recruitment-fulfillment path). `OnboardingCase.mandatoryMaterialComplete`
+(the old manually-toggled flag) was removed from the schema entirely —
+"Materi Wajib" is now derived live every time the case detail/list page
+renders, via `isOnboardingTrainingComplete(assignmentStatuses)`, the same
+derive-on-read pattern as `ContractRenewalCase`'s D-30 trigger. Migration:
+`20260812010000_add_onboarding_training_link` (SQLite table-recreation for
+`OnboardingCase`/`TrainingCourse`; verified 0 of 2 pre-migration rows had
+the removed flag set — zero data loss).
+
+### Phase 4A: Employee Assets
+
+Built from `Phase_4A_Employee_Asset_Workflow.pdf`'s 2-page swimlane diagram
+(create/assign/acknowledge → movement/return/offboarding-block), additive
+against every prior phase. New `GA_ADMIN` role workspace, deliberately
+**excluding** HR Admin from every asset-mutation predicate
+(`canManageAssets`/`canViewAssetMaster`/`canImportAssetMaster`) — the one
+explicit access-boundary deviation from this app's usual
+"`isHrAdmin(session) || isXAdmin(session)`" pattern, per the PDF's literal
+"HR Admin receives only onboarding/offboarding completion or blocker
+status and cannot create, assign, return or edit GA records."
+
+**Schema** (`20260812020000_add_phase_4a_employee_assets`, purely additive —
+3 `CREATE TABLE`, zero `ALTER`/`DROP`): `AssetLocation` (new minimal
+GA-managed master data, no existing "Location" concept fit —
+`AttendanceGeofence` is GPS-purpose-built, not a generic location);
+`FixedAsset` with `AssetTrackingType` (INDIVIDUAL/QUANTITY_TRACKED) —
+Individual assets are single-unit, `status` is authoritative and flips to
+IN_USE the instant ANY custody exists (even pending acknowledgement) to
+close the double-booking window; Quantity-tracked assets pool
+`totalQuantity`/`availableQuantity`, `status` stays AVAILABLE by
+convention, and a non-GOOD return does NOT rejoin the pool (documented
+Phase-4B-deferred simplification — repair/disposal workflows are explicitly
+out of scope per the PDF's own phase boundary language); `AssetCustody`
+models the tri-target invariant (`targetType` discriminator + 3 nullable
+FKs — same pattern as `MandatoryTrainingRule`'s existing target-type
+design, since Prisma/SQLite has no polymorphic association) with
+`PENDING_ACKNOWLEDGEMENT`→`ACTIVE`→`RETURNED` status (only an
+EMPLOYEE-target custody needs acknowledgement; DEPARTMENT/LOCATION starts
+ACTIVE immediately) and `transferredToCustodyId` linking an atomic
+return-and-reassign to its replacement row, so history is never
+overwritten and an INDIVIDUAL asset never passes back through Available
+mid-transfer.
+
+**The one load-bearing rule** — "Only open Employee custody blocks
+offboarding" — is now a real DB-backed check in `executeExitClearance`
+(`src/app/(app)/offboarding/actions.ts`), replacing a stale, purely
+cosmetic warning string (`offboarding.clearanceAssetNotice`) that had
+existed since before Assets was modeled at all. Confirmed live: assigned
+`AST-LAPTOP-001` to EMP-0001 (who already had a real `PENDING_CLEARANCE`
+Offboarding Case in this dataset), attempted exit clearance → server
+rejected with the specific asset named in the error, returned the asset as
+GA Admin, re-checked the case → blocker panel gone, button enabled, no
+error. Deliberately did **not** click through to actually complete that
+real employee's exit clearance (irreversible account-disable + assignment-
+end on the live 200-employee dataset) — the blocker's removal alone proves
+the rule.
+
+**Reused unmodified**: `FileObject`/`/api/files/[id]` category-widening
+pattern (added `ASSET_HANDOVER_EVIDENCE`/`ASSET_RETURN_EVIDENCE`, gated
+GA-Admin-or-self); the generic `ImportBatch`/`ImportRow`/`DatasetModule`
+registry (added `asset-master` — catalog fields only; `trackingType`/
+`totalQuantity` are CREATE-only via import, never touched on UPDATE, since
+an existing asset can already have custody history an import row has no
+safe way to reconcile — "Asset Master may be imported; operational
+transactions are completed in-app" per the PDF); `AuditLog`/`logAudit()`;
+private-file storage.
+
+**Onboarding/Offboarding folded in**: onboarding detail page shows a
+GA-Admin-visible real custody list next to the existing (still manual,
+GA-Admin-only) `assetsComplete` toggle — full derivation was skipped
+because, unlike training, there's no "required for onboarding" concept on
+`FixedAsset` yet. Offboarding detail page renders the same real open-custody
+list as an amber blocker panel whenever one exists.
+
+Seeded UAT data (`scripts/seed-phase4a-assets.ts`, one-time, safe to
+re-run): 3 locations, 5 assets spanning both tracking types and all three
+custody target types, deliberately leaving EMP-0001 untouched so the live
+demo walkthrough had a real employee to assign to. Live-verified the full
+requested scenario end to end via browser: import (CSV upload isn't
+scriptable through browser automation — verified instead by driving the
+same `dryRun`/`commitRow` functions the upload form calls) → assign to
+employee → acknowledge (as the employee) → offboarding blocked (as HR
+Admin) → return (as GA Admin) → offboarding continues. Also re-verified
+Phase 3A (`/training/mandatory-rules`, previously hit by a stale-dev-server
+false alarm) and the onboarding-training auto-derive still work correctly
+against the live dataset.
+
+**Files changed**: `prisma/schema.prisma` + 2 migrations; `src/lib/assets.ts`
+(new, pure, tested); `src/lib/onboarding.ts`, `src/lib/mandatory-training.ts`
+(onboarding-training helpers); `src/lib/permissions.ts` (narrowed
+`canMarkOnboardingAssets`, widened `canAccessImport`, new Phase 4A block);
+`src/app/(app)/employees/actions.ts`, `src/app/(app)/recruitment/actions.ts`
+(auto-assign wiring); `src/app/(app)/training/courses/*`
+(`isOnboardingRequired`); `src/app/(app)/onboarding/*` (removed manual
+training toggle, added real custody list); `src/app/(app)/offboarding/
+actions.ts` + `[id]/page.tsx` + `[id]/decision-forms.tsx` (real blocker);
+`src/app/(app)/assets/**`, `src/app/(app)/my-assets/**` (new UI, all pages);
+`src/lib/import-export/asset-master.ts` + `registry.ts` (new dataset);
+`src/app/api/assets/export/route.ts` (new); `src/app/api/import-export/**`,
+`src/app/(app)/import/**` (asset-master wiring); `src/app/api/files/[id]/
+route.ts` (evidence category widening); `src/app/(app)/dashboard/page.tsx`
+(GA stat cards); `src/app/(app)/layout.tsx` + `src/lib/i18n/id.ts` (nav +
+strings). Tests: `src/lib/assets.test.ts` (7), `src/lib/onboarding.test.ts`
+(+3), `src/lib/permissions.test.ts` (+asset predicates) — 274 total passing.
+`tsc --noEmit`, `eslint .`, and `next build` all clean.
+
+**Superseded same day** — see the 2026-08-14 entry above: the user pointed
+out assets still weren't actually linked to onboarding, and the manual
+toggle was replaced with a fully live derivation from real `AssetCustody`
+acknowledgement, same as training. The "no required-assets concept"
+observation below no longer applies — completion doesn't need a defined
+kit, just zero open custody.
+
+## 2026-08-12 — Phase 3B: Learning Library / LMS
+
+New phase, additive-only against every prior accepted phase including Phase
+3A — no existing model, migration, or page was rebuilt beyond adding new
+fields/back-relations to `TrainingCourse`/`LearningAssignment`/`FileObject`.
+Source of truth: the attached workflow PDF (`phase_3b_learning_library_lms_
+workflow.pdf`), covering course authoring, request-or-mandatory-only
+assignment, and mode-aware learning/completion.
+
+### Schema: 4 enums, 7 new models, 2 extended models
+
+`CourseStatus` (DRAFT/PUBLISHED/ARCHIVED), `CourseDeliveryMode` (ONLINE/
+IN_PERSON/BLENDED), `CourseMaterialType` (PDF/DOCX/PPTX/VIDEO/URL),
+`QuizQuestionType` (SINGLE_CHOICE/MULTIPLE_CHOICE/TRUE_FALSE).
+`CourseMaterial`, `LearningAssignmentMaterialProgress`, `Quiz`,
+`QuizQuestion`, `QuizOption`, `QuizAttempt`, `QuizAttemptAnswer`.
+`TrainingCourse` gained `mode`/`objectives`/`status` — `activeFlag` is left
+in the schema but superseded; every consumer (Training Request course
+picker, Mandatory Rule course picker, learner-facing pages) now filters on
+`status: PUBLISHED` instead, and 3 stale call sites were caught and fixed by
+grep sweep before any live testing. `LearningAssignment` gained
+`certificateExpiryDate`/`certificateFileId`/`attendanceEvidenceNote`/
+`attendanceEvidenceFileId`/`quizBonusAttempts`/`overrideReason`. Applied via
+the same `prisma migrate diff` → hand-written migration → `prisma migrate
+deploy` workaround used throughout this project; the SQLite-specific
+table-recreation it generates for the two extended models was inspected
+line-by-line to confirm the `INSERT INTO new_X SELECT ... FROM X` step
+preserves every existing row before applying.
+
+No new `Notification` model — matches this app's existing convention (every
+"notification" is a live-computed nav-badge/personal-inbox, never a stored
+row); the PDF's "Notify employee and manager" step reuses the existing
+`/training/my-learning` and `/training/learning-assignments` nav-visibility
+pattern. No dedicated reset/override schema fields either — quiz-attempt
+resets and refresher overrides are tracked the same way every other
+override in this app is (an `AuditLog` row with a reason string), with only
+`LearningAssignment.quizBonusAttempts`/`overrideReason` as plain counters/
+markers, never a duplicated audit trail.
+
+### Server-side quiz scoring, exact-set match, no partial credit
+
+`lib/lms.ts` (11 unit tests) is pure and Prisma-free: `computeQuizAttemptScore`
+is points-weighted (not a flat question count) and requires the learner's
+selected-option set to *exactly equal* the correct-option set per question —
+`MULTIPLE_CHOICE` gets no partial credit for a subset match, matching how
+`SINGLE_CHOICE`/`TRUE_FALSE` already behave. `canRetryQuiz` checks attempts
+against `Quiz.maxAttempts + LearningAssignment.quizBonusAttempts`, so an
+audited reset never mutates historical `QuizAttempt` rows. The learner-facing
+submit action (`my-learning/actions.ts`) never trusts client-provided
+correctness or scores — every submission re-fetches the question/option set
+and recomputes server-side. Live-verified: a real quiz question answered
+correctly through the browser scored exactly 100.0% and was recorded as
+attempt #1/passed.
+
+### Completion is mode-aware; Online skips the attendance step entirely
+
+`isLearningAssignmentComplete`/`canCompleteOnlineLearningAssignment` encode
+the PDF's three completion branches: ONLINE = required materials + quiz (if
+any); IN_PERSON = attendance only, regardless of materials/quiz; BLENDED =
+both. Online assignments go straight from `ASSIGNED` to `COMPLETED` (no
+`ATTENDED` stop) once requirements are met — `completeLearningAssignment()`
+branches on `course.mode` and re-checks requirements server-side before
+allowing the transition, independent of whatever the admin list page shows.
+Competency scores are never touched by completion, and training completion
+never rewrites a competency assessment (unchanged from Phase 3A's COM-12
+guarantee) — this module doesn't import anything from the competency layer
+at all. Live-verified end to end: a fresh Online assignment (material link →
+quiz → pass) let Training Admin complete it directly from `ASSIGNED`, while
+a second, older assignment for the same employee/course was left untouched.
+
+### Mandatory Training gained a preview step and a refresher override
+
+The PDF's "preview affected employees before confirm" step is a new page
+(`/training/mandatory-rules/[id]`) that resolves the audience via the
+already-existing `resolveMandatoryTrainingAudience` (unchanged) and shows
+who's new vs. already-assigned before the same `applyMandatoryTrainingRule`
+action runs. "Prevent duplicate active assignments unless Training Admin
+confirms a refresher" required extending `applyMandatoryTrainingRule` with
+an optional `refresherReason` parameter: when supplied, every already-
+assigned audience member also gets a second `LearningAssignment` row tagged
+`overrideReason`, audited with the reason text; when omitted, the original
+idempotent skip-if-already-assigned behavior is unchanged. The same
+refresher-reason pattern was added to `scheduleTrainingRequest` (Training
+Request path) since it previously had no duplicate-assignment check at all —
+a real gap caught while implementing this, not called out in the PDF itself.
+Live-verified: applying a rule against an employee who already had an active
+assignment, with a reason filled in, correctly created exactly one new
+`overrideReason`-tagged row and reported "1 new" — the pre-existing row was
+left untouched.
+
+### Role-scoped visibility reuses one page per surface, not parallel pages
+
+`/training/learning-assignments` (Admin-owned list) now also admits Manager
+(direct reports only, via new `getDirectReportEmployeeIds` — same one-level
+granularity as the existing `isDirectManagerOfEmployee`) and HR Manager
+(company-wide, read-only) — the query scope narrows per role but the action
+buttons (`ConfirmAttendanceButton`/`CompleteForm`/`CancelButton`) only ever
+render for the true Admin gate, matching the PDF's "Only Training Admin
+manages... attendance, results and certificates." Widening `canAccessImport`
+to admit Training Admin for the two new Phase 3B import datasets required
+also filtering which upload forms the hub page renders per role, rather than
+just widening the outer gate — the same "check what else is behind a
+widened gate" discipline applied throughout this app.
+
+### Bulk import reuses the generic ImportBatch/ImportRow framework unchanged
+
+`mandatory-training-participants` and `training-attendance` are two new
+`DatasetModule`s (`dryRun`/`commitRow`/`exportData`) registered in the
+existing `DATASET_REGISTRY` and reachable through the same `/import` hub as
+every other dataset — no changes to the generic upload/preview/commit engine
+itself. The participant-list importer reuses the exact refresher-reason
+convention from the Mandatory Rule UI (a `refresherReason` CSV column,
+required only when the row's employee already has an active assignment);
+the attendance importer only accepts a positive "Ya"/"Yes"/"true"/"1" value
+for `attended` since there's no "mark absent" workflow anywhere else in this
+app to plug into.
+
+### Live verification found and fixed one real bug: stale dev server, not app code
+
+Mid-session, `/training/mandatory-rules` threw `PrismaClientValidationError:
+Unknown argument 'status'` — the dev server process had been running since
+before the Phase 3B migration and was holding the pre-migration Prisma
+Client in memory (the regenerated client files on disk were already
+correct, which is why `tsc`/`next build` had passed cleanly). Killing the
+process, clearing `.next`, and restarting resolved it — not a code defect.
+Separately, live walkthrough surfaced one small real UI bug (not caught by
+type-checking): the "Tandai Selesai" material-progress button on
+`/training/my-learning/[id]` stayed visually active after an assignment
+left `ASSIGNED`, even though the server action already silently rejected the
+click — fixed by hiding the button (rather than leaving a dead control) once
+`assignment.status !== "ASSIGNED"`.
+
+### Full workflow live-verified end to end, Phase 3A re-confirmed unaffected
+
+Course authoring (Draft → add URL material → create quiz → add a
+single-choice question with a marked-correct option → Publish), Mandatory
+Rule preview/apply/refresher-override, learner quiz-taking with correct
+server-side scoring, and Admin completion of an Online assignment were all
+exercised through the actual browser as different demo accounts (Training
+Admin, and two real employee-linked logins), not just unit tests. `/training-
+requests` and `/competency` (Phase 3A) were spot-checked after all Phase 3B
+changes landed and render without error, confirming the additive-only claim
+holds in practice, not just by code review.
+
 ## 2026-08-11 (later same day) — Phase 3A: Competency & Training Operations
 
 New phase, additive-only against every prior accepted phase (Phase 0/1/2,

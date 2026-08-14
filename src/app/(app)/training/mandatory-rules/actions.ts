@@ -54,23 +54,32 @@ export async function createMandatoryTrainingRule(_prevState: string | undefined
 
 // TRN-13: idempotent — re-applying an already-applied rule assigns only
 // newly-eligible Employees (e.g. someone who just joined the target
-// Department), never duplicates an existing active assignment.
-export async function applyMandatoryTrainingRuleAction(ruleId: string, _prevState: string | undefined): Promise<string | undefined> {
+// Department), never duplicates an existing active assignment — UNLESS the
+// preview page's optional "refresherReason" is filled in, which is Training
+// Admin's explicit confirmation to refresh everyone already assigned too.
+export async function applyMandatoryTrainingRuleAction(
+  ruleId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
   const session = await requireSession();
   if (!canManageMandatoryTrainingRule(session)) return "Anda tidak memiliki akses.";
 
-  const result = await applyMandatoryTrainingRule(ruleId, session.user.id);
+  const refresherReason = (formData.get("refresherReason") as string)?.trim() || null;
+  const result = await applyMandatoryTrainingRule(ruleId, session.user.id, refresherReason);
 
   await logAudit({
     actorAccountId: session.user.id,
     action: "UPDATE",
     datasetName: "MandatoryTrainingRule",
     recordId: ruleId,
-    reason: `Applied rule: ${result.newlyAssigned} newly assigned, ${result.alreadyAssigned} already assigned of ${result.audienceSize} audience`,
+    reason: refresherReason
+      ? `Applied rule: ${result.newlyAssigned} newly assigned, ${result.refresherAssigned} confirmed refresher (reason: ${refresherReason}) of ${result.audienceSize} audience`
+      : `Applied rule: ${result.newlyAssigned} newly assigned, ${result.alreadyAssigned} already assigned of ${result.audienceSize} audience`,
   });
 
   revalidatePath("/training/mandatory-rules");
-  redirect(`/training/mandatory-rules?applied=${result.newlyAssigned}`);
+  redirect(`/training/mandatory-rules?applied=${result.newlyAssigned + result.refresherAssigned}`);
 }
 
 export async function deactivateMandatoryTrainingRule(ruleId: string, _prevState: string | undefined): Promise<string | undefined> {

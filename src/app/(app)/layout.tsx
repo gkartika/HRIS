@@ -19,6 +19,7 @@ import {
   Clock,
   CalendarOff,
   GraduationCap,
+  Package,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -28,6 +29,7 @@ import {
   canSubmitRecruitmentRequest,
   canViewOnboarding,
   canManageCompetencyFramework,
+  canViewAssetMaster,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
@@ -185,8 +187,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   if (isHrAdmin(session)) {
     navItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: Settings });
-    navItems.push({ href: "/import", label: t("nav.importData"), icon: Upload });
     navItems.push({ href: "/audit-log", label: t("nav.auditLog"), icon: ShieldCheck });
+  }
+  // Phase 3B: Training Admin also reaches the shared import hub now, solely
+  // for the mandatory-training-participants/training-attendance datasets
+  // (import/page.tsx filters which upload forms each role actually sees).
+  if (isHrAdmin(session) || isTrainingAdmin(session)) {
+    navItems.push({ href: "/import", label: t("nav.importData"), icon: Upload });
   }
   // ACC-03: Training & Competency Admin needs this master-data browse even
   // without HR Admin's broader org-structure access — a separate nav entry
@@ -220,6 +227,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (session.user.employeeId) {
     navItems.push({ href: "/competency/my", label: t("competencyAdmin.myNavLabel"), icon: GraduationCap });
   }
+  // Phase 3B: self-service materials/quiz/certificate view, scoped to the
+  // signed-in Employee's own LearningAssignment rows only (see
+  // canViewLearningAssignment/canTakeQuiz) — every employee-linked account
+  // gets this link, same as My Competency above.
+  if (session.user.employeeId) {
+    navItems.push({ href: "/training/my-learning", label: t("training.myLearningNavLabel"), icon: GraduationCap });
+  }
   // TRN-09/ACC-22: same broad list-nav visibility as Contract/Movement/
   // Absence — HR Admin, Training Admin, or any employee-linked account (who
   // may submit for self, or for their Department if Level 3), scoped
@@ -230,6 +244,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (isHrAdmin(session) || isTrainingAdmin(session)) {
     navItems.push({ href: "/training/courses", label: t("training.coursesNavLabel"), icon: GraduationCap });
     navItems.push({ href: "/training/mandatory-rules", label: t("training.mandatoryRulesNavLabel"), icon: GraduationCap });
+  }
+  // Phase 3B: "Manager sees employees within their authority, HR Manager
+  // has company-level read-only reporting" — same broad-then-scoped nav
+  // visibility as training-requests above; the page itself resolves
+  // whether this account actually has any direct reports/HR Manager
+  // Assignment and denies access otherwise.
+  if (isHrAdmin(session) || isTrainingAdmin(session) || session.user.employeeId) {
     navItems.push({ href: "/training/learning-assignments", label: t("training.learningAssignmentsNavLabel"), icon: GraduationCap });
   }
   // TRN-04/TRN-07: any employee-linked account may hold a direct report's
@@ -238,6 +259,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // then-page-scoped visibility pattern as Approval Inbox.
   if (isHrAdmin(session) || isTrainingAdmin(session) || session.user.employeeId) {
     navItems.push({ href: "/training/effectiveness-tasks", label: t("training.effectivenessTasksNavLabel"), icon: GraduationCap });
+  }
+  // Phase 4A access boundary: GA Admin operates the Asset Master/custody
+  // records — HR Admin deliberately gets no nav entry here, only the
+  // read-only completion/blocker status folded into Onboarding/Offboarding
+  // pages it already reaches.
+  if (canViewAssetMaster(session)) {
+    navItems.push({ href: "/assets", label: t("asset.navLabel"), icon: Package });
+  }
+  // Employee self-service — see only one's own assets, same broad
+  // employee-linked-account visibility as My Competency/My Learning above.
+  if (session.user.employeeId) {
+    navItems.push({ href: "/my-assets", label: t("asset.myAssetsNavLabel"), icon: Package });
   }
 
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");

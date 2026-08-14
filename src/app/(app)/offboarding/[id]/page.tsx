@@ -87,6 +87,18 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
     canCancelOffboardingCaseStatus(offboardingCase.status);
   const overdue = offboardingCase.status === "PENDING_CLEARANCE" && isOverdue(offboardingCase.clearanceDueDate);
 
+  // Phase 4A: "Only open Employee custody blocks offboarding" — surfaced
+  // here so whoever can execute clearance sees the real blocker before
+  // clicking (executeExitClearance also re-checks this server-side, the
+  // authoritative gate).
+  const openAssetCustodies =
+    offboardingCase.status === "PENDING_CLEARANCE"
+      ? await prisma.assetCustody.findMany({
+          where: { employeeId: offboardingCase.employeeId, status: { not: "RETURNED" } },
+          include: { asset: { select: { assetName: true, assetCode: true } } },
+        })
+      : [];
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -190,6 +202,19 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
           </p>
           {offboardingCase.clearanceNote && <p className="mt-1 text-sm text-slate-600">{offboardingCase.clearanceNote}</p>}
           <p className="mt-2 text-xs text-slate-400">{t("offboarding.completedNotice")}</p>
+        </div>
+      )}
+
+      {openAssetCustodies.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+          <p className="text-sm font-medium text-amber-800">{t("offboarding.assetBlockerTitle")}</p>
+          <ul className="mt-2 space-y-1 text-sm text-amber-800">
+            {openAssetCustodies.map((c) => (
+              <li key={c.id}>
+                {c.asset.assetName} ({c.asset.assetCode}) — {t(`assetCustodyStatus.${c.status}`)}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

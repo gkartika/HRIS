@@ -25,6 +25,7 @@ import {
   initialRecruitmentStatus,
 } from "@/lib/recruitment";
 import { formatOnboardingCaseNumber } from "@/lib/onboarding";
+import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import { validateNoKk } from "@/lib/validation/employee-fields";
 import type {
   RecruitmentReasonCode,
@@ -476,6 +477,11 @@ export async function createEmployeeFromRecruitmentRequest(
     recordId: result.fulfillment.id,
     reason: `Linked employee ${employeeNumber} and assignment ${result.assignment.id} to request ${request.requestNumber}`,
   });
+
+  // Onboarding-compulsory course auto-assign — unlike the direct-entry path,
+  // currentPositionId/the Assignment are already set here, so every target
+  // type (including Department/Job/Primary Position) can resolve.
+  await applyOnboardingMandatoryTrainingForEmployee(result.employee.id, session.user.id);
 
   revalidatePath(`/recruitment/${requestId}`);
   revalidatePath("/recruitment");

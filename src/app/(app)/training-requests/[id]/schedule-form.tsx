@@ -27,6 +27,12 @@ export function ScheduleForm({ requestId, sessions }: { requestId: string; sessi
           ))}
         </select>
       </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">
+          Alasan Penyegaran (isi hanya jika karyawan sudah memiliki penugasan aktif untuk pelatihan ini)
+        </label>
+        <textarea name="refresherReason" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      </div>
       <button
         type="submit"
         disabled={isPending}

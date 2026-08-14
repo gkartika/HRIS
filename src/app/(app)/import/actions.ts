@@ -11,6 +11,9 @@ import {
   isHrAdmin,
   canImportFingerprintAttendance,
   canRunCompetencyHistoricalMigration,
+  canImportMandatoryTrainingParticipants,
+  canImportTrainingAttendance,
+  canImportAssetMaster,
 } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { parseCsvRows } from "@/lib/import-export/csv";
@@ -29,6 +32,9 @@ function canImportDataset(session: Session, dataset: DatasetKey): boolean {
   // toggle the UI exposes to anyone else; there is no separate "acceptance"
   // flag in this build (COM-19 calls it a one-time action by convention).
   if (dataset === "competency-migration") return canRunCompetencyHistoricalMigration(session);
+  if (dataset === "mandatory-training-participants") return canImportMandatoryTrainingParticipants(session);
+  if (dataset === "training-attendance") return canImportTrainingAttendance(session);
+  if (dataset === "asset-master") return canImportAssetMaster(session);
   return canManageOrgStructure(session);
 }
 
@@ -148,6 +154,7 @@ export async function commitImportBatch(batchId: string) {
   revalidatePath("/admin/jobs");
   revalidatePath("/admin/positions");
   revalidatePath("/organization");
+  revalidatePath("/training/learning-assignments");
   redirect(`/import/${batchId}`);
 }
 

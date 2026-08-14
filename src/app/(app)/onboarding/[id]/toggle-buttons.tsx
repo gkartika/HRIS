@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import { useActionState } from "react";
-import {
-  toggleContractComplete,
-  toggleTrainingComplete,
-  toggleAssetsComplete,
-  updateMandatoryMaterialDueDate,
-} from "../actions";
+import { toggleContractComplete, updateMandatoryMaterialDueDate } from "../actions";
 import { t } from "@/lib/i18n/id";
 
 function ToggleButton({
@@ -73,17 +68,9 @@ export function ContractToggle({ caseId, complete, canToggle }: { caseId: string
   );
 }
 
-export function TrainingToggle({ caseId, complete, canToggle }: { caseId: string; complete: boolean; canToggle: boolean }) {
-  return (
-    <ToggleButton caseId={caseId} complete={complete} label={t("onboarding.mandatoryMaterialComplete")} canToggle={canToggle} action={toggleTrainingComplete} />
-  );
-}
-
-export function AssetsToggle({ caseId, complete, canToggle }: { caseId: string; complete: boolean; canToggle: boolean }) {
-  return (
-    <ToggleButton caseId={caseId} complete={complete} label={t("onboarding.assetsComplete")} canToggle={canToggle} action={toggleAssetsComplete} />
-  );
-}
+// "Materi Wajib" and "Perlengkapan" have no toggle anymore — both are
+// derived from real data (course completion, asset custody status),
+// rendered inline in ../[id]/page.tsx, never manually set.
 
 export function DueDateForm({
   caseId,

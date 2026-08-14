@@ -44,3 +44,28 @@ export function isOnboardingFullyComplete(
 ): boolean {
   return contractComplete && mandatoryMaterialComplete && assetsComplete;
 }
+
+// "Materi Wajib" completion is derived from real onboarding-required
+// LearningAssignment rows, never a manual toggle — CANCELLED assignments
+// don't block (they're not a real obligation anymore), and an employee with
+// no onboarding-required courses at all is trivially complete (nothing to
+// do), same as a checklist item with zero requirements.
+export function isOnboardingTrainingComplete(learningAssignmentStatuses: string[]): boolean {
+  const relevant = learningAssignmentStatuses.filter((status) => status !== "CANCELLED");
+  return relevant.length === 0 || relevant.every((status) => status === "COMPLETED");
+}
+
+// Phase 4A: "Perlengkapan Selesai" is derived from real AssetCustody rows
+// for the employee, same live-derivation pattern as training above — a
+// RETURNED custody is closed history and doesn't block; an employee with no
+// assets assigned at all is trivially complete (nothing outstanding), same
+// as a checklist item with zero requirements. Per direct user request,
+// AssetCustody has no intermediate "awaiting acknowledgement" status
+// anymore (custody starts ACTIVE immediately on assignment), so in
+// practice this now always evaluates true — kept as a real predicate
+// (not hardcoded) so it stays correct if a blocking status is ever
+// reintroduced.
+export function isOnboardingAssetsComplete(assetCustodyStatuses: string[]): boolean {
+  const relevant = assetCustodyStatuses.filter((status) => status !== "RETURNED");
+  return relevant.length === 0 || relevant.every((status) => status === "ACTIVE");
+}

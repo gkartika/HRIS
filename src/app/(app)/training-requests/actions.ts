@@ -212,6 +212,19 @@ export async function scheduleTrainingRequest(
 
   const course = await prisma.trainingCourse.findUniqueOrThrow({ where: { id: request.courseId } });
 
+  // TRN-14/Key Control "Audited retry reset" sibling rule: "Prevent
+  // duplicate active assignments unless Training Admin confirms a
+  // refresher." A duplicate is blocked unless a reason is supplied, in
+  // which case the new row is tagged via overrideReason (audited below) —
+  // same convention as every other override in this app.
+  const existingActive = await prisma.learningAssignment.findFirst({
+    where: { employeeId: request.employeeId, courseId: request.courseId, status: { not: "CANCELLED" } },
+  });
+  const refresherReason = (formData.get("refresherReason") as string)?.trim() || null;
+  if (existingActive && !refresherReason) {
+    return "Karyawan ini sudah memiliki penugasan aktif untuk pelatihan ini. Isi \"Alasan Penyegaran\" untuk melanjutkan sebagai refresher.";
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.trainingRequest.update({ where: { id: requestId }, data: { status: "SCHEDULED", sessionId } });
     await tx.learningAssignment.create({
@@ -224,6 +237,7 @@ export async function scheduleTrainingRequest(
         assignedByAccountId: session.user.id,
         status: "ASSIGNED",
         effectivenessRequiredSnapshot: course.effectivenessRequired,
+        overrideReason: existingActive ? refresherReason : null,
       },
     });
   });
@@ -233,7 +247,9 @@ export async function scheduleTrainingRequest(
     action: "UPDATE",
     datasetName: "TrainingRequest",
     recordId: requestId,
-    reason: `Training Admin scheduled session ${sessionId} and assigned employee`,
+    reason: existingActive
+      ? `Training Admin scheduled session ${sessionId} as a confirmed refresher despite an existing active assignment — reason: ${refresherReason}`
+      : `Training Admin scheduled session ${sessionId} and assigned employee`,
   });
 
   revalidatePath(`/training-requests/${requestId}`);

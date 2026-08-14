@@ -63,7 +63,7 @@ export default async function TrainingRequestDetailPage({ params }: { params: Pr
   const isRequester = session.user.id === request.submittedByAccountId;
   const canCancel = canCancelTrainingRequestByActor(session, isRequester) && canCancelTrainingRequestStatus(request.status);
 
-  const courses = canValidate ? await prisma.trainingCourse.findMany({ where: { activeFlag: true }, orderBy: { title: "asc" } }) : [];
+  const courses = canValidate ? await prisma.trainingCourse.findMany({ where: { status: "PUBLISHED" }, orderBy: { title: "asc" } }) : [];
   const sessions =
     canSchedule && request.courseId
       ? await prisma.trainingSession.findMany({ where: { courseId: request.courseId }, orderBy: { startDate: "asc" } })

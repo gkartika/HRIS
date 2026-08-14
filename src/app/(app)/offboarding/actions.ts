@@ -26,6 +26,7 @@ import {
   canCancelOffboardingCaseStatus,
 } from "@/lib/offboarding";
 import type { OffboardingReason } from "@/generated/prisma/enums";
+import { blocksOffboarding } from "@/lib/assets";
 
 // LIF-06/12: the ONE shared creator for every trigger — a reported
 // resignation and Contract Renewal's non-renewal handoff (contracts/
@@ -232,9 +233,9 @@ export async function decideOffboardingCase(
 // Disable" — one combined action (nothing in the spec describes an
 // intermediate gate between them). Closes (never deletes) every ACTIVE
 // Assignment as of the case's last working day, per LIF-07's "does not
-// remove historical records." GA-05's asset-return blocker cannot be
-// enforced yet — Assets (Phase 4) isn't modeled in this schema at all; see
-// the schema comment and docs/DECISIONS.md.
+// remove historical records." Phase 4A: "Only open Employee custody blocks
+// offboarding" is now a real DB-backed check (blocksOffboarding below) —
+// Department/Location custody never blocks, matching the workflow spec.
 export async function executeExitClearance(
   caseId: string,
   _prevState: string | undefined,
@@ -250,6 +251,16 @@ export async function executeExitClearance(
   if (!offboardingCase) return "Kasus tidak ditemukan.";
   if (!canExecuteExitClearanceStatus(offboardingCase.status)) {
     return "Kasus ini belum disetujui atau sudah selesai diproses.";
+  }
+
+  const openEmployeeCustodies = await prisma.assetCustody.findMany({
+    where: { employeeId: offboardingCase.employeeId, status: { not: "RETURNED" } },
+    include: { asset: { select: { assetName: true, assetCode: true } } },
+  });
+  const blockingCustodies = openEmployeeCustodies.filter((c) => blocksOffboarding("EMPLOYEE", c.status));
+  if (blockingCustodies.length > 0) {
+    const assetList = blockingCustodies.map((c) => `${c.asset.assetName} (${c.asset.assetCode})`).join(", ");
+    return `Clearance keluar diblokir — masih ada aset yang belum dikembalikan: ${assetList}. GA Admin harus memproses pengembalian aset terlebih dahulu.`;
   }
 
   const clearanceNote = (formData.get("clearanceNote") as string)?.trim() || null;

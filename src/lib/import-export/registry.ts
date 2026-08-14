@@ -5,6 +5,9 @@ import * as positions from "./positions";
 import * as assignments from "./assignments";
 import * as fingerprintAttendance from "./fingerprint-attendance";
 import * as competencyMigration from "./competency-migration";
+import * as mandatoryTrainingParticipants from "./mandatory-training-participants";
+import * as trainingAttendance from "./training-attendance";
+import * as assetMaster from "./asset-master";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
 import type { Session } from "next-auth";
 
@@ -15,7 +18,10 @@ export type DatasetKey =
   | "positions"
   | "assignments"
   | "fingerprint-attendance"
-  | "competency-migration";
+  | "competency-migration"
+  | "mandatory-training-participants"
+  | "training-attendance"
+  | "asset-master";
 
 export interface DatasetModule {
   label: string;
@@ -37,6 +43,9 @@ export const DATASET_REGISTRY: Record<DatasetKey, DatasetModule> = {
   assignments: assignments as DatasetModule,
   "fingerprint-attendance": fingerprintAttendance as DatasetModule,
   "competency-migration": competencyMigration as DatasetModule,
+  "mandatory-training-participants": mandatoryTrainingParticipants as DatasetModule,
+  "training-attendance": trainingAttendance as DatasetModule,
+  "asset-master": assetMaster as DatasetModule,
 };
 
 export function isDatasetKey(value: string): value is DatasetKey {

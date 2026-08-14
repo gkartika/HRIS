@@ -36,6 +36,18 @@ export default async function DashboardPage() {
     const positions = await prisma.position.count({ where: { positionStatus: "FILLED" } });
     cards.push({ label: "Posisi Terisi", value: positions });
   }
+  if (isGaAdmin(session)) {
+    const [totalAssets, inUseAssets, activeCustodies, underRepair] = await Promise.all([
+      prisma.fixedAsset.count({ where: { activeFlag: true } }),
+      prisma.fixedAsset.count({ where: { activeFlag: true, status: "IN_USE" } }),
+      prisma.assetCustody.count({ where: { status: "ACTIVE" } }),
+      prisma.fixedAsset.count({ where: { activeFlag: true, status: "UNDER_REPAIR" } }),
+    ]);
+    cards.push({ label: "Total Aset Aktif", value: totalAssets });
+    cards.push({ label: "Sedang Digunakan", value: inUseAssets });
+    cards.push({ label: "Total Penguasaan Aktif", value: activeCustodies });
+    cards.push({ label: "Dalam Perbaikan", value: underRepair });
+  }
   if (session.user.employeeId) {
     const employee = await prisma.employee.findUnique({
       where: { id: session.user.employeeId },

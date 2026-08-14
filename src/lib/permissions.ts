@@ -26,8 +26,12 @@ export function canListEmployees(session: Session): boolean {
 
 export function canAccessImport(session: Session): boolean {
   // Recruitment/employee import ownership sits with the People & Payroll (HR)
-  // admin per the Data Fields Blueprint's Primary Owner column.
-  return isHrAdmin(session);
+  // admin per the Data Fields Blueprint's Primary Owner column — Training
+  // Admin and GA Admin are admitted too, solely for their own scoped
+  // dataset entries (mandatory-training-participants/training-attendance,
+  // asset-master respectively); the hub page itself filters which upload
+  // forms each role actually sees.
+  return isHrAdmin(session) || isTrainingAdmin(session) || isGaAdmin(session);
 }
 
 export function canAccessAuditLog(session: Session): boolean {
@@ -190,9 +194,6 @@ export function canMarkOnboardingContract(session: Session): boolean {
 }
 export function canMarkOnboardingTraining(session: Session): boolean {
   return isHrAdmin(session) || isTrainingAdmin(session);
-}
-export function canMarkOnboardingAssets(session: Session): boolean {
-  return isHrAdmin(session) || isGaAdmin(session);
 }
 
 // Data Fields Blueprint "08 Contracts": Visibility "Self + People Admin" —
@@ -639,6 +640,18 @@ export function canRunCompetencyHistoricalMigration(session: Session): boolean {
   return isHrAdmin(session);
 }
 
+// Phase 3B "Provide import preview for mandatory participant lists and
+// in-person attendance" — Training Admin owns both, same
+// isTrainingAdmin-or-isHrAdmin shape as every other Training-domain write
+// predicate (canManageTrainingCourse, canManageMandatoryTrainingRule, etc.).
+export function canImportMandatoryTrainingParticipants(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+export function canImportTrainingAttendance(session: Session): boolean {
+  return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
 // ---------- Phase 3A: Training (TRN-02/09/10/13, ACC-22/23) ----------
 
 // TRN-09/ACC-22: "An Employee may submit a request for self, and a Level 3
@@ -681,6 +694,47 @@ export function canManageTrainingCourse(session: Session): boolean {
 
 export function canManageLearningAssignment(session: Session): boolean {
   return isTrainingAdmin(session) || isHrAdmin(session);
+}
+
+// ---------- Phase 3B: Learning Library / LMS ----------
+
+// Key Control "Employee sees only their own learning" — a quiz attempt is
+// always taken by the exact assigned Employee, never on their behalf by a
+// manager or admin (server-side scoring still applies regardless of who
+// clicks submit, but only the learner is allowed to).
+export function canTakeQuiz(session: Session, assignmentEmployeeId: string): boolean {
+  return !!session.user.employeeId && session.user.employeeId === assignmentEmployeeId;
+}
+
+// Key Control "Role-scoped confidentiality": Employee sees only their own
+// learning; a manager sees only employees within their authority (direct
+// report or Level-3 department scope, resolved by the caller the same way
+// every other manager-scoped view in this app is); Training/HR Admin see
+// everything; HR Manager gets the same access for its own dedicated
+// company-wide *read-only* reporting view (ACC-15-style persona, distinct
+// from the operational Training Admin workspace).
+export function canViewLearningAssignment(
+  session: Session,
+  employeeId: string,
+  isManagerOfEmployee: boolean,
+  activeHrManagerPositionIds: string[]
+): boolean {
+  return (
+    isHrAdmin(session) ||
+    isTrainingAdmin(session) ||
+    session.user.employeeId === employeeId ||
+    isManagerOfEmployee ||
+    isHrManager(activeHrManagerPositionIds)
+  );
+}
+
+// ACC-15-style: HR Manager's personal company-wide LMS reporting is
+// read-only (no course/assignment/attendance/certificate management —
+// that stays Training-Admin-only per Key Control "Training Admin owns
+// content"), gated on the same live-resolved HR Manager Position Assignment
+// as the rest of that persona's workspace.
+export function canViewCompanyWideLmsReporting(session: Session, activeHrManagerPositionIds: string[]): boolean {
+  return isHrAdmin(session) || isTrainingAdmin(session) || isHrManager(activeHrManagerPositionIds);
 }
 
 // TRN-04: "the Primary Position supervisor completes it [the effectiveness
@@ -800,4 +854,33 @@ export function projectEmployee(
   delete result.personalEmail;
   delete result.mobileNumber;
   return result;
+}
+
+// ---------- Phase 4A: Employee Assets ----------
+// Access boundary, explicit in the workflow spec: "GA Admin operates asset
+// records... HR Admin receives only onboarding/offboarding completion or
+// blocker status and cannot create, assign, return or edit GA records." So
+// unlike almost every other domain in this app, HR Admin is deliberately
+// NOT included in any of these — GA Admin only.
+
+export function canManageAssets(session: Session): boolean {
+  return isGaAdmin(session);
+}
+
+// Same predicate today (both are GA-Admin-only), kept as a separate name
+// since "who may browse the Asset Master/custody records" and "who may
+// mutate them" are conceptually distinct questions even though this build
+// answers them identically.
+export function canViewAssetMaster(session: Session): boolean {
+  return isGaAdmin(session);
+}
+
+export function canImportAssetMaster(session: Session): boolean {
+  return isGaAdmin(session);
+}
+
+// Employee sees only their own assets (never another employee's, never a
+// Department/Location custody record).
+export function canViewOwnAssetCustody(session: Session, custodyEmployeeId: string | null): boolean {
+  return !!session.user.employeeId && session.user.employeeId === custodyEmployeeId;
 }

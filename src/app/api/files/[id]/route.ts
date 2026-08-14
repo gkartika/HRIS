@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { readPrivateFile } from "@/lib/file-storage";
 import { logAudit } from "@/lib/audit";
-import { isHrAdmin, canViewEmployeeDocument, canViewAbsenceRequest } from "@/lib/permissions";
+import { isHrAdmin, isTrainingAdmin, isGaAdmin, canViewEmployeeDocument, canViewAbsenceRequest } from "@/lib/permissions";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 
@@ -38,6 +38,37 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       canView = canViewAbsenceRequest(session, file.employeeId, isLevel3, holderIds);
     }
   }
+  // Phase 3B: course materials have no `employeeId` (they're not
+  // employee-specific), so the base branch above only ever admits HR Admin
+  // for them — widen to Training Admin (Key Control "Training Admin owns
+  // content") and any Employee currently enrolled in the material's course.
+  if (!canView && file.category === "COURSE_MATERIAL") {
+    canView = isTrainingAdmin(session);
+    if (!canView && session.user.employeeId) {
+      const material = await prisma.courseMaterial.findFirst({ where: { fileId: file.id } });
+      if (material) {
+        const enrollment = await prisma.learningAssignment.findFirst({
+          where: { courseId: material.courseId, employeeId: session.user.employeeId, status: { not: "CANCELLED" } },
+        });
+        canView = !!enrollment;
+      }
+    }
+  }
+  // A Certificate or in-person Attendance Evidence file is owned by the
+  // learner it's attached to (`file.employeeId`), but must also be reachable
+  // by Training Admin — same widening reason as ABSENCE_ATTACHMENT above.
+  if (!canView && (file.category === "CERTIFICATE" || file.category === "ATTENDANCE_EVIDENCE") && file.employeeId) {
+    canView = isTrainingAdmin(session) || session.user.employeeId === file.employeeId;
+  }
+  // Phase 4A: handover/return evidence is attached to the Employee for an
+  // Employee-target custody (self-view alongside GA Admin), but has no
+  // employeeId at all for a Department/Location-target custody — GA Admin
+  // still needs to reach those, so this check doesn't require file.employeeId
+  // the way ABSENCE_ATTACHMENT/CERTIFICATE's widening does.
+  if (!canView && (file.category === "ASSET_HANDOVER_EVIDENCE" || file.category === "ASSET_RETURN_EVIDENCE")) {
+    canView = isGaAdmin(session) || (!!file.employeeId && session.user.employeeId === file.employeeId);
+  }
+
   if (!canView) {
     await logAudit({
       actorAccountId: session.user.id,

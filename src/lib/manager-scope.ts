@@ -30,6 +30,25 @@ export async function isDirectManagerOfEmployee(
   return targetPosition?.reportsToPositionId === manager.currentPositionId;
 }
 
+// Phase 3B "Manager sees employees within their authority" — direct reports
+// only (one level), same granularity as isDirectManagerOfEmployee above,
+// not a full transitive org-tree walk.
+export async function getDirectReportEmployeeIds(managerEmployeeId: string | null | undefined): Promise<string[]> {
+  if (!managerEmployeeId) return [];
+
+  const manager = await prisma.employee.findUnique({
+    where: { id: managerEmployeeId },
+    select: { currentPositionId: true },
+  });
+  if (!manager?.currentPositionId) return [];
+
+  const reports = await prisma.employee.findMany({
+    where: { activeFlag: true, currentPosition: { reportsToPositionId: manager.currentPositionId } },
+    select: { id: true },
+  });
+  return reports.map((r) => r.id);
+}
+
 export interface SupervisorCandidate {
   employeeId: string;
   positionId: string;

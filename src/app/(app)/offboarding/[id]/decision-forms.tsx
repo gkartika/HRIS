@@ -96,7 +96,6 @@ export function ExecuteExitClearanceForm({ caseId }: { caseId: string }) {
   return (
     <form action={formAction} className="space-y-3 rounded-xl border border-slate-200 bg-white p-6">
       <p className="text-sm font-medium text-slate-900">{t("offboarding.clearanceTitle")}</p>
-      <p className="text-xs text-amber-700">{t("offboarding.clearanceAssetNotice")}</p>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("offboarding.clearanceNote")}</label>
         <textarea name="clearanceNote" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />

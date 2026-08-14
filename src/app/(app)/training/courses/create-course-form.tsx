@@ -26,6 +26,18 @@ export function CreateCourseForm() {
         <input name="deliveryMethod" placeholder="Tatap Muka / Daring" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div>
+        <label className="mb-1 block text-xs text-slate-500">Mode Pelatihan</label>
+        <select name="mode" defaultValue="ONLINE" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <option value="ONLINE">Daring (Online)</option>
+          <option value="IN_PERSON">Tatap Muka (In-person)</option>
+          <option value="BLENDED">Campuran (Blended)</option>
+        </select>
+      </div>
+      <div className="md:col-span-3">
+        <label className="mb-1 block text-xs text-slate-500">Tujuan Pembelajaran</label>
+        <textarea name="objectives" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      </div>
+      <div>
         <label className="mb-1 block text-xs text-slate-500">Estimasi Biaya</label>
         <input name="plannedCost" type="number" step="0.01" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
@@ -48,6 +60,12 @@ export function CreateCourseForm() {
         <input id="effectivenessRequired" name="effectivenessRequired" type="checkbox" />
         <label htmlFor="effectivenessRequired" className="text-xs text-slate-600">
           Perlu Evaluasi Efektivitas
+        </label>
+      </div>
+      <div className="flex items-center gap-2">
+        <input id="isOnboardingRequired" name="isOnboardingRequired" type="checkbox" />
+        <label htmlFor="isOnboardingRequired" className="text-xs text-slate-600">
+          Wajib untuk Onboarding
         </label>
       </div>
       <div className="flex items-end">

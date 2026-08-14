@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
-import { canAccessImport } from "@/lib/permissions";
+import {
+  canAccessImport,
+  canImportMandatoryTrainingParticipants,
+  canImportTrainingAttendance,
+  canImportAssetMaster,
+} from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { UploadForm } from "./upload-form";
@@ -16,7 +21,20 @@ const DATASET_ORDER: DatasetKey[] = [
   "assignments",
   "fingerprint-attendance",
   "competency-migration",
+  "mandatory-training-participants",
+  "training-attendance",
+  "asset-master",
 ];
+
+// The 7 HR-domain datasets above are all HR-Admin-only (every existing
+// canAccessDataset/canImportDataset branch for them resolves to
+// isHrAdmin); the two Phase 3B Training datasets admit Training Admin too,
+// and Phase 4A's asset-master is GA-Admin-only (never HR Admin, per the
+// access boundary — see feedback_widening_access_gates memory: canAccessImport
+// widens the whole hub page to Training/GA Admin, so this filter keeps
+// either from seeing upload forms they can't actually submit).
+const TRAINING_DATASETS: DatasetKey[] = ["mandatory-training-participants", "training-attendance"];
+const GA_DATASETS: DatasetKey[] = ["asset-master"];
 
 export default async function ImportPage() {
   const session = await requireSession();
@@ -24,7 +42,14 @@ export default async function ImportPage() {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
+  const visibleDatasets = DATASET_ORDER.filter((key) => {
+    if (TRAINING_DATASETS.includes(key)) return canImportMandatoryTrainingParticipants(session) || canImportTrainingAttendance(session);
+    if (GA_DATASETS.includes(key)) return canImportAssetMaster(session);
+    return isHrAdmin(session);
+  });
+
   const batches = await prisma.importBatch.findMany({
+    where: isHrAdmin(session) ? {} : { importType: { in: visibleDatasets } },
     orderBy: { uploadedAt: "desc" },
     take: 20,
   });
@@ -38,7 +63,7 @@ export default async function ImportPage() {
       </p>
 
       <div className="mt-4 space-y-3">
-        {DATASET_ORDER.map((key) => (
+        {visibleDatasets.map((key) => (
           <UploadForm key={key} dataset={key} label={DATASET_REGISTRY[key].label} />
         ))}
         {isHrAdmin(session) && <EmployeeDocumentsZipForm />}

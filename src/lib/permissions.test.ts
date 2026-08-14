@@ -17,7 +17,6 @@ import {
   canViewOnboarding,
   canMarkOnboardingContract,
   canMarkOnboardingTraining,
-  canMarkOnboardingAssets,
   canViewContract,
   canManageContracts,
   canApproveContractRelease,
@@ -53,6 +52,13 @@ import {
   canRecordLearningEffectiveness,
   canManageMandatoryTrainingRule,
   canViewTrainingRequest,
+  canTakeQuiz,
+  canViewLearningAssignment,
+  canViewCompanyWideLmsReporting,
+  canManageAssets,
+  canViewAssetMaster,
+  canImportAssetMaster,
+  canViewOwnAssetCustody,
   projectEmployee,
 } from "./permissions";
 
@@ -251,9 +257,6 @@ describe("Onboarding visibility and completion ownership (LIF-03)", () => {
     expect(canMarkOnboardingTraining(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
     expect(canMarkOnboardingTraining(mockSession({ roles: ["GA_ADMIN"] }))).toBe(false);
     expect(canMarkOnboardingTraining(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
-    expect(canMarkOnboardingAssets(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
-    expect(canMarkOnboardingAssets(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
-    expect(canMarkOnboardingAssets(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
   });
 });
 
@@ -591,5 +594,52 @@ describe("canViewTrainingRequest (TRN-02/ACC-22)", () => {
     expect(
       canViewTrainingRequest(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", "account-x", [])
     ).toBe(false);
+  });
+});
+
+describe("canTakeQuiz", () => {
+  it("only the exact assigned employee, never a manager or admin on their behalf", () => {
+    expect(canTakeQuiz(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
+    expect(canTakeQuiz(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
+    expect(canTakeQuiz(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(false);
+  });
+});
+
+describe("canViewLearningAssignment (Phase 3B role-scoped confidentiality)", () => {
+  it("allows HR Admin, Training Admin, the employee themself, their manager, or an active HR Manager", () => {
+    expect(canViewLearningAssignment(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", false, [])).toBe(true);
+    expect(canViewLearningAssignment(mockSession({ roles: ["TRAINING_ADMIN"] }), "emp-1", false, [])).toBe(true);
+    expect(canViewLearningAssignment(mockSession({ employeeId: "emp-1" }), "emp-1", false, [])).toBe(true);
+    expect(canViewLearningAssignment(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", true, [])).toBe(true);
+    expect(canViewLearningAssignment(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", false, ["pos-hr-manager"])).toBe(true);
+  });
+
+  it("denies a bystander", () => {
+    expect(canViewLearningAssignment(mockSession({ employeeId: "bystander-1" }), "emp-1", false, [])).toBe(false);
+  });
+});
+
+describe("canViewCompanyWideLmsReporting", () => {
+  it("HR Admin, Training Admin, or an active HR Manager — never a plain employee", () => {
+    expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["HR_ADMIN"] }), [])).toBe(true);
+    expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["TRAINING_ADMIN"] }), [])).toBe(true);
+    expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["EMPLOYEE"] }), ["pos-hr-manager"])).toBe(true);
+    expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["EMPLOYEE"] }), [])).toBe(false);
+  });
+});
+
+describe("Phase 4A asset permissions — GA Admin only, never HR Admin", () => {
+  it("canManageAssets/canViewAssetMaster/canImportAssetMaster are GA Admin only", () => {
+    for (const fn of [canManageAssets, canViewAssetMaster, canImportAssetMaster]) {
+      expect(fn(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
+      expect(fn(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
+      expect(fn(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+    }
+  });
+
+  it("canViewOwnAssetCustody: only the exact custody employee, never GA/HR Admin", () => {
+    expect(canViewOwnAssetCustody(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
+    expect(canViewOwnAssetCustody(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
+    expect(canViewOwnAssetCustody(mockSession({ roles: ["GA_ADMIN"] }), "emp-1")).toBe(false);
   });
 });

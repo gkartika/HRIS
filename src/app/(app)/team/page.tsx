@@ -53,7 +53,7 @@ export default async function TeamPage() {
                     href={`/employees/${holder.id}`}
                     className="block text-sm text-indigo-600 hover:underline"
                   >
-                    {holder.preferredName ?? holder.fullLegalName}
+                    {holder.fullLegalName}
                   </Link>
                 ))
               )}

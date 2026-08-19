@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import {
-  isHrAdmin,
   isTrainingAdmin,
   canViewTrainingRequest,
   canDecideTrainingRequestAsDeptHead,
@@ -31,7 +30,7 @@ export default async function TrainingRequestDetailPage({ params }: { params: Pr
   const request = await prisma.trainingRequest.findUnique({
     where: { id },
     include: {
-      employee: { select: { fullLegalName: true, preferredName: true, employeeNumber: true } },
+      employee: { select: { fullLegalName: true, employeeNumber: true } },
       departmentSnapshot: { select: { unitName: true } },
       course: true,
       session: true,
@@ -55,7 +54,7 @@ export default async function TrainingRequestDetailPage({ params }: { params: Pr
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const isAdmin = isHrAdmin(session) || isTrainingAdmin(session);
+  const isAdmin = isTrainingAdmin(session);
   const canDecideDeptHead =
     canDecideTrainingRequestAsDeptHead(deptHeadPositions.map((p) => p.positionId)) && canDeptHeadDecideTrainingRequest(request.status);
   const canValidate = canValidateTrainingRequest(session) && canTrainingAdminValidateTrainingRequest(request.status);
@@ -72,7 +71,7 @@ export default async function TrainingRequestDetailPage({ params }: { params: Pr
   return (
     <div>
       <h1 className="text-lg font-medium text-slate-900">
-        {request.requestNumber} — {request.employee.preferredName ?? request.employee.fullLegalName}
+        {request.requestNumber} — {request.employee.fullLegalName}
       </h1>
       <p className="mt-1 text-sm text-slate-500">
         {request.employee.employeeNumber} · {request.departmentSnapshot?.unitName ?? "—"}

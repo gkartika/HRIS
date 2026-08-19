@@ -56,10 +56,10 @@ export default async function EvaluationDetailPage({ params }: { params: Promise
               {t("evaluation.employee")}:{" "}
               {isHrAdminUser ? (
                 <Link href={`/employees/${evaluation.employeeId}`} className="text-indigo-600 hover:underline">
-                  {evaluation.employee.preferredName ?? evaluation.employee.fullLegalName}
+                  {evaluation.employee.fullLegalName}
                 </Link>
               ) : (
-                evaluation.employee.preferredName ?? evaluation.employee.fullLegalName
+                evaluation.employee.fullLegalName
               )}
             </p>
             <p className="mt-1 text-xs text-slate-400">

@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       ...(status ? { status: status as never } : {}),
       ...(absenceType ? { absenceType: absenceType as never } : {}),
     },
-    include: { employee: { select: { employeeNumber: true, fullLegalName: true, preferredName: true } } },
+    include: { employee: { select: { employeeNumber: true, fullLegalName: true } } },
     orderBy: { submittedAt: "desc" },
   });
 
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     requests.map((r) => ({
       requestNumber: r.requestNumber,
       employeeNumber: r.employee.employeeNumber,
-      name: r.employee.preferredName ?? r.employee.fullLegalName,
+      name: r.employee.fullLegalName,
       absenceType: t(`absenceType.${r.absenceType}`),
       startDate: r.startDate.toISOString().slice(0, 10),
       endDate: r.endDate.toISOString().slice(0, 10),

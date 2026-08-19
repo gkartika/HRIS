@@ -91,7 +91,7 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
     return {
       employeeId: employee.id,
       employeeNumber: employee.employeeNumber,
-      name: employee.preferredName ?? employee.fullLegalName,
+      name: employee.fullLegalName,
       departmentName: employee.currentPosition?.orgUnit.unitName ?? "—",
       hasAssignment: !!assignment,
       method: assignment?.method ?? null,

@@ -5,12 +5,15 @@ import { canViewAssetMaster, canManageAssets } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
 import { AssignForms } from "./assign-forms";
 import { CustodyActions } from "./custody-actions";
+import { MarkObsoleteForm } from "./mark-obsolete-form";
 
 const STATUS_TONE: Record<string, string> = {
   AVAILABLE: "bg-emerald-50 text-emerald-700",
   IN_USE: "bg-indigo-50 text-indigo-700",
   UNDER_REPAIR: "bg-amber-50 text-amber-700",
   DISPOSED: "bg-slate-100 text-slate-500",
+  LOST_PENDING_REVIEW: "bg-rose-50 text-rose-700",
+  RETIRED: "bg-slate-100 text-slate-500",
 };
 
 const CUSTODY_STATUS_TONE: Record<string, string> = {
@@ -20,11 +23,11 @@ const CUSTODY_STATUS_TONE: Record<string, string> = {
 
 function custodyTargetLabel(c: {
   targetType: string;
-  employee: { employeeNumber: string; fullLegalName: string; preferredName: string | null } | null;
+  employee: { employeeNumber: string; fullLegalName: string } | null;
   orgUnit: { unitName: string } | null;
   location: { locationName: string } | null;
 }): string {
-  if (c.targetType === "EMPLOYEE" && c.employee) return `${c.employee.employeeNumber} — ${c.employee.preferredName ?? c.employee.fullLegalName}`;
+  if (c.targetType === "EMPLOYEE" && c.employee) return `${c.employee.employeeNumber} — ${c.employee.fullLegalName}`;
   if (c.targetType === "DEPARTMENT" && c.orgUnit) return c.orgUnit.unitName;
   if (c.targetType === "LOCATION" && c.location) return c.location.locationName;
   return "—";
@@ -43,7 +46,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
       custodies: {
         orderBy: { assignedAt: "desc" },
         include: {
-          employee: { select: { employeeNumber: true, fullLegalName: true, preferredName: true } },
+          employee: { select: { employeeNumber: true, fullLegalName: true } },
           orgUnit: { select: { unitName: true } },
           location: { select: { locationName: true } },
         },
@@ -54,12 +57,15 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
 
   const canManage = canManageAssets(session);
   const openCustodies = asset.custodies.filter((c) => c.status !== "RETURNED");
+  const openDisposalCase = canManage
+    ? await prisma.disposalCase.findFirst({ where: { assetId: asset.id, status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } } })
+    : null;
   const canAssignMore =
     asset.trackingType === "QUANTITY_TRACKED"
       ? (asset.availableQuantity ?? 0) > 0
       : asset.status === "AVAILABLE" && openCustodies.length === 0;
 
-  let employees: { id: string; employeeNumber: string; fullLegalName: string; preferredName: string | null }[] = [];
+  let employees: { id: string; employeeNumber: string; fullLegalName: string }[] = [];
   let orgUnits: { id: string; unitName: string }[] = [];
   let locations: { id: string; locationName: string }[] = [];
   if (canManage) {
@@ -67,7 +73,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
       prisma.employee.findMany({
         where: { activeFlag: true },
         orderBy: { fullLegalName: "asc" },
-        select: { id: true, employeeNumber: true, fullLegalName: true, preferredName: true },
+        select: { id: true, employeeNumber: true, fullLegalName: true },
       }),
       prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
       prisma.assetLocation.findMany({ where: { activeFlag: true }, orderBy: { locationName: "asc" } }),
@@ -91,6 +97,12 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
           </p>
           {asset.notes && <p className="mt-1 text-xs text-slate-500">{asset.notes}</p>}
         </div>
+        {canManage && asset.status !== "RETIRED" && !openDisposalCase && <MarkObsoleteForm assetId={asset.id} />}
+        {openDisposalCase && (
+          <a href={`/disposal-cases/${openDisposalCase.id}`} className="text-xs text-indigo-600 hover:underline">
+            Kasus Disposal {openDisposalCase.caseNumber}
+          </a>
+        )}
       </div>
 
       <h2 className="mt-6 text-sm font-medium text-slate-900">{t("asset.currentCustodyTitle")}</h2>

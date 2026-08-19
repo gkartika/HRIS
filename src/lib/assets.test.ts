@@ -21,6 +21,8 @@ describe("isAssetAvailableForIndividualAssignment", () => {
     expect(isAssetAvailableForIndividualAssignment("IN_USE")).toBe(false);
     expect(isAssetAvailableForIndividualAssignment("UNDER_REPAIR")).toBe(false);
     expect(isAssetAvailableForIndividualAssignment("DISPOSED")).toBe(false);
+    expect(isAssetAvailableForIndividualAssignment("LOST_PENDING_REVIEW")).toBe(false);
+    expect(isAssetAvailableForIndividualAssignment("RETIRED")).toBe(false);
   });
 });
 

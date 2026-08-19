@@ -178,7 +178,7 @@ export default async function MovementListPage({
             <option value="">{t("common.allOption")}</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+                {e.fullLegalName} ({e.employeeNumber})
               </option>
             ))}
           </select>
@@ -244,7 +244,7 @@ export default async function MovementListPage({
             <option value="">{t("common.allOption")}</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+                {e.fullLegalName} ({e.employeeNumber})
               </option>
             ))}
           </select>
@@ -305,7 +305,7 @@ export default async function MovementListPage({
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {r.employee.preferredName ?? r.employee.fullLegalName}
+                    {r.employee.fullLegalName}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{t(`movementType.${r.movementType}`)}</td>
                   <td className="px-4 py-3 text-slate-600">

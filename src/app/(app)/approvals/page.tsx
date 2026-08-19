@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
+import { canDecideAsConfiguredGaApprover } from "@/lib/permissions";
+import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 
@@ -36,9 +38,60 @@ export default async function ApprovalsPage() {
     orderBy: { releasedAt: "asc" },
   });
 
-  if (hrManagerPositions.length === 0 && deptHeadDepartmentIds.length === 0 && pendingOwnEvaluations.length === 0) {
+  // Phase 4B: GA Operations approvals (New Asset Need / Loss Review /
+  // Disposal) are each gated on "current holder of the GaApprovalConfig'd
+  // Position" — same widening reason as pendingOwnEvaluations above, since
+  // an employee who ONLY holds one of these three GA approval Positions
+  // (and is neither HR Manager nor Dept Head) would otherwise have no
+  // notification surface at all.
+  const [newAssetNeedConfig, lossReviewConfig, disposalConfig] = await Promise.all([
+    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "NEW_ASSET_NEED" } }),
+    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "LOSS_REVIEW" } }),
+    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "DISPOSAL" } }),
+  ]);
+  const [newAssetNeedHolderIds, lossReviewHolderIds, disposalHolderIds] = await Promise.all([
+    getCurrentHolderEmployeeIds(newAssetNeedConfig?.approverPositionId ?? null),
+    getCurrentHolderEmployeeIds(lossReviewConfig?.approverPositionId ?? null),
+    getCurrentHolderEmployeeIds(disposalConfig?.approverPositionId ?? null),
+  ]);
+  const isNewAssetNeedApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, newAssetNeedHolderIds);
+  const isLossReviewApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, lossReviewHolderIds);
+  const isDisposalApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, disposalHolderIds);
+
+  if (
+    hrManagerPositions.length === 0 &&
+    deptHeadDepartmentIds.length === 0 &&
+    pendingOwnEvaluations.length === 0 &&
+    !isNewAssetNeedApprover &&
+    !isLossReviewApprover &&
+    !isDisposalApprover
+  ) {
     return <p className="text-sm text-rose-600">{t("hrManagerUi.notHrManager")}</p>;
   }
+
+  const [pendingGaNewAssetNeeds, pendingGaLossReviews, pendingGaDisposals] = await Promise.all([
+    isNewAssetNeedApprover
+      ? prisma.gaRequest.findMany({
+          where: { status: "PENDING_APPROVAL" },
+          include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
+          orderBy: { verifiedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    isLossReviewApprover
+      ? prisma.gaRequest.findMany({
+          where: { status: "PENDING_LOSS_REVIEW" },
+          include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
+          orderBy: { verifiedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    isDisposalApprover
+      ? prisma.disposalCase.findMany({
+          where: { status: "PENDING_APPROVAL" },
+          include: { asset: { select: { assetCode: true, assetName: true } } },
+          orderBy: { submittedForApprovalAt: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const [
     pendingRequests,
@@ -520,6 +573,110 @@ export default async function ApprovalsPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-600">{c.employee.fullLegalName}</td>
                       <td className="px-4 py-3 text-slate-600">{t(`offboardingReason.${c.reason}`)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isNewAssetNeedApprover && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">GA Operations — Kebutuhan Aset Baru</h2>
+          {pendingGaNewAssetNeeds.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">No.</th>
+                    <th className="px-4 py-3 font-medium">Pemohon</th>
+                    <th className="px-4 py-3 font-medium">Deskripsi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingGaNewAssetNeeds.map((r) => (
+                    <tr key={r.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/ga-requests/${r.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {r.requestNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{r.requester.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{r.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isLossReviewApprover && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">GA Operations — Peninjauan Kehilangan</h2>
+          {pendingGaLossReviews.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">No.</th>
+                    <th className="px-4 py-3 font-medium">Pemohon</th>
+                    <th className="px-4 py-3 font-medium">Aset</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingGaLossReviews.map((r) => (
+                    <tr key={r.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/ga-requests/${r.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {r.requestNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{r.requester.fullLegalName}</td>
+                      <td className="px-4 py-3 text-slate-600">{r.asset ? `${r.asset.assetName} (${r.asset.assetCode})` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isDisposalApprover && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-slate-700">GA Operations — Persetujuan Akhir Disposal</h2>
+          {pendingGaDisposals.length === 0 ? (
+            <p className="text-sm text-slate-400">{t("hrManagerUi.approvalInboxEmpty")}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">No.</th>
+                    <th className="px-4 py-3 font-medium">Aset</th>
+                    <th className="px-4 py-3 font-medium">Alasan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingGaDisposals.map((c) => (
+                    <tr key={c.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">
+                        <Link href={`/disposal-cases/${c.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          {c.caseNumber}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {c.asset.assetName} ({c.asset.assetCode})
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{c.reason}</td>
                     </tr>
                   ))}
                 </tbody>

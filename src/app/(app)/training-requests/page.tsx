@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin, isTrainingAdmin } from "@/lib/permissions";
+import { isTrainingAdmin } from "@/lib/permissions";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
@@ -20,7 +20,7 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
   const session = await requireSession();
   const { status, q } = await searchParams;
 
-  const isAdmin = isHrAdmin(session) || isTrainingAdmin(session);
+  const isAdmin = isTrainingAdmin(session);
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
 
   if (!session.user.employeeId && !isAdmin) {
@@ -56,7 +56,7 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
 
   const requests = await prisma.trainingRequest.findMany({
     where,
-    include: { employee: { select: { fullLegalName: true, preferredName: true, employeeNumber: true } }, course: { select: { title: true } } },
+    include: { employee: { select: { fullLegalName: true, employeeNumber: true } }, course: { select: { title: true } } },
     orderBy: { createdAt: "desc" },
     take: 100,
   });
@@ -131,7 +131,7 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
               <tr key={r.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-mono text-xs">{r.requestNumber}</td>
                 <td className="px-4 py-3">
-                  <p className="text-slate-900">{r.employee.preferredName ?? r.employee.fullLegalName}</p>
+                  <p className="text-slate-900">{r.employee.fullLegalName}</p>
                   <p className="text-xs text-slate-400">{r.employee.employeeNumber}</p>
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">{r.requestedTopic}</td>

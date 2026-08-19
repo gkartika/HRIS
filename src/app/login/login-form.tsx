@@ -8,9 +8,11 @@ const DEMO_ACCOUNTS = [
   { role: "roles.HR_ADMIN", user: "hr.admin@cbp.demo" },
   { role: "roles.TRAINING_ADMIN", user: "training.admin@cbp.demo" },
   { role: "roles.GA_ADMIN", user: "ga.admin@cbp.demo" },
-  { role: "roles.MANAGER", user: "budi.manager@cbp.demo" },
-  { role: "roles.EMPLOYEE", user: "siti.karyawan@cbp.demo" },
-  { role: "roles.HR_MANAGER", user: "made.wirawan@cbp.demo" },
+  { role: "roles.HR_MANAGER", user: "hr.manager@cbp.demo" },
+  { role: "roles.DEPT_HEAD", user: "depthead.production@cbp.demo" },
+  { role: "roles.LEVEL_3", user: "level3.production@cbp.demo" },
+  { role: "roles.LEVEL_2", user: "level2.production@cbp.demo" },
+  { role: "roles.EMPLOYEE", user: "level1.production@cbp.demo" },
 ];
 
 const DEMO_PASSWORD = "Demo12345!";

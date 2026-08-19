@@ -27,6 +27,7 @@ import {
 } from "@/lib/offboarding";
 import type { OffboardingReason } from "@/generated/prisma/enums";
 import { blocksOffboarding } from "@/lib/assets";
+import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
 
 // LIF-06/12: the ONE shared creator for every trigger — a reported
 // resignation and Contract Renewal's non-renewal handoff (contracts/
@@ -258,9 +259,30 @@ export async function executeExitClearance(
     include: { asset: { select: { assetName: true, assetCode: true } } },
   });
   const blockingCustodies = openEmployeeCustodies.filter((c) => blocksOffboarding("EMPLOYEE", c.status));
-  if (blockingCustodies.length > 0) {
-    const assetList = blockingCustodies.map((c) => `${c.asset.assetName} (${c.asset.assetCode})`).join(", ");
-    return `Clearance keluar diblokir — masih ada aset yang belum dikembalikan: ${assetList}. GA Admin harus memproses pengembalian aset terlebih dahulu.`;
+
+  // Phase 4B: an unresolved Damage/Loss GA request the employee reported
+  // also blocks clearance — same "asset accountability isn't settled yet"
+  // reasoning as the custody check above, but catches the case where the
+  // reported asset isn't (or is no longer) in the employee's own custody.
+  const openGaRequests = await prisma.gaRequest.findMany({
+    where: { requesterEmployeeId: offboardingCase.employeeId },
+    include: { asset: { select: { assetName: true, assetCode: true } } },
+  });
+  const blockingGaRequests = openGaRequests.filter((r) => blocksOffboardingGaRequest(r.requestType, r.status));
+
+  if (blockingCustodies.length > 0 || blockingGaRequests.length > 0) {
+    const parts: string[] = [];
+    if (blockingCustodies.length > 0) {
+      const assetList = blockingCustodies.map((c) => `${c.asset.assetName} (${c.asset.assetCode})`).join(", ");
+      parts.push(`aset yang belum dikembalikan: ${assetList}`);
+    }
+    if (blockingGaRequests.length > 0) {
+      const requestList = blockingGaRequests
+        .map((r) => `${r.requestNumber}${r.asset ? ` — ${r.asset.assetName} (${r.asset.assetCode})` : ""}`)
+        .join(", ");
+      parts.push(`permintaan GA yang belum selesai: ${requestList}`);
+    }
+    return `Clearance keluar diblokir — masih ada ${parts.join("; ")}. GA Admin harus menyelesaikan ini terlebih dahulu.`;
   }
 
   const clearanceNote = (formData.get("clearanceNote") as string)?.trim() || null;

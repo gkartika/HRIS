@@ -173,7 +173,7 @@ export default async function OnboardingListPage({
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {c.employee.preferredName ?? c.employee.fullLegalName}
+                    {c.employee.fullLegalName}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {c.employee.currentPosition

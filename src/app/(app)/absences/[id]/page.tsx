@@ -36,7 +36,7 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
   const request = await prisma.absenceRequest.findUnique({
     where: { id },
     include: {
-      employee: { select: { fullLegalName: true, preferredName: true, employeeNumber: true } },
+      employee: { select: { fullLegalName: true, employeeNumber: true } },
       attachmentFile: true,
       firstApproverPosition: { include: { job: true } },
       firstDecisionByAccount: { select: { usernameOrEmail: true } },
@@ -70,7 +70,7 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
       <div>
         <h1 className="text-lg font-medium text-slate-900">{request.requestNumber}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          {request.employee.preferredName ?? request.employee.fullLegalName} ({request.employee.employeeNumber})
+          {request.employee.fullLegalName} ({request.employee.employeeNumber})
         </p>
       </div>
 

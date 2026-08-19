@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
-import { canViewOnboarding, canMarkOnboardingContract, canMarkOnboardingTraining } from "@/lib/permissions";
+import { canViewOnboarding, canMarkOnboardingContract, canMarkOnboardingTraining, canManageAssets } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getOnboardingTrainingStatusesForEmployee } from "@/lib/mandatory-training";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { computeOnboardingStatus, isOnboardingTrainingComplete, isOnboardingAssetsComplete } from "@/lib/onboarding";
 import { ContractToggle, DueDateForm } from "./toggle-buttons";
+import { AssignAssetDuringOnboardingForm } from "./assign-asset-form";
 
 const LEARNING_STATUS_LABELS: Record<string, string> = {
   ASSIGNED: "Berjalan",
@@ -55,6 +56,20 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
   });
   const assetsComplete = isOnboardingAssetsComplete(assetCustodies.map((c) => c.status));
 
+  // GA Admin can assign standard equipment to the new employee directly
+  // from this case, instead of navigating to /assets — same AVAILABLE-only
+  // filter used by the GA request "allocate" flow.
+  const canAssignAssets = canManageAssets(session);
+  const availableAssets = canAssignAssets
+    ? await prisma.fixedAsset.findMany({
+        where: {
+          activeFlag: true,
+          OR: [{ trackingType: "INDIVIDUAL", status: "AVAILABLE" }, { trackingType: "QUANTITY_TRACKED", availableQuantity: { gt: 0 } }],
+        },
+        orderBy: { assetCode: "asc" },
+      })
+    : [];
+
   const overallStatus = computeOnboardingStatus({
     contractComplete: onboardingCase.contractComplete,
     mandatoryMaterialComplete: trainingComplete,
@@ -81,7 +96,7 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
             <h1 className="font-mono text-lg font-medium text-slate-900">{onboardingCase.caseNumber}</h1>
             <p className="mt-1 text-sm text-slate-500">
               <Link href={`/employees/${onboardingCase.employeeId}`} className="text-indigo-600 hover:underline">
-                {onboardingCase.employee.preferredName ?? onboardingCase.employee.fullLegalName}
+                {onboardingCase.employee.fullLegalName}
               </Link>{" "}
               ({onboardingCase.employee.employeeNumber}) —{" "}
               {onboardingCase.employee.currentPosition
@@ -177,6 +192,18 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
                   </li>
                 ))}
               </ul>
+            )}
+            {canAssignAssets && (
+              <AssignAssetDuringOnboardingForm
+                caseId={onboardingCase.id}
+                employeeId={onboardingCase.employeeId}
+                assets={availableAssets.map((a) => ({
+                  id: a.id,
+                  label: `${a.assetCode} — ${a.assetName}`,
+                  trackingType: a.trackingType,
+                  availableQuantity: a.availableQuantity,
+                }))}
+              />
             )}
           </div>
         </div>

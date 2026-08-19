@@ -9,7 +9,6 @@ export const label = "Karyawan (Employee)";
 export const templateHeaders = [
   "employeeNumber",
   "fullLegalName",
-  "preferredName",
   "gender",
   "workEmail",
   "mobileNumber",
@@ -23,7 +22,6 @@ export const templateHeaders = [
 export const templateExampleRow = {
   employeeNumber: "CBP-0099",
   fullLegalName: "Nama Contoh",
-  preferredName: "Contoh",
   gender: "MALE",
   workEmail: "contoh@cbp.demo",
   mobileNumber: "0812-0000-0000",
@@ -112,7 +110,6 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
 
   const data = {
     fullLegalName: raw.fullLegalName.trim(),
-    preferredName: raw.preferredName?.trim() || null,
     gender: genderRaw ? (genderRaw as Gender) : null,
     workEmail: raw.workEmail?.trim() || null,
     mobileNumber: raw.mobileNumber?.trim() || null,
@@ -148,7 +145,6 @@ export async function exportData(session: Session): Promise<ExportResult> {
     return {
       employeeNumber: projected.employeeNumber ?? "",
       fullLegalName: projected.fullLegalName ?? "",
-      preferredName: projected.preferredName ?? "",
       gender: projected.gender ?? "",
       workEmail: projected.workEmail ?? "",
       mobileNumber: projected.mobileNumber ?? "",

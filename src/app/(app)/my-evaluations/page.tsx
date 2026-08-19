@@ -56,7 +56,7 @@ export default async function MyEvaluationsPage() {
                       {e.evaluationNumber}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{e.employee.preferredName ?? e.employee.fullLegalName}</td>
+                  <td className="px-4 py-3 text-slate-600">{e.employee.fullLegalName}</td>
                   <td className="px-4 py-3 text-slate-600">{t(`evaluationPurpose.${e.purpose}`)}</td>
                   <td className="px-4 py-3 text-slate-600">{e.p1EmployeeId === employeeId ? "P1" : "P2"}</td>
                   <td className="px-4 py-3 text-slate-600">{formatDate(e.evaluationDueDate)}</td>

@@ -23,7 +23,7 @@ export default async function EffectivenessTasksPage() {
   const candidates = await prisma.learningAssignment.findMany({
     where: { status: "COMPLETED", effectivenessRequiredSnapshot: true, effectivenessCompletedAt: null },
     include: {
-      employee: { select: { id: true, fullLegalName: true, preferredName: true, employeeNumber: true } },
+      employee: { select: { id: true, fullLegalName: true, employeeNumber: true } },
       course: { select: { title: true } },
     },
     orderBy: { effectivenessDueDate: "asc" },
@@ -50,7 +50,7 @@ export default async function EffectivenessTasksPage() {
         {tasks.map(({ task, canSubmit }) => (
           <div key={task.id} className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-sm text-slate-900">
-              {task.employee.preferredName ?? task.employee.fullLegalName}
+              {task.employee.fullLegalName}
               <span className="ml-2 text-xs text-slate-400">{task.employee.employeeNumber}</span>
             </p>
             <p className="mt-1 text-xs text-slate-500">

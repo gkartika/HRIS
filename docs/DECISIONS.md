@@ -3,6 +3,308 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-08-18 (UAT prep) — Removed Employee.preferredName; fullLegalName everywhere
+
+Resumed a task paused on 2026-08-06 (see that date's memory note) — the
+user's original instruction was "always use employee full name delete
+proffered name field," paused mid-task with the schema safely reverted.
+Triggered again today by a concrete symptom during UAT prep: SUHARTONO's
+account greeted him as "UAT-0107" on the dashboard instead of his name,
+because `auth.ts`'s session-name computation preferred
+`account.employee?.preferredName` over `fullLegalName`, and his
+`preferredName` was a leftover synthetic placeholder from the real-data
+migration's UAT seed pass. Direct user instruction: "change it with full
+name for everything, no preferred name needed... these users will be
+easily testing it as they are familiar with all of the people."
+
+**Scope, full removal this time, not just display**: `Employee.preferredName`
+dropped from `prisma/schema.prisma` entirely (migration
+`20260818095740_remove_employee_preferred_name`, standard SQLite
+RedefineTables rebuild, generated via `prisma migrate diff` since
+`migrate dev`'s confirmation prompt can't run non-interactively — reviewed
+the generated SQL before applying). ~92 references across ~45 files fixed
+in two passes:
+1. Mechanical regex pass for the `X.preferredName ?? X.fullLegalName`
+   display-coalescing pattern (62 replacements) — a backreference-based
+   regex matched the identical object-path prefix on both sides of the
+   `??`, so it correctly left any further `?? ...` fallbacks in the same
+   expression untouched (e.g. `cancelledByEmployee?.preferredName ??
+   cancelledByEmployee?.fullLegalName ?? cancelledByAccount?.usernameOrEmail`
+   correctly became just the first two operands collapsed).
+2. A second regex pass for the structural leftovers — `preferredName: true`
+   in Prisma `select` clauses and `preferredName: string | null` in TS
+   type literals (30 replacements).
+Then ten files needed hand edits: the Employee list search `OR` clause,
+the Recruitment "create Employee from approved request" form + action, the
+`auth.ts` session-name fallback chain (the actual bug), the i18n label +
+its one remaining `<Field>` usage, the bulk import/export dataset column
+mapping, a `permissions.test.ts` mock, and three `prisma/seed.ts` demo
+records.
+
+**Live-verified**: logged in as `depthead.production@cbp.demo` (SUHARTONO)
+post-migration — dashboard now reads "Beranda — SUHARTONO". Confirmed the
+Employee list search-by-name and the Approvals inbox (which shows several
+other employees' names) still render correctly. Full suite (301 tests),
+`tsc --noEmit`, and `eslint` all clean.
+
+**Non-interactive migration workaround, worth remembering**: `prisma
+migrate dev` (with or without `--create-only`) refuses to run when a
+migration has a data-loss warning and the environment is non-interactive —
+even just to generate the SQL file. Workaround: create the migration
+folder by hand, then `prisma migrate diff --from-migrations
+./prisma/migrations --to-schema ./prisma/schema.prisma --script` to
+generate the SQL non-interactively (review it before saving), then `prisma
+migrate deploy` to apply. Note the flag is `--to-schema`, not
+`--to-schema-datamodel` (renamed in this Prisma version).
+
+## 2026-08-18 (later same day) — Training Admin becomes sole owner of Training & Competency
+
+Direct user request, made right after reviewing the access matrix built
+earlier the same day ("Make Training Admin the operational owner. HR Admin
+have no access"). Withdrew every `isHrAdmin` fallback across the whole
+Training & Competency domain, mirroring the wall-off shape GA Admin already
+had over Assets/GA (see Phase 4B's decision entry below) — HR Admin's usual
+"can administer anything" latitude does not apply here, same as it already
+didn't apply to GA/Asset operations.
+
+**Scope**: every predicate in `permissions.ts` for Competency Framework/
+Cycle, Competency Assessment scoring & reassignment, the historical
+migration, Competency Gaps reporting, Training Requests (submit/decide/
+cancel), Training Courses, Mandatory Training Rules, Learning Assignments,
+company-wide LMS reporting, Learning Effectiveness tasks, and the two
+training-domain Import datasets. Also the Onboarding "training complete"
+flag (`canMarkOnboardingTraining`) — the one completion flag on that page
+that isn't HR Admin's to mark alongside its owner, since Training is now
+fully Training Admin's. The Onboarding module itself, the "contract
+complete" flag, and Employee Master visibility were **not** touched — those
+remain HR Admin's as before; this was scoped to Training & Competency only.
+
+**Two capabilities that move to Training Admin rather than disappear**:
+P1/P2 evaluator reassignment (`canReassignCompetencyEvaluator`) and running
+the one-time historical competency migration
+(`canRunCompetencyHistoricalMigration`) were both HR-Admin-exclusive before
+today, deliberately separated from Training Admin's operational latitude
+("HR Admin may reassign but cannot score", "HR Admin alone may run the
+migration; Training Admin may only review after commit"). Both authorities
+now sit with Training Admin instead — full ownership transfer, not a
+carve-out.
+
+**Cancellation now matches the GA Requests shape exactly**:
+`canCancelTrainingRequest` was `{requester} ∪ {Training Admin} ∪ {HR
+Admin}`; it's now `{requester} ∪ {Training Admin}`, identical in shape to
+GA Requests' `{requester} ∪ {GA Admin}` — the first precedent in this app
+for a domain with genuinely no HR Admin fallback at any stage, now applied
+a second time.
+
+**Nav-gate consequence**: `layout.tsx`'s "broad nav, scoped page" pattern
+meant most of these nav items were already visible to any employee-linked
+account regardless of HR Admin — removing HR Admin's OR-branch there mainly
+affects the HR Admin account itself (which has no `employeeId`), so it now
+loses every Training & Competency nav entry outright rather than falling
+back to a narrower view.
+
+**Tests**: updated 12 assertions in `permissions.test.ts` that encoded the
+old HR-Admin-inclusive behavior (301 → still 301, since these were edits to
+existing tests, not new ones). Full suite, `tsc --noEmit`, and `eslint` all
+clean.
+
+## 2026-08-18 — Link GA Operations to Onboarding and Offboarding
+
+Direct user request ("Link assets to on boarding and off boarding"), asked
+right after Phase 4B shipped. Since Phase 4A's `AssetCustody` was already
+fully linked to both flows (derived onboarding checklist item, offboarding
+clearance blocker), this was clarified via `AskUserQuestion` into two
+concrete, independent asks:
+
+**Onboarding — GA Admin can assign equipment directly from the case.** A
+new `AssignAssetToOnboardingForm` on the Onboarding detail page lets GA
+Admin pick an AVAILABLE asset and hand it to the employee without leaving
+the page. Implemented as a thin wrapper,
+`assignAssetDuringOnboarding` (`onboarding/actions.ts`), that calls the
+real, unmodified `assignAssetToEmployee` (Phase 4A, `assets/actions.ts`)
+and additionally revalidates the onboarding case's own path — genuine
+reuse, not reimplementation, same pattern as Phase 4B's own Phase 4A
+handoff.
+
+**Offboarding — exit clearance also blocks on unresolved Damage/Loss GA
+requests.** New pure predicate `blocksOffboardingGaRequest(requestType,
+status)` in `lib/ga-operations.ts`: a request blocks only while it's
+still short of its own terminal status (`WORK_ORDER_CREATED` for damage,
+`LOSS_CONFIRMED`/`LOSS_NOT_CONFIRMED` for loss) — `NEW_ASSET_NEED` never
+blocks, since an unfulfilled equipment request isn't an accountability
+issue and can simply lapse. Wired into `executeExitClearance`
+(`offboarding/actions.ts`) alongside the existing custody blocker, with a
+combined error message when both fire, and surfaced identically on the
+Offboarding detail page. Deliberately does **not** re-check
+`AssetCustody` for these requests — for a Damage/Loss report on the
+employee's own asset, custody is untouched by the GA workflow (nothing in
+Phase 4B closes a custody row), so the existing custody blocker already
+covers that case; this new check's real value is catching a report about
+an asset that isn't (or is no longer) in the employee's own custody.
+
+**Live-verified**: assigned AST-CHAIR-POOL to EMP-0002 from
+`/onboarding/[id]` — second custody row appeared immediately, no
+navigation away. Submitted a fresh `DAMAGE_OR_ABNORMAL_CONDITION` request
+as `level1.production@cbp.demo` (EMP-0001, who has a real
+`PENDING_CLEARANCE` case), confirmed exit clearance was blocked
+server-side with the exact new message, then verified the request (GA
+Admin) to `WORK_ORDER_CREATED` and confirmed the blocker panel
+disappeared. Full suite (301 tests, +3), `tsc --noEmit`, and `eslint` all
+clean. Hit one unrelated dev-server crash mid-session ("Jest worker
+encountered 2 child process exceptions") — fixed with the usual kill +
+clear `.next` + restart, not a code issue.
+
+**Follow-on same day — GA Admin couldn't see who's offboarding.** User
+noticed GA Admin's nav had no Offboarding entry ("I don't see off
+boarding menu in GA") — expected/correct, since `/offboarding`'s gate
+(`isHrAdmin(session) || session.user.employeeId`) never admits an
+employee-less GA Admin account, matching the Phase 4A boundary that keeps
+GA Admin out of HR-only data. But the new GA-request blocker made this a
+real gap: GA Admin had no way to know which employees to proactively
+clear. Clarified via `AskUserQuestion`
+("I want them to confirm that all assets have been return but for that
+they need to know how [who] need to be off boarding") into a narrow,
+purpose-built page rather than widening `canViewOffboardingCase` or the
+real Offboarding pages — `/offboarding/asset-clearance`
+(`offboarding/asset-clearance/page.tsx`, gated on `canManageAssets`)
+lists only employees with an active case, their case number/status, and
+their open custody/GA-request items — never the reason, Dept
+Head/HR Manager decisions, or clearance notes, which stay HR-only. New
+"Klirens Aset Offboarding" nav entry, GA-Admin-only. Live-verified as
+`ga.admin@cbp.demo` in a fresh browser tab (an unrelated stale-session
+artifact from Fast-Refresh churn made two earlier login attempts in the
+same tab appear to fail even though the first had actually succeeded
+server-side — a new tab sidestepped it cleanly): page renders
+OFB-2026-0001 (UAT-0001) as "Aset Selesai", and the nav item is present
+for GA Admin and absent for HR Admin.
+
+## 2026-08-14 (later same day) — Phase 4B: GA Operations
+
+Built from `Phase_4B_GA_Operations_Workflow.pdf` (2 pages: "Requests,
+incidents and routing" / "Maintenance and disposal"), on top of the
+accepted Phase 0–4A build without modifying any of it — Operational
+Vehicle Usage explicitly excluded per the request. Proceeded autonomously
+on the detailed spec (same precedent as Phase 4A), flagging assumptions
+below rather than asking mid-build.
+
+**Schema** (5 new models, 11 new enums, 2 additive `AssetStatus` values,
+3 migrations): `GaRequest` (New Asset Need / Damage-Abnormal-Condition /
+Loss, one shared status enum gated by type in `lib/ga-operations.ts`, not
+the schema), `GaApprovalConfig` (Position-per-approval-type, mirrors
+`AbsenceEntitlementConfig`'s shape — global, not department-scoped, since
+the PDF gives no department signal for GA approvals), `MaintenancePlan`
+(preventive, due-date-driven), `MaintenanceWorkOrder`
+(preventive/corrective, internal/vendor), `DisposalCase`
+(Beyond-Repair/Obsolete/Confirmed-Loss → Position-approved →
+executed). `AssetStatus` gained `LOST_PENDING_REVIEW` and `RETIRED` —
+zero code changes needed to satisfy "cannot be newly assigned" for either,
+since Phase 4A's `isAssetAvailableForIndividualAssignment` is already an
+`AVAILABLE`-only allowlist. `RETIRED` is deliberately a new, separate
+terminal status from Phase 4A's existing `DISPOSED` (the informal
+return-inspection shortcut) — Phase 4B's formal, Position-approved
+execution never reuses it. Cross-links between a `GaRequest` and what it
+produced (`resultingCustodyId`, `sourceWorkOrderId`, `sourceGaRequestId`)
+are plain unconstrained `String?` columns, not Prisma relations — same
+convention `AssetCustody.transferredToCustodyId` already uses in this
+schema, chosen to avoid a web of back-relation bookkeeping for what are
+purely informational pointers. `GaRequestStatus` also got a `CANCELLED`
+value (schema/migration `20260814020000_ga_request_cancellation`,
+additive) for the same DM-25-style withdrawal every other
+submittable-request workflow in this app already has — the PDF doesn't
+show it explicitly but omitting it would have been the one workflow in
+the whole app without a cancel path.
+
+**Pure logic** (`lib/ga-operations.ts`, 22 unit tests): numbering,
+status-transition/routing gates per request type, and the asset-status
+side effects of each transition (verification moves a
+damage/loss-reported asset to `UNDER_REPAIR`/`LOST_PENDING_REVIEW`;
+maintenance `OPERATIONAL` returns it to `IN_USE`/`AVAILABLE` depending on
+whether custody is still open; `BEYOND_REPAIR` leaves it blocked pending
+disposal; disposal execution always ends at `RETIRED`).
+
+**Approvals**: one shared session-based predicate,
+`canDecideAsConfiguredGaApprover(actingEmployeeId, holderIds)`, reused for
+all three GA approval points (New Asset Need, Loss Review, Disposal) —
+the caller resolves the live holder set from `GaApprovalConfig` via the
+existing `getCurrentHolderEmployeeIds`. New Asset Need is the only
+approval point that can be configured *absent* (request auto-progresses,
+matching the PDF's dashed "Approval required? No" line); Loss Review and
+Disposal sitting unconfigured just means no one can currently decide them
+— same convention as every other unconfigured-Position gap already in
+this app.
+
+**Real bug caught during live verification, fixed same session**:
+`canViewGaRequest`'s approver-widening was originally keyed off the
+request's *current status* (`PENDING_APPROVAL`/`PENDING_LOSS_REVIEW`) —
+so the moment an approver decided a request, the status moved past that
+window and the page denied the very person who just acted on it (hit live
+as `level3.production@cbp.demo` immediately after approving
+GAR-DEMO-0001: "Anda tidak memiliki akses ke halaman ini"). Fixed by
+keying the widening off `requestType` instead (stable for the record's
+whole life — NEW_ASSET_NEED always maps to the NEW_ASSET_NEED config,
+LOSS always to LOSS_REVIEW), re-verified working.
+
+**Reuse-via-direct-invocation for the Phase 4A handoff**: an approved New
+Asset Need request's "allocate available asset" path calls the existing,
+unmodified `assignAssetToEmployee`/`ToDepartment`/`ToLocation` actions in
+`assets/actions.ts` with a constructed `FormData`, then looks up the
+just-created `AssetCustody` row (most recent for that asset) since those
+actions don't return an id — genuine reuse, not reimplementation, and the
+one honest way to avoid touching accepted Phase 4A code for this.
+
+**Access boundary**: `canManageGaOperations` (GA Admin only) gates every
+mutation across GA requests, maintenance and disposal — HR Admin gets
+zero nav entries and every direct URL hit returns the standard access-
+denied page, live-verified as `hr.admin@cbp.demo` against all four
+GA-only pages. `canSubmitGaRequest`/`canViewGaRequest` are broader (any
+employee-linked account may submit and see their own), matching
+"Requester sees only own requests."
+
+**Documented assumptions**: (1) the PDF's `OBSOLETE` disposal reason has
+no dedicated flow producing it, unlike `BEYOND_REPAIR`
+(maintenance outcome) or `CONFIRMED_LOSS` (loss review) — built as a
+direct manual GA Admin trigger on any non-retired asset
+(`createObsoleteDisposalCase`, exposed on the asset detail page). (2)
+`MaintenancePlan.intervalDays`/`intervalKm` are descriptive/manually-
+referenced fields, not an automatic interval-rollover engine — GA Admin
+enters the plan's next due date by hand when executing a work order,
+same "due" detection pattern (derive-on-read from `dueDate`) as every
+other due-date check in this app. (3) "Allocate available asset" lets GA
+Admin pick any target (employee/department/location), defaulting the UI
+to the requester for the common case but not restricting to it — the PDF
+doesn't say the new asset must go to the original requester.
+
+**Migrations**: `20260814010000_phase4b_ga_operations` (5 new tables,
+purely additive), `20260814020000_ga_request_cancellation` (adds
+`CANCELLED` + cancellation fields to `GaRequest`, one SQLite table
+recreation, zero data loss — table was empty at the time).
+
+**Seed**: `scripts/seed-phase4b-ga-operations.ts` configures all three
+`GaApprovalConfig` rows to "Asst Manager Production" (RISWANTO,
+`level3.production@cbp.demo` — a real, already-login-capable Position,
+reused rather than inventing a new demo login) and leaves four open GA
+requests plus one due `MaintenancePlan` and one already-`UNDER_REPAIR`
+asset with an open preventive work order, so every acceptance checkpoint
+is reachable with minimal further clicks.
+
+**Live-verified, full walkthrough**: NEW_ASSET_NEED approved → Phase 4A
+custody handoff (asset went `IN_USE`, custody row created); a second
+NEW_ASSET_NEED rejected; DAMAGE_OR_ABNORMAL_CONDITION → corrective work
+order → executed `OPERATIONAL` (asset returned to `IN_USE`); preventive
+`MaintenancePlan` → work order created live from the plan → executed
+`OPERATIONAL` (plan's `dueDate` rolled forward, overdue badge cleared);
+a separate preventive work order executed `BEYOND_REPAIR` → auto-drafted
+`DisposalCase` → submitted → approved by the configured Position →
+executed (`SELL_AS_SCRAP`, asset `RETIRED`) — evidence upload for this
+step done via a throwaway `tsx` script calling the same code path
+directly, since `<input type="file">` still can't be driven through this
+browser tool (same documented Phase 4A limitation); LOSS request
+confirmed by the configured reviewer → asset `LOST_PENDING_REVIEW` →
+second `DisposalCase` auto-drafted (`CONFIRMED_LOSS`); HR Admin denied on
+all four GA pages; a `RETIRED` asset's assignment confirmed rejected by
+`createCustody`'s existing status guard. Full suite (298 tests),
+`tsc --noEmit`, `eslint`, and `next build` all clean throughout.
+
 ## 2026-08-14 (later same day) — Remove asset acknowledgement gate
 
 Direct user feedback: "aset tidak butuh Menunggu Konfirmasi Penerimaan"

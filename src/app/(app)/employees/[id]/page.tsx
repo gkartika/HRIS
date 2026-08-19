@@ -56,7 +56,7 @@ export default async function EmployeeDetailPage({
           reportsToPosition: {
             include: {
               job: true,
-              currentHolders: { where: { activeFlag: true }, select: { fullLegalName: true, preferredName: true } },
+              currentHolders: { where: { activeFlag: true }, select: { fullLegalName: true } },
             },
           },
         },
@@ -183,7 +183,7 @@ export default async function EmployeeDetailPage({
   const reportsTo = employee.currentPosition?.reportsToPosition
     ? {
         label: `${employee.currentPosition.reportsToPosition.jobLevel} ${employee.currentPosition.reportsToPosition.job.jobTitle}`,
-        holderName: reportsToHolder ? reportsToHolder.preferredName ?? reportsToHolder.fullLegalName : null,
+        holderName: reportsToHolder ? reportsToHolder.fullLegalName : null,
       }
     : null;
   const activeNonPrimaryAssignments = employee.assignments

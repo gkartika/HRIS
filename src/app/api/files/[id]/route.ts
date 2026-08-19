@@ -68,6 +68,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!canView && (file.category === "ASSET_HANDOVER_EVIDENCE" || file.category === "ASSET_RETURN_EVIDENCE")) {
     canView = isGaAdmin(session) || (!!file.employeeId && session.user.employeeId === file.employeeId);
   }
+  // Phase 4B: a GA request's own evidence is reachable by GA Admin or the
+  // requester who attached it ("Requester sees only own requests" extends
+  // to their evidence). Maintenance/disposal evidence is asset-centric, not
+  // employee-linked, so there's no requester self-view case for those —
+  // GA Admin only.
+  if (!canView && file.category === "GA_REQUEST_EVIDENCE") {
+    canView = isGaAdmin(session) || (!!file.employeeId && session.user.employeeId === file.employeeId);
+  }
+  if (
+    !canView &&
+    (file.category === "MAINTENANCE_EVIDENCE" ||
+      file.category === "DISPOSAL_PROPOSAL_EVIDENCE" ||
+      file.category === "DISPOSAL_EXECUTION_EVIDENCE")
+  ) {
+    canView = isGaAdmin(session);
+  }
 
   if (!canView) {
     await logAudit({

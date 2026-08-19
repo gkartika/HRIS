@@ -139,7 +139,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.submittedBy")}</p>
             <p className="text-sm text-slate-900">
-              {request.requesterEmployee.preferredName ?? request.requesterEmployee.fullLegalName}
+              {request.requesterEmployee.fullLegalName}
               {request.requesterPosition ? ` (${request.requesterPosition.job.jobTitle})` : ""}
             </p>
           </div>
@@ -199,7 +199,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
             <>
               {" · "}
               {t("recruitment.cancelledBy")}:{" "}
-              {request.cancelledByEmployee?.preferredName ?? request.cancelledByEmployee?.fullLegalName ?? request.cancelledByAccount?.usernameOrEmail ?? "—"}
+              {request.cancelledByEmployee?.fullLegalName ?? request.cancelledByAccount?.usernameOrEmail ?? "—"}
               {" "}({t(`cancellationAuthority.${request.cancellationAuthority}`)}, {formatDate(request.cancelledAt)})
               {request.cancellationReason && <> — {request.cancellationReason}</>}
             </>
@@ -257,7 +257,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
                 className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2 text-sm"
               >
                 <Link href={`/employees/${f.employeeId}`} className="text-indigo-600 hover:underline">
-                  {f.employee.preferredName ?? f.employee.fullLegalName} ({f.employee.employeeNumber})
+                  {f.employee.fullLegalName} ({f.employee.employeeNumber})
                 </Link>
                 <span className="text-xs text-slate-500">{f.assignment.position.job.jobTitle}</span>
               </div>

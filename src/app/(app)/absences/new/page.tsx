@@ -17,7 +17,7 @@ export default async function NewAbsenceRequestPage() {
     ? await prisma.employee.findMany({
         where: { activeFlag: true },
         orderBy: { fullLegalName: "asc" },
-        select: { id: true, employeeNumber: true, fullLegalName: true, preferredName: true },
+        select: { id: true, employeeNumber: true, fullLegalName: true },
       })
     : [];
 
@@ -52,7 +52,7 @@ export default async function NewAbsenceRequestPage() {
           employeeId={isHrAdminUser ? undefined : session.user.employeeId!}
           employees={
             isHrAdminUser
-              ? employees.map((e) => ({ id: e.id, label: `${e.employeeNumber} — ${e.preferredName ?? e.fullLegalName}` }))
+              ? employees.map((e) => ({ id: e.id, label: `${e.employeeNumber} — ${e.fullLegalName}` }))
               : undefined
           }
         />

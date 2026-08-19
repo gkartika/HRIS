@@ -86,7 +86,7 @@ export default async function ShiftAssignmentsPage({
       const current = shiftByEmployeeId.get(e.id);
       return {
         id: e.id,
-        name: e.preferredName ?? e.fullLegalName,
+        name: e.fullLegalName,
         employeeNumber: e.employeeNumber,
         departmentName: e.currentPosition?.orgUnit.unitName ?? "—",
         jobLevel: e.currentPosition?.jobLevel ?? null,

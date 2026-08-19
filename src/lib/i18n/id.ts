@@ -42,6 +42,9 @@ export const strings = {
     EMPLOYEE: "Karyawan",
     MANAGER: "Atasan/Manajer",
     HR_MANAGER: "HR Manager",
+    DEPT_HEAD: "Kepala Departemen",
+    LEVEL_3: "Level 3 (Asst Manager)",
+    LEVEL_2: "Level 2 (Team Leader)",
   },
   dataModel: {
     job: "Jabatan Standar",
@@ -84,7 +87,6 @@ export const strings = {
     detailTitle: "Detail Karyawan",
     employeeNumber: "Nomor Karyawan",
     fullLegalName: "Nama Lengkap (sesuai dokumen resmi)",
-    preferredName: "Nama Panggilan",
     gender: "Jenis Kelamin",
     birthDate: "Tanggal Lahir",
     birthPlace: "Tempat Lahir",
@@ -828,6 +830,19 @@ export const strings = {
     description: "Deskripsi",
     addLocation: "Tambah Lokasi",
   },
+  gaRequest: {
+    navLabel: "Permintaan GA",
+  },
+  maintenance: {
+    plansNavLabel: "Rencana Perawatan",
+    workOrdersNavLabel: "Work Order Perawatan",
+  },
+  disposalCase: {
+    navLabel: "Kasus Disposal",
+  },
+  gaApprovals: {
+    navLabel: "Konfigurasi Persetujuan GA",
+  },
   assetTrackingType: {
     INDIVIDUAL: "Individual",
     QUANTITY_TRACKED: "Kuantitas",
@@ -837,6 +852,8 @@ export const strings = {
     IN_USE: "Sedang Digunakan",
     UNDER_REPAIR: "Dalam Perbaikan",
     DISPOSED: "Dihapuskan",
+    LOST_PENDING_REVIEW: "Hilang — Menunggu Peninjauan",
+    RETIRED: "Dipensiunkan",
   },
   assetCustodyStatus: {
     ACTIVE: "Aktif",

@@ -40,17 +40,13 @@ export default async function EmployeesPage({
 
   const where: Prisma.EmployeeWhereInput = {};
   if (q?.trim()) {
-    // Search also matches preferredName (the name shown almost everywhere
-    // else in the app — org chart, shift assignments, movements — so a
-    // search for what a user actually sees elsewhere must not come up
-    // empty just because it differs from fullLegalName) and the employee's
-    // current job title — with 180+ people, typing "Operator CNC" is often
-    // faster than hunting through a long Department/Level combination.
+    // Also matches the employee's current job title — with 180+ people,
+    // typing "Operator CNC" is often faster than hunting through a long
+    // Department/Level combination.
     const query = q.trim();
     where.OR = [
       { employeeNumber: { contains: query } },
       { fullLegalName: { contains: query } },
-      { preferredName: { contains: query } },
       { currentPosition: { job: { jobTitle: { contains: query } } } },
     ];
   }

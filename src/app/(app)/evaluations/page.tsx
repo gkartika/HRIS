@@ -110,14 +110,14 @@ export default async function EvaluationListPage({
                       {e.evaluationNumber}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{e.employee.preferredName ?? e.employee.fullLegalName}</td>
+                  <td className="px-4 py-3 text-slate-600">{e.employee.fullLegalName}</td>
                   <td className="px-4 py-3 text-slate-600">{t(`evaluationPurpose.${e.purpose}`)}</td>
                   <td className="px-4 py-3 text-slate-600">
-                    {e.p1Employee ? (e.p1Employee.preferredName ?? e.p1Employee.fullLegalName) : "—"}
+                    {e.p1Employee ? (e.p1Employee.fullLegalName) : "—"}
                     {e.p1SubmittedAt ? " ✓" : ""}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {e.p2Employee ? (e.p2Employee.preferredName ?? e.p2Employee.fullLegalName) : "—"}
+                    {e.p2Employee ? (e.p2Employee.fullLegalName) : "—"}
                     {e.p2SubmittedAt ? " ✓" : ""}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{formatDate(e.evaluationDueDate)}</td>

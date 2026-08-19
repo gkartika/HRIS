@@ -59,6 +59,13 @@ import {
   canViewAssetMaster,
   canImportAssetMaster,
   canViewOwnAssetCustody,
+  canManageGaOperations,
+  canManageGaApprovalConfig,
+  canSubmitGaRequest,
+  canViewGaRequest,
+  canDecideAsConfiguredGaApprover,
+  canExportGaOperationsData,
+  canCancelGaRequest,
   projectEmployee,
 } from "./permissions";
 
@@ -83,7 +90,6 @@ function mockEmployee(overrides: Partial<Employee> = {}): Employee {
     id: "emp-1",
     employeeNumber: "CBP-0001",
     fullLegalName: "Contoh Karyawan",
-    preferredName: null,
     nationalIdNumber: "1234567890123456",
     birthPlace: null,
     birthDate: null,
@@ -251,12 +257,12 @@ describe("Onboarding visibility and completion ownership (LIF-03)", () => {
     expect(canViewOnboarding(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), [])).toBe(false);
   });
 
-  it("each completion flag is owned by its Primary Owner, plus HR Admin", () => {
+  it("each completion flag is owned by its Primary Owner, plus HR Admin — except training, Training Admin only", () => {
     expect(canMarkOnboardingContract(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
     expect(canMarkOnboardingContract(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
     expect(canMarkOnboardingTraining(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
     expect(canMarkOnboardingTraining(mockSession({ roles: ["GA_ADMIN"] }))).toBe(false);
-    expect(canMarkOnboardingTraining(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canMarkOnboardingTraining(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
   });
 });
 
@@ -464,11 +470,12 @@ describe("isDirector", () => {
 });
 
 describe("canManageCompetencyFramework / canOpenCompetencyCycle (ACC-03)", () => {
-  it("allows Training Admin or HR Admin, denies a plain employee", () => {
+  it("allows Training Admin only — HR Admin withdrawn 2026-08-18", () => {
     expect(canManageCompetencyFramework(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
-    expect(canManageCompetencyFramework(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canManageCompetencyFramework(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
     expect(canManageCompetencyFramework(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
     expect(canOpenCompetencyCycle(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canOpenCompetencyCycle(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
     expect(canOpenCompetencyCycle(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
   });
 });
@@ -484,9 +491,9 @@ describe("canScoreAsCompetencyP1 / canScoreAsCompetencyP2 (ACC-21)", () => {
 });
 
 describe("canReassignCompetencyEvaluator (ACC-21)", () => {
-  it("HR Admin only", () => {
-    expect(canReassignCompetencyEvaluator(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
-    expect(canReassignCompetencyEvaluator(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+  it("Training Admin only — moved from HR Admin 2026-08-18", () => {
+    expect(canReassignCompetencyEvaluator(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canReassignCompetencyEvaluator(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
   });
 });
 
@@ -499,9 +506,9 @@ describe("canViewOwnCompetencyResult (COM-10)", () => {
 });
 
 describe("canViewCompetencyAssessment (COM-10/ACC-21)", () => {
-  it("allows HR Admin, Training Admin, either evaluator, the finalized subject, Level-3 dept, or the Director", () => {
+  it("allows Training Admin, either evaluator, the finalized subject, Level-3 dept, or the Director — HR Admin withdrawn 2026-08-18", () => {
     expect(canViewCompetencyAssessment(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", null, null, null, false, [])).toBe(
-      true
+      false
     );
     expect(
       canViewCompetencyAssessment(mockSession({ roles: ["TRAINING_ADMIN"] }), "emp-1", null, null, null, false, [])
@@ -528,60 +535,66 @@ describe("canViewCompetencyAssessment (COM-10/ACC-21)", () => {
 });
 
 describe("canRunCompetencyHistoricalMigration (ACC-24)", () => {
-  it("HR Admin only, not Training Admin", () => {
-    expect(canRunCompetencyHistoricalMigration(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
-    expect(canRunCompetencyHistoricalMigration(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+  it("Training Admin only, not HR Admin — moved 2026-08-18", () => {
+    expect(canRunCompetencyHistoricalMigration(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canRunCompetencyHistoricalMigration(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
   });
 });
 
 describe("canSubmitTrainingRequest (TRN-09/ACC-22)", () => {
-  it("allows self, an active Level-3 in the employee's department, or HR Admin", () => {
+  it("allows self or an active Level-3 in the employee's department — HR Admin's submit-on-behalf withdrawn 2026-08-18", () => {
     expect(canSubmitTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), true, false)).toBe(true);
     expect(canSubmitTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), false, true)).toBe(true);
-    expect(canSubmitTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }), false, false)).toBe(true);
+    expect(canSubmitTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }), false, false)).toBe(false);
     expect(canSubmitTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), false, false)).toBe(false);
   });
 });
 
 describe("canDecideTrainingRequestAsDeptHead / canValidateTrainingRequest / canScheduleTrainingRequest (TRN-10)", () => {
-  it("Department Head decides first; Training Admin/HR Admin validate and schedule", () => {
+  it("Department Head decides first; Training Admin validates and schedules — HR Admin withdrawn 2026-08-18", () => {
     expect(canDecideTrainingRequestAsDeptHead(["pos-dept-head"])).toBe(true);
     expect(canDecideTrainingRequestAsDeptHead([])).toBe(false);
     expect(canValidateTrainingRequest(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canValidateTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
     expect(canValidateTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
-    expect(canScheduleTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canScheduleTrainingRequest(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canScheduleTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
   });
 });
 
 describe("canCancelTrainingRequest", () => {
-  it("allows the requester, Training Admin, or HR Admin", () => {
+  it("allows the requester or Training Admin — HR Admin withdrawn 2026-08-18", () => {
     expect(canCancelTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
     expect(canCancelTrainingRequest(mockSession({ roles: ["TRAINING_ADMIN"] }), false)).toBe(true);
+    expect(canCancelTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(false);
     expect(canCancelTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
   });
 });
 
 describe("canManageTrainingCourse / canManageLearningAssignment / canManageMandatoryTrainingRule (ACC-22/23)", () => {
-  it("Training Admin or HR Admin only", () => {
+  it("Training Admin only — HR Admin withdrawn 2026-08-18", () => {
     expect(canManageTrainingCourse(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
     expect(canManageTrainingCourse(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
-    expect(canManageLearningAssignment(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canManageLearningAssignment(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canManageLearningAssignment(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
     expect(canManageMandatoryTrainingRule(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(true);
+    expect(canManageMandatoryTrainingRule(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
     expect(canManageMandatoryTrainingRule(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
   });
 });
 
 describe("canRecordLearningEffectiveness (TRN-04)", () => {
-  it("the employee's supervisor or HR Admin", () => {
+  it("the employee's supervisor or Training Admin — moved from HR Admin 2026-08-18", () => {
     expect(canRecordLearningEffectiveness(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
-    expect(canRecordLearningEffectiveness(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(true);
+    expect(canRecordLearningEffectiveness(mockSession({ roles: ["TRAINING_ADMIN"] }), false)).toBe(true);
+    expect(canRecordLearningEffectiveness(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(false);
     expect(canRecordLearningEffectiveness(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
   });
 });
 
 describe("canViewTrainingRequest (TRN-02/ACC-22)", () => {
-  it("allows HR Admin, Training Admin, the subject, the submitter, or an eligible Department Head", () => {
-    expect(canViewTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", "account-x", [])).toBe(true);
+  it("allows Training Admin, the subject, the submitter, or an eligible Department Head — HR Admin withdrawn 2026-08-18", () => {
+    expect(canViewTrainingRequest(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", "account-x", [])).toBe(false);
     expect(canViewTrainingRequest(mockSession({ roles: ["TRAINING_ADMIN"] }), "emp-1", "account-x", [])).toBe(true);
     expect(canViewTrainingRequest(mockSession({ employeeId: "emp-1" }), "emp-1", "account-x", [])).toBe(true);
     expect(canViewTrainingRequest(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", "account-1", [])).toBe(true);
@@ -606,8 +619,8 @@ describe("canTakeQuiz", () => {
 });
 
 describe("canViewLearningAssignment (Phase 3B role-scoped confidentiality)", () => {
-  it("allows HR Admin, Training Admin, the employee themself, their manager, or an active HR Manager", () => {
-    expect(canViewLearningAssignment(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", false, [])).toBe(true);
+  it("allows Training Admin, the employee themself, their manager, or an active HR Manager — HR Admin withdrawn 2026-08-18", () => {
+    expect(canViewLearningAssignment(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", false, [])).toBe(false);
     expect(canViewLearningAssignment(mockSession({ roles: ["TRAINING_ADMIN"] }), "emp-1", false, [])).toBe(true);
     expect(canViewLearningAssignment(mockSession({ employeeId: "emp-1" }), "emp-1", false, [])).toBe(true);
     expect(canViewLearningAssignment(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", true, [])).toBe(true);
@@ -620,8 +633,8 @@ describe("canViewLearningAssignment (Phase 3B role-scoped confidentiality)", () 
 });
 
 describe("canViewCompanyWideLmsReporting", () => {
-  it("HR Admin, Training Admin, or an active HR Manager — never a plain employee", () => {
-    expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["HR_ADMIN"] }), [])).toBe(true);
+  it("Training Admin or an active HR Manager — never a plain employee, HR Admin withdrawn 2026-08-18", () => {
+    expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["HR_ADMIN"] }), [])).toBe(false);
     expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["TRAINING_ADMIN"] }), [])).toBe(true);
     expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["EMPLOYEE"] }), ["pos-hr-manager"])).toBe(true);
     expect(canViewCompanyWideLmsReporting(mockSession({ roles: ["EMPLOYEE"] }), [])).toBe(false);
@@ -641,5 +654,42 @@ describe("Phase 4A asset permissions — GA Admin only, never HR Admin", () => {
     expect(canViewOwnAssetCustody(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
     expect(canViewOwnAssetCustody(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
     expect(canViewOwnAssetCustody(mockSession({ roles: ["GA_ADMIN"] }), "emp-1")).toBe(false);
+  });
+});
+
+describe("Phase 4B GA Operations permissions — GA Admin only, never HR Admin", () => {
+  it("canManageGaOperations/canManageGaApprovalConfig/canExportGaOperationsData are GA Admin only", () => {
+    for (const fn of [canManageGaOperations, canManageGaApprovalConfig, canExportGaOperationsData]) {
+      expect(fn(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
+      expect(fn(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
+      expect(fn(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+    }
+  });
+
+  it("canSubmitGaRequest: any employee-linked account, no HR-Admin-on-behalf-of exception", () => {
+    expect(canSubmitGaRequest(mockSession({ employeeId: "emp-1" }))).toBe(true);
+    expect(canSubmitGaRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
+  });
+
+  it("canViewGaRequest: GA Admin, the exact requester, or the configured approver holder, never HR Admin", () => {
+    expect(canViewGaRequest(mockSession({ roles: ["GA_ADMIN"] }), "emp-1")).toBe(true);
+    expect(canViewGaRequest(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
+    expect(canViewGaRequest(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
+    expect(canViewGaRequest(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(false);
+    expect(canViewGaRequest(mockSession({ employeeId: "emp-9" }), "emp-1", ["emp-9"])).toBe(true);
+  });
+
+  it("canDecideAsConfiguredGaApprover: only a current holder of the configured Position", () => {
+    expect(canDecideAsConfiguredGaApprover("emp-1", ["emp-1", "emp-2"])).toBe(true);
+    expect(canDecideAsConfiguredGaApprover("emp-3", ["emp-1", "emp-2"])).toBe(false);
+    expect(canDecideAsConfiguredGaApprover(null, ["emp-1"])).toBe(false);
+    expect(canDecideAsConfiguredGaApprover(undefined, [])).toBe(false);
+  });
+
+  it("canCancelGaRequest: the original requester or GA Admin", () => {
+    expect(canCancelGaRequest(mockSession({ roles: ["GA_ADMIN"] }), "emp-1")).toBe(true);
+    expect(canCancelGaRequest(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
+    expect(canCancelGaRequest(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
+    expect(canCancelGaRequest(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(false);
   });
 });

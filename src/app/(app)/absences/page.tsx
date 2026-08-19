@@ -48,7 +48,7 @@ export default async function AbsencesPage({
 
   const requests = await prisma.absenceRequest.findMany({
     where,
-    include: { employee: { select: { employeeNumber: true, fullLegalName: true, preferredName: true } } },
+    include: { employee: { select: { employeeNumber: true, fullLegalName: true } } },
     orderBy: { submittedAt: "desc" },
     take: 100,
   });
@@ -134,7 +134,7 @@ export default async function AbsencesPage({
                       {r.requestNumber}
                     </Link>
                   </td>
-                  <td className="px-4 py-3">{r.employee.preferredName ?? r.employee.fullLegalName}</td>
+                  <td className="px-4 py-3">{r.employee.fullLegalName}</td>
                   <td className="px-4 py-3 text-slate-600">{t(`absenceType.${r.absenceType}`)}</td>
                   <td className="px-4 py-3 text-slate-600">
                     {r.startDate.toISOString().slice(0, 10)} – {r.endDate.toISOString().slice(0, 10)}

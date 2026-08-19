@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
-import { canOpenCompetencyCycle, isHrAdmin, isTrainingAdmin } from "@/lib/permissions";
+import { canOpenCompetencyCycle, isTrainingAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { OpenCompetencyCycleForm } from "./open-cycle-form";
@@ -13,7 +13,7 @@ const STATUS_TONE: Record<string, string> = {
 export default async function CompetencyCyclesPage() {
   const session = await requireSession();
   const canOpen = canOpenCompetencyCycle(session);
-  const canSeeAll = isHrAdmin(session) || isTrainingAdmin(session);
+  const canSeeAll = isTrainingAdmin(session);
 
   if (!canSeeAll) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;

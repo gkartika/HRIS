@@ -116,7 +116,7 @@ export async function getOrgChartData(asOfDate: Date): Promise<OrgChartData> {
     list.push({
       assignmentId: a.id,
       employeeId: a.employeeId,
-      employeeName: a.employee.preferredName ?? a.employee.fullLegalName,
+      employeeName: a.employee.fullLegalName,
       assignmentType: a.assignmentType,
     });
     assignmentsByPosition.set(a.positionId, list);

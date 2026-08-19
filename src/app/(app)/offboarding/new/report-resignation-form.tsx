@@ -33,7 +33,7 @@ export function ReportResignationForm({
           <option value="">— Pilih —</option>
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
-              {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+              {e.fullLegalName} ({e.employeeNumber})
               {e.currentPosition ? ` — ${e.currentPosition.job.jobTitle} · ${e.currentPosition.orgUnit.unitName}` : ""}
             </option>
           ))}

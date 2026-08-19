@@ -753,6 +753,20 @@ model Account {
   fixedAssetsCreatedBy     FixedAsset[]   @relation("FixedAssetCreatedBy")
   assetCustodiesAssignedBy AssetCustody[] @relation("AssetCustodyAssignedBy")
   assetCustodiesReturnedBy AssetCustody[] @relation("AssetCustodyReturnedBy")
+
+  gaRequestsSubmittedBy        GaRequest[]            @relation("GaRequestSubmittedBy")
+  gaRequestsVerifiedBy         GaRequest[]            @relation("GaRequestVerifiedBy")
+  gaRequestsDecidedBy          GaRequest[]            @relation("GaRequestDecidedBy")
+  gaRequestsProcessedBy        GaRequest[]            @relation("GaRequestProcessedBy")
+  gaRequestsLossReviewedBy     GaRequest[]            @relation("GaRequestLossReviewedBy")
+  gaRequestsCancelledBy        GaRequest[]            @relation("GaRequestCancelledBy")
+  maintenancePlansCreatedBy    MaintenancePlan[]      @relation("MaintenancePlanCreatedBy")
+  maintenanceWorkOrdersCreated MaintenanceWorkOrder[] @relation("MaintenanceWorkOrderCreatedBy")
+  maintenanceWorkOrdersClosed  MaintenanceWorkOrder[] @relation("MaintenanceWorkOrderCompletedBy")
+  disposalCasesCreatedBy       DisposalCase[]         @relation("DisposalCaseCreatedBy")
+  disposalCasesDecidedBy       DisposalCase[]         @relation("DisposalCaseDecidedBy")
+  disposalCasesExecutedBy      DisposalCase[]         @relation("DisposalCaseExecutedBy")
+  gaApprovalConfigsUpdatedBy   GaApprovalConfig[]     @relation("GaApprovalConfigUpdatedBy")
 }
 
 model AccountRole {
@@ -770,7 +784,6 @@ model Employee {
   id                       String           @id @default(cuid())
   employeeNumber           String           @unique
   fullLegalName            String
-  preferredName            String?
   nationalIdNumber         String?
   birthPlace               String?
   birthDate                DateTime?
@@ -853,6 +866,8 @@ model Employee {
   learningAssignments                         LearningAssignment[]        @relation("LearningAssignmentEmployee")
   learningAssignmentsAsEffectivenessEvaluator LearningAssignment[]        @relation("LearningAssignmentEffectivenessEvaluator")
   mandatoryTrainingRuleTargets                MandatoryTrainingRule[]     @relation("MandatoryTrainingRuleTargetEmployee")
+
+  gaRequests GaRequest[] @relation("GaRequestRequester")
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -986,6 +1001,11 @@ model Position {
   shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]       @relation("ShiftAssignmentSubmittedByPosition")
   absenceApproverConfigOf                     AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
   absenceRequestsAsFirstApproverPosition      AbsenceRequest[]        @relation("AbsenceFirstApproverPosition")
+
+  gaApprovalConfigsOf             GaApprovalConfig[] @relation("GaApprovalConfigPosition")
+  gaRequestsDecisionPositionOf    GaRequest[]        @relation("GaRequestDecisionPosition")
+  gaRequestsLossReviewPositionOf  GaRequest[]        @relation("GaRequestLossReviewPosition")
+  disposalCasesDecisionPositionOf DisposalCase[]     @relation("DisposalCaseDecisionPosition")
 
   competencyAssessmentsAsSnapshotPosition    CompetencyAssessment[]  @relation("CompetencyAssessmentPosition")
   competencyAssessmentsAsP1Position          CompetencyAssessment[]  @relation("CompetencyAssessmentP1Position")
@@ -1435,17 +1455,21 @@ model FileObject {
   confidential        Boolean     @default(true)
   createdAt           DateTime    @default(now())
 
-  employeeKtpOf                          Employee?           @relation("EmployeeKtpFile")
-  employeeKkOf                           Employee?           @relation("EmployeeKkFile")
+  employeeKtpOf                          Employee?             @relation("EmployeeKtpFile")
+  employeeKkOf                           Employee?             @relation("EmployeeKkFile")
   contractOf                             Contract?
   movementPerformanceEvaluationOf        MovementRequest?
-  attendanceEventSelfieOf                AttendanceEvent?    @relation("AttendanceEventSelfie")
-  absenceRequestAttachmentOf             AbsenceRequest?     @relation("AbsenceRequestAttachment")
-  courseMaterialOf                       CourseMaterial?     @relation("CourseMaterialFile")
-  learningAssignmentCertificateOf        LearningAssignment? @relation("LearningAssignmentCertificateFile")
-  learningAssignmentAttendanceEvidenceOf LearningAssignment? @relation("LearningAssignmentAttendanceEvidenceFile")
-  assetCustodyHandoverEvidenceOf         AssetCustody?       @relation("AssetCustodyHandoverEvidence")
-  assetCustodyReturnEvidenceOf           AssetCustody?       @relation("AssetCustodyReturnEvidence")
+  attendanceEventSelfieOf                AttendanceEvent?      @relation("AttendanceEventSelfie")
+  absenceRequestAttachmentOf             AbsenceRequest?       @relation("AbsenceRequestAttachment")
+  courseMaterialOf                       CourseMaterial?       @relation("CourseMaterialFile")
+  learningAssignmentCertificateOf        LearningAssignment?   @relation("LearningAssignmentCertificateFile")
+  learningAssignmentAttendanceEvidenceOf LearningAssignment?   @relation("LearningAssignmentAttendanceEvidenceFile")
+  assetCustodyHandoverEvidenceOf         AssetCustody?         @relation("AssetCustodyHandoverEvidence")
+  assetCustodyReturnEvidenceOf           AssetCustody?         @relation("AssetCustodyReturnEvidence")
+  gaRequestEvidenceOf                    GaRequest?            @relation("GaRequestEvidence")
+  maintenanceWorkOrderEvidenceOf         MaintenanceWorkOrder? @relation("MaintenanceWorkOrderEvidence")
+  disposalCaseProposalEvidenceOf         DisposalCase?         @relation("DisposalCaseProposalEvidence")
+  disposalCaseExecutionEvidenceOf        DisposalCase?         @relation("DisposalCaseExecutionEvidence")
 }
 
 // ---------- Phase 2 Extension: Attendance & Absence ----------
@@ -2295,15 +2319,27 @@ enum AssetTrackingType {
 // QUANTITY_TRACKED asset's real "how much is left" signal is
 // availableQuantity vs totalQuantity below — its own status field stays
 // AVAILABLE by convention (a pooled item type doesn't have a single
-// instance state). UNDER_REPAIR/DISPOSED are terminal outcomes of a return
-// inspection; the actual repair/disposal workflows are explicitly Phase 4B
-// ("Phase 4B repair workflow" / "Phase 4B disposal" in the PDF) and out of
-// scope here — this schema only records the resulting state.
+// instance state). UNDER_REPAIR/DISPOSED were originally Phase 4A-only
+// terminal outcomes of a *return inspection* (Phase 4A's own return flow,
+// unchanged). Phase 4B adds two more: LOST_PENDING_REVIEW (a Loss GaRequest
+// was submitted for this asset, awaiting the configured reviewing
+// Position's confirmation) and RETIRED (a DisposalCase actually executed —
+// deliberately distinct from Phase 4A's DISPOSED, which stays only the
+// immediate "returned in unusable condition" shortcut with no approval
+// gate; RETIRED is the Phase 4B formal disposal-with-approval outcome,
+// covering retire/dispose/sell-as-scrap alike since this app builds no
+// accounting/depreciation distinction between those methods). All four
+// non-AVAILABLE statuses block a new INDIVIDUAL assignment — see
+// isAssetAvailableForIndividualAssignment in lib/assets.ts, which already
+// allowlists only AVAILABLE, so both new values are blocked automatically
+// with no change to that Phase 4A function.
 enum AssetStatus {
   AVAILABLE
   IN_USE
   UNDER_REPAIR
   DISPOSED
+  LOST_PENDING_REVIEW
+  RETIRED
 }
 
 enum AssetCustodyTargetType {
@@ -2337,7 +2373,8 @@ model AssetLocation {
   activeFlag   Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  custodies AssetCustody[]
+  custodies  AssetCustody[]
+  gaRequests GaRequest[]
 }
 
 model FixedAsset {
@@ -2365,7 +2402,11 @@ model FixedAsset {
   createdByAccount   Account           @relation("FixedAssetCreatedBy", fields: [createdByAccountId], references: [id])
   createdAt          DateTime          @default(now())
 
-  custodies AssetCustody[]
+  custodies             AssetCustody[]
+  gaRequests            GaRequest[]
+  maintenancePlans      MaintenancePlan[]
+  maintenanceWorkOrders MaintenanceWorkOrder[]
+  disposalCases         DisposalCase[]
 }
 
 // One row per custody period — a return or transfer always creates a new
@@ -2425,4 +2466,292 @@ model TaskForceMembership {
   addedByAccountId String
   addedByAccount   Account   @relation("TaskForceMembershipAddedBy", fields: [addedByAccountId], references: [id])
   createdAt        DateTime  @default(now())
+}
+
+// ==================== Phase 4B: GA Operations ====================
+// Requests (new asset / damage / loss), preventive/corrective maintenance,
+// and Position-approved disposal. Reuses Phase 4A's FixedAsset/AssetCustody/
+// AssetLocation and Phase 4A's custody actions for the New Asset Need
+// hand-off (see src/app/(app)/ga-requests/actions.ts) rather than
+// duplicating custody-creation logic. GA Admin-only mutation surface,
+// mirroring Phase 4A's access boundary (HR Admin excluded, see
+// [[project_hr_app_cbp_phase4a_employee_assets]] equivalent note in
+// docs/DECISIONS.md).
+
+enum GaRequestType {
+  NEW_ASSET_NEED
+  DAMAGE_OR_ABNORMAL_CONDITION
+  LOSS
+}
+
+enum GaRequestUrgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// One shared status set covers all three request types; which values are
+// reachable depends on requestType (enforced in lib/ga-operations.ts, not
+// by the schema — same "shared enum, type-gated transitions" shape as
+// OffboardingCaseStatus elsewhere in this file).
+// NEW_ASSET_NEED: SUBMITTED -> (verify) -> PENDING_APPROVAL or straight to
+//   APPROVED -> REJECTED/APPROVED -> PROCESSED.
+// DAMAGE_OR_ABNORMAL_CONDITION: SUBMITTED -> (verify) -> WORK_ORDER_CREATED
+//   (terminal for the request; the corrective work continues as a
+//   MaintenanceWorkOrder).
+// LOSS: SUBMITTED -> (verify) -> PENDING_LOSS_REVIEW -> LOSS_CONFIRMED
+//   (drafts a DisposalCase) or LOSS_NOT_CONFIRMED (terminal).
+// CANCELLED: same DM-25-style withdrawal available on every other
+// submittable-request workflow in this app, reachable from any pre-terminal
+// status (see canCancelGaRequestStatus in ga-operations.ts).
+enum GaRequestStatus {
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  PROCESSED
+  WORK_ORDER_CREATED
+  PENDING_LOSS_REVIEW
+  LOSS_CONFIRMED
+  LOSS_NOT_CONFIRMED
+  CANCELLED
+}
+
+// PDF: "Submit new need, damage, loss or abnormal condition" -> "GA Admin
+// verifies asset, location and urgency" -> routes by requestType.
+// "Requester sees only own requests" / "HR Admin has no GA operational
+// access" are enforced in permissions.ts, not here.
+model GaRequest {
+  id            String           @id @default(cuid())
+  requestNumber String           @unique
+  requestType   GaRequestType
+  status        GaRequestStatus  @default(SUBMITTED)
+  urgency       GaRequestUrgency @default(MEDIUM)
+  description   String
+
+  requesterEmployeeId  String
+  requester            Employee @relation("GaRequestRequester", fields: [requesterEmployeeId], references: [id])
+  submittedByAccountId String
+  submittedByAccount   Account  @relation("GaRequestSubmittedBy", fields: [submittedByAccountId], references: [id])
+  submittedAt          DateTime @default(now())
+
+  // Required for DAMAGE_OR_ABNORMAL_CONDITION/LOSS (an existing asset);
+  // null for NEW_ASSET_NEED (nothing exists yet to reference).
+  assetId    String?
+  asset      FixedAsset?    @relation(fields: [assetId], references: [id])
+  // Optional — reused Phase 4A master data, never a new location concept.
+  locationId String?
+  location   AssetLocation? @relation(fields: [locationId], references: [id])
+
+  verifiedAt          DateTime?
+  verifiedByAccountId String?
+  verifiedByAccount   Account?  @relation("GaRequestVerifiedBy", fields: [verifiedByAccountId], references: [id])
+  verificationNote    String?
+
+  // ---- NEW_ASSET_NEED path ----
+  // Snapshot of whether a GaApprovalConfig row existed for NEW_ASSET_NEED
+  // at verification time — "Approval required?" in the PDF.
+  approvalRequired     Boolean?
+  decisionAt           DateTime?
+  decisionByAccountId  String?
+  decisionByAccount    Account?  @relation("GaRequestDecidedBy", fields: [decisionByAccountId], references: [id])
+  decisionPositionId   String?
+  decisionPosition     Position? @relation("GaRequestDecisionPosition", fields: [decisionPositionId], references: [id])
+  decisionNote         String?
+  // Exactly one of these two is set once PROCESSED — "Allocate available
+  // asset or record procurement reference" (PDF). Plain informational
+  // pointer (no Prisma relation), same convention as
+  // AssetCustody.transferredToCustodyId already uses in this schema.
+  procurementReference String?
+  resultingCustodyId   String?
+  processedAt          DateTime?
+  processedByAccountId String?
+  processedByAccount   Account?  @relation("GaRequestProcessedBy", fields: [processedByAccountId], references: [id])
+
+  // ---- LOSS path ----
+  lossReviewedAt          DateTime?
+  lossReviewedByAccountId String?
+  lossReviewedByAccount   Account?  @relation("GaRequestLossReviewedBy", fields: [lossReviewedByAccountId], references: [id])
+  lossReviewedPositionId  String?
+  lossReviewedPosition    Position? @relation("GaRequestLossReviewPosition", fields: [lossReviewedPositionId], references: [id])
+  lossReviewNote          String?
+
+  evidenceFileId String?     @unique
+  evidenceFile   FileObject? @relation("GaRequestEvidence", fields: [evidenceFileId], references: [id])
+
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelledByAccount   Account?  @relation("GaRequestCancelledBy", fields: [cancelledByAccountId], references: [id])
+  cancellationReason   String?
+
+  createdAt DateTime @default(now())
+}
+
+enum GaApprovalType {
+  NEW_ASSET_NEED
+  LOSS_REVIEW
+  DISPOSAL
+}
+
+// GA-Admin-configured Position per approval point — "Configurable
+// Position-based approvals; do not hard-code employees." NEW_ASSET_NEED is
+// the only optional one in practice (its absence means "Approval required?
+// No" in the PDF, request auto-progresses); LOSS_REVIEW and DISPOSAL are
+// expected to always be configured. If unconfigured, decisions have no
+// eligible approver and sit pending — same convention as every other
+// unconfigured-Position gap already in this app (e.g. a department with no
+// Level-3B holder).
+model GaApprovalConfig {
+  id                 String         @id @default(cuid())
+  approvalType       GaApprovalType @unique
+  approverPositionId String
+  approverPosition   Position       @relation("GaApprovalConfigPosition", fields: [approverPositionId], references: [id])
+  updatedByAccountId String
+  updatedByAccount   Account        @relation("GaApprovalConfigUpdatedBy", fields: [updatedByAccountId], references: [id])
+  updatedAt          DateTime       @updatedAt
+}
+
+// GA-Admin-created preventive schedule for an asset. "Due" detection is
+// dueDate-driven (derive-on-read, same pattern as every other due-date
+// check in this app) — intervalDays/intervalKm are descriptive reference
+// fields GA Admin uses to decide the next dueDate manually, not a fully
+// automatic interval-rollover engine (documented simplification).
+model MaintenancePlan {
+  id           String     @id @default(cuid())
+  assetId      String
+  asset        FixedAsset @relation(fields: [assetId], references: [id])
+  description  String
+  dueDate      DateTime?
+  intervalDays Int?
+  intervalKm   Int?
+  activeFlag   Boolean    @default(true)
+
+  createdByAccountId String
+  createdByAccount   Account  @relation("MaintenancePlanCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt          DateTime @default(now())
+}
+
+enum MaintenanceSourceType {
+  PREVENTIVE
+  CORRECTIVE
+}
+
+enum MaintenanceWorkType {
+  INTERNAL
+  VENDOR
+}
+
+enum MaintenanceStatus {
+  OPEN
+  COMPLETED
+}
+
+enum MaintenanceOutcome {
+  OPERATIONAL
+  BEYOND_REPAIR
+}
+
+// PREVENTIVE work orders originate from a MaintenancePlan; CORRECTIVE ones
+// from a GaRequest (DAMAGE_OR_ABNORMAL_CONDITION). sourcePlanId/
+// sourceGaRequestId are plain informational pointers (no Prisma relation,
+// same convention as AssetCustody.transferredToCustodyId) — exactly one is
+// set, matching sourceType. Completing with outcome BEYOND_REPAIR
+// auto-drafts a DisposalCase (lib/ga-operations.ts); OPERATIONAL just
+// updates the asset's condition/nextDue fields.
+model MaintenanceWorkOrder {
+  id                String                @id @default(cuid())
+  workOrderNumber   String                @unique
+  assetId           String
+  asset             FixedAsset            @relation(fields: [assetId], references: [id])
+  sourceType        MaintenanceSourceType
+  sourcePlanId      String?
+  sourceGaRequestId String?
+  workType          MaintenanceWorkType
+  checklistNotes    String?
+  status            MaintenanceStatus     @default(OPEN)
+
+  createdByAccountId String
+  createdByAccount   Account  @relation("MaintenanceWorkOrderCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt          DateTime @default(now())
+
+  serviceDate     DateTime?
+  odometerKm      Int?
+  diagnosisNote   String?
+  actionTakenNote String?
+  cost            Float?
+  evidenceFileId  String?             @unique
+  evidenceFile    FileObject?         @relation("MaintenanceWorkOrderEvidence", fields: [evidenceFileId], references: [id])
+  outcome         MaintenanceOutcome?
+  nextDueDate     DateTime?
+  nextDueKm       Int?
+
+  completedByAccountId String?
+  completedByAccount   Account?  @relation("MaintenanceWorkOrderCompletedBy", fields: [completedByAccountId], references: [id])
+  completedAt          DateTime?
+}
+
+enum DisposalReason {
+  BEYOND_REPAIR
+  OBSOLETE
+  CONFIRMED_LOSS
+}
+
+enum DisposalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  EXECUTED
+}
+
+enum DisposalMethod {
+  RETIRE
+  DISPOSE
+  SELL_AS_SCRAP
+}
+
+// "Beyond Repair, Obsolete or Confirmed Loss automatically creates a draft
+// Disposal Case" — OBSOLETE is the one manually-triggered reason (a direct
+// GA Admin action on the asset; the PDF lists it as an entry point but
+// shows no separate flow producing it). sourceWorkOrderId/sourceGaRequestId
+// are plain informational pointers (no Prisma relation, same convention as
+// elsewhere in this schema) — at most one is set, matching reason.
+// Rejected proposals return to DRAFT ("No: repair, storage or review" in
+// the PDF) rather than being deleted — immutable history, never silently
+// overwritten.
+model DisposalCase {
+  id         String         @id @default(cuid())
+  caseNumber String         @unique
+  assetId    String
+  asset      FixedAsset     @relation(fields: [assetId], references: [id])
+  reason     DisposalReason
+  status     DisposalStatus @default(DRAFT)
+
+  sourceWorkOrderId String?
+  sourceGaRequestId String?
+
+  proposalNote           String?
+  proposalEvidenceFileId String?     @unique
+  proposalEvidenceFile   FileObject? @relation("DisposalCaseProposalEvidence", fields: [proposalEvidenceFileId], references: [id])
+  submittedForApprovalAt DateTime?
+
+  decisionAt          DateTime?
+  decisionByAccountId String?
+  decisionByAccount   Account?  @relation("DisposalCaseDecidedBy", fields: [decisionByAccountId], references: [id])
+  decisionPositionId  String?
+  decisionPosition    Position? @relation("DisposalCaseDecisionPosition", fields: [decisionPositionId], references: [id])
+  decisionNote        String?
+
+  executionMethod         DisposalMethod?
+  executionDate           DateTime?
+  executionValue          Float?
+  executionReference      String?
+  executionEvidenceFileId String?         @unique
+  executionEvidenceFile   FileObject?     @relation("DisposalCaseExecutionEvidence", fields: [executionEvidenceFileId], references: [id])
+  executedByAccountId     String?
+  executedByAccount       Account?        @relation("DisposalCaseExecutedBy", fields: [executedByAccountId], references: [id])
+
+  createdByAccountId String
+  createdByAccount   Account  @relation("DisposalCaseCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt          DateTime @default(now())
 }

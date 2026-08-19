@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     where: status ? { status: status as AssetCustodyStatus } : undefined,
     include: {
       asset: { select: { assetCode: true, assetName: true } },
-      employee: { select: { employeeNumber: true, fullLegalName: true, preferredName: true } },
+      employee: { select: { employeeNumber: true, fullLegalName: true } },
       orgUnit: { select: { unitName: true } },
       location: { select: { locationName: true } },
     },
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       targetType: c.targetType,
       target:
         c.targetType === "EMPLOYEE" && c.employee
-          ? `${c.employee.employeeNumber} — ${c.employee.preferredName ?? c.employee.fullLegalName}`
+          ? `${c.employee.employeeNumber} — ${c.employee.fullLegalName}`
           : (c.targetType === "DEPARTMENT" ? c.orgUnit?.unitName : c.location?.locationName) ?? "",
       quantity: String(c.quantity),
       status: c.status,

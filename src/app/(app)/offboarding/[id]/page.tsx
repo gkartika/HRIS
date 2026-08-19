@@ -18,6 +18,7 @@ import {
   canExecuteExitClearanceStatus,
   canCancelOffboardingCaseStatus,
 } from "@/lib/offboarding";
+import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
 import { isOverdue } from "@/lib/work-calendar";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
@@ -99,6 +100,18 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
         })
       : [];
 
+  // Phase 4B: same surfacing for the GA-request blocker as the custody one
+  // above — executeExitClearance re-checks this server-side too.
+  const openGaRequests =
+    offboardingCase.status === "PENDING_CLEARANCE"
+      ? (
+          await prisma.gaRequest.findMany({
+            where: { requesterEmployeeId: offboardingCase.employeeId },
+            include: { asset: { select: { assetName: true, assetCode: true } } },
+          })
+        ).filter((r) => blocksOffboardingGaRequest(r.requestType, r.status))
+      : [];
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -107,7 +120,7 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
             <h1 className="font-mono text-lg font-medium text-slate-900">{offboardingCase.caseNumber}</h1>
             <p className="mt-1 text-sm text-slate-500">
               <Link href={`/employees/${offboardingCase.employeeId}`} className="text-indigo-600 hover:underline">
-                {offboardingCase.employee.preferredName ?? offboardingCase.employee.fullLegalName}
+                {offboardingCase.employee.fullLegalName}
               </Link>{" "}
               ({offboardingCase.employee.employeeNumber})
               {offboardingCase.employee.currentPosition && (
@@ -212,6 +225,22 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
             {openAssetCustodies.map((c) => (
               <li key={c.id}>
                 {c.asset.assetName} ({c.asset.assetCode}) — {t(`assetCustodyStatus.${c.status}`)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {openGaRequests.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+          <p className="text-sm font-medium text-amber-800">Permintaan GA yang Belum Selesai</p>
+          <ul className="mt-2 space-y-1 text-sm text-amber-800">
+            {openGaRequests.map((r) => (
+              <li key={r.id}>
+                <Link href={`/ga-requests/${r.id}`} className="font-mono text-xs hover:underline">
+                  {r.requestNumber}
+                </Link>
+                {r.asset && ` — ${r.asset.assetName} (${r.asset.assetCode})`}
               </li>
             ))}
           </ul>

@@ -49,7 +49,7 @@ function TransferForm({
   locations,
 }: {
   custodyId: string;
-  employees: (Option & { employeeNumber: string; fullLegalName: string; preferredName: string | null })[];
+  employees: (Option & { employeeNumber: string; fullLegalName: string })[];
   orgUnits: (Option & { unitName: string })[];
   locations: (Option & { locationName: string })[];
 }) {
@@ -78,7 +78,7 @@ function TransferForm({
             <option value="">— Pilih Karyawan —</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.employeeNumber} — {e.preferredName ?? e.fullLegalName}
+                {e.employeeNumber} — {e.fullLegalName}
               </option>
             ))}
           </select>
@@ -134,7 +134,7 @@ export function CustodyActions({
   locations,
 }: {
   custodyId: string;
-  employees: (Option & { employeeNumber: string; fullLegalName: string; preferredName: string | null })[];
+  employees: (Option & { employeeNumber: string; fullLegalName: string })[];
   orgUnits: (Option & { unitName: string })[];
   locations: (Option & { locationName: string })[];
 }) {

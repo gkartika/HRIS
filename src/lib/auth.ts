@@ -82,10 +82,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         return {
           id: account.id,
-          name:
-            account.employee?.preferredName ??
-            account.employee?.fullLegalName ??
-            account.usernameOrEmail,
+          name: account.employee?.fullLegalName ?? account.usernameOrEmail,
           email: account.usernameOrEmail,
           accountType: account.accountType,
           adminScope: account.adminScope,

@@ -131,7 +131,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           <div>
             <h1 className="font-mono text-lg font-medium text-slate-900">{request.requestNumber}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              {request.employee.preferredName ?? request.employee.fullLegalName} ({request.employee.employeeNumber})
+              {request.employee.fullLegalName} ({request.employee.employeeNumber})
             </p>
           </div>
           <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
@@ -173,7 +173,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.submittedBy")}</p>
             <p className="text-sm text-slate-900">
-              {request.requesterEmployee.preferredName ?? request.requesterEmployee.fullLegalName}
+              {request.requesterEmployee.fullLegalName}
               {request.requesterPosition ? ` (${request.requesterPosition.job.jobTitle})` : ""}
             </p>
           </div>
@@ -290,7 +290,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
             <>
               {" · "}
               {t("recruitment.cancelledBy")}:{" "}
-              {request.cancelledByEmployee?.preferredName ?? request.cancelledByEmployee?.fullLegalName ?? request.cancelledByAccount?.usernameOrEmail ?? "—"}
+              {request.cancelledByEmployee?.fullLegalName ?? request.cancelledByAccount?.usernameOrEmail ?? "—"}
               {" "}({t(`cancellationAuthority.${request.cancellationAuthority}`)}, {formatDate(request.cancelledAt)})
               {request.cancellationReason && <> — {request.cancellationReason}</>}
             </>

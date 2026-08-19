@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import {
-  isHrAdmin,
   isTrainingAdmin,
   canScoreAsCompetencyP1,
   canScoreAsCompetencyP2,
@@ -24,10 +23,10 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
     where: { id },
     include: {
       cycle: true,
-      employee: { select: { id: true, fullLegalName: true, preferredName: true, employeeNumber: true } },
+      employee: { select: { id: true, fullLegalName: true, employeeNumber: true } },
       position: { select: { positionCode: true, job: { select: { jobTitle: true } } } },
-      p1Employee: { select: { fullLegalName: true, preferredName: true } },
-      p2Employee: { select: { fullLegalName: true, preferredName: true } },
+      p1Employee: { select: { fullLegalName: true } },
+      p2Employee: { select: { fullLegalName: true } },
       items: { orderBy: [{ categorySnapshot: "asc" }, { competencyNameSnapshot: "asc" }] },
       valueItems: { orderBy: { valueNameSnapshot: "asc" } },
       evaluatorChanges: {
@@ -38,7 +37,7 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
   });
   if (!assessment) notFound();
 
-  const isAdmin = isHrAdmin(session) || isTrainingAdmin(session);
+  const isAdmin = isTrainingAdmin(session);
   const isLevel3InDept = isAdmin ? false : await isLevel3ForEmployeeDepartment(session.user.employeeId, assessment.employeeId);
   const directorCandidates = isAdmin ? [] : await getActiveDirectorCandidates();
   const myDirectorPositionIds = directorCandidates
@@ -76,7 +75,7 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
       })
     : [];
 
-  const employeeName = assessment.employee.preferredName ?? assessment.employee.fullLegalName;
+  const employeeName = assessment.employee.fullLegalName;
 
   return (
     <div>
@@ -90,7 +89,7 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">P1 {assessment.isLevel3AtSnapshot ? "(Direktur)" : "(Atasan Posisi Utama)"}</p>
           <p className="mt-1 text-sm text-slate-900">
-            {assessment.p1Employee ? (assessment.p1Employee.preferredName ?? assessment.p1Employee.fullLegalName) : "Belum ditentukan"}
+            {assessment.p1Employee ? (assessment.p1Employee.fullLegalName) : "Belum ditentukan"}
           </p>
           <p className="mt-1 text-xs text-slate-400">
             {assessment.p1SubmittedAt ? `Dikirim ${assessment.p1SubmittedAt.toISOString().slice(0, 10)}` : "Belum dikirim"}
@@ -100,7 +99,7 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">P2 {assessment.isLevel3AtSnapshot ? "(HR Manager)" : "(Kepala Departemen)"}</p>
           <p className="mt-1 text-sm text-slate-900">
-            {assessment.p2Employee ? (assessment.p2Employee.preferredName ?? assessment.p2Employee.fullLegalName) : "Belum ditentukan"}
+            {assessment.p2Employee ? (assessment.p2Employee.fullLegalName) : "Belum ditentukan"}
           </p>
           <p className="mt-1 text-xs text-slate-400">
             {assessment.p2SubmittedAt ? `Dikirim ${assessment.p2SubmittedAt.toISOString().slice(0, 10)}` : "Belum dikirim"}

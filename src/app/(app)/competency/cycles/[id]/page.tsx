@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin, isTrainingAdmin, canOpenCompetencyCycle } from "@/lib/permissions";
+import { isTrainingAdmin, canOpenCompetencyCycle } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { CloseCycleButton } from "./close-cycle-button";
@@ -9,7 +9,7 @@ import { CloseCycleButton } from "./close-cycle-button";
 export default async function CompetencyCycleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await requireSession();
-  if (!isHrAdmin(session) && !isTrainingAdmin(session)) {
+  if (!isTrainingAdmin(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
@@ -19,10 +19,10 @@ export default async function CompetencyCycleDetailPage({ params }: { params: Pr
   const assessments = await prisma.competencyAssessment.findMany({
     where: { cycleId: id },
     include: {
-      employee: { select: { fullLegalName: true, preferredName: true, employeeNumber: true } },
+      employee: { select: { fullLegalName: true, employeeNumber: true } },
       position: { select: { positionCode: true, job: { select: { jobTitle: true } } } },
-      p1Employee: { select: { fullLegalName: true, preferredName: true } },
-      p2Employee: { select: { fullLegalName: true, preferredName: true } },
+      p1Employee: { select: { fullLegalName: true } },
+      p2Employee: { select: { fullLegalName: true } },
     },
     orderBy: { employee: { fullLegalName: "asc" } },
   });
@@ -58,16 +58,16 @@ export default async function CompetencyCycleDetailPage({ params }: { params: Pr
             {assessments.map((a) => (
               <tr key={a.id} className="border-t border-slate-100">
                 <td className="px-4 py-3">
-                  <p className="text-slate-900">{a.employee.preferredName ?? a.employee.fullLegalName}</p>
+                  <p className="text-slate-900">{a.employee.fullLegalName}</p>
                   <p className="text-xs text-slate-400">{a.employee.employeeNumber}</p>
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">{a.position?.job.jobTitle ?? "—"}</td>
                 <td className="px-4 py-3 text-xs">
-                  {a.p1Employee ? (a.p1Employee.preferredName ?? a.p1Employee.fullLegalName) : "—"}
+                  {a.p1Employee ? (a.p1Employee.fullLegalName) : "—"}
                   {a.p1SubmittedAt && <span className="ml-1 text-emerald-600">✓</span>}
                 </td>
                 <td className="px-4 py-3 text-xs">
-                  {a.p2Employee ? (a.p2Employee.preferredName ?? a.p2Employee.fullLegalName) : "—"}
+                  {a.p2Employee ? (a.p2Employee.fullLegalName) : "—"}
                   {a.p2SubmittedAt && <span className="ml-1 text-emerald-600">✓</span>}
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">

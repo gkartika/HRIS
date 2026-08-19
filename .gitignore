@@ -43,9 +43,13 @@ next-env.d.ts
 
 /src/generated/prisma
 
-# SQLite dev database
+# SQLite dev database — real employee PII (NIK, KK, bank accounts, scanned
+# documents) lives in here and in every timestamped backup ever taken before
+# a risky migration; never let any of them reach a commit.
 /dev.db
 /dev.db-journal
+/dev.db.bak-*
+/dev.db.backup-*
 
 # Private file storage (never committed — dev-only fictional documents)
 /storage/

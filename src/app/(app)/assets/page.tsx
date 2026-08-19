@@ -11,6 +11,8 @@ const STATUS_TONE: Record<string, string> = {
   IN_USE: "bg-indigo-50 text-indigo-700",
   UNDER_REPAIR: "bg-amber-50 text-amber-700",
   DISPOSED: "bg-slate-100 text-slate-500",
+  LOST_PENDING_REVIEW: "bg-rose-50 text-rose-700",
+  RETIRED: "bg-slate-100 text-slate-500",
 };
 
 export default async function AssetsPage({

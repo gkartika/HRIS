@@ -261,7 +261,6 @@ async function main() {
     create: {
       employeeNumber: "CBP-0001",
       fullLegalName: "Budi Santoso",
-      preferredName: "Budi",
       gender: "MALE",
       birthDate: new Date("1988-04-12"),
       birthPlace: "Semarang",
@@ -288,7 +287,6 @@ async function main() {
     create: {
       employeeNumber: "CBP-0002",
       fullLegalName: "Siti Rahayu",
-      preferredName: "Siti",
       gender: "FEMALE",
       birthDate: new Date("1996-09-20"),
       birthPlace: "Kudus",
@@ -319,7 +317,6 @@ async function main() {
     create: {
       employeeNumber: "CBP-0003",
       fullLegalName: "Made Wirawan",
-      preferredName: "Made",
       gender: "MALE",
       birthDate: new Date("1985-11-02"),
       birthPlace: "Denpasar",

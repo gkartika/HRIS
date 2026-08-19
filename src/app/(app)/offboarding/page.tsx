@@ -172,7 +172,7 @@ export default async function OffboardingListPage({
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-600">
-                      {c.employee.preferredName ?? c.employee.fullLegalName}
+                      {c.employee.fullLegalName}
                       {c.employee.currentPosition && (
                         <span className="block text-xs text-slate-400">{c.employee.currentPosition.orgUnit.unitName}</span>
                       )}

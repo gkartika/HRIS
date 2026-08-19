@@ -60,7 +60,7 @@ export function EmployeeProfileView({
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-medium text-slate-900">
-              {employee.preferredName ?? employee.fullLegalName}
+              {employee.fullLegalName}
             </h1>
             <p className="font-mono text-xs text-slate-400">{employee.employeeNumber}</p>
           </div>
@@ -80,7 +80,6 @@ export function EmployeeProfileView({
 
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3">
           <Field label={t("employee.fullLegalName")} value={employee.fullLegalName} />
-          <Field label={t("employee.preferredName")} value={employee.preferredName} />
           <Field
             label={t("employee.gender")}
             value={employee.gender ? t(`gender.${employee.gender}`) : undefined}

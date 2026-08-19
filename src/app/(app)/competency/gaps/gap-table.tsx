@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export interface GapTableRow {
   id: string;
-  employee: { fullLegalName: string; preferredName: string | null; employeeNumber: string };
+  employee: { fullLegalName: string; employeeNumber: string };
   position: { job: { jobTitle: string } } | null;
   competencyAchievementPct: number | null;
   companyValuesScore: number | null;
@@ -35,7 +35,7 @@ export function GapTable({ rows, title }: { rows: GapTableRow[]; title: string }
           {rows.map((a) => (
             <tr key={a.id} className="border-t border-slate-100">
               <td className="px-4 py-3">
-                <p className="text-slate-900">{a.employee.preferredName ?? a.employee.fullLegalName}</p>
+                <p className="text-slate-900">{a.employee.fullLegalName}</p>
                 <p className="text-xs text-slate-400">{a.employee.employeeNumber}</p>
               </td>
               <td className="px-4 py-3 text-xs text-slate-600">{a.position?.job.jobTitle ?? "—"}</td>

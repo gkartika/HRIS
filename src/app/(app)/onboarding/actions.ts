@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { redirect } from "next/navigation";
-import { canCreateOnboardingCase, canMarkOnboardingContract, canMarkOnboardingTraining } from "@/lib/permissions";
+import { canCreateOnboardingCase, canMarkOnboardingContract, canMarkOnboardingTraining, canManageAssets } from "@/lib/permissions";
 import {
   isOnboardingFullyComplete,
   isOnboardingTrainingComplete,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/onboarding";
 import { getOnboardingTrainingStatusesForEmployee } from "@/lib/mandatory-training";
 import { logAudit } from "@/lib/audit";
+import { assignAssetToEmployee } from "@/app/(app)/assets/actions";
 
 // Manual entry point — every other Onboarding Case is auto-created inside
 // createEmployee/createEmployeeFromRecruitmentRequest (LIF-03). This covers
@@ -130,4 +131,25 @@ export async function updateMandatoryMaterialDueDate(
   });
 
   revalidatePath(`/onboarding/${caseId}`);
+}
+
+// Lets GA Admin assign an asset to the new employee directly from the
+// Onboarding case, instead of navigating away to /assets — reuses the real
+// Phase 4A assignAssetToEmployee action (createCustody) unmodified, then
+// additionally revalidates this onboarding case's own path so the derived
+// "Perlengkapan Selesai" section reflects the new custody immediately.
+export async function assignAssetDuringOnboarding(
+  caseId: string,
+  assetId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+
+  const error = await assignAssetToEmployee(assetId, undefined, formData);
+  if (error) return error;
+
+  revalidatePath(`/onboarding/${caseId}`);
+  return undefined;
 }

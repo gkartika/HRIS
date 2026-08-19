@@ -355,7 +355,6 @@ export async function createEmployeeFromRecruitmentRequest(
 
   const employeeNumber = (formData.get("employeeNumber") as string)?.trim();
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
-  const preferredName = (formData.get("preferredName") as string)?.trim() || null;
   const gender = (formData.get("gender") as string) || null;
   const workEmail = (formData.get("workEmail") as string)?.trim() || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
@@ -403,7 +402,6 @@ export async function createEmployeeFromRecruitmentRequest(
       data: {
         employeeNumber,
         fullLegalName,
-        preferredName,
         gender: gender ? (gender as Gender) : null,
         workEmail,
         mobileNumber,

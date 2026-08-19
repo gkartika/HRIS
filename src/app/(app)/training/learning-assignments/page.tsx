@@ -51,7 +51,7 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
         : {}),
     },
     include: {
-      employee: { select: { fullLegalName: true, preferredName: true, employeeNumber: true } },
+      employee: { select: { fullLegalName: true, employeeNumber: true } },
       course: {
         select: {
           title: true,
@@ -151,7 +151,7 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
             {assignments.map((a) => (
               <tr key={a.id} className="border-t border-slate-100 align-top">
                 <td className="px-4 py-3">
-                  <p className="text-slate-900">{a.employee.preferredName ?? a.employee.fullLegalName}</p>
+                  <p className="text-slate-900">{a.employee.fullLegalName}</p>
                   <p className="text-xs text-slate-400">{a.employee.employeeNumber}</p>
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">{a.course.title}</td>

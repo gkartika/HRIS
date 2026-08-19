@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/require-session";
 import { GapTable } from "./gap-table";
-import { isHrAdmin, isTrainingAdmin } from "@/lib/permissions";
+import { isTrainingAdmin } from "@/lib/permissions";
 import { getLevel3DepartmentIds, resolveDepartmentId } from "@/lib/level3-scope";
 import { getActiveDirectorCandidates } from "@/lib/org-chart";
 import { prisma } from "@/lib/db";
@@ -14,7 +14,7 @@ export default async function CompetencyGapsPage({ searchParams }: { searchParam
   const session = await requireSession();
   const { cycleId: requestedCycleId } = await searchParams;
 
-  const isAdmin = isHrAdmin(session) || isTrainingAdmin(session);
+  const isAdmin = isTrainingAdmin(session);
   const level3DepartmentIds = isAdmin ? [] : await getLevel3DepartmentIds(session.user.employeeId);
   const directorCandidates = isAdmin ? [] : await getActiveDirectorCandidates();
   const isDirector = directorCandidates.some((c) => c.employeeId === session.user.employeeId);
@@ -37,7 +37,7 @@ export default async function CompetencyGapsPage({ searchParams }: { searchParam
   const assessments = await prisma.competencyAssessment.findMany({
     where: { cycleId },
     include: {
-      employee: { select: { fullLegalName: true, preferredName: true, employeeNumber: true } },
+      employee: { select: { fullLegalName: true, employeeNumber: true } },
       position: { select: { job: { select: { jobTitle: true } }, orgUnit: { select: { id: true, unitName: true } } } },
     },
     orderBy: { employee: { fullLegalName: "asc" } },

@@ -133,7 +133,7 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <p className="text-sm font-medium text-slate-900">
-              {t("evaluation.p1Title")} — {evaluation.p1Employee?.preferredName ?? evaluation.p1Employee?.fullLegalName}
+              {t("evaluation.p1Title")} — {evaluation.p1Employee?.fullLegalName}
             </p>
             {evaluation.p1SubmittedAt ? (
               isViewerP1 || isReviewer ? (
@@ -147,7 +147,7 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
           </div>
           <div>
             <p className="text-sm font-medium text-slate-900">
-              {t("evaluation.p2Title")} — {evaluation.p2Employee?.preferredName ?? evaluation.p2Employee?.fullLegalName}
+              {t("evaluation.p2Title")} — {evaluation.p2Employee?.fullLegalName}
             </p>
             {evaluation.p2SubmittedAt ? (
               isViewerP2 || isReviewer ? (

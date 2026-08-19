@@ -37,7 +37,7 @@ export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationI
             <option value="">— Pilih Karyawan —</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+                {e.fullLegalName} ({e.employeeNumber})
               </option>
             ))}
           </select>
@@ -48,7 +48,7 @@ export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationI
             <option value="">— Pilih Karyawan —</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+                {e.fullLegalName} ({e.employeeNumber})
               </option>
             ))}
           </select>
@@ -143,7 +143,7 @@ export function CreateManualEvaluationForm({ employees }: { employees: Employee[
           <option value="">— Pilih —</option>
           {employees.map((e) => (
             <option key={e.id} value={e.id}>
-              {e.preferredName ?? e.fullLegalName} ({e.employeeNumber})
+              {e.fullLegalName} ({e.employeeNumber})
             </option>
           ))}
         </select>

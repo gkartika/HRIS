@@ -20,6 +20,8 @@ import {
   CalendarOff,
   GraduationCap,
   Package,
+  Wrench,
+  Trash2,
 } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -30,6 +32,9 @@ import {
   canViewOnboarding,
   canManageCompetencyFramework,
   canViewAssetMaster,
+  canManageAssets,
+  canManageGaOperations,
+  canSubmitGaRequest,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
@@ -215,13 +220,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         },
       })) > 0
     : false;
-  if (isHrAdmin(session) || isTrainingAdmin(session) || hasPendingCompetencyEvaluation) {
+  if (isTrainingAdmin(session) || hasPendingCompetencyEvaluation) {
     navItems.push({ href: "/competency", label: t("competencyAdmin.cycleNavLabel"), icon: GraduationCap });
   }
   // COM-10: Department Level 3 gets its Department's gap report, the
   // Director gets the Level-3 gap report — same broad-visibility-then-
-  // page-scoped pattern as every other report in this app.
-  if (isHrAdmin(session) || isTrainingAdmin(session) || isLevel3Anywhere || isDirectorAnywhere) {
+  // page-scoped pattern as every other report in this app. HR Admin
+  // withdrawn from the whole Training & Competency domain, 2026-08-18.
+  if (isTrainingAdmin(session) || isLevel3Anywhere || isDirectorAnywhere) {
     navItems.push({ href: "/competency/gaps", label: t("competencyAdmin.gapsNavLabel"), icon: GraduationCap });
   }
   if (session.user.employeeId) {
@@ -235,13 +241,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     navItems.push({ href: "/training/my-learning", label: t("training.myLearningNavLabel"), icon: GraduationCap });
   }
   // TRN-09/ACC-22: same broad list-nav visibility as Contract/Movement/
-  // Absence — HR Admin, Training Admin, or any employee-linked account (who
-  // may submit for self, or for their Department if Level 3), scoped
-  // further on the list page itself.
-  if (isHrAdmin(session) || isTrainingAdmin(session) || session.user.employeeId) {
+  // Absence — Training Admin, or any employee-linked account (who may
+  // submit for self, or for their Department if Level 3), scoped further
+  // on the list page itself. HR Admin withdrawn, 2026-08-18.
+  if (isTrainingAdmin(session) || session.user.employeeId) {
     navItems.push({ href: "/training-requests", label: t("trainingRequest.navLabel"), icon: GraduationCap });
   }
-  if (isHrAdmin(session) || isTrainingAdmin(session)) {
+  if (isTrainingAdmin(session)) {
     navItems.push({ href: "/training/courses", label: t("training.coursesNavLabel"), icon: GraduationCap });
     navItems.push({ href: "/training/mandatory-rules", label: t("training.mandatoryRulesNavLabel"), icon: GraduationCap });
   }
@@ -249,15 +255,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // has company-level read-only reporting" — same broad-then-scoped nav
   // visibility as training-requests above; the page itself resolves
   // whether this account actually has any direct reports/HR Manager
-  // Assignment and denies access otherwise.
-  if (isHrAdmin(session) || isTrainingAdmin(session) || session.user.employeeId) {
+  // Assignment and denies access otherwise. HR Admin withdrawn, 2026-08-18.
+  if (isTrainingAdmin(session) || session.user.employeeId) {
     navItems.push({ href: "/training/learning-assignments", label: t("training.learningAssignmentsNavLabel"), icon: GraduationCap });
   }
   // TRN-04/TRN-07: any employee-linked account may hold a direct report's
   // D+30 effectiveness task regardless of Dept Head/Level 3 status, plus
-  // Training/HR Admin get the company-wide queue (ACC-22) — same broad-
-  // then-page-scoped visibility pattern as Approval Inbox.
-  if (isHrAdmin(session) || isTrainingAdmin(session) || session.user.employeeId) {
+  // Training Admin gets the company-wide queue (ACC-22) — same broad-
+  // then-page-scoped visibility pattern as Approval Inbox. HR Admin
+  // withdrawn, 2026-08-18.
+  if (isTrainingAdmin(session) || session.user.employeeId) {
     navItems.push({ href: "/training/effectiveness-tasks", label: t("training.effectivenessTasksNavLabel"), icon: GraduationCap });
   }
   // Phase 4A access boundary: GA Admin operates the Asset Master/custody
@@ -267,10 +274,32 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (canViewAssetMaster(session)) {
     navItems.push({ href: "/assets", label: t("asset.navLabel"), icon: Package });
   }
+  // Per direct user request: GA Admin needs to know who's currently
+  // offboarding so they can proactively confirm asset returns — scoped to
+  // just that (employee/case number/open custody/open GA requests), never
+  // the full Offboarding case (reason, decisions, notes stay HR-only).
+  if (canManageAssets(session)) {
+    navItems.push({ href: "/offboarding/asset-clearance", label: "Klirens Aset Offboarding", icon: UserMinus });
+  }
   // Employee self-service — see only one's own assets, same broad
   // employee-linked-account visibility as My Competency/My Learning above.
   if (session.user.employeeId) {
     navItems.push({ href: "/my-assets", label: t("asset.myAssetsNavLabel"), icon: Package });
+  }
+  // Phase 4B: GA Operations. /ga-requests is reachable by any
+  // employee-linked account (self-service submit/view-own, same as
+  // /my-assets) or GA Admin (full queue) — "Requester sees only own
+  // requests" is enforced on the page itself. Maintenance and Disposal
+  // Cases are GA-Admin-only mutation surfaces (HR Admin deliberately gets
+  // no nav entry here, same access boundary as Asset Master above).
+  if (canManageGaOperations(session) || canSubmitGaRequest(session)) {
+    navItems.push({ href: "/ga-requests", label: t("gaRequest.navLabel"), icon: Package });
+  }
+  if (canManageGaOperations(session)) {
+    navItems.push({ href: "/maintenance/plans", label: t("maintenance.plansNavLabel"), icon: Wrench });
+    navItems.push({ href: "/maintenance/work-orders", label: t("maintenance.workOrdersNavLabel"), icon: Wrench });
+    navItems.push({ href: "/disposal-cases", label: t("disposalCase.navLabel"), icon: Trash2 });
+    navItems.push({ href: "/admin/ga-approvals", label: t("gaApprovals.navLabel"), icon: Settings });
   }
 
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");

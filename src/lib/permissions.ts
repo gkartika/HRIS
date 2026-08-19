@@ -188,12 +188,14 @@ export function canCreateOnboardingCase(session: Session): boolean {
 
 // Each completion flag has its own Primary Owner in the blueprint; HR Admin
 // (People & Payroll) can also mark any of them, consistent with its broader
-// operational latitude elsewhere in this app.
+// operational latitude elsewhere in this app. The training flag is the one
+// exception: Training Admin is the domain's sole operational owner
+// (2026-08-18), so HR Admin does not get the usual fallback here.
 export function canMarkOnboardingContract(session: Session): boolean {
   return isHrAdmin(session);
 }
 export function canMarkOnboardingTraining(session: Session): boolean {
-  return isHrAdmin(session) || isTrainingAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 // Data Fields Blueprint "08 Contracts": Visibility "Self + People Admin" —
@@ -563,16 +565,16 @@ export function isDirector(activeDirectorPositionIds: string[]): boolean {
   return activeDirectorPositionIds.length > 0;
 }
 
-// ACC-03: "Training & Competency Admin" (the TRAINING_ADMIN role) owns
-// framework versions, Position/Job competency requirements and cycle
-// open/close — HR Admin keeps the same administrative latitude it has
-// everywhere else.
+// 2026-08-18: Training & Competency Admin is the sole operational owner of
+// the whole Training & Competency domain — HR Admin's usual administrative
+// latitude is deliberately withheld here, same wall-off shape as GA Admin
+// owns Assets/GA with HR Admin excluded.
 export function canManageCompetencyFramework(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 export function canOpenCompetencyCycle(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 // ACC-21: "P1 is the Primary Position supervisor and completes the
@@ -589,12 +591,12 @@ export function canScoreAsCompetencyP2(actingEmployeeId: string | null | undefin
   return !!actingEmployeeId && !!p2EmployeeId && actingEmployeeId === p2EmployeeId;
 }
 
-// ACC-21: "HR Admin may manually replace P1 or P2 with a mandatory reason
-// and full audit history, but cannot score or approve unless separately
-// assigned as an evaluator" — reassignment authority is HR Admin only, and
-// deliberately does NOT also grant canScoreAsCompetencyP1/P2 above.
+// 2026-08-18: reassignment authority moved from HR Admin to Training Admin
+// along with the rest of the domain — still deliberately does NOT also
+// grant canScoreAsCompetencyP1/P2 above, same separation-of-duties shape as
+// before, just with Training Admin now on both sides of that line.
 export function canReassignCompetencyEvaluator(session: Session): boolean {
-  return isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 // COM-10/ACC-21: "Employees may see only their own finalized results" — the
@@ -604,12 +606,13 @@ export function canViewOwnCompetencyResult(session: Session, subjectEmployeeId: 
   return !!session.user.employeeId && session.user.employeeId === subjectEmployeeId && completedAt !== null;
 }
 
-// COM-10/ACC-21: full assessment visibility — HR Admin, Training &
-// Competency Admin, either assigned evaluator (own slot; the OTHER
-// evaluator's scores stay hidden at the page level while their slot is
-// unsubmitted, same as canViewEvaluation), the subject's own finalized
-// result, the subject's Department Level 3 (department gap report, COM-10)
-// and the Director (Level 3 gap report, COM-10).
+// COM-10/ACC-21: full assessment visibility — Training & Competency Admin,
+// either assigned evaluator (own slot; the OTHER evaluator's scores stay
+// hidden at the page level while their slot is unsubmitted, same as
+// canViewEvaluation), the subject's own finalized result, the subject's
+// Department Level 3 (department gap report, COM-10) and the Director
+// (Level 3 gap report, COM-10). HR Admin deliberately excluded — see the
+// domain-ownership note above canManageCompetencyFramework.
 export function canViewCompetencyAssessment(
   session: Session,
   subjectEmployeeId: string,
@@ -620,7 +623,6 @@ export function canViewCompetencyAssessment(
   activeDirectorPositionIds: string[]
 ): boolean {
   return (
-    isHrAdmin(session) ||
     isTrainingAdmin(session) ||
     canScoreAsCompetencyP1(session.user.employeeId, p1EmployeeId) ||
     canScoreAsCompetencyP2(session.user.employeeId, p2EmployeeId) ||
@@ -630,36 +632,34 @@ export function canViewCompetencyAssessment(
   );
 }
 
-// ACC-24: "HR Admin alone may run the approved one-time historical
-// competency migration through preview, mapping, rejection and commit...
-// Training Admin may review migrated competency content after commit but
-// cannot bypass Employee/Position matching or edit source evidence" — that
-// post-commit review is read-only, so it's exactly
-// canViewCompetencyAssessment's admin branch; no separate predicate needed.
+// 2026-08-18: run authority for the one-time historical migration moved to
+// Training Admin along with the rest of the domain — it's now the same
+// canManageCompetencyFramework-style admin branch as everything else here,
+// no more split between "runs it" (HR Admin) and "reviews it" (Training
+// Admin).
 export function canRunCompetencyHistoricalMigration(session: Session): boolean {
-  return isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 // Phase 3B "Provide import preview for mandatory participant lists and
-// in-person attendance" — Training Admin owns both, same
-// isTrainingAdmin-or-isHrAdmin shape as every other Training-domain write
-// predicate (canManageTrainingCourse, canManageMandatoryTrainingRule, etc.).
+// in-person attendance" — Training Admin owns both, exclusively (2026-08-18).
 export function canImportMandatoryTrainingParticipants(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 export function canImportTrainingAttendance(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 // ---------- Phase 3A: Training (TRN-02/09/10/13, ACC-22/23) ----------
 
 // TRN-09/ACC-22: "An Employee may submit a request for self, and a Level 3
-// Position may submit for employees in its Department." HR Admin keeps the
-// same administrative submit-on-behalf latitude it has everywhere else in
-// this app (e.g. canSubmitMovementRequest).
-export function canSubmitTrainingRequest(session: Session, isSelf: boolean, isLevel3InEmployeeDepartment: boolean): boolean {
-  return isHrAdmin(session) || isSelf || isLevel3InEmployeeDepartment;
+// Position may submit for employees in its Department." 2026-08-18: HR
+// Admin's administrative submit-on-behalf latitude was withdrawn along with
+// the rest of the domain — submission is now Self or Level 3 only (Training
+// Admin was never on this list either; it validates/schedules, not submits).
+export function canSubmitTrainingRequest(_session: Session, isSelf: boolean, isLevel3InEmployeeDepartment: boolean): boolean {
+  return isSelf || isLevel3InEmployeeDepartment;
 }
 
 // TRN-10/ACC-22: "The Department Head approves first" — same Position-
@@ -669,31 +669,32 @@ export function canDecideTrainingRequestAsDeptHead(activeDeptHeadPositionIds: st
 }
 
 // TRN-10/ACC-22: "Training Admin then validates, schedules and administers
-// delivery."
+// delivery." — exclusively, as of 2026-08-18 (HR Admin withdrawn).
 export function canValidateTrainingRequest(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 export function canScheduleTrainingRequest(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 // TRN-10: "Returned/rejected/cancelled reasons are mandatory and audited" —
-// same DM-25-style cancel-eligibility exception used by Recruitment/
-// Movement/Absence: the original Requester, Training Admin or HR Admin.
+// same DM-25-style cancel-eligibility shape used elsewhere, but with HR
+// Admin withdrawn (2026-08-18): the original Requester or Training Admin,
+// matching GA Requests' {requester} ∪ {domain admin} shape exactly.
 export function canCancelTrainingRequest(session: Session, isRequester: boolean): boolean {
-  return isHrAdmin(session) || isTrainingAdmin(session) || isRequester;
+  return isTrainingAdmin(session) || isRequester;
 }
 
 // ACC-22: "Training Admin may create courses and sessions manually" and
 // administers the resulting LearningAssignment lifecycle (attendance,
-// completion, certificate).
+// completion, certificate) — exclusively, as of 2026-08-18.
 export function canManageTrainingCourse(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 export function canManageLearningAssignment(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
 // ---------- Phase 3B: Learning Library / LMS ----------
@@ -709,10 +710,11 @@ export function canTakeQuiz(session: Session, assignmentEmployeeId: string): boo
 // Key Control "Role-scoped confidentiality": Employee sees only their own
 // learning; a manager sees only employees within their authority (direct
 // report or Level-3 department scope, resolved by the caller the same way
-// every other manager-scoped view in this app is); Training/HR Admin see
-// everything; HR Manager gets the same access for its own dedicated
-// company-wide *read-only* reporting view (ACC-15-style persona, distinct
-// from the operational Training Admin workspace).
+// every other manager-scoped view in this app is); Training Admin sees
+// everything (HR Admin withdrawn, 2026-08-18); HR Manager gets the same
+// access for its own dedicated company-wide *read-only* reporting view
+// (ACC-15-style persona, distinct from the operational Training Admin
+// workspace).
 export function canViewLearningAssignment(
   session: Session,
   employeeId: string,
@@ -720,7 +722,6 @@ export function canViewLearningAssignment(
   activeHrManagerPositionIds: string[]
 ): boolean {
   return (
-    isHrAdmin(session) ||
     isTrainingAdmin(session) ||
     session.user.employeeId === employeeId ||
     isManagerOfEmployee ||
@@ -732,27 +733,31 @@ export function canViewLearningAssignment(
 // read-only (no course/assignment/attendance/certificate management —
 // that stays Training-Admin-only per Key Control "Training Admin owns
 // content"), gated on the same live-resolved HR Manager Position Assignment
-// as the rest of that persona's workspace.
+// as the rest of that persona's workspace. HR Admin withdrawn, 2026-08-18.
 export function canViewCompanyWideLmsReporting(session: Session, activeHrManagerPositionIds: string[]): boolean {
-  return isHrAdmin(session) || isTrainingAdmin(session) || isHrManager(activeHrManagerPositionIds);
+  return isTrainingAdmin(session) || isHrManager(activeHrManagerPositionIds);
 }
 
 // TRN-04: "the Primary Position supervisor completes it [the effectiveness
-// follow-up]" — the assigned Employee's live-resolved supervisor, or HR
-// Admin with the same administrative latitude used everywhere else.
+// follow-up]" — the assigned Employee's live-resolved supervisor, or
+// Training Admin with the domain's administrative latitude (HR Admin's
+// equivalent latitude was withdrawn 2026-08-18, moved here along with the
+// rest of the domain).
 export function canRecordLearningEffectiveness(session: Session, isEmployeesSupervisor: boolean): boolean {
-  return isHrAdmin(session) || isEmployeesSupervisor;
+  return isTrainingAdmin(session) || isEmployeesSupervisor;
 }
 
 // TRN-13/ACC-23: Mandatory Training rule authoring is Training Admin's
-// operational data, same as course/session creation.
+// operational data, exclusively (2026-08-18), same as course/session
+// creation.
 export function canManageMandatoryTrainingRule(session: Session): boolean {
-  return isTrainingAdmin(session) || isHrAdmin(session);
+  return isTrainingAdmin(session);
 }
 
-// TRN-02/ACC-22: view access to a single Training Request — HR Admin,
-// Training Admin, the subject Employee, whoever submitted it, or an eligible
-// Department Head approver. Same shape as canViewAbsenceRequest.
+// TRN-02/ACC-22: view access to a single Training Request — Training Admin,
+// the subject Employee, whoever submitted it, or an eligible Department
+// Head approver. Same shape as canViewAbsenceRequest. HR Admin withdrawn,
+// 2026-08-18.
 export function canViewTrainingRequest(
   session: Session,
   subjectEmployeeId: string,
@@ -760,7 +765,6 @@ export function canViewTrainingRequest(
   activeDeptHeadPositionIds: string[]
 ): boolean {
   return (
-    isHrAdmin(session) ||
     isTrainingAdmin(session) ||
     session.user.employeeId === subjectEmployeeId ||
     session.user.id === submittedByAccountId ||
@@ -883,4 +887,67 @@ export function canImportAssetMaster(session: Session): boolean {
 // Department/Location custody record).
 export function canViewOwnAssetCustody(session: Session, custodyEmployeeId: string | null): boolean {
   return !!session.user.employeeId && session.user.employeeId === custodyEmployeeId;
+}
+
+// ---------- Phase 4B: GA Operations ----------
+// Same explicit deviation as Phase 4A above, restated because it's easy to
+// get wrong here specifically: GA Admin owns every mutation (verify/route/
+// process a request, create/execute maintenance, create/execute disposal,
+// configure approval Positions). HR Admin is NOT included in any of these
+// predicates — "HR Admin has no GA operational access" per the PDF.
+
+export function canManageGaOperations(session: Session): boolean {
+  return isGaAdmin(session);
+}
+
+export function canManageGaApprovalConfig(session: Session): boolean {
+  return isGaAdmin(session);
+}
+
+// Submission is self-service only — any employee-linked account may report
+// a need, damage or loss for themselves. No HR-Admin-on-behalf-of exception
+// here (unlike Absence): the PDF's requester lane is the employee/GA-user
+// lane, not an HR proxy path.
+export function canSubmitGaRequest(session: Session): boolean {
+  return !!session.user.employeeId;
+}
+
+// "Requester sees only own requests" — GA Admin (full operational access),
+// the original requester, or whoever currently holds the Position
+// configured to decide this specific request (so an approver can actually
+// open the request they're meant to act on) — same widening reason as
+// canViewAbsenceRequest's firstApproverPositionId holder exception.
+// Deliberately no HR Admin/manager exception.
+export function canViewGaRequest(
+  session: Session,
+  requesterEmployeeId: string,
+  approverPositionHolderEmployeeIds: string[] = []
+): boolean {
+  return (
+    isGaAdmin(session) ||
+    (!!session.user.employeeId && session.user.employeeId === requesterEmployeeId) ||
+    canDecideAsConfiguredGaApprover(session.user.employeeId, approverPositionHolderEmployeeIds)
+  );
+}
+
+// Position-based approval, resolved live by the caller (GaApprovalConfig ->
+// getCurrentHolderEmployeeIds), same shape as
+// canDecideAbsenceRequestAsFirstApprover. Reused identically for all three
+// GA Operations approval points (New Asset Need, Loss review, Disposal) —
+// the caller passes the holder set for whichever GaApprovalType applies.
+export function canDecideAsConfiguredGaApprover(
+  actingEmployeeId: string | null | undefined,
+  approverPositionHolderEmployeeIds: string[]
+): boolean {
+  return !!actingEmployeeId && approverPositionHolderEmployeeIds.includes(actingEmployeeId);
+}
+
+export function canExportGaOperationsData(session: Session): boolean {
+  return isGaAdmin(session);
+}
+
+// Same DM-25-style exception as every other cancellation in this app: the
+// original requester or GA Admin.
+export function canCancelGaRequest(session: Session, requesterEmployeeId: string): boolean {
+  return isGaAdmin(session) || (!!session.user.employeeId && session.user.employeeId === requesterEmployeeId);
 }

@@ -1,7 +1,16 @@
 // Pure business logic for Phase 4A Employee Assets. No Prisma/Next
 // imports — unit testable, same pattern as lms.ts/onboarding.ts.
 
-export type AssetStatusValue = "AVAILABLE" | "IN_USE" | "UNDER_REPAIR" | "DISPOSED";
+// LOST_PENDING_REVIEW/RETIRED added for Phase 4B (GA Operations) — see
+// ga-operations.ts. isAssetAvailableForIndividualAssignment below already
+// blocks assignment for both with no further change needed here.
+export type AssetStatusValue =
+  | "AVAILABLE"
+  | "IN_USE"
+  | "UNDER_REPAIR"
+  | "DISPOSED"
+  | "LOST_PENDING_REVIEW"
+  | "RETIRED";
 export type AssetCustodyStatusValue = "ACTIVE" | "RETURNED";
 export type AssetCustodyTargetTypeValue = "EMPLOYEE" | "DEPARTMENT" | "LOCATION";
 export type AssetInspectionResultValue = "GOOD" | "NEEDS_REPAIR" | "LOST_OR_BEYOND_REPAIR";

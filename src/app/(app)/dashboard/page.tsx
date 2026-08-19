@@ -47,6 +47,17 @@ export default async function DashboardPage() {
     cards.push({ label: "Sedang Digunakan", value: inUseAssets });
     cards.push({ label: "Total Penguasaan Aktif", value: activeCustodies });
     cards.push({ label: "Dalam Perbaikan", value: underRepair });
+
+    const [openGaRequests, openWorkOrders, openDisposalCases] = await Promise.all([
+      prisma.gaRequest.count({
+        where: { status: { in: ["SUBMITTED", "PENDING_APPROVAL", "PENDING_LOSS_REVIEW"] } },
+      }),
+      prisma.maintenanceWorkOrder.count({ where: { status: "OPEN" } }),
+      prisma.disposalCase.count({ where: { status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } } }),
+    ]);
+    cards.push({ label: "Permintaan GA Terbuka", value: openGaRequests });
+    cards.push({ label: "Work Order Terbuka", value: openWorkOrders });
+    cards.push({ label: "Kasus Disposal Aktif", value: openDisposalCases });
   }
   if (session.user.employeeId) {
     const employee = await prisma.employee.findUnique({

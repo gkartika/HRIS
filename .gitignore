@@ -62,3 +62,6 @@ next-env.d.ts
 
 # Local-only Claude Code session permissions (machine-specific, like .env.local)
 /.claude/settings.local.json
+
+.vercel
+.env*

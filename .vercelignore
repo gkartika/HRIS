@@ -1,0 +1,15 @@
+# Vercel's CLI upload step does not reliably follow .gitignore the same
+# way git does — this file exists specifically to guarantee real employee
+# PII (dev.db and every timestamped backup) and secrets (.env) never reach
+# Vercel's build servers, regardless of git-ignore semantics.
+dev.db
+dev.db-journal
+dev.db.bak-*
+dev.db.backup-*
+storage/
+.env
+.env.*
+!.env.example
+node_modules
+.next
+.git

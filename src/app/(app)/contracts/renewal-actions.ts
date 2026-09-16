@@ -101,6 +101,76 @@ export async function triggerDueRenewalCases(): Promise<void> {
   }
 }
 
+// Version after UAT: manual per-contract trigger for HR Admin, from the
+// dashboard's expiring-contracts widget — same body as one iteration of
+// triggerDueRenewalCases above, minus the isRenewalDue gate, since HR Admin
+// is explicitly choosing to start the renewal process early rather than
+// waiting for the automatic D-30 trigger. The unique constraint on
+// ContractRenewalCase.currentContractId still guards against ever creating
+// two cases for the same contract.
+export async function triggerRenewalCaseNow(contractId: string): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+
+  const contract = await prisma.contract.findUnique({
+    where: { id: contractId },
+    include: { employee: true, renewalCaseAsCurrentContract: true },
+  });
+  if (!contract) return "Kontrak tidak ditemukan.";
+  if (contract.status !== "ACTIVE" || !contract.endDate) {
+    return "Kontrak ini tidak aktif atau tidak memiliki tanggal berakhir.";
+  }
+  if (contract.renewalCaseAsCurrentContract) {
+    return "Proses Perpanjangan untuk kontrak ini sudah dimulai.";
+  }
+
+  const employee = contract.employee;
+  if (!employee.currentPositionId) return "Karyawan ini belum memiliki Posisi saat ini.";
+
+  const primaryAssignment = await prisma.assignment.findFirst({
+    where: { employeeId: employee.id, assignmentType: "PRIMARY", status: "ACTIVE" },
+  });
+  if (!primaryAssignment) return "Penempatan Utama aktif karyawan ini tidak ditemukan.";
+
+  const year = new Date().getFullYear();
+  const countThisYear = await prisma.contractRenewalCase.count({
+    where: { caseNumber: { startsWith: `REN-${year}-` } },
+  });
+  const caseNumber = formatRenewalCaseNumber(countThisYear + 1, year);
+
+  const evaluation = await createDraftEvaluation({
+    employeeId: employee.id,
+    purpose: "CONTRACT_RENEWAL",
+    primaryAssignmentId: primaryAssignment.id,
+    snapshotPositionId: employee.currentPositionId,
+    createdByAccountId: session.user.id,
+  });
+
+  const created = await prisma.contractRenewalCase.create({
+    data: {
+      caseNumber,
+      currentContractId: contract.id,
+      employeeId: employee.id,
+      primaryAssignmentId: primaryAssignment.id,
+      snapshotPositionId: employee.currentPositionId,
+      status: "TRIGGERED",
+      evaluationId: evaluation.id,
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "CREATE",
+    datasetName: "ContractRenewalCase",
+    recordId: created.id,
+    reason: `Manually triggered by HR Admin from dashboard for contract ${contract.contractNumber}, linked to ${evaluation.evaluationNumber}`,
+  });
+
+  revalidatePath(`/contracts/${contractId}`);
+  revalidatePath("/contracts");
+  revalidatePath("/dashboard");
+}
+
 export async function submitDeptHeadRecommendation(
   caseId: string,
   _prevState: string | undefined,

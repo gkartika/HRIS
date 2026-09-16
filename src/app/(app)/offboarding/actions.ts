@@ -10,6 +10,8 @@ import {
   canDecideOffboardingCase,
   canExecuteExitClearance,
   canCancelOffboardingCase,
+  canSubmitExitClearanceForm,
+  canConfirmGaAssetClearance,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
@@ -26,7 +28,7 @@ import {
   canCancelOffboardingCaseStatus,
 } from "@/lib/offboarding";
 import type { OffboardingReason } from "@/generated/prisma/enums";
-import { blocksOffboarding } from "@/lib/assets";
+import { blocksOffboarding, computeAssetStatusAfterReturn, computeAvailableQuantityAfterReturn } from "@/lib/assets";
 import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
 
 // LIF-06/12: the ONE shared creator for every trigger — a reported
@@ -285,6 +287,14 @@ export async function executeExitClearance(
     return `Clearance keluar diblokir — masih ada ${parts.join("; ")}. GA Admin harus menyelesaikan ini terlebih dahulu.`;
   }
 
+  // Version after UAT: GA Admin's own explicit checklist sign-off is a
+  // required precondition alongside the automatic checks above — even once
+  // the DB shows everything returned, GA Admin must still actively confirm
+  // it (see confirmGaAssetClearance below).
+  if (!offboardingCase.gaAssetClearanceConfirmedAt) {
+    return "Clearance keluar diblokir — Admin GA belum mengonfirmasi checklist pengembalian aset.";
+  }
+
   const clearanceNote = (formData.get("clearanceNote") as string)?.trim() || null;
 
   const activeAssignments = await prisma.assignment.findMany({
@@ -391,4 +401,162 @@ export async function cancelOffboardingCase(
   revalidatePath(`/offboarding/${caseId}`);
   revalidatePath("/offboarding");
   revalidatePath("/approvals");
+}
+
+// Version after UAT: employee-facing Exit Clearance form — self-service,
+// one submission per case, informational only (does not gate
+// executeExitClearance above). Questions come from the HR-Admin-maintained
+// ExitClearanceQuestion list (src/app/(app)/admin/exit-clearance-questions).
+export async function submitExitClearanceForm(
+  caseId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+
+  const offboardingCase = await prisma.offboardingCase.findUnique({ where: { id: caseId } });
+  if (!offboardingCase) return "Kasus tidak ditemukan.";
+  if (!canSubmitExitClearanceForm(session, offboardingCase.employeeId)) {
+    return "Anda tidak memiliki akses untuk mengisi formulir ini.";
+  }
+  if (offboardingCase.status !== "PENDING_CLEARANCE") {
+    return "Formulir ini hanya dapat diisi saat kasus menunggu Exit Clearance.";
+  }
+
+  const existing = await prisma.exitClearanceSubmission.findUnique({ where: { offboardingCaseId: caseId } });
+  if (existing) return "Formulir ini sudah pernah diisi dan tidak dapat diubah.";
+
+  const questions = await prisma.exitClearanceQuestion.findMany({ where: { activeFlag: true } });
+
+  await prisma.$transaction(async (tx) => {
+    const submission = await tx.exitClearanceSubmission.create({
+      data: { offboardingCaseId: caseId, employeeId: offboardingCase.employeeId },
+    });
+    for (const question of questions) {
+      const answerText = (formData.get(`question-${question.id}`) as string)?.trim() || null;
+      await tx.exitClearanceAnswer.create({
+        data: { submissionId: submission.id, questionId: question.id, answerText },
+      });
+    }
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "CREATE",
+    datasetName: "ExitClearanceSubmission",
+    recordId: caseId,
+    reason: `${offboardingCase.caseNumber}: employee submitted Exit Clearance form`,
+  });
+
+  revalidatePath(`/offboarding/${caseId}`);
+}
+
+// Version after UAT: GA Admin's explicit sign-off that every asset/GA
+// request tied to the employee has been returned/closed — required
+// alongside (not instead of) the automatic checks in executeExitClearance
+// above. Re-verifies server-side rather than trusting the client-rendered
+// gate on the asset-clearance page.
+//
+// Per direct follow-up request: one click here also bulk-returns every
+// outstanding AssetCustody for the employee (same effect as processing each
+// one individually via returnAssetCustody in the Assets module, generic
+// "GOOD" inspection result since there's no per-item detail entry in this
+// flow) — GA Admin no longer has to visit each asset's own page first.
+// Open GaRequests (damage/loss/disposal-type investigations) are NOT
+// auto-resolved this way — those need an actual decision, not a bulk
+// rubber-stamp — so if any remain after the bulk return, the checklist
+// confirmation itself is withheld until GA Admin resolves those individually.
+export async function confirmGaAssetClearance(
+  caseId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canConfirmGaAssetClearance(session)) return "Anda tidak memiliki akses.";
+
+  const offboardingCase = await prisma.offboardingCase.findUnique({ where: { id: caseId } });
+  if (!offboardingCase) return "Kasus tidak ditemukan.";
+
+  const openCustodies = await prisma.assetCustody.findMany({
+    where: { employeeId: offboardingCase.employeeId, status: { not: "RETURNED" } },
+    include: { asset: true },
+  });
+  const blockingCustodies = openCustodies.filter((c) => blocksOffboarding("EMPLOYEE", c.status));
+
+  if (blockingCustodies.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      for (const custody of blockingCustodies) {
+        await tx.assetCustody.update({
+          where: { id: custody.id },
+          data: {
+            status: "RETURNED",
+            returnedAt: new Date(),
+            returnedByAccountId: session.user.id,
+            returnConditionNote: "Dikembalikan melalui konfirmasi massal di Klirens Aset Offboarding.",
+            inspectionResult: "GOOD",
+          },
+        });
+        if (custody.asset.trackingType === "INDIVIDUAL") {
+          await tx.fixedAsset.update({
+            where: { id: custody.assetId },
+            data: { status: computeAssetStatusAfterReturn("GOOD") },
+          });
+        } else {
+          await tx.fixedAsset.update({
+            where: { id: custody.assetId },
+            data: {
+              availableQuantity: computeAvailableQuantityAfterReturn(
+                custody.asset.availableQuantity ?? 0,
+                custody.quantity,
+                "GOOD"
+              ),
+            },
+          });
+        }
+      }
+    });
+
+    await logAudit({
+      actorAccountId: session.user.id,
+      action: "UPDATE",
+      datasetName: "AssetCustody",
+      recordId: caseId,
+      reason: `${offboardingCase.caseNumber}: bulk-returned ${blockingCustodies.length} asset custody record(s) via Klirens Aset Offboarding`,
+    });
+  }
+
+  const openGaRequests = await prisma.gaRequest.findMany({
+    where: { requesterEmployeeId: offboardingCase.employeeId },
+  });
+  const blockingGaRequests = openGaRequests.filter((r) => blocksOffboardingGaRequest(r.requestType, r.status));
+  if (blockingGaRequests.length > 0) {
+    revalidatePath("/offboarding/asset-clearance");
+    revalidatePath(`/employees/${offboardingCase.employeeId}`);
+    revalidatePath("/assets");
+    return `${blockingCustodies.length > 0 ? "Aset berhasil dikembalikan, tetapi masih" : "Masih"} ada ${blockingGaRequests.length} permintaan GA yang harus diselesaikan satu per satu sebelum checklist dapat dikonfirmasi.`;
+  }
+
+  const gaAssetClearanceNote = (formData.get("gaAssetClearanceNote") as string)?.trim() || null;
+
+  await prisma.offboardingCase.update({
+    where: { id: caseId },
+    data: {
+      gaAssetClearanceConfirmedAt: new Date(),
+      gaAssetClearanceConfirmedById: session.user.id,
+      gaAssetClearanceNote,
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "OffboardingCase",
+    recordId: caseId,
+    reason: `${offboardingCase.caseNumber}: GA Admin confirmed asset return checklist${blockingCustodies.length > 0 ? ` (bulk-returned ${blockingCustodies.length} asset(s))` : ""}`,
+  });
+
+  revalidatePath("/offboarding/asset-clearance");
+  revalidatePath(`/offboarding/${caseId}`);
+  revalidatePath(`/employees/${offboardingCase.employeeId}`);
+  revalidatePath("/assets");
 }

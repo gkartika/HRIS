@@ -76,6 +76,16 @@ export function CreateEmployeeForm({
         <p className="text-xs font-medium text-slate-500">Data Identitas &amp; Kependudukan</p>
       </div>
       <div>
+        <label className="mb-1 block text-xs text-slate-500">No. KTP (NIK)</label>
+        <input
+          name="nationalIdNumber"
+          inputMode="numeric"
+          maxLength={16}
+          placeholder="16 digit angka"
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
         <label className="mb-1 block text-xs text-slate-500">No. KK</label>
         <input
           name="noKk"
@@ -121,7 +131,7 @@ export function CreateEmployeeForm({
       </div>
 
       <p className="text-xs text-slate-400 md:col-span-2">
-        Setelah karyawan dibuat, unggah File KTP/KK dan tambahkan Penempatan (Posisi Utama) dari
+        Setelah karyawan dibuat, unggah Kartu BPJS dan tambahkan Penempatan (Posisi Utama) dari
         halaman detail karyawan.
       </p>
       {error && <p className="text-xs text-rose-600 md:col-span-2">{error}</p>}

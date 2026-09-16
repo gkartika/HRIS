@@ -60,9 +60,9 @@ export interface ImportZipResult {
 // Bulk-attaches documents from a ZIP+manifest (CTL-13: "ZIP/manifest
 // import"). Manifest rows only need employeeNumber, category, and
 // zipEntryPath — every import is an *additional* document (a brand-new
-// FileObject); if category is KTP or KK it also repoints
-// Employee.ktpFileId/kkFileId, same replace semantics as the single-file
-// upload panel.
+// FileObject); if category is BPJS_TK or BPJS_KESEHATAN it also repoints
+// Employee.bpjsTkFileId/bpjsKesehatanFileId, same replace semantics as the
+// single-file upload panel.
 export async function importEmployeeDocumentsZip(
   zipBuffer: Buffer,
   uploaderAccountId: string
@@ -119,7 +119,7 @@ export async function importEmployeeDocumentsZip(
         originalFileName,
         mimeType,
         sizeBytes: bytes.length,
-        sensitivity: category === "KTP" || category === "KK" ? "HIGHLY_RESTRICTED" : "RESTRICTED",
+        sensitivity: category === "BPJS_TK" || category === "BPJS_KESEHATAN" ? "HIGHLY_RESTRICTED" : "RESTRICTED",
         employeeId: employee.id,
         uploadedByAccountId: uploaderAccountId,
         category,
@@ -127,10 +127,10 @@ export async function importEmployeeDocumentsZip(
       },
     });
 
-    if (category === "KTP") {
-      await prisma.employee.update({ where: { id: employee.id }, data: { ktpFileId: fileObject.id } });
-    } else if (category === "KK") {
-      await prisma.employee.update({ where: { id: employee.id }, data: { kkFileId: fileObject.id } });
+    if (category === "BPJS_TK") {
+      await prisma.employee.update({ where: { id: employee.id }, data: { bpjsTkFileId: fileObject.id } });
+    } else if (category === "BPJS_KESEHATAN") {
+      await prisma.employee.update({ where: { id: employee.id }, data: { bpjsKesehatanFileId: fileObject.id } });
     }
 
     await logAudit({

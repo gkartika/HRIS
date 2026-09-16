@@ -5,6 +5,12 @@ import { blocksOffboarding } from "@/lib/assets";
 import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { ConfirmGaAssetClearanceForm } from "./confirm-form";
+
+function formatDate(date: Date | null | undefined): string {
+  if (!date) return "—";
+  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
+}
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_DEPT_HEAD: "Menunggu Kepala Departemen",
@@ -27,7 +33,10 @@ export default async function OffboardingAssetClearancePage() {
 
   const activeCases = await prisma.offboardingCase.findMany({
     where: { status: { in: ["PENDING_DEPT_HEAD", "PENDING_HR_MANAGER", "PENDING_CLEARANCE"] } },
-    include: { employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } } },
+    include: {
+      employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
+      gaAssetClearanceConfirmedBy: { select: { usernameOrEmail: true } },
+    },
     orderBy: { clearanceDueDate: "asc" },
   });
 
@@ -101,13 +110,24 @@ export default async function OffboardingAssetClearancePage() {
                 </div>
                 <p className="mt-2 text-xs text-slate-400">{STATUS_LABEL[c.status] ?? c.status}</p>
 
-                {clear ? (
+                {clear && (
                   <p className="mt-3 text-sm text-emerald-700">✓ Semua aset sudah dikembalikan, tidak ada permintaan GA yang belum selesai.</p>
+                )}
+
+                {c.gaAssetClearanceConfirmedAt ? (
+                  <p className="mt-3 text-xs text-slate-500">
+                    ✓ Dikonfirmasi oleh {c.gaAssetClearanceConfirmedBy?.usernameOrEmail ?? "—"} pada{" "}
+                    {formatDate(c.gaAssetClearanceConfirmedAt)}
+                    {c.gaAssetClearanceNote && ` — "${c.gaAssetClearanceNote}"`}
+                  </p>
                 ) : (
                   <div className="mt-3 space-y-2">
                     {custodies.length > 0 && (
                       <div>
                         <p className="text-xs font-medium text-slate-500">Aset Belum Dikembalikan</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          Tidak perlu diproses satu per satu di halaman aset — tombol di bawah mengembalikan semuanya sekaligus.
+                        </p>
                         <ul className="mt-1 space-y-1 text-sm text-slate-700">
                           {custodies.map((custody) => (
                             <li key={custody.id}>
@@ -121,7 +141,7 @@ export default async function OffboardingAssetClearancePage() {
                     )}
                     {requests.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-slate-500">Permintaan GA Belum Selesai</p>
+                        <p className="text-xs font-medium text-slate-500">Permintaan GA Belum Selesai (harus diselesaikan satu per satu)</p>
                         <ul className="mt-1 space-y-1 text-sm text-slate-700">
                           {requests.map((r) => (
                             <li key={r.id}>
@@ -134,6 +154,7 @@ export default async function OffboardingAssetClearancePage() {
                         </ul>
                       </div>
                     )}
+                    <ConfirmGaAssetClearanceForm caseId={c.id} />
                   </div>
                 )}
               </div>

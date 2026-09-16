@@ -10,6 +10,7 @@ import {
   canManageAssignments,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
+  canViewBpjsCard,
   canSubmitMovementRequest,
   canViewContract,
   canManageContracts,
@@ -27,7 +28,7 @@ import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { EmployeeProfileView } from "@/components/employee-profile-view";
 import { AssignmentManagementPanel } from "./assignment-panel";
-import { IdentityDocumentsPanel } from "./identity-documents-panel";
+import { BpjsCardsPanel } from "./bpjs-cards-panel";
 import { AccountHoldPanel } from "./account-panel";
 import { AttendanceAssignmentPanel } from "./attendance-panel";
 import { TaskForcePanel } from "./task-force-panel";
@@ -68,8 +69,8 @@ export default async function EmployeeDetailPage({
       files: true,
       educationLevel: true,
       ptkpStatus: true,
-      ktpFile: true,
-      kkFile: true,
+      bpjsTkFile: true,
+      bpjsKesehatanFile: true,
       account: { select: { accountStatus: true, usernameOrEmail: true } },
     },
   });
@@ -87,12 +88,14 @@ export default async function EmployeeDetailPage({
   // Documents carry their own sensitivity (many are Highly Restricted, e.g.
   // contracts) independent of which Employee fields a role can see — only the
   // owner or HR Admin should even know a given file exists (matches the
-  // permission check in /api/files/[id]). KTP/KK are excluded from the
-  // generic list since they get their own dedicated panel below.
+  // permission check in /api/files/[id]). BPJS cards are excluded from the
+  // generic list since they get their own dedicated panel below, with a
+  // wider view audience (canViewBpjs, not canViewDocs).
   const canViewDocs = canViewEmployeeDocument(session, employee.id);
   const visibleFiles = canViewDocs
-    ? employee.files.filter((f) => f.category !== "KTP" && f.category !== "KK")
+    ? employee.files.filter((f) => f.category !== "BPJS_TK" && f.category !== "BPJS_KESEHATAN")
     : [];
+  const canViewBpjs = canViewBpjsCard(session, employee.id);
   const canEdit = isSelf || isHrAdmin(session);
   const canManage = canManageAssignments(session);
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
@@ -281,11 +284,11 @@ export default async function EmployeeDetailPage({
           existingNames={taskForceNames}
         />
       )}
-      {canViewDocs && (
-        <IdentityDocumentsPanel
+      {canViewBpjs && (
+        <BpjsCardsPanel
           employeeId={employee.id}
-          ktpFile={employee.ktpFile}
-          kkFile={employee.kkFile}
+          bpjsTkFile={employee.bpjsTkFile}
+          bpjsKesehatanFile={employee.bpjsKesehatanFile}
           canUpload={canUploadDocs}
         />
       )}

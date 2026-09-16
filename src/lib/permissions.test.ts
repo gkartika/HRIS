@@ -25,12 +25,16 @@ import {
   canSignContract,
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
+  canViewBpjsCard,
   canReportResignation,
   canDecideOffboardingCaseAsDeptHead,
   canDecideOffboardingCase,
   canExecuteExitClearance,
   canCancelOffboardingCase,
   canViewOffboardingCase,
+  canSubmitExitClearanceForm,
+  canManageExitClearanceQuestions,
+  canConfirmGaAssetClearance,
   canSubmitShiftAssignment,
   canViewShiftAssignments,
   isDirector,
@@ -110,8 +114,8 @@ function mockEmployee(overrides: Partial<Employee> = {}): Employee {
     namaIbuKandung: "Ibu Contoh",
     educationLevelId: "edu-1",
     ptkpStatusCode: "K/1",
-    ktpFileId: "file-ktp",
-    kkFileId: "file-kk",
+    bpjsTkFileId: "file-bpjs-tk",
+    bpjsKesehatanFileId: "file-bpjs-kesehatan",
     hireDate: new Date("2022-01-01"),
     employmentStatus: "PKWTT",
     currentPositionId: null,
@@ -339,6 +343,19 @@ describe("canUploadEmployeeDocument", () => {
   });
 });
 
+describe("canViewBpjsCard", () => {
+  it("allows HR Admin, GA Admin, Training Admin, and the employee themselves", () => {
+    expect(canViewBpjsCard(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(true);
+    expect(canViewBpjsCard(mockSession({ roles: ["GA_ADMIN"] }), "emp-1")).toBe(true);
+    expect(canViewBpjsCard(mockSession({ roles: ["TRAINING_ADMIN"] }), "emp-1")).toBe(true);
+    expect(canViewBpjsCard(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1")).toBe(true);
+  });
+
+  it("denies a plain employee viewing someone else's BPJS card", () => {
+    expect(canViewBpjsCard(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-2")).toBe(false);
+  });
+});
+
 describe("projectEmployee field-level scope (ACC-10 / DM-17 sensitivity)", () => {
   it("gives HR Admin the full record including noKk/namaIbuKandung/ptkpStatusCode", () => {
     const session = mockSession({ roles: ["HR_ADMIN"] });
@@ -354,14 +371,13 @@ describe("projectEmployee field-level scope (ACC-10 / DM-17 sensitivity)", () =>
     expect(result.noKk).toBe("3374010101880001");
   });
 
-  it("strips noKk/namaIbuKandung/ptkpStatusCode/ktpFileId/kkFileId from Training Admin", () => {
+  it("strips nationalIdNumber/noKk/namaIbuKandung/ptkpStatusCode from Training Admin", () => {
     const session = mockSession({ roles: ["TRAINING_ADMIN"] });
     const result = projectEmployee(mockEmployee(), session);
+    expect(result.nationalIdNumber).toBeUndefined();
     expect(result.noKk).toBeUndefined();
     expect(result.namaIbuKandung).toBeUndefined();
     expect(result.ptkpStatusCode).toBeUndefined();
-    expect(result.ktpFileId).toBeUndefined();
-    expect(result.kkFileId).toBeUndefined();
   });
 
   it("strips the same identity fields from GA Admin", () => {
@@ -438,6 +454,28 @@ describe("canViewOffboardingCase", () => {
     expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", [], false)).toBe(
       false
     );
+  });
+});
+
+describe("canSubmitExitClearanceForm", () => {
+  it("allows only the employee themselves — not HR Admin on their behalf", () => {
+    expect(canSubmitExitClearanceForm(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1")).toBe(true);
+    expect(canSubmitExitClearanceForm(mockSession({ roles: ["HR_ADMIN"], employeeId: null }), "emp-1")).toBe(false);
+    expect(canSubmitExitClearanceForm(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-2" }), "emp-1")).toBe(false);
+  });
+});
+
+describe("canManageExitClearanceQuestions", () => {
+  it("is HR Admin only", () => {
+    expect(canManageExitClearanceQuestions(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canManageExitClearanceQuestions(mockSession({ roles: ["GA_ADMIN"] }))).toBe(false);
+  });
+});
+
+describe("canConfirmGaAssetClearance", () => {
+  it("is GA Admin only", () => {
+    expect(canConfirmGaAssetClearance(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
+    expect(canConfirmGaAssetClearance(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
   });
 });
 

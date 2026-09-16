@@ -284,6 +284,21 @@ export function canUploadEmployeeDocument(session: Session): boolean {
   return isHrAdmin(session);
 }
 
+// BPJS TK/Kesehatan cards: broader view access than other employee documents
+// — GA Admin and Training Admin need to pull an employee's card on hand
+// (e.g. HSE handling a workplace accident), but only HR Admin can
+// upload/replace one. Kept separate from canViewEmployeeDocument since that
+// function's self-or-HR-Admin-only rule still applies to every other
+// employee document category.
+export function canViewBpjsCard(session: Session, employeeId: string): boolean {
+  return (
+    isHrAdmin(session) ||
+    isGaAdmin(session) ||
+    isTrainingAdmin(session) ||
+    session.user.employeeId === employeeId
+  );
+}
+
 // ---------- Shared Evaluation (DM-26/27, WF-19, ACC-17, PER-07, DEC-020) ----------
 // One reusable FR-HC-01-07 workflow for every consumer — Contract Renewal
 // (draft at D-30), Perubahan Posisi (draft on Promosi/Mutasi/Demosi
@@ -419,6 +434,27 @@ export function canViewOffboardingCase(
     isEmployeesManager ||
     isDeptHeadApprover(activeDeptHeadPositionIds)
   );
+}
+
+// Version after UAT: employee-facing Exit Clearance form — self-service
+// only, no admin latitude (this is the employee's own attestation, not
+// something HR Admin fills in on their behalf).
+export function canSubmitExitClearanceForm(session: Session, employeeId: string): boolean {
+  return session.user.employeeId === employeeId;
+}
+
+// Admin-configurable question bank behind the form above — People & Payroll
+// Admin owns this the same way it owns every other admin-configurable
+// master list (Education Levels, PTKP Status).
+export function canManageExitClearanceQuestions(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
+// GA Admin's explicit sign-off that every asset/GA request tied to the
+// employee has been returned/closed — required alongside (not instead of)
+// the automatic AssetCustody/GaRequest checks in executeExitClearance().
+export function canConfirmGaAssetClearance(session: Session): boolean {
+  return isGaAdmin(session);
 }
 
 // ---------- Shift Assignment (new, per direct user request) ----------
@@ -783,16 +819,14 @@ const HIGHLY_RESTRICTED_FIELDS = [
   "taxId",
   "bpjsEmploymentNumber",
   "bpjsHealthNumber",
-  // DM-17/DM-18/CTL-12: "No KK, Nama Ibu Kandung, PTKP Pajak, KTP file and KK
-  // file are sensitive" — same tier as bank/tax/BPJS above. The relation
-  // objects (ptkpStatus/ktpFile/kkFile) aren't part of the base Employee
-  // scalar type — their visibility is gated separately at the page level,
-  // same pattern already used for currentPosition/assignments/files.
+  // DM-17/DM-18/CTL-12: "No KK, Nama Ibu Kandung, PTKP Pajak are sensitive" —
+  // same tier as bank/tax/BPJS above. The relation object (ptkpStatus) isn't
+  // part of the base Employee scalar type — its visibility is gated
+  // separately at the page level, same pattern used for
+  // currentPosition/assignments/files/bpjsTkFile/bpjsKesehatanFile.
   "noKk",
   "namaIbuKandung",
   "ptkpStatusCode",
-  "ktpFileId",
-  "kkFileId",
 ] as const;
 
 const RESTRICTED_CONTACT_FIELDS = [

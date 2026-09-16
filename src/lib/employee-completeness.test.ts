@@ -2,16 +2,15 @@ import { describe, it, expect } from "vitest";
 import { isEmployeeProfileIncomplete, missingFieldLabels } from "./employee-completeness";
 
 const complete = {
+  nationalIdNumber: "3374010101880000",
   noKk: "3374010101880001",
   namaIbuKandung: "Sri Wahyuni",
   educationLevelId: "edu-1",
   ptkpStatusCode: "K/1",
-  ktpFileId: "file-1",
-  kkFileId: "file-2",
 };
 
 describe("isEmployeeProfileIncomplete", () => {
-  it("returns false when all six DM-17/DM-18/DM-19/DM-20 fields are present", () => {
+  it("returns false when all five DM-17/DM-18/DM-19/DM-20 fields are present", () => {
     expect(isEmployeeProfileIncomplete(complete)).toBe(false);
   });
 
@@ -24,12 +23,11 @@ describe("isEmployeeProfileIncomplete", () => {
   it("returns true for a record with nothing filled in (legacy pre-migration row)", () => {
     expect(
       isEmployeeProfileIncomplete({
+        nationalIdNumber: null,
         noKk: null,
         namaIbuKandung: null,
         educationLevelId: null,
         ptkpStatusCode: null,
-        ktpFileId: null,
-        kkFileId: null,
       })
     ).toBe(true);
   });
@@ -37,9 +35,9 @@ describe("isEmployeeProfileIncomplete", () => {
 
 describe("missingFieldLabels", () => {
   it("lists only the missing fields, in a stable order", () => {
-    expect(missingFieldLabels({ ...complete, ktpFileId: null, kkFileId: null })).toEqual([
-      "File KTP",
-      "File KK",
+    expect(missingFieldLabels({ ...complete, nationalIdNumber: null, noKk: null })).toEqual([
+      "No. KTP",
+      "No. KK",
     ]);
   });
 

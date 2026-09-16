@@ -1,18 +1,18 @@
 "use client";
 
 import { useActionState } from "react";
-import { uploadIdentityDocument } from "./document-actions";
+import { uploadBpjsCard } from "./bpjs-actions";
 
 interface DocSlotProps {
   employeeId: string;
-  category: "KTP" | "KK";
+  category: "BPJS_TK" | "BPJS_KESEHATAN";
   label: string;
   currentFile: { id: string; originalFileName: string } | null;
   canUpload: boolean;
 }
 
 function DocumentSlot({ employeeId, category, label, currentFile, canUpload }: DocSlotProps) {
-  const action = uploadIdentityDocument.bind(null, employeeId, category);
+  const action = uploadBpjsCard.bind(null, employeeId, category);
   const [error, formAction, isPending] = useActionState(action, undefined);
 
   return (
@@ -54,36 +54,37 @@ function DocumentSlot({ employeeId, category, label, currentFile, canUpload }: D
   );
 }
 
-export function IdentityDocumentsPanel({
+export function BpjsCardsPanel({
   employeeId,
-  ktpFile,
-  kkFile,
+  bpjsTkFile,
+  bpjsKesehatanFile,
   canUpload,
 }: {
   employeeId: string;
-  ktpFile: { id: string; originalFileName: string } | null;
-  kkFile: { id: string; originalFileName: string } | null;
+  bpjsTkFile: { id: string; originalFileName: string } | null;
+  bpjsKesehatanFile: { id: string; originalFileName: string } | null;
   canUpload: boolean;
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="text-sm font-medium text-slate-900">Dokumen Identitas</h2>
+      <h2 className="text-sm font-medium text-slate-900">Kartu BPJS</h2>
       <p className="mt-1 text-xs text-slate-500">
-        Tersimpan privat — hanya dapat diakses oleh karyawan yang bersangkutan dan Admin SDM.
+        Dapat diunduh oleh karyawan yang bersangkutan, Admin SDM, Admin GA, dan Admin Pelatihan.
+        Hanya Admin SDM yang dapat mengunggah atau mengganti berkas.
       </p>
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         <DocumentSlot
           employeeId={employeeId}
-          category="KTP"
-          label="File KTP"
-          currentFile={ktpFile}
+          category="BPJS_TK"
+          label="Kartu BPJS Ketenagakerjaan"
+          currentFile={bpjsTkFile}
           canUpload={canUpload}
         />
         <DocumentSlot
           employeeId={employeeId}
-          category="KK"
-          label="File KK"
-          currentFile={kkFile}
+          category="BPJS_KESEHATAN"
+          label="Kartu BPJS Kesehatan"
+          currentFile={bpjsKesehatanFile}
           canUpload={canUpload}
         />
       </div>

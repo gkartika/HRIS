@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, UserCheck, CalendarDays, Award } from "lucide-react";
+import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, UserCheck, CalendarDays, Award, ClipboardCheck } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
@@ -58,6 +58,12 @@ const SECTIONS = [
     icon: Award,
     title: "Kerangka Kompetensi",
     desc: "Matrik Kompetensi dan Tata Nilai Perusahaan (juga dapat diakses Admin Pelatihan & Kompetensi)",
+  },
+  {
+    href: "/admin/exit-clearance-questions",
+    icon: ClipboardCheck,
+    title: "Pertanyaan Klirens Keluar",
+    desc: "Daftar pertanyaan formulir Klirens Keluar yang diisi karyawan saat offboarding",
   },
 ];
 

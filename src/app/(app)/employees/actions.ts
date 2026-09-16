@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canCreateEmployee, isHrAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { validateNoKk } from "@/lib/validation/employee-fields";
+import { validateNoKk, validateNationalIdNumber } from "@/lib/validation/employee-fields";
 import { formatOnboardingCaseNumber } from "@/lib/onboarding";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";
@@ -25,6 +25,7 @@ export async function createEmployee(
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
   const hireDate = formData.get("hireDate") as string;
   const employmentStatus = formData.get("employmentStatus") as EmploymentStatus;
+  const nationalIdNumber = (formData.get("nationalIdNumber") as string)?.trim() || null;
   const noKk = (formData.get("noKk") as string)?.trim() || null;
   const namaIbuKandung = (formData.get("namaIbuKandung") as string)?.trim() || null;
   const educationLevelId = (formData.get("educationLevelId") as string) || null;
@@ -35,6 +36,10 @@ export async function createEmployee(
   }
   if (!educationLevelId) return "Pendidikan Terakhir wajib dipilih.";
   if (!ptkpStatusCode) return "PTKP Pajak wajib dipilih.";
+  if (nationalIdNumber) {
+    const nationalIdError = validateNationalIdNumber(nationalIdNumber);
+    if (nationalIdError) return nationalIdError;
+  }
   if (noKk) {
     const noKkError = validateNoKk(noKk);
     if (noKkError) return noKkError;
@@ -58,6 +63,7 @@ export async function createEmployee(
         mobileNumber,
         hireDate: hireDateObj,
         employmentStatus,
+        nationalIdNumber,
         noKk,
         namaIbuKandung,
         educationLevelId,
@@ -136,6 +142,7 @@ export async function updateEmployee(
   if (isHrAdmin(session)) {
     data.fullLegalName = fullLegalName;
 
+    const nationalIdNumber = (formData.get("nationalIdNumber") as string)?.trim() || null;
     const noKk = (formData.get("noKk") as string)?.trim() || null;
     const namaIbuKandung = (formData.get("namaIbuKandung") as string)?.trim() || null;
     const educationLevelId = (formData.get("educationLevelId") as string) || null;
@@ -143,11 +150,16 @@ export async function updateEmployee(
 
     if (!educationLevelId) return "Pendidikan Terakhir wajib dipilih.";
     if (!ptkpStatusCode) return "PTKP Pajak wajib dipilih.";
+    if (nationalIdNumber) {
+      const nationalIdError = validateNationalIdNumber(nationalIdNumber);
+      if (nationalIdError) return nationalIdError;
+    }
     if (noKk) {
       const noKkError = validateNoKk(noKk);
       if (noKkError) return noKkError;
     }
 
+    data.nationalIdNumber = nationalIdNumber;
     data.noKk = noKk;
     data.namaIbuKandung = namaIbuKandung;
     data.educationLevelId = educationLevelId;

@@ -13,6 +13,17 @@ export function validateNoKk(value: string): string | null {
   return null;
 }
 
+const NATIONAL_ID_NUMBER_PATTERN = /^\d{16}$/;
+
+export function validateNationalIdNumber(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null; // optional field — only format is validated when provided
+  if (!NATIONAL_ID_NUMBER_PATTERN.test(trimmed)) {
+    return "No. KTP (NIK) harus tepat 16 digit angka.";
+  }
+  return null;
+}
+
 export const ALLOWED_DOCUMENT_MIME_TYPES = [
   "application/pdf",
   "image/jpeg",

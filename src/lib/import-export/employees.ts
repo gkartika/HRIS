@@ -38,7 +38,7 @@ const VALID_EMPLOYMENT_STATUSES = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"];
 
 // CTL-13: create/update upsert by employeeNumber, replacing the Phase 0
 // create-only importer. System-generated fields (id, timestamps,
-// currentPositionId, ktpFileId/kkFileId) are never writable via import.
+// currentPositionId, bpjsTkFileId/bpjsKesehatanFileId) are never writable via import.
 export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[]> {
   const [existingEmployees, educationLevels, ptkpStatuses] = await Promise.all([
     prisma.employee.findMany({ select: { id: true, employeeNumber: true } }),

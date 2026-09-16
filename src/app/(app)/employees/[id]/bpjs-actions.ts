@@ -8,16 +8,16 @@ import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 
-type IdentityDocumentCategory = "KTP" | "KK";
+type BpjsCardCategory = "BPJS_TK" | "BPJS_KESEHATAN";
 
 function getExtension(fileName: string): string {
   const idx = fileName.lastIndexOf(".");
   return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
 }
 
-export async function uploadIdentityDocument(
+export async function uploadBpjsCard(
   employeeId: string,
-  category: IdentityDocumentCategory,
+  category: BpjsCardCategory,
   _prevState: string | undefined,
   formData: FormData
 ): Promise<string | undefined> {
@@ -41,7 +41,8 @@ export async function uploadIdentityDocument(
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return "Karyawan tidak ditemukan.";
 
-  const isReplacement = category === "KTP" ? !!employee.ktpFileId : !!employee.kkFileId;
+  const isReplacement =
+    category === "BPJS_TK" ? !!employee.bpjsTkFileId : !!employee.bpjsKesehatanFileId;
 
   const storageKey = randomStorageKey(category, getExtension(file.name));
   const bytes = Buffer.from(await file.arrayBuffer());
@@ -63,7 +64,10 @@ export async function uploadIdentityDocument(
 
   await prisma.employee.update({
     where: { id: employeeId },
-    data: category === "KTP" ? { ktpFileId: fileObject.id } : { kkFileId: fileObject.id },
+    data:
+      category === "BPJS_TK"
+        ? { bpjsTkFileId: fileObject.id }
+        : { bpjsKesehatanFileId: fileObject.id },
   });
 
   await logAudit({

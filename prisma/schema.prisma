@@ -544,10 +544,10 @@ enum OffboardingCaseStatus {
 
 // ---------- Phase 2: Offboarding (LIF-06/07/12, WF-10, GA-05, DSH-08/09/14) ----------
 // GA-05 ("Exit Clearance cannot complete while employee-assigned assets
-// remain open") cannot be enforced yet — Assets (Phase 4) isn't modeled in
-// this schema at all. Exit-clearance completion is HR-Admin-attested for
-// now; revisit once Phase 4 ships an Asset model to check against (flagged
-// in docs/DECISIONS.md rather than built as a speculative placeholder).
+// remain open") is enforced in executeExitClearance() by checking for open
+// AssetCustody/GaRequest rows (Phase 4A/4B), plus GA Admin's own explicit
+// gaAssetClearanceConfirmedAt sign-off below (Version after UAT) — no longer
+// a speculative placeholder.
 model OffboardingCase {
   id         String                @id @default(cuid())
   caseNumber String                @unique
@@ -604,8 +604,59 @@ model OffboardingCase {
   cancelledByAccount   Account?  @relation("OffboardingCancelledBy", fields: [cancelledByAccountId], references: [id])
   cancellationReason   String?
 
+  // Version after UAT: GA Admin's own explicit sign-off that every asset/GA
+  // request tied to this employee has been returned/closed — required
+  // alongside (not instead of) the automatic AssetCustody/GaRequest checks
+  // in executeExitClearance(), so GA has real accountability rather than a
+  // silent system check.
+  gaAssetClearanceConfirmedAt   DateTime?
+  gaAssetClearanceConfirmedById String?
+  gaAssetClearanceConfirmedBy   Account?  @relation("OffboardingGaAssetClearanceConfirmedBy", fields: [gaAssetClearanceConfirmedById], references: [id])
+  gaAssetClearanceNote          String?
+
+  // Employee-facing Exit Clearance form (Version after UAT) — informational
+  // only, does not gate executeExitClearance(). One submission per case.
+  exitClearanceSubmission ExitClearanceSubmission?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Version after UAT: admin-configurable Exit Clearance questions, answered
+// once (free text) by the employee themselves when their offboarding case
+// reaches PENDING_CLEARANCE. Structurally the same "admin-defined ordered
+// items + per-submission answers" shape as the LMS Quiz chain, but with a
+// free-text answer instead of multiple-choice options.
+model ExitClearanceQuestion {
+  id           String   @id @default(cuid())
+  questionText String
+  displayOrder Int      @default(0)
+  activeFlag   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  answers ExitClearanceAnswer[]
+}
+
+model ExitClearanceSubmission {
+  id                String          @id @default(cuid())
+  offboardingCaseId String          @unique
+  offboardingCase   OffboardingCase @relation(fields: [offboardingCaseId], references: [id])
+  employeeId        String
+  employee          Employee        @relation("EmployeeExitClearanceSubmissions", fields: [employeeId], references: [id])
+  submittedAt       DateTime        @default(now())
+
+  answers ExitClearanceAnswer[]
+}
+
+model ExitClearanceAnswer {
+  id           String                  @id @default(cuid())
+  submissionId String
+  submission   ExitClearanceSubmission @relation(fields: [submissionId], references: [id])
+  questionId   String
+  question     ExitClearanceQuestion   @relation(fields: [questionId], references: [id])
+  answerText   String?
+
+  @@unique([submissionId, questionId])
 }
 
 // ---------- Shift Assignment (new, per direct user request) ----------
@@ -729,6 +780,7 @@ model Account {
   offboardingCasesHrManagerDecisionBy    OffboardingCase[]               @relation("OffboardingHrManagerDecisionBy")
   offboardingCasesClearanceCompletedBy   OffboardingCase[]               @relation("OffboardingClearanceCompletedBy")
   offboardingCasesCancelledBy            OffboardingCase[]               @relation("OffboardingCancelledBy")
+  offboardingCasesGaAssetClearanceConfirmedBy OffboardingCase[]          @relation("OffboardingGaAssetClearanceConfirmedBy")
   shiftAssignmentsSubmittedBy            ShiftAssignment[]               @relation("ShiftAssignmentSubmittedBy")
   attendanceAssignmentsAssignedBy        AttendanceAssignment[]          @relation("AttendanceAssignmentAssignedBy")
   absenceRequestsSubmittedBy             AbsenceRequest[]                @relation("AbsenceRequestSubmittedBy")
@@ -815,11 +867,15 @@ model Employee {
   // DM-18/CTL-12: private file references, never a public URL or base64 blob.
   // A new upload creates a new FileObject and repoints this FK — the
   // superseded FileObject row is kept (still linked via FileObject.employeeId)
-  // so replacement history isn't lost.
-  ktpFileId                String?          @unique
-  ktpFile                  FileObject?      @relation("EmployeeKtpFile", fields: [ktpFileId], references: [id])
-  kkFileId                 String?          @unique
-  kkFile                   FileObject?      @relation("EmployeeKkFile", fields: [kkFileId], references: [id])
+  // so replacement history isn't lost. KTP/KK are number-only fields now
+  // (nationalIdNumber/noKk above) — BPJS cards are the only employee
+  // documents still stored as files, downloadable (not editable) by GA
+  // Admin and Training Admin too since HSE/GA need them on hand for a
+  // workplace accident.
+  bpjsTkFileId             String?          @unique
+  bpjsTkFile               FileObject?      @relation("EmployeeBpjsTkFile", fields: [bpjsTkFileId], references: [id])
+  bpjsKesehatanFileId      String?          @unique
+  bpjsKesehatanFile        FileObject?      @relation("EmployeeBpjsKesehatanFile", fields: [bpjsKesehatanFileId], references: [id])
   hireDate                 DateTime
   employmentStatus         EmploymentStatus
   // Denormalized pointer to the Position of this employee's current Primary
@@ -850,6 +906,7 @@ model Employee {
   evaluationsAsP1                Evaluation[]                   @relation("EvaluationP1Evaluator")
   evaluationsAsP2                Evaluation[]                   @relation("EvaluationP2Evaluator")
   offboardingCases               OffboardingCase[]              @relation("OffboardingCaseEmployee")
+  exitClearanceSubmissions       ExitClearanceSubmission[]      @relation("EmployeeExitClearanceSubmissions")
   shiftAssignments               ShiftAssignment[]              @relation("ShiftAssignmentEmployee")
   attendanceAssignments          AttendanceAssignment[]         @relation("AttendanceAssignmentEmployee")
   attendanceEvents               AttendanceEvent[]              @relation("AttendanceEventEmployee")
@@ -1455,8 +1512,8 @@ model FileObject {
   confidential        Boolean     @default(true)
   createdAt           DateTime    @default(now())
 
-  employeeKtpOf                          Employee?             @relation("EmployeeKtpFile")
-  employeeKkOf                           Employee?             @relation("EmployeeKkFile")
+  employeeBpjsTkOf                       Employee?             @relation("EmployeeBpjsTkFile")
+  employeeBpjsKesehatanOf                Employee?             @relation("EmployeeBpjsKesehatanFile")
   contractOf                             Contract?
   movementPerformanceEvaluationOf        MovementRequest?
   attendanceEventSelfieOf                AttendanceEvent?      @relation("AttendanceEventSelfie")

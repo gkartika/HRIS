@@ -3,7 +3,14 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { readPrivateFile } from "@/lib/file-storage";
 import { logAudit } from "@/lib/audit";
-import { isHrAdmin, isTrainingAdmin, isGaAdmin, canViewEmployeeDocument, canViewAbsenceRequest } from "@/lib/permissions";
+import {
+  isHrAdmin,
+  isTrainingAdmin,
+  isGaAdmin,
+  canViewEmployeeDocument,
+  canViewAbsenceRequest,
+  canViewBpjsCard,
+} from "@/lib/permissions";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 
@@ -83,6 +90,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       file.category === "DISPOSAL_EXECUTION_EVIDENCE")
   ) {
     canView = isGaAdmin(session);
+  }
+  // BPJS cards: broader read-only audience than other employee documents —
+  // GA Admin and Training Admin need to pull one up (e.g. HSE handling a
+  // workplace accident), on top of self/HR Admin already covered above.
+  if (!canView && (file.category === "BPJS_TK" || file.category === "BPJS_KESEHATAN") && file.employeeId) {
+    canView = canViewBpjsCard(session, file.employeeId);
   }
 
   if (!canView) {

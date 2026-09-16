@@ -28,6 +28,7 @@ import {
   ExecuteExitClearanceForm,
   CancelOffboardingCaseForm,
 } from "./decision-forms";
+import { ExitClearanceEmployeeForm } from "./exit-clearance-form";
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) return "—";
@@ -87,6 +88,20 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
     canCancelOffboardingCase(session, offboardingCase.reportedByAccountId, activeHrManagerPositionIds) &&
     canCancelOffboardingCaseStatus(offboardingCase.status);
   const overdue = offboardingCase.status === "PENDING_CLEARANCE" && isOverdue(offboardingCase.clearanceDueDate);
+  const isSelf = session.user.employeeId === offboardingCase.employeeId;
+
+  // Version after UAT: employee-facing Exit Clearance form — informational
+  // only, visible read-only to anyone who can already view this case once
+  // submitted; the fill-in form itself is self-service and only offered
+  // while there's actually something to clear.
+  const exitClearanceSubmission = await prisma.exitClearanceSubmission.findUnique({
+    where: { offboardingCaseId: offboardingCase.id },
+    include: { answers: { include: { question: true } } },
+  });
+  const exitClearanceQuestions =
+    isSelf && offboardingCase.status === "PENDING_CLEARANCE" && !exitClearanceSubmission
+      ? await prisma.exitClearanceQuestion.findMany({ where: { activeFlag: true }, orderBy: { displayOrder: "asc" } })
+      : [];
 
   // Phase 4A: "Only open Employee custody blocks offboarding" — surfaced
   // here so whoever can execute clearance sees the real blocker before
@@ -244,6 +259,29 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {exitClearanceQuestions.length > 0 && (
+        <ExitClearanceEmployeeForm caseId={offboardingCase.id} questions={exitClearanceQuestions} />
+      )}
+
+      {exitClearanceSubmission && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <p className="text-sm font-medium text-slate-900">Formulir Klirens Keluar (Diisi Karyawan)</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Dikirim pada {formatDate(exitClearanceSubmission.submittedAt)}
+          </p>
+          <div className="mt-3 space-y-3">
+            {exitClearanceSubmission.answers
+              .sort((a, b) => a.question.displayOrder - b.question.displayOrder)
+              .map((a) => (
+                <div key={a.id}>
+                  <p className="text-xs text-slate-500">{a.question.questionText}</p>
+                  <p className="text-sm text-slate-900">{a.answerText || "—"}</p>
+                </div>
+              ))}
+          </div>
         </div>
       )}
 

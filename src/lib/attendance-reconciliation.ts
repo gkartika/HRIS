@@ -22,42 +22,72 @@ function startOfDay(date: Date): Date {
 // assignment history — acceptable since the trigger runs on every visit and
 // self-heals forward, same class of simplification as work-calendar.ts's
 // Mon-Fri-only calendar.
+//
+// Performance note: this used to check/create one (employee, day) pair at a
+// time in a nested loop — up to `assignments.length * LOOKBACK_DAYS`
+// sequential awaited round trips on every single page load (e.g. 184
+// employees × 14 days = 2576 round trips once the company is fully
+// onboarded). Rewritten to batch: one query for existing records, one each
+// for check-in/check-out events across the whole window, then a single
+// createMany for whatever's still missing — a handful of round trips total
+// regardless of how many employees/days are due.
 export async function reconcileDueDailyAttendance(): Promise<void> {
   const today = startOfDay(new Date());
   const assignments = await prisma.attendanceAssignment.findMany({
     where: { effectiveTo: null },
   });
+  if (assignments.length === 0) return;
 
+  const dueDays: Date[] = [];
+  for (let offset = 1; offset <= LOOKBACK_DAYS; offset++) {
+    const day = new Date(today.getTime() - offset * 24 * 60 * 60 * 1000);
+    if (isWorkingDay(day)) dueDays.push(day);
+  }
+  if (dueDays.length === 0) return;
+  const windowStart = dueDays[dueDays.length - 1];
+
+  const duePairs: { employeeId: string; day: Date }[] = [];
   for (const assignment of assignments) {
     const assignmentStart = startOfDay(assignment.effectiveFrom);
-    for (let offset = 1; offset <= LOOKBACK_DAYS; offset++) {
-      const day = new Date(today.getTime() - offset * 24 * 60 * 60 * 1000);
+    for (const day of dueDays) {
       if (day < assignmentStart) continue;
-      if (!isWorkingDay(day)) continue;
-
-      const existing = await prisma.dailyAttendanceRecord.findUnique({
-        where: { employeeId_attendanceDate: { employeeId: assignment.employeeId, attendanceDate: day } },
-      });
-      if (existing) continue;
-
-      const dayEnd = new Date(day.getTime() + 24 * 60 * 60 * 1000);
-      const [checkIn, checkOut] = await Promise.all([
-        prisma.attendanceEvent.findFirst({
-          where: { employeeId: assignment.employeeId, eventType: "CHECK_IN", eventAt: { gte: day, lt: dayEnd } },
-        }),
-        prisma.attendanceEvent.findFirst({
-          where: { employeeId: assignment.employeeId, eventType: "CHECK_OUT", eventAt: { gte: day, lt: dayEnd } },
-        }),
-      ]);
-
-      await prisma.dailyAttendanceRecord.create({
-        data: {
-          employeeId: assignment.employeeId,
-          attendanceDate: day,
-          checkInEventId: checkIn?.id,
-          checkOutEventId: checkOut?.id,
-        },
-      });
+      duePairs.push({ employeeId: assignment.employeeId, day });
     }
+  }
+  if (duePairs.length === 0) return;
+
+  const employeeIds = [...new Set(duePairs.map((p) => p.employeeId))];
+  const keyOf = (employeeId: string, day: Date) => `${employeeId}|${day.getTime()}`;
+
+  const [existingRecords, checkInEvents, checkOutEvents] = await Promise.all([
+    prisma.dailyAttendanceRecord.findMany({
+      where: { employeeId: { in: employeeIds }, attendanceDate: { gte: windowStart, lt: today } },
+      select: { employeeId: true, attendanceDate: true },
+    }),
+    prisma.attendanceEvent.findMany({
+      where: { employeeId: { in: employeeIds }, eventType: "CHECK_IN", eventAt: { gte: windowStart, lt: today } },
+      select: { id: true, employeeId: true, eventAt: true },
+    }),
+    prisma.attendanceEvent.findMany({
+      where: { employeeId: { in: employeeIds }, eventType: "CHECK_OUT", eventAt: { gte: windowStart, lt: today } },
+      select: { id: true, employeeId: true, eventAt: true },
+    }),
+  ]);
+
+  const existingKeys = new Set(existingRecords.map((r) => keyOf(r.employeeId, r.attendanceDate)));
+  const checkInByKey = new Map(checkInEvents.map((e) => [keyOf(e.employeeId, startOfDay(e.eventAt)), e.id]));
+  const checkOutByKey = new Map(checkOutEvents.map((e) => [keyOf(e.employeeId, startOfDay(e.eventAt)), e.id]));
+
+  const toCreate = duePairs
+    .filter((p) => !existingKeys.has(keyOf(p.employeeId, p.day)))
+    .map((p) => ({
+      employeeId: p.employeeId,
+      attendanceDate: p.day,
+      checkInEventId: checkInByKey.get(keyOf(p.employeeId, p.day)),
+      checkOutEventId: checkOutByKey.get(keyOf(p.employeeId, p.day)),
+    }));
+
+  if (toCreate.length > 0) {
+    await prisma.dailyAttendanceRecord.createMany({ data: toCreate, skipDuplicates: true });
   }
 }

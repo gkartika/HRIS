@@ -66,35 +66,73 @@ export default async function DashboardPage({
 
   const cards: { label: string; value: string | number }[] = [];
 
-  if (canListEmployees(session)) {
-    const employeeCount = await prisma.employee.count({ where: { activeFlag: true } });
+  // Performance note: every section below used to be a separate `await`,
+  // run one after another even though none of them depend on each other's
+  // results — on a serverless+pooled-Postgres deploy each round trip adds
+  // real latency, so a page with 6+ independent query groups paid for all
+  // of them back-to-back. Fired together in one Promise.all instead; total
+  // wait is now bounded by the single slowest query, not the sum of all of
+  // them. Card-push order below still matches the original section order.
+  const [employeeCount, hrAdminData, filledPositions, gaAssetCounts, gaOpenCounts, employee] = await Promise.all([
+    canListEmployees(session) ? prisma.employee.count({ where: { activeFlag: true } }) : Promise.resolve(null),
+    isHrAdmin(session)
+      ? Promise.all([
+          prisma.position.count({ where: { positionStatus: "VACANT" } }),
+          prisma.importBatch.count(),
+          prisma.auditLog.count(),
+          prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+          prisma.contract.findMany({
+            where: {
+              status: "ACTIVE",
+              endDate: { not: null },
+              ...(orgUnitId ? { employee: { currentPosition: { orgUnitId } } } : {}),
+            },
+            include: {
+              employee: { include: { currentPosition: { include: { orgUnit: true } } } },
+              renewalCaseAsCurrentContract: { select: { id: true } },
+            },
+          }),
+        ])
+      : Promise.resolve(null),
+    isTrainingAdmin(session) || isGaAdmin(session)
+      ? prisma.position.count({ where: { positionStatus: "FILLED" } })
+      : Promise.resolve(null),
+    isGaAdmin(session)
+      ? Promise.all([
+          prisma.fixedAsset.count({ where: { activeFlag: true } }),
+          prisma.fixedAsset.count({ where: { activeFlag: true, status: "IN_USE" } }),
+          prisma.assetCustody.count({ where: { status: "ACTIVE" } }),
+          prisma.fixedAsset.count({ where: { activeFlag: true, status: "UNDER_REPAIR" } }),
+        ])
+      : Promise.resolve(null),
+    isGaAdmin(session)
+      ? Promise.all([
+          prisma.gaRequest.count({ where: { status: { in: ["SUBMITTED", "PENDING_APPROVAL", "PENDING_LOSS_REVIEW"] } } }),
+          prisma.maintenanceWorkOrder.count({ where: { status: "OPEN" } }),
+          prisma.disposalCase.count({ where: { status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } } }),
+        ])
+      : Promise.resolve(null),
+    session.user.employeeId
+      ? prisma.employee.findUnique({
+          where: { id: session.user.employeeId },
+          include: { currentPosition: { include: { job: true, orgUnit: true } } },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  if (employeeCount !== null) {
     cards.push({ label: "Total Karyawan Aktif", value: employeeCount });
   }
   let expiringContracts: ExpiringContractRow[] = [];
   let orgUnits: { id: string; unitName: string }[] = [];
-  if (isHrAdmin(session)) {
-    const [vacantPositions, importBatches, auditEvents] = await Promise.all([
-      prisma.position.count({ where: { positionStatus: "VACANT" } }),
-      prisma.importBatch.count(),
-      prisma.auditLog.count(),
-    ]);
+  if (hrAdminData) {
+    const [vacantPositions, importBatches, auditEvents, orgUnitsResult, contracts] = hrAdminData;
     cards.push({ label: "Posisi Kosong", value: vacantPositions });
     cards.push({ label: "Riwayat Impor", value: importBatches });
     cards.push({ label: "Total Peristiwa Audit", value: auditEvents });
 
-    orgUnits = await prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } });
+    orgUnits = orgUnitsResult;
 
-    const contracts = await prisma.contract.findMany({
-      where: {
-        status: "ACTIVE",
-        endDate: { not: null },
-        ...(orgUnitId ? { employee: { currentPosition: { orgUnitId } } } : {}),
-      },
-      include: {
-        employee: { include: { currentPosition: { include: { orgUnit: true } } } },
-        renewalCaseAsCurrentContract: { select: { id: true } },
-      },
-    });
     expiringContracts = contracts
       .map((c) => ({
         id: c.id,
@@ -122,42 +160,25 @@ export default async function DashboardPage({
         return sortDir === "desc" ? -cmp : cmp;
       });
   }
-  if (isTrainingAdmin(session) || isGaAdmin(session)) {
-    const positions = await prisma.position.count({ where: { positionStatus: "FILLED" } });
-    cards.push({ label: "Posisi Terisi", value: positions });
+  if (filledPositions !== null) {
+    cards.push({ label: "Posisi Terisi", value: filledPositions });
   }
-  if (isGaAdmin(session)) {
-    const [totalAssets, inUseAssets, activeCustodies, underRepair] = await Promise.all([
-      prisma.fixedAsset.count({ where: { activeFlag: true } }),
-      prisma.fixedAsset.count({ where: { activeFlag: true, status: "IN_USE" } }),
-      prisma.assetCustody.count({ where: { status: "ACTIVE" } }),
-      prisma.fixedAsset.count({ where: { activeFlag: true, status: "UNDER_REPAIR" } }),
-    ]);
+  if (gaAssetCounts) {
+    const [totalAssets, inUseAssets, activeCustodies, underRepair] = gaAssetCounts;
     cards.push({ label: "Total Aset Aktif", value: totalAssets });
     cards.push({ label: "Sedang Digunakan", value: inUseAssets });
     cards.push({ label: "Total Penguasaan Aktif", value: activeCustodies });
     cards.push({ label: "Dalam Perbaikan", value: underRepair });
-
-    const [openGaRequests, openWorkOrders, openDisposalCases] = await Promise.all([
-      prisma.gaRequest.count({
-        where: { status: { in: ["SUBMITTED", "PENDING_APPROVAL", "PENDING_LOSS_REVIEW"] } },
-      }),
-      prisma.maintenanceWorkOrder.count({ where: { status: "OPEN" } }),
-      prisma.disposalCase.count({ where: { status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } } }),
-    ]);
+  }
+  if (gaOpenCounts) {
+    const [openGaRequests, openWorkOrders, openDisposalCases] = gaOpenCounts;
     cards.push({ label: "Permintaan GA Terbuka", value: openGaRequests });
     cards.push({ label: "Work Order Terbuka", value: openWorkOrders });
     cards.push({ label: "Kasus Disposal Aktif", value: openDisposalCases });
   }
-  if (session.user.employeeId) {
-    const employee = await prisma.employee.findUnique({
-      where: { id: session.user.employeeId },
-      include: { currentPosition: { include: { job: true, orgUnit: true } } },
-    });
-    if (employee?.currentPosition) {
-      cards.push({ label: "Jabatan Saat Ini", value: employee.currentPosition.job.jobTitle });
-      cards.push({ label: "Unit Organisasi", value: employee.currentPosition.orgUnit.unitName });
-    }
+  if (employee?.currentPosition) {
+    cards.push({ label: "Jabatan Saat Ini", value: employee.currentPosition.job.jobTitle });
+    cards.push({ label: "Unit Organisasi", value: employee.currentPosition.orgUnit.unitName });
   }
 
   return (

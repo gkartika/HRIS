@@ -73,14 +73,15 @@ export default async function EmployeesPage({
     prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
     prisma.position.findMany({ distinct: ["jobLevel"], select: { jobLevel: true }, orderBy: { jobLevel: "asc" } }),
     prisma.employee.count(),
+    // Doesn't depend on the reads above and they don't depend on it —
+    // run it alongside them instead of as an extra sequential round trip.
+    logAudit({
+      actorAccountId: session.user.id,
+      action: "VIEW",
+      datasetName: "Employee",
+      reason: "Viewed employee list",
+    }),
   ]);
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "VIEW",
-    datasetName: "Employee",
-    reason: "Viewed employee list",
-  });
 
   const rows = employees.map((e) => projectEmployee(e, session));
   const hasFilters = !!(q || orgUnitId || jobLevel || employmentStatus || activeFlag);

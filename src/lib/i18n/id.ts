@@ -661,6 +661,7 @@ export const strings = {
     alreadyCheckedIn: "Anda sudah check-in pukul {time}.",
     alreadyCheckedOut: "Anda sudah check-out pukul {time}.",
     notCheckedInYet: "Anda belum check-in hari ini.",
+    notCheckedOutYet: "Anda belum check-out hari ini.",
     fingerprintNotice:
       "Metode absensi Anda adalah Fingerprint — check-in/out tercatat otomatis melalui mesin fingerprint, tidak ada tindakan manual di sini.",
     noAssignmentNotice: "Anda belum memiliki penugasan absensi. Hubungi HR Admin.",
@@ -669,7 +670,7 @@ export const strings = {
     locationCaptured: "Lokasi berhasil diambil.",
     locationPending: "Lokasi belum diambil.",
     locationError: "Gagal mengambil lokasi. Pastikan izin lokasi diaktifkan pada perangkat Anda.",
-    selfieLabel: "Foto Selfie",
+    reasonLabel: "Alasan (jika terlambat atau di luar lokasi)",
     geolocationUnsupported: "Perangkat/peramban Anda tidak mendukung deteksi lokasi.",
   },
   attendanceException: {
@@ -684,6 +685,7 @@ export const strings = {
     subtitle: "Rekap Check-in/Check-out harian dan status pengecualian, dihitung langsung dari data absensi.",
     dateLabel: "Tanggal",
     exceptionsOnlyLabel: "Hanya tampilkan pengecualian",
+    exceptionTypeLabel: "Jenis Pengecualian",
     noExceptions: "Tidak ada pengecualian",
     noAssignmentBadge: "Belum ditugaskan",
     exportButton: "Ekspor CSV",
@@ -692,6 +694,8 @@ export const strings = {
     methodFilterNoneOption: "Belum Ditugaskan",
     shiftColumnLabel: "Shift",
     absenceColumnLabel: "Absensi/Cuti",
+    reasonCheckIn: "Check-in",
+    reasonCheckOut: "Check-out",
   },
   attendanceMethod: {
     MOBILE: "Mobile",

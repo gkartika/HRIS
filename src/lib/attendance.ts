@@ -17,6 +17,20 @@ export const DEFAULT_END_TIME_MON_THU = "16:30";
 export const DEFAULT_END_TIME_FRIDAY = "17:00";
 export const DEFAULT_WORK_DAYS_CSV = "1,2,3,4,5"; // Mon-Fri
 
+// Formats a Date's own local calendar date as YYYY-MM-DD. NEVER use
+// `date.toISOString().slice(0, 10)` for this — that converts to UTC first,
+// which silently shifts the date back a day for any positive UTC offset
+// (e.g. WIB, UTC+7): a local midnight Date becomes 17:00 the PREVIOUS day in
+// UTC. This bit both the Rekap Absensi date filter (always echoing/exporting
+// the day before whatever was actually queried) and the CSV export's
+// filename/audit reason.
+export function formatDateOnly(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const EARTH_RADIUS_METERS = 6371000;
 
 export function haversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -38,16 +52,23 @@ export interface AttendanceEventLike {
   eventAt: Date;
   latitude: number | null;
   longitude: number | null;
-  geofence: AttendanceGeofenceLike | null;
 }
 
-// null = not evaluable (no geofence assigned, or no coordinates captured —
-// e.g. a FINGERPRINT_IMPORT event) — deliberately distinct from false, so
-// callers never mistake "not checked" for "checked and failed".
-export function isEventWithinGeofence(event: AttendanceEventLike): boolean | null {
-  if (!event.geofence || event.latitude === null || event.longitude === null) return null;
-  const distance = haversineDistanceMeters(event.latitude, event.longitude, event.geofence.latitude, event.geofence.longitude);
-  return distance <= event.geofence.radiusMeters;
+// null = not evaluable (no coordinates captured — e.g. a FINGERPRINT_IMPORT
+// event — or no active geofence configured at all) — deliberately distinct
+// from false, so callers never mistake "not checked" for "checked and
+// failed". true if the event falls within ANY of the given geofences —
+// there is no longer a single "the" geofence an event is checked against;
+// any active company location counts (Version after UAT, per direct
+// request to support multiple base locations).
+export function isEventWithinAnyGeofence(
+  event: { latitude: number | null; longitude: number | null },
+  geofences: AttendanceGeofenceLike[]
+): boolean | null {
+  if (event.latitude === null || event.longitude === null || geofences.length === 0) return null;
+  return geofences.some(
+    (g) => haversineDistanceMeters(event.latitude!, event.longitude!, g.latitude, g.longitude) <= g.radiusMeters
+  );
 }
 
 function isoWeekday(date: Date): number {
@@ -86,6 +107,7 @@ export interface AttendanceExceptionInput {
   attendanceDate: Date;
   checkInEvent: AttendanceEventLike | null;
   checkOutEvent: AttendanceEventLike | null;
+  activeGeofences: AttendanceGeofenceLike[];
 }
 
 export function deriveDailyAttendanceExceptions(input: AttendanceExceptionInput): AttendanceException[] {
@@ -94,19 +116,23 @@ export function deriveDailyAttendanceExceptions(input: AttendanceExceptionInput)
   const exceptions: AttendanceException[] = [];
 
   if (!input.checkInEvent) {
-    exceptions.push("MISSING_CHECK_IN");
+    // Per direct user request: check-out is allowed without a prior
+    // check-in (never blocked) — but a check-out with no check-in on
+    // record reads as "they were here, they just never punched in", which
+    // is closer to a late check-in than a genuinely missing one.
+    exceptions.push(input.checkOutEvent ? "LATE_CHECK_IN" : "MISSING_CHECK_IN");
   } else {
     if (isLateCheckIn(input.checkInEvent.eventAt)) {
       exceptions.push("LATE_CHECK_IN");
     }
-    if (isEventWithinGeofence(input.checkInEvent) === false) {
+    if (isEventWithinAnyGeofence(input.checkInEvent, input.activeGeofences) === false) {
       exceptions.push("OUTSIDE_GEOFENCE_CHECK_IN");
     }
   }
 
   if (!input.checkOutEvent) {
     exceptions.push("MISSING_CHECK_OUT");
-  } else if (isEventWithinGeofence(input.checkOutEvent) === false) {
+  } else if (isEventWithinAnyGeofence(input.checkOutEvent, input.activeGeofences) === false) {
     exceptions.push("OUTSIDE_GEOFENCE_CHECK_OUT");
   }
 

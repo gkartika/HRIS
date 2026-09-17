@@ -1516,7 +1516,6 @@ model FileObject {
   employeeBpjsKesehatanOf                Employee?             @relation("EmployeeBpjsKesehatanFile")
   contractOf                             Contract?
   movementPerformanceEvaluationOf        MovementRequest?
-  attendanceEventSelfieOf                AttendanceEvent?      @relation("AttendanceEventSelfie")
   absenceRequestAttachmentOf             AbsenceRequest?       @relation("AbsenceRequestAttachment")
   courseMaterialOf                       CourseMaterial?       @relation("CourseMaterialFile")
   learningAssignmentCertificateOf        LearningAssignment?   @relation("LearningAssignmentCertificateFile")
@@ -1587,10 +1586,10 @@ model AttendanceEvent {
   longitude              Float?
   geofenceId             String?
   geofence               AttendanceGeofence?   @relation(fields: [geofenceId], references: [id])
-  // Private file reference only (see FileObject/file-storage.ts) — never a
-  // public URL or base64 blob, same discipline as KTP/KK uploads.
-  selfieFileId           String?               @unique
-  selfieFile             FileObject?           @relation("AttendanceEventSelfie", fields: [selfieFileId], references: [id])
+  // Version after UAT: photo requirement dropped (location only). Required
+  // whenever the check-in is late or outside every active geofence — see
+  // recordAttendanceEvent — otherwise freely optional.
+  reason                 String?
   createdAt              DateTime              @default(now())
 
   dailyRecordsAsCheckIn  DailyAttendanceRecord[] @relation("DailyRecordCheckInEvent")

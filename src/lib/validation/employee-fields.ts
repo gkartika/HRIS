@@ -57,24 +57,3 @@ export function validateDocumentFile(file: { name: string; type: string; size: n
   }
   return null;
 }
-
-export const ALLOWED_SELFIE_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png"] as const;
-export const ALLOWED_SELFIE_EXTENSIONS = [".jpg", ".jpeg", ".png"] as const;
-export const MAX_SELFIE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB — a phone-camera selfie, not a scanned document
-
-// Mobile check-in/out selfie — image only, no PDF (unlike identity
-// documents), and a smaller size cap since it's always a live camera photo.
-export function validateSelfieFile(file: { name: string; type: string; size: number }): string | null {
-  const mimeOk = (ALLOWED_SELFIE_MIME_TYPES as readonly string[]).includes(file.type);
-  const extensionOk = (ALLOWED_SELFIE_EXTENSIONS as readonly string[]).includes(getExtension(file.name));
-  if (!mimeOk || !extensionOk) {
-    return "Jenis berkas tidak didukung. Gunakan foto JPG atau PNG.";
-  }
-  if (file.size > MAX_SELFIE_SIZE_BYTES) {
-    return "Ukuran foto melebihi batas maksimum 5 MB.";
-  }
-  if (file.size === 0) {
-    return "Foto kosong atau tidak dapat dibaca.";
-  }
-  return null;
-}

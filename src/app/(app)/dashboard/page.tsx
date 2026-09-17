@@ -5,6 +5,7 @@ import { isHrAdmin, isTrainingAdmin, isGaAdmin, canListEmployees } from "@/lib/p
 import { computeExpiryUrgency, type ExpiryUrgency } from "@/lib/contract";
 import { t } from "@/lib/i18n/id";
 import { TriggerEvaluationButton } from "./trigger-evaluation-button";
+import { AttendanceCheckSection } from "./attendance-check-section";
 
 interface ExpiringContractRow {
   id: string;
@@ -165,6 +166,8 @@ export default async function DashboardPage({
         {t("nav.dashboard")} — {session.user.name}
       </h1>
       <p className="mt-1 text-sm text-slate-500">Peran: {roleLabels}</p>
+
+      {session.user.employeeId && <AttendanceCheckSection employeeId={session.user.employeeId} />}
 
       <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3">
         {cards.map((c) => (

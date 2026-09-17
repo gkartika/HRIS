@@ -158,14 +158,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (isHrAdmin(session) || isLevel3Anywhere) {
     navItems.push({ href: "/shift-assignments", label: t("shiftAssignment.navLabel"), icon: CalendarClock });
   }
-  // Phase 2 Extension: self-service Mobile check-in/out. Any employee-linked
-  // account can reach the page — it self-adapts to "no manual action" for a
-  // Fingerprint-assigned employee and "contact HR Admin" for one with no
-  // AttendanceAssignment yet, same pattern as Contract/Offboarding's broad
-  // nav visibility with page-level scoping.
-  if (session.user.employeeId) {
-    navItems.push({ href: "/attendance", label: t("attendance.navLabel"), icon: Clock });
-  }
+  // Version after UAT: self-service Mobile check-in/out moved onto Beranda
+  // (dashboard) directly — no separate nav item/page anymore.
   // Rekap Absensi (records + exceptions): same HR-Admin-or-Level-3 visibility
   // scope as Shift Assignment, since it's the same "who can see this team's
   // operational data" authority.

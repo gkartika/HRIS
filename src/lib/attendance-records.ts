@@ -24,6 +24,8 @@ export interface AttendanceRecordRow {
   method: AttendanceMethod | null;
   checkInAt: Date | null;
   checkOutAt: Date | null;
+  checkInReason: string | null;
+  checkOutReason: string | null;
   exceptions: AttendanceException[];
   shiftType: ShiftAssignmentType;
   activeAbsence: ActiveAbsenceSummary | null;
@@ -41,7 +43,7 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
   const utcDay = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const weekStartDate = normalizeWeekStart(utcDay);
 
-  const [employees, assignments, events, shiftAssignments, absences] = await Promise.all([
+  const [employees, assignments, events, shiftAssignments, absences, activeGeofences] = await Promise.all([
     prisma.employee.findMany({
       where: { id: { in: employeeIds } },
       include: { currentPosition: { include: { orgUnit: true } } },
@@ -52,7 +54,6 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
     }),
     prisma.attendanceEvent.findMany({
       where: { employeeId: { in: employeeIds }, eventAt: { gte: dayStart, lt: dayEnd } },
-      include: { geofence: true },
     }),
     prisma.shiftAssignment.findMany({
       where: { employeeId: { in: employeeIds }, weekStartDate },
@@ -65,6 +66,7 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
         endDate: { gte: utcDay },
       },
     }),
+    prisma.attendanceGeofence.findMany({ where: { activeFlag: true } }),
   ]);
   const assignmentByEmployeeId = new Map(assignments.map((a) => [a.employeeId, a]));
   const shiftByEmployeeId = new Map(shiftAssignments.map((s) => [s.employeeId, s]));
@@ -80,11 +82,12 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
       ? deriveDailyAttendanceExceptions({
           attendanceDate: dayStart,
           checkInEvent: checkInEvent
-            ? { eventAt: checkInEvent.eventAt, latitude: checkInEvent.latitude, longitude: checkInEvent.longitude, geofence: checkInEvent.geofence }
+            ? { eventAt: checkInEvent.eventAt, latitude: checkInEvent.latitude, longitude: checkInEvent.longitude }
             : null,
           checkOutEvent: checkOutEvent
-            ? { eventAt: checkOutEvent.eventAt, latitude: checkOutEvent.latitude, longitude: checkOutEvent.longitude, geofence: checkOutEvent.geofence }
+            ? { eventAt: checkOutEvent.eventAt, latitude: checkOutEvent.latitude, longitude: checkOutEvent.longitude }
             : null,
+          activeGeofences,
         })
       : [];
 
@@ -97,6 +100,8 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
       method: assignment?.method ?? null,
       checkInAt: checkInEvent?.eventAt ?? null,
       checkOutAt: checkOutEvent?.eventAt ?? null,
+      checkInReason: checkInEvent?.reason ?? null,
+      checkOutReason: checkOutEvent?.reason ?? null,
       exceptions,
       shiftType: shiftByEmployeeId.get(employee.id)?.shiftType ?? DEFAULT_SHIFT_TYPE,
       activeAbsence: activeAbsenceRequest

@@ -10,7 +10,7 @@ export interface AttendanceAssignmentSummary {
   effectiveFrom: string;
 }
 
-const METHOD_LABEL: Record<string, string> = { MOBILE: "Mobile (GPS + Selfie)", FINGERPRINT: "Fingerprint (Impor)" };
+const METHOD_LABEL: Record<string, string> = { MOBILE: "Mobile (GPS)", FINGERPRINT: "Fingerprint (Impor)" };
 
 function AssignmentForm({
   employeeId,

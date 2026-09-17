@@ -5,14 +5,8 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canRecordOwnAttendance } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
-import { validateSelfieFile } from "@/lib/validation/employee-fields";
+import { isLateCheckIn, isEventWithinAnyGeofence } from "@/lib/attendance";
 import type { AttendanceEventType } from "@/generated/prisma/enums";
-
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
 
 function todayRange(now: Date): { start: Date; end: Date } {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -46,11 +40,6 @@ export async function recordAttendanceEvent(
     return "Lokasi GPS tidak terdeteksi — ambil lokasi terlebih dahulu.";
   }
 
-  const file = formData.get("selfie") as File | null;
-  if (!file || file.size === 0) return "Foto selfie wajib diambil.";
-  const validationError = validateSelfieFile({ name: file.name, type: file.type, size: file.size });
-  if (validationError) return validationError;
-
   const now = new Date();
   const { start, end } = todayRange(now);
 
@@ -61,30 +50,33 @@ export async function recordAttendanceEvent(
     return eventType === "CHECK_IN" ? "Anda sudah check-in hari ini." : "Anda sudah check-out hari ini.";
   }
 
-  if (eventType === "CHECK_OUT") {
-    const checkIn = await prisma.attendanceEvent.findFirst({
+  // Per direct user request: check-out is allowed even with no check-in on
+  // record today — never blocked, same "no restrictions" philosophy as time
+  // and location. It's treated as an implicit late check-in below (a
+  // check-out with nothing to pair it with reads as "they were here, they
+  // just never punched in" rather than a genuinely missing day).
+  const missingCheckInOnCheckOut =
+    eventType === "CHECK_OUT" &&
+    !(await prisma.attendanceEvent.findFirst({
       where: { employeeId, eventType: "CHECK_IN", eventAt: { gte: start, lt: end } },
-    });
-    if (!checkIn) return "Anda belum check-in hari ini.";
+    }));
+
+  // Version after UAT: check-in/out is never blocked by time or location —
+  // but a reason is required when either is off, so HR can see why in Rekap
+  // Absensi rather than just that it happened.
+  const activeGeofences = await prisma.attendanceGeofence.findMany({ where: { activeFlag: true } });
+  const late = (eventType === "CHECK_IN" && isLateCheckIn(now)) || missingCheckInOnCheckOut;
+  const withinGeofence = isEventWithinAnyGeofence({ latitude, longitude }, activeGeofences);
+  const reason = (formData.get("reason") as string)?.trim() || null;
+
+  if (!reason) {
+    const triggers: string[] = [];
+    if (late) triggers.push("terlambat");
+    if (withinGeofence === false) triggers.push("berada di luar lokasi yang terdaftar");
+    if (triggers.length > 0) {
+      return `Anda ${triggers.join(" dan ")} — mohon isi kolom Alasan sebelum mengirim.`;
+    }
   }
-
-  const storageKey = randomStorageKey("attendance-selfie", getExtension(file.name));
-  const bytes = Buffer.from(await file.arrayBuffer());
-  await savePrivateFile(storageKey, bytes);
-
-  const fileObject = await prisma.fileObject.create({
-    data: {
-      storageKey,
-      originalFileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      sensitivity: "RESTRICTED",
-      employeeId,
-      uploadedByAccountId: session.user.id,
-      category: "ATTENDANCE_SELFIE",
-      confidential: true,
-    },
-  });
 
   const event = await prisma.attendanceEvent.create({
     data: {
@@ -96,7 +88,7 @@ export async function recordAttendanceEvent(
       latitude,
       longitude,
       geofenceId: assignment!.geofenceId,
-      selfieFileId: fileObject.id,
+      reason,
     },
   });
 
@@ -108,5 +100,5 @@ export async function recordAttendanceEvent(
     reason: `${eventType} via Mobile`,
   });
 
-  revalidatePath("/attendance");
+  revalidatePath("/dashboard");
 }

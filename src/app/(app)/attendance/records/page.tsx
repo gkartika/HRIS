@@ -4,6 +4,7 @@ import { isHrAdmin, canExportAttendanceData } from "@/lib/permissions";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { reconcileDueDailyAttendance } from "@/lib/attendance-reconciliation";
 import { computeAttendanceRecordsForDate } from "@/lib/attendance-records";
+import { formatDateOnly, type AttendanceException } from "@/lib/attendance";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import type { Prisma } from "@/generated/prisma/client";
@@ -21,10 +22,6 @@ const ABSENCE_BADGE_TONE: Record<string, string> = {
   APPROVED: "bg-emerald-50 text-emerald-700",
 };
 
-function isoOf(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 function formatTime(date: Date | null | undefined): string {
   if (!date) return "—";
   return date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
@@ -39,6 +36,8 @@ export default async function AttendanceRecordsPage({
     jobLevel?: string;
     exceptionsOnly?: string;
     method?: string;
+    exceptionType?: string;
+    shiftType?: string;
   }>;
 }) {
   const session = await requireSession();
@@ -51,10 +50,10 @@ export default async function AttendanceRecordsPage({
 
   await reconcileDueDailyAttendance();
 
-  const { date, orgUnitId, jobLevel, exceptionsOnly, method } = await searchParams;
+  const { date, orgUnitId, jobLevel, exceptionsOnly, method, exceptionType, shiftType } = await searchParams;
   const selectedDate = date ? new Date(date) : new Date();
   const dayStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-  const dateIso = isoOf(dayStart);
+  const dateIso = formatDateOnly(dayStart);
 
   const positionFilter: Prisma.PositionWhereInput = {};
   if (!isHrAdminUser) {
@@ -86,9 +85,11 @@ export default async function AttendanceRecordsPage({
       if (!method) return true;
       if (method === "NONE") return !row.hasAssignment;
       return row.method === method;
-    });
+    })
+    .filter((row) => !exceptionType || row.exceptions.includes(exceptionType as AttendanceException))
+    .filter((row) => !shiftType || row.shiftType === shiftType);
 
-  const hasFilters = !!(orgUnitId || jobLevel || exceptionsOnly || method);
+  const hasFilters = !!(orgUnitId || jobLevel || exceptionsOnly || method || exceptionType || shiftType);
 
   return (
     <div>
@@ -99,7 +100,12 @@ export default async function AttendanceRecordsPage({
         </div>
         {canExportAttendanceData(session) && (
           <a
-            href={`/api/attendance/export?${new URLSearchParams({ date: dateIso, ...(method ? { method } : {}) }).toString()}`}
+            href={`/api/attendance/export?${new URLSearchParams({
+              date: dateIso,
+              ...(method ? { method } : {}),
+              ...(exceptionType ? { exceptionType } : {}),
+              ...(shiftType ? { shiftType } : {}),
+            }).toString()}`}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
           >
             {t("attendanceRecords.exportButton")}
@@ -146,6 +152,31 @@ export default async function AttendanceRecordsPage({
             <option value="MOBILE">{t("attendanceMethod.MOBILE")}</option>
             <option value="FINGERPRINT">{t("attendanceMethod.FINGERPRINT")}</option>
             <option value="NONE">{t("attendanceRecords.methodFilterNoneOption")}</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("attendanceRecords.shiftColumnLabel")}</label>
+          <select name="shiftType" defaultValue={shiftType ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            <option value="SHIFT_1">{t("shiftAssignmentType.SHIFT_1")}</option>
+            <option value="SHIFT_2">{t("shiftAssignmentType.SHIFT_2")}</option>
+            <option value="SHIFT_3">{t("shiftAssignmentType.SHIFT_3")}</option>
+            <option value="NON_SHIFT">{t("shiftAssignmentType.NON_SHIFT")}</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("attendanceRecords.exceptionTypeLabel")}</label>
+          <select
+            name="exceptionType"
+            defaultValue={exceptionType ?? ""}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">{t("common.allOption")}</option>
+            <option value="LATE_CHECK_IN">{t("attendanceException.LATE_CHECK_IN")}</option>
+            <option value="OUTSIDE_GEOFENCE_CHECK_IN">{t("attendanceException.OUTSIDE_GEOFENCE_CHECK_IN")}</option>
+            <option value="OUTSIDE_GEOFENCE_CHECK_OUT">{t("attendanceException.OUTSIDE_GEOFENCE_CHECK_OUT")}</option>
+            <option value="MISSING_CHECK_IN">{t("attendanceException.MISSING_CHECK_IN")}</option>
+            <option value="MISSING_CHECK_OUT">{t("attendanceException.MISSING_CHECK_OUT")}</option>
           </select>
         </div>
         <label className="flex items-center gap-1.5 pb-2 text-sm text-slate-700">
@@ -210,6 +241,13 @@ export default async function AttendanceRecordsPage({
                         </span>
                       ))}
                     </div>
+                  )}
+                  {(row.checkInReason || row.checkOutReason) && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {row.checkInReason && `${t("attendanceRecords.reasonCheckIn")}: ${row.checkInReason}`}
+                      {row.checkInReason && row.checkOutReason && " · "}
+                      {row.checkOutReason && `${t("attendanceRecords.reasonCheckOut")}: ${row.checkOutReason}`}
+                    </p>
                   )}
                 </td>
                 <td className="px-4 py-3">

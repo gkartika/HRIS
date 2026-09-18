@@ -143,7 +143,6 @@ export async function decideTrainingRequestAsDeptHead(
   });
 
   revalidatePath(`/training-requests/${requestId}`);
-  revalidatePath("/approvals");
   redirect(`/training-requests/${requestId}`);
 }
 

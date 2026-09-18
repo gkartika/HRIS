@@ -4,7 +4,8 @@ import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin, isGaAdmin, canListEmployees } from "@/lib/permissions";
 import { computeExpiryUrgency, type ExpiryUrgency } from "@/lib/contract";
 import { isManagerOfAnyPosition } from "@/lib/manager-scope";
-import { getActiveDeptHeadPositions } from "@/lib/dept-head";
+import { getActiveDeptHeadPositions, getDeptHeadDepartmentIds } from "@/lib/dept-head";
+import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getPendingApprovals, countPendingApprovals, type PendingApprovals } from "@/lib/pending-approvals";
 import { t } from "@/lib/i18n/id";
 import { TriggerEvaluationButton } from "./trigger-evaluation-button";
@@ -305,21 +306,26 @@ export default async function DashboardPage({
   const sortBy: SortKey = sortByParam === "employeeName" || sortByParam === "urgency" ? sortByParam : "endDate";
   const sortDir: "asc" | "desc" = sortDirParam === "desc" ? "desc" : "asc";
 
-  // Simple Karyawan home: decided from cheap, already-necessary checks only
-  // (never from the full pending-approvals aggregation below, which a plain
-  // employee — the majority of a manufacturing workforce — has no reason to
-  // pay for at all).
+  // Simple Karyawan home: decided from cheap, already-necessary checks only.
+  // Performance: this used to call the FULL getPendingApprovals (~20 DB
+  // queries) just to read 2 booleans off it, then throw the rest away — and
+  // then call it AGAIN below for the real data. Now it only runs the 2
+  // cheap lookups those booleans actually depend on, and getPendingApprovals
+  // itself is called at most once per request.
   const isManagerNow = await isManagerOfAnyPosition(session.user.employeeId);
   const isHrAdminUser = isHrAdmin(session);
   const isTrainingAdminUser = isTrainingAdmin(session);
   const isGaAdminUser = isGaAdmin(session);
 
   if (!isHrAdminUser && !isTrainingAdminUser && !isGaAdminUser && !isManagerNow) {
-    const pendingForSimpleView = await getPendingApprovals(session);
-    if (pendingForSimpleView.isHrManager || pendingForSimpleView.isDeptHead) {
-      // A plain employee who also happens to hold HR Manager/Dept Head
-      // authority still needs the full approvals section — fall through.
-    } else if (session.user.employeeId) {
+    const [hrManagerPositions, deptHeadDepartmentIds] = await Promise.all([
+      getActiveHrManagerPositions(session.user.employeeId),
+      getDeptHeadDepartmentIds(session.user.employeeId),
+    ]);
+    // A plain employee who also happens to hold HR Manager/Dept Head
+    // authority still needs the full approvals section — fall through
+    // instead of the simple home.
+    if (hrManagerPositions.length === 0 && deptHeadDepartmentIds.length === 0 && session.user.employeeId) {
       return <SimpleKaryawanHome employeeId={session.user.employeeId} userName={session.user.name ?? ""} />;
     }
   }

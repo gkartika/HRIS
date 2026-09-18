@@ -21,20 +21,24 @@ import { SidebarNav, type SidebarNavGroup, type SidebarNavItem } from "./sidebar
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
   const canSeeEmployees = isHrAdmin(session) || isTrainingAdmin(session) || isGaAdmin(session);
-  // ACC-14/DEC-015: derived live from an active Position Assignment on every
-  // page load — never cached in the session/JWT — so access to the HR
-  // Manager workspace ends automatically the moment the Assignment's
-  // effectiveTo passes, with no separate revoke step.
-  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  // Performance: this layout runs on every single page in the app, so these
+  // 3 independent authority lookups (none depends on another's result) are
+  // fired together instead of one-after-another — same reasoning as the
+  // dashboard/employees query parallelization from the earlier perf pass.
+  // - ACC-14/DEC-015: HR Manager, derived live from an active Position
+  //   Assignment — never cached in the session/JWT — so access ends
+  //   automatically the moment the Assignment's effectiveTo passes.
+  // - New Shift Assignment module: Level-3 (3A/3B) submit eligibility,
+  //   same as Perubahan Posisi.
+  // - COM-10/COM-15: Director gap-report/P1 authority, resolved live from
+  //   the org root Position's active Assignment.
+  const [hrManagerPositions, level3DepartmentIds, directorCandidates] = await Promise.all([
+    getActiveHrManagerPositions(session.user.employeeId),
+    getLevel3DepartmentIds(session.user.employeeId),
+    getActiveDirectorCandidates(),
+  ]);
   const isHrManagerNow = hrManagerPositions.length > 0;
-  // New Shift Assignment module, per direct user request — same Level-3
-  // (3A/3B) submit eligibility already used for Perubahan Posisi.
-  const level3DepartmentIds = await getLevel3DepartmentIds(session.user.employeeId);
   const isLevel3Anywhere = level3DepartmentIds.length > 0;
-  // COM-10/COM-15: Director gap-report/P1 authority, resolved live from the
-  // org root Position's active Assignment — same pattern as every other
-  // Position-derived authority in this app.
-  const directorCandidates = await getActiveDirectorCandidates();
   const isDirectorAnywhere = directorCandidates.some((c) => c.employeeId === session.user.employeeId);
 
   // Categorized sidebar: every visibility condition below is unchanged from

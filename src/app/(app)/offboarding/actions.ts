@@ -177,7 +177,6 @@ export async function decideOffboardingCaseAsDeptHead(
 
   revalidatePath(`/offboarding/${caseId}`);
   revalidatePath("/offboarding");
-  revalidatePath("/approvals");
 }
 
 // LIF-06: "HR Manager decision/oversight" — a resignation report has one
@@ -229,7 +228,6 @@ export async function decideOffboardingCase(
 
   revalidatePath(`/offboarding/${caseId}`);
   revalidatePath("/offboarding");
-  revalidatePath("/approvals");
 }
 
 // LIF-06/LIF-07/GA-05: "HR Admin exit-clearance execution > Account
@@ -400,7 +398,6 @@ export async function cancelOffboardingCase(
 
   revalidatePath(`/offboarding/${caseId}`);
   revalidatePath("/offboarding");
-  revalidatePath("/approvals");
 }
 
 // Version after UAT: employee-facing Exit Clearance form — self-service,

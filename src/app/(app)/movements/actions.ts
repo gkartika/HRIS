@@ -249,7 +249,6 @@ export async function decideMovementRequestAsDeptHead(
 
   revalidatePath(`/movements/${requestId}`);
   revalidatePath("/movements");
-  revalidatePath("/approvals");
 }
 
 // HR Manager decision (final stage) — only reachable once Dept Head 3B has

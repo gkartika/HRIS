@@ -206,7 +206,6 @@ export async function decideRecruitmentRequestAsDeptHead(
 
   revalidatePath(`/recruitment/${requestId}`);
   revalidatePath("/recruitment");
-  revalidatePath("/approvals");
 }
 
 // WF-15/WF-02/WF-05: only the employee occupying an active HR Manager

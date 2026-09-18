@@ -163,7 +163,6 @@ export async function submitDisposalCaseForApproval(
 
   revalidatePath(`/disposal-cases/${caseId}`);
   revalidatePath("/disposal-cases");
-  revalidatePath("/approvals");
   return undefined;
 }
 
@@ -215,7 +214,6 @@ export async function decideDisposalCase(
 
   revalidatePath(`/disposal-cases/${caseId}`);
   revalidatePath("/disposal-cases");
-  revalidatePath("/approvals");
   return undefined;
 }
 

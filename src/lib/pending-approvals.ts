@@ -7,70 +7,95 @@ import { canDecideAbsenceRequestAsFirstApprover } from "@/lib/permissions";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { getDirectReportEmployeeIds } from "@/lib/manager-scope";
 
-// Shared by /approvals (src/app/(app)/approvals/page.tsx) and the Dashboard's
-// merged "Perlu Persetujuan Anda" section, so both surfaces enumerate the
-// exact same pending items from one place instead of drifting apart. Every
-// query here is unchanged from what /approvals already computed on its own
-// before this extraction — this file only moves it, plus adds Absence
-// (which /approvals never listed) since the Dashboard now needs it too.
+// Shared by the Dashboard's merged "Perlu Persetujuan Anda" section (this
+// used to also back a standalone /approvals page, now removed — see
+// docs/DECISIONS.md history). Every query here is unchanged in shape from
+// the original /approvals implementation — this file only moves it, plus
+// Absence, Competency Assessment and Training Effectiveness, which never
+// had a home on /approvals.
+//
+// Performance: every query below is independent of every OTHER query in
+// its own group — only a handful of derived flags (isHrManager, isDeptHead,
+// the GA approver flags, absencePositionIds, directReportIds) gate which
+// queries in the NEXT group actually run. Grouped into 3 Promise.all
+// stages by that real dependency order instead of ~20 one-after-another
+// awaits, so total latency is bounded by 3 round trips' worth of the
+// slowest query in each stage, not the sum of all ~20.
 export async function getPendingApprovals(session: Session) {
-  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
-  const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
   const employeeId = session.user.employeeId ?? "__none__";
-  const isHrManager = hrManagerPositions.length > 0;
-  const isDeptHead = deptHeadDepartmentIds.length > 0;
 
-  const pendingOwnEvaluations = await prisma.evaluation.findMany({
-    where: {
-      status: "RELEASED",
-      OR: [
-        { p1EmployeeId: employeeId, p1SubmittedAt: null },
-        { p2EmployeeId: employeeId, p2SubmittedAt: null },
-      ],
-    },
-    include: { employee: true },
-    orderBy: { releasedAt: "asc" },
-  });
-
-  const [newAssetNeedConfig, lossReviewConfig, disposalConfig] = await Promise.all([
+  // Stage 1 — needs only employeeId/session, nothing computed below.
+  const [
+    hrManagerPositions,
+    deptHeadDepartmentIds,
+    pendingOwnEvaluations,
+    newAssetNeedConfig,
+    lossReviewConfig,
+    disposalConfig,
+    pendingAbsenceHrAdmin,
+    submittedAbsenceRequests,
+    pendingCompetencyAssessments,
+    directReportIds,
+  ] = await Promise.all([
+    getActiveHrManagerPositions(session.user.employeeId),
+    getDeptHeadDepartmentIds(session.user.employeeId),
+    prisma.evaluation.findMany({
+      where: {
+        status: "RELEASED",
+        OR: [
+          { p1EmployeeId: employeeId, p1SubmittedAt: null },
+          { p2EmployeeId: employeeId, p2SubmittedAt: null },
+        ],
+      },
+      include: { employee: true },
+      orderBy: { releasedAt: "asc" },
+    }),
     prisma.gaApprovalConfig.findUnique({ where: { approvalType: "NEW_ASSET_NEED" } }),
     prisma.gaApprovalConfig.findUnique({ where: { approvalType: "LOSS_REVIEW" } }),
     prisma.gaApprovalConfig.findUnique({ where: { approvalType: "DISPOSAL" } }),
-  ]);
-  const [newAssetNeedHolderIds, lossReviewHolderIds, disposalHolderIds] = await Promise.all([
-    getCurrentHolderEmployeeIds(newAssetNeedConfig?.approverPositionId ?? null),
-    getCurrentHolderEmployeeIds(lossReviewConfig?.approverPositionId ?? null),
-    getCurrentHolderEmployeeIds(disposalConfig?.approverPositionId ?? null),
-  ]);
-  const isNewAssetNeedApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, newAssetNeedHolderIds);
-  const isLossReviewApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, lossReviewHolderIds);
-  const isDisposalApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, disposalHolderIds);
-
-  const [pendingGaNewAssetNeeds, pendingGaLossReviews, pendingGaDisposals] = await Promise.all([
-    isNewAssetNeedApprover
-      ? prisma.gaRequest.findMany({
-          where: { status: "PENDING_APPROVAL" },
-          include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
-          orderBy: { verifiedAt: "asc" },
+    // Absence: never listed on the old /approvals page — the configured
+    // first approver for a SUBMITTED request isn't one global authority
+    // (unlike HR Manager/Dept Head), so pending requests are fetched once
+    // and matched against this employee's current Position in memory
+    // rather than N one-off holder lookups (see Stage 2/3 below).
+    isHrAdmin(session)
+      ? prisma.absenceRequest.findMany({
+          where: { status: "PENDING_HR_ADMIN" },
+          include: { employee: true, absenceType: true },
+          orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
-    isLossReviewApprover
-      ? prisma.gaRequest.findMany({
-          where: { status: "PENDING_LOSS_REVIEW" },
-          include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
-          orderBy: { verifiedAt: "asc" },
+    session.user.employeeId
+      ? prisma.absenceRequest.findMany({
+          where: { status: "SUBMITTED", firstApproverPositionId: { not: null } },
+          include: { employee: true, absenceType: true },
+          orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
-    isDisposalApprover
-      ? prisma.disposalCase.findMany({
-          where: { status: "PENDING_APPROVAL" },
-          include: { asset: { select: { assetCode: true, assetName: true } } },
-          orderBy: { submittedForApprovalAt: "asc" },
+    // Competency Assessment P1 scoring (P2 dropped from the workflow — see
+    // lib/competency.ts/competency-routing.ts) — same "I'm the evaluator,
+    // not the evaluatee" shape as pendingOwnEvaluations above.
+    session.user.employeeId
+      ? prisma.competencyAssessment.findMany({
+          where: { p1EmployeeId: session.user.employeeId, p1SubmittedAt: null },
+          include: { employee: true, cycle: true },
+          orderBy: { createdAt: "asc" },
         })
       : Promise.resolve([]),
+    getDirectReportEmployeeIds(session.user.employeeId),
   ]);
 
+  const isHrManager = hrManagerPositions.length > 0;
+  const isDeptHead = deptHeadDepartmentIds.length > 0;
+  const absencePositionIds = [...new Set(submittedAbsenceRequests.map((r) => r.firstApproverPositionId!))];
+
+  // Stage 2 — depends on Stage 1's results (isHrManager/isDeptHead/
+  // deptHeadDepartmentIds, the 3 GA configs, absencePositionIds,
+  // directReportIds).
   const [
+    newAssetNeedHolderIds,
+    lossReviewHolderIds,
+    disposalHolderIds,
     pendingRequests,
     pendingMovements,
     pendingDeptHeadRequests,
@@ -80,7 +105,12 @@ export async function getPendingApprovals(session: Session) {
     pendingHrManagerRenewals,
     pendingHrManagerOffboarding,
     pendingDeptHeadTrainingRequests,
+    absencePositionHolders,
+    pendingEffectivenessTasks,
   ] = await Promise.all([
+    getCurrentHolderEmployeeIds(newAssetNeedConfig?.approverPositionId ?? null),
+    getCurrentHolderEmployeeIds(lossReviewConfig?.approverPositionId ?? null),
+    getCurrentHolderEmployeeIds(disposalConfig?.approverPositionId ?? null),
     isHrManager
       ? prisma.recruitmentRequest.findMany({
           where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
@@ -162,35 +192,35 @@ export async function getPendingApprovals(session: Session) {
           orderBy: { createdAt: "asc" },
         })
       : Promise.resolve([]),
+    absencePositionIds.length
+      ? prisma.employee.findMany({
+          where: { currentPositionId: { in: absencePositionIds }, activeFlag: true },
+          select: { id: true, currentPositionId: true },
+        })
+      : Promise.resolve([]),
+    // Training effectiveness (D+30) tasks — "the Primary Position
+    // supervisor completes it" (TRN-04/TRN-07) — scoped to this employee's
+    // own direct reports (one query) rather than N one-off
+    // isDirectManagerOfEmployee lookups, same pattern as the page's own
+    // candidate list.
+    directReportIds.length
+      ? prisma.learningAssignment.findMany({
+          where: {
+            employeeId: { in: directReportIds },
+            status: "COMPLETED",
+            effectivenessRequiredSnapshot: true,
+            effectivenessCompletedAt: null,
+          },
+          include: { employee: true, course: { select: { title: true } } },
+          orderBy: { effectivenessDueDate: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
-  // Absence: never listed on /approvals before — the configured first
-  // approver for a SUBMITTED request isn't one global authority (unlike HR
-  // Manager/Dept Head), so pending requests are fetched once and matched
-  // against this employee's current Position in memory rather than N
-  // one-off holder lookups.
-  const pendingAbsenceHrAdmin = isHrAdmin(session)
-    ? await prisma.absenceRequest.findMany({
-        where: { status: "PENDING_HR_ADMIN" },
-        include: { employee: true, absenceType: true },
-        orderBy: { submittedAt: "asc" },
-      })
-    : [];
+  const isNewAssetNeedApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, newAssetNeedHolderIds);
+  const isLossReviewApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, lossReviewHolderIds);
+  const isDisposalApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, disposalHolderIds);
 
-  const submittedAbsenceRequests = session.user.employeeId
-    ? await prisma.absenceRequest.findMany({
-        where: { status: "SUBMITTED", firstApproverPositionId: { not: null } },
-        include: { employee: true, absenceType: true },
-        orderBy: { submittedAt: "asc" },
-      })
-    : [];
-  const absencePositionIds = [...new Set(submittedAbsenceRequests.map((r) => r.firstApproverPositionId!))];
-  const absencePositionHolders = absencePositionIds.length
-    ? await prisma.employee.findMany({
-        where: { currentPositionId: { in: absencePositionIds }, activeFlag: true },
-        select: { id: true, currentPositionId: true },
-      })
-    : [];
   const absenceHolderIdsByPosition = new Map<string, string[]>();
   for (const h of absencePositionHolders) {
     const list = absenceHolderIdsByPosition.get(h.currentPositionId!) ?? [];
@@ -201,37 +231,30 @@ export async function getPendingApprovals(session: Session) {
     canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, absenceHolderIdsByPosition.get(r.firstApproverPositionId!) ?? [])
   );
 
-  // Competency Assessment P1 scoring (P2 dropped from the workflow — see
-  // lib/competency.ts/competency-routing.ts) — same "I'm the evaluator, not
-  // the evaluatee" shape as pendingOwnEvaluations above. Never had its own
-  // persistent sidebar link for a pending task (only Training Admin's cycle
-  // management does); surfaced here instead, linking straight to the
-  // assessment's own scoring form.
-  const pendingCompetencyAssessments = session.user.employeeId
-    ? await prisma.competencyAssessment.findMany({
-        where: { p1EmployeeId: session.user.employeeId, p1SubmittedAt: null },
-        include: { employee: true, cycle: true },
-        orderBy: { createdAt: "asc" },
-      })
-    : [];
-
-  // Training effectiveness (D+30) tasks — "the Primary Position supervisor
-  // completes it" (TRN-04/TRN-07) — scoped to this employee's own direct
-  // reports (one query) rather than N one-off isDirectManagerOfEmployee
-  // lookups, same pattern as the page's own candidate list.
-  const directReportIds = session.user.employeeId ? await getDirectReportEmployeeIds(session.user.employeeId) : [];
-  const pendingEffectivenessTasks = directReportIds.length
-    ? await prisma.learningAssignment.findMany({
-        where: {
-          employeeId: { in: directReportIds },
-          status: "COMPLETED",
-          effectivenessRequiredSnapshot: true,
-          effectivenessCompletedAt: null,
-        },
-        include: { employee: true, course: { select: { title: true } } },
-        orderBy: { effectivenessDueDate: "asc" },
-      })
-    : [];
+  // Stage 3 — depends on Stage 2's approver flags.
+  const [pendingGaNewAssetNeeds, pendingGaLossReviews, pendingGaDisposals] = await Promise.all([
+    isNewAssetNeedApprover
+      ? prisma.gaRequest.findMany({
+          where: { status: "PENDING_APPROVAL" },
+          include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
+          orderBy: { verifiedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    isLossReviewApprover
+      ? prisma.gaRequest.findMany({
+          where: { status: "PENDING_LOSS_REVIEW" },
+          include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
+          orderBy: { verifiedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    isDisposalApprover
+      ? prisma.disposalCase.findMany({
+          where: { status: "PENDING_APPROVAL" },
+          include: { asset: { select: { assetCode: true, assetName: true } } },
+          orderBy: { submittedForApprovalAt: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
 
   return {
     hrManagerPositions,

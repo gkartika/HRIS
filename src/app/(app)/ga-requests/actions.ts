@@ -194,7 +194,6 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
 
   revalidatePath(`/ga-requests/${requestId}`);
   revalidatePath("/ga-requests");
-  revalidatePath("/approvals");
   if (request.assetId) revalidatePath(`/assets/${request.assetId}`);
   return undefined;
 }
@@ -246,7 +245,6 @@ export async function decideGaRequestAsApprover(
 
   revalidatePath(`/ga-requests/${requestId}`);
   revalidatePath("/ga-requests");
-  revalidatePath("/approvals");
   return undefined;
 }
 
@@ -412,7 +410,6 @@ export async function reviewGaRequestLoss(
 
   revalidatePath(`/ga-requests/${requestId}`);
   revalidatePath("/ga-requests");
-  revalidatePath("/approvals");
   revalidatePath(`/assets/${request.assetId}`);
   if (confirmed) revalidatePath("/disposal-cases");
   return undefined;
@@ -443,6 +440,5 @@ export async function cancelGaRequest(requestId: string, _prevState: string | un
 
   revalidatePath(`/ga-requests/${requestId}`);
   revalidatePath("/ga-requests");
-  revalidatePath("/approvals");
   return undefined;
 }

@@ -10,6 +10,15 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Brand colors from ptcbp.com — scoped so far to the sidebar, Beranda
+     (HR Admin + Karyawan variants). The rest of the app keeps its current
+     indigo accents until a dedicated follow-up rolls this out everywhere. */
+  --color-brand: #552c59;
+  --color-brand-dark: #3d1f40;
+  --color-brand-soft: #f4eef5;
+  --color-brand-accent: #fdef0a;
+  --color-brand-accent-soft: #fefaad;
 }
 
 @media (prefers-color-scheme: dark) {

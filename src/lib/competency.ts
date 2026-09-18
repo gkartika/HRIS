@@ -47,34 +47,33 @@ export function isValidCompanyValueScore(value: number): boolean {
   return (COMPANY_VALUE_SCORE_SCALE as readonly number[]).includes(value);
 }
 
-// COM-14: "Per value use average(P1,P2) × 20%; sum the five values for a
-// Company Values Score from 0-100." `weight` is stored as an integer
-// percentage (20), so the multiplier is weight/100. Returns null while
-// either evaluator hasn't scored yet — a per-value contribution isn't
-// computable from a single side.
-export function computeCompanyValueItemScore(p1Score: number | null, p2Score: number | null, weight: number): number | null {
-  if (p1Score === null || p2Score === null) return null;
-  return ((p1Score + p2Score) / 2) * (weight / 100);
+// Revised per direct request: P2 (Department Head/HR Manager) dropped from
+// Company Values scoring entirely — P1 alone × weight/100. The original
+// blueprint formula was average(P1,P2) × weight/100 (COM-14); this
+// deliberately supersedes it, not a bug. Returns null only while P1 hasn't
+// scored yet.
+export function computeCompanyValueItemScore(p1Score: number | null, weight: number): number | null {
+  if (p1Score === null) return null;
+  return p1Score * (weight / 100);
 }
 
 export interface CompanyValueScoreItem {
   p1Score: number | null;
-  p2Score: number | null;
   weightSnapshot: number;
 }
 
-// COM-14/COM-13: every eligible Employee is scored on the same five Company
-// Values, so a Company Values Score is only meaningful once all five items
-// have both P1 and P2 recorded — returns null until then rather than
-// reporting a partial sum as if it were final.
+// Revised per direct request (was COM-14/COM-13 dual-rater): a Company
+// Values Score is now meaningful once all five items have a P1 score —
+// returns null until then rather than reporting a partial sum as final.
 export function computeCompanyValuesScore(items: CompanyValueScoreItem[]): number | null {
-  const scores = items.map((item) => computeCompanyValueItemScore(item.p1Score, item.p2Score, item.weightSnapshot));
+  const scores = items.map((item) => computeCompanyValueItemScore(item.p1Score, item.weightSnapshot));
   if (scores.some((s) => s === null)) return null;
   return (scores as number[]).reduce((sum, s) => sum + s, 0);
 }
 
-// An assessment is complete only once P1 (competency + Company Values) and
-// P2 (Company Values only) have both submitted — COM-06/COM-15.
-export function isCompetencyAssessmentComplete(p1SubmittedAt: Date | null, p2SubmittedAt: Date | null): boolean {
-  return p1SubmittedAt !== null && p2SubmittedAt !== null;
+// Revised per direct request (was COM-06/COM-15 "both P1 and P2 required"):
+// P1's own submission (competency levels + Company Values) is now
+// sufficient on its own — P2 is no longer part of the workflow.
+export function isCompetencyAssessmentComplete(p1SubmittedAt: Date | null): boolean {
+  return p1SubmittedAt !== null;
 }

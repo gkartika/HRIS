@@ -49,6 +49,26 @@ export async function getDirectReportEmployeeIds(managerEmployeeId: string | nul
   return reports.map((r) => r.id);
 }
 
+// "Am I anyone's manager at all" — used to gate the "Tim Saya" nav item and
+// the Dashboard's simple-vs-full-featured fork. Moved from layout.tsx as-is
+// (was a private helper there) so dashboard/page.tsx can reuse the exact
+// same check without duplicating it. Deliberately checks for a subordinate
+// Position existing at all (even if currently vacant), not
+// getDirectReportEmployeeIds' "an active Employee is in it" — a manager
+// whose report just resigned shouldn't instantly lose "Tim Saya" visibility.
+export async function isManagerOfAnyPosition(employeeId: string | null | undefined): Promise<boolean> {
+  if (!employeeId) return false;
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { currentPositionId: true },
+  });
+  if (!employee?.currentPositionId) return false;
+  const directReport = await prisma.position.findFirst({
+    where: { reportsToPositionId: employee.currentPositionId },
+  });
+  return !!directReport;
+}
+
 export interface SupervisorCandidate {
   employeeId: string;
   positionId: string;

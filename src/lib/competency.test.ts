@@ -71,36 +71,34 @@ describe("isValidCompanyValueScore", () => {
   });
 });
 
-describe("computeCompanyValueItemScore (COM-14)", () => {
-  it("average(p1,p2) x weight/100", () => {
-    expect(computeCompanyValueItemScore(100, 50, 20)).toBeCloseTo(((100 + 50) / 2) * 0.2, 5);
+describe("computeCompanyValueItemScore (P1-only, P2 dropped per direct request)", () => {
+  it("p1 x weight/100", () => {
+    expect(computeCompanyValueItemScore(100, 20)).toBeCloseTo(100 * 0.2, 5);
   });
 
-  it("null while either evaluator hasn't scored", () => {
-    expect(computeCompanyValueItemScore(null, 50, 20)).toBeNull();
-    expect(computeCompanyValueItemScore(50, null, 20)).toBeNull();
+  it("null while P1 hasn't scored", () => {
+    expect(computeCompanyValueItemScore(null, 20)).toBeNull();
   });
 });
 
-describe("computeCompanyValuesScore (COM-14)", () => {
-  it("sums five values each capped at their own weight when both sides score 100", () => {
-    const items = Array.from({ length: 5 }, () => ({ p1Score: 100, p2Score: 100, weightSnapshot: 20 }));
+describe("computeCompanyValuesScore (P1-only, P2 dropped per direct request)", () => {
+  it("sums five values each capped at their own weight when P1 scores 100", () => {
+    const items = Array.from({ length: 5 }, () => ({ p1Score: 100, weightSnapshot: 20 }));
     expect(computeCompanyValuesScore(items)).toBe(100);
   });
 
-  it("null until all five items have both P1 and P2 recorded", () => {
+  it("null until all five items have a P1 score recorded", () => {
     const items = [
-      { p1Score: 100, p2Score: 100, weightSnapshot: 20 },
-      { p1Score: 100, p2Score: null, weightSnapshot: 20 },
+      { p1Score: 100, weightSnapshot: 20 },
+      { p1Score: null, weightSnapshot: 20 },
     ];
     expect(computeCompanyValuesScore(items)).toBeNull();
   });
 });
 
-describe("isCompetencyAssessmentComplete (COM-06/COM-15)", () => {
-  it("requires both P1 and P2 submission timestamps", () => {
-    expect(isCompetencyAssessmentComplete(new Date(), new Date())).toBe(true);
-    expect(isCompetencyAssessmentComplete(new Date(), null)).toBe(false);
-    expect(isCompetencyAssessmentComplete(null, null)).toBe(false);
+describe("isCompetencyAssessmentComplete (P1-only, P2 dropped per direct request)", () => {
+  it("requires only the P1 submission timestamp", () => {
+    expect(isCompetencyAssessmentComplete(new Date())).toBe(true);
+    expect(isCompetencyAssessmentComplete(null)).toBe(false);
   });
 });

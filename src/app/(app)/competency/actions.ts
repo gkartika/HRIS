@@ -4,19 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import {
-  canOpenCompetencyCycle,
-  canReassignCompetencyEvaluator,
-  canScoreAsCompetencyP1,
-  canScoreAsCompetencyP2,
-} from "@/lib/permissions";
+import { canOpenCompetencyCycle, canReassignCompetencyEvaluator, canScoreAsCompetencyP1 } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import {
   formatCycleCode,
   computeCompetencyAchievementPct,
   computeCompanyValuesScore,
   isValidCompanyValueScore,
-  isCompetencyAssessmentComplete,
 } from "@/lib/competency";
 import { resolveCompetencyEvaluators } from "@/lib/competency-routing";
 import type { EvaluatorSlot } from "@/generated/prisma/enums";
@@ -24,8 +18,9 @@ import type { EvaluatorSlot } from "@/generated/prisma/enums";
 // COM-06/COM-08/COM-17: opening a cycle snapshots every active Employee's
 // Primary Position, organization, competency requirements (Job-scoped,
 // isRequired items only — COM-04/DM-43) and the same five Company Values,
-// plus resolves P1/P2 per COM-15 — all frozen at this moment so later
-// master-data edits never rewrite an open or completed cycle's results.
+// plus resolves P1 per COM-15 (P2 dropped — see lib/competency-routing.ts)
+// — all frozen at this moment so later master-data edits never rewrite an
+// open or completed cycle's results.
 export async function openCompetencyCycle(
   _prevState: string | undefined,
   formData: FormData
@@ -145,8 +140,6 @@ export async function openCompetencyCycle(
         isLevel3AtSnapshot: evaluators.isLevel3,
         p1EmployeeId: evaluators.p1?.employeeId ?? null,
         p1PositionId: evaluators.p1?.positionId ?? null,
-        p2EmployeeId: evaluators.p2?.employeeId ?? null,
-        p2PositionId: evaluators.p2?.positionId ?? null,
         items: {
           create: jobRequirements.map((req) => ({
             competencyDefinitionId: req.competencyDefinitionId,
@@ -315,16 +308,15 @@ export async function submitP1Assessment(
       actualLevel: itemUpdates.find((u) => u.id === item.id)?.actualLevel ?? item.actualLevel,
     }))
   );
-  const isComplete = isCompetencyAssessmentComplete(now, assessment.p2SubmittedAt);
-  const companyValuesScore = isComplete
-    ? computeCompanyValuesScore(
-        assessment.valueItems.map((v) => ({
-          p1Score: valueUpdates.find((u) => u.id === v.id)?.score ?? null,
-          p2Score: v.p2Score,
-          weightSnapshot: v.weightSnapshot,
-        }))
-      )
-    : null;
+  // P1's submission alone completes the assessment now (P2 dropped — see
+  // lib/competency.ts), so this is unconditional rather than gated on a
+  // second submission arriving later.
+  const companyValuesScore = computeCompanyValuesScore(
+    assessment.valueItems.map((v) => ({
+      p1Score: valueUpdates.find((u) => u.id === v.id)?.score ?? null,
+      weightSnapshot: v.weightSnapshot,
+    }))
+  );
 
   await prisma.$transaction(async (tx) => {
     for (const u of itemUpdates) {
@@ -339,7 +331,7 @@ export async function submitP1Assessment(
         p1SubmittedAt: now,
         competencyAchievementPct,
         companyValuesScore,
-        completedAt: isComplete ? now : null,
+        completedAt: now,
       },
     });
   });
@@ -350,68 +342,6 @@ export async function submitP1Assessment(
     datasetName: "CompetencyAssessment",
     recordId: assessmentId,
     reason: "P1 submitted competency levels and Company Values",
-  });
-
-  revalidatePath(`/competency/assessments/${assessmentId}`);
-  redirect(`/competency/assessments/${assessmentId}`);
-}
-
-// COM-06/ACC-21: P2 records Company Values only, independent of P1.
-export async function submitP2Assessment(
-  assessmentId: string,
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
-
-  const assessment = await prisma.competencyAssessment.findUnique({
-    where: { id: assessmentId },
-    include: { valueItems: true },
-  });
-  if (!assessment) return "Penilaian tidak ditemukan.";
-  if (!canScoreAsCompetencyP2(session.user.employeeId, assessment.p2EmployeeId)) return "Anda tidak memiliki akses.";
-  if (assessment.p2SubmittedAt) return "Penilaian P2 sudah dikirim.";
-
-  const valueUpdates: { id: string; score: number }[] = [];
-  for (const v of assessment.valueItems) {
-    const raw = formData.get(`p2score_${v.id}`) as string | null;
-    const score = raw !== null && raw !== "" ? Number(raw) : NaN;
-    if (Number.isNaN(score) || !isValidCompanyValueScore(score)) return `Skor Tata Nilai "${v.valueNameSnapshot}" wajib dipilih.`;
-    valueUpdates.push({ id: v.id, score });
-  }
-
-  const now = new Date();
-  const isComplete = isCompetencyAssessmentComplete(assessment.p1SubmittedAt, now);
-  const companyValuesScore = isComplete
-    ? computeCompanyValuesScore(
-        assessment.valueItems.map((v) => ({
-          p1Score: v.p1Score,
-          p2Score: valueUpdates.find((u) => u.id === v.id)?.score ?? null,
-          weightSnapshot: v.weightSnapshot,
-        }))
-      )
-    : null;
-
-  await prisma.$transaction(async (tx) => {
-    for (const u of valueUpdates) {
-      await tx.companyValueAssessmentItem.update({ where: { id: u.id }, data: { p2Score: u.score } });
-    }
-    await tx.competencyAssessment.update({
-      where: { id: assessmentId },
-      data: {
-        p2SubmittedAt: now,
-        companyValuesScore,
-        completedAt: isComplete ? now : null,
-      },
-    });
-  });
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "UPDATE",
-    datasetName: "CompetencyAssessment",
-    recordId: assessmentId,
-    reason: "P2 submitted Company Values",
   });
 
   revalidatePath(`/competency/assessments/${assessmentId}`);

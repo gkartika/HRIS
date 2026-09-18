@@ -3,7 +3,6 @@ import { requireSession } from "@/lib/require-session";
 import {
   isTrainingAdmin,
   canScoreAsCompetencyP1,
-  canScoreAsCompetencyP2,
   canReassignCompetencyEvaluator,
   canViewCompetencyAssessment,
 } from "@/lib/permissions";
@@ -12,7 +11,6 @@ import { getActiveDirectorCandidates } from "@/lib/org-chart";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { P1ScoringForm } from "./p1-scoring-form";
-import { P2ScoringForm } from "./p2-scoring-form";
 import { ReassignEvaluatorForm } from "./reassign-form";
 
 export default async function CompetencyAssessmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -58,14 +56,11 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
   }
 
   const isP1 = canScoreAsCompetencyP1(session.user.employeeId, assessment.p1EmployeeId);
-  const isP2 = canScoreAsCompetencyP2(session.user.employeeId, assessment.p2EmployeeId);
   const canScoreP1 = isP1 && !assessment.p1SubmittedAt;
-  const canScoreP2 = isP2 && !assessment.p2SubmittedAt;
   const canReassign = canReassignCompetencyEvaluator(session) && assessment.cycle.status === "OPEN";
   const isComplete = assessment.completedAt !== null;
 
   const canSeeP1Scores = isAdmin || isP1 || isComplete;
-  const canSeeP2Scores = isAdmin || isP2 || isComplete;
 
   const employeeOptions = canReassign
     ? await prisma.employee.findMany({
@@ -96,16 +91,19 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
           </p>
           {canReassign && <ReassignEvaluatorForm assessmentId={assessment.id} slot="P1" employees={employeeOptions} />}
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs font-medium text-slate-500">P2 {assessment.isLevel3AtSnapshot ? "(HR Manager)" : "(Kepala Departemen)"}</p>
-          <p className="mt-1 text-sm text-slate-900">
-            {assessment.p2Employee ? (assessment.p2Employee.fullLegalName) : "Belum ditentukan"}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            {assessment.p2SubmittedAt ? `Dikirim ${assessment.p2SubmittedAt.toISOString().slice(0, 10)}` : "Belum dikirim"}
-          </p>
-          {canReassign && <ReassignEvaluatorForm assessmentId={assessment.id} slot="P2" employees={employeeOptions} />}
-        </div>
+        {/* P2 dropped from the workflow per direct request — a new
+            assessment never gets a p2EmployeeId. Older cycles opened before
+            this change may still carry one; shown read-only here purely as
+            an archive record, never a live scoring path. */}
+        {assessment.p2EmployeeId && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-medium text-slate-500">P2 (arsip — tidak lagi diperlukan)</p>
+            <p className="mt-1 text-sm text-slate-900">{assessment.p2Employee?.fullLegalName}</p>
+            <p className="mt-1 text-xs text-slate-400">
+              {assessment.p2SubmittedAt ? `Dikirim ${assessment.p2SubmittedAt.toISOString().slice(0, 10)}` : "Tidak dikirim"}
+            </p>
+          </div>
+        )}
       </div>
 
       {isComplete && (
@@ -166,9 +164,11 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
         </div>
       )}
 
-      {canScoreP2 ? (
-        <P2ScoringForm assessmentId={assessment.id} valueItems={assessment.valueItems} />
-      ) : (
+      {/* P1's own form above already collects Tata Nilai scores as part of
+          one combined submission (see p1-scoring-form.tsx) — this is just
+          the read-only view of what P1 submitted, shown once scoring isn't
+          in progress. */}
+      {!canScoreP1 && (
         <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="bg-slate-50 px-4 py-2 text-xs font-medium text-slate-600">Tata Nilai Perusahaan</div>
           <table className="w-full text-sm">
@@ -177,7 +177,6 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
                 <th className="px-4 py-2 font-medium">Nilai</th>
                 <th className="px-4 py-2 font-medium">Bobot</th>
                 <th className="px-4 py-2 font-medium">Skor P1</th>
-                <th className="px-4 py-2 font-medium">Skor P2</th>
               </tr>
             </thead>
             <tbody>
@@ -186,7 +185,6 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
                   <td className="px-4 py-2 text-slate-900">{v.valueNameSnapshot}</td>
                   <td className="px-4 py-2 text-slate-600">{v.weightSnapshot}%</td>
                   <td className="px-4 py-2 text-slate-600">{canSeeP1Scores ? (v.p1Score ?? "—") : "Disembunyikan"}</td>
-                  <td className="px-4 py-2 text-slate-600">{canSeeP2Scores ? (v.p2Score ?? "—") : "Disembunyikan"}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { deriveDailyAttendanceExceptions, type AttendanceException } from "@/lib/attendance";
 import { normalizeWeekStart, DEFAULT_SHIFT_TYPE } from "@/lib/shift-assignment";
-import type { AttendanceMethod, ShiftAssignmentType, AbsenceType, AbsenceStatus } from "@/generated/prisma/enums";
+import type { AttendanceMethod, ShiftAssignmentType, AbsenceStatus } from "@/generated/prisma/enums";
 
 // Any Absence status still "live" for overlap-blocking / display purposes —
 // per direct user request, an Absence is shown here even before it's been
@@ -11,7 +11,7 @@ const ACTIVE_ABSENCE_STATUSES: AbsenceStatus[] = ["SUBMITTED", "PENDING_HR_ADMIN
 export interface ActiveAbsenceSummary {
   id: string;
   requestNumber: string;
-  absenceType: AbsenceType;
+  absenceTypeLabel: string;
   status: AbsenceStatus;
 }
 
@@ -43,7 +43,7 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
   const utcDay = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const weekStartDate = normalizeWeekStart(utcDay);
 
-  const [employees, assignments, events, shiftAssignments, absences, activeGeofences] = await Promise.all([
+  const [employees, assignments, events, shiftAssignments, absences, activeGeofences, absenceTypes] = await Promise.all([
     prisma.employee.findMany({
       where: { id: { in: employeeIds } },
       include: { currentPosition: { include: { orgUnit: true } } },
@@ -67,10 +67,12 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
       },
     }),
     prisma.attendanceGeofence.findMany({ where: { activeFlag: true } }),
+    prisma.absenceTypeConfig.findMany({ select: { code: true, label: true } }),
   ]);
   const assignmentByEmployeeId = new Map(assignments.map((a) => [a.employeeId, a]));
   const shiftByEmployeeId = new Map(shiftAssignments.map((s) => [s.employeeId, s]));
   const absenceByEmployeeId = new Map(absences.map((a) => [a.employeeId, a]));
+  const absenceTypeLabelByCode = new Map(absenceTypes.map((t) => [t.code, t.label]));
 
   return employees.map((employee) => {
     const assignment = assignmentByEmployeeId.get(employee.id) ?? null;
@@ -108,7 +110,7 @@ export async function computeAttendanceRecordsForDate(employeeIds: string[], dat
         ? {
             id: activeAbsenceRequest.id,
             requestNumber: activeAbsenceRequest.requestNumber,
-            absenceType: activeAbsenceRequest.absenceType,
+            absenceTypeLabel: absenceTypeLabelByCode.get(activeAbsenceRequest.absenceTypeCode) ?? activeAbsenceRequest.absenceTypeCode,
             status: activeAbsenceRequest.status,
           }
         : null,

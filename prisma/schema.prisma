@@ -689,11 +689,27 @@ enum AttendanceSource {
   FINGERPRINT_IMPORT
 }
 
-enum AbsenceType {
-  CUTI
-  IZIN
-  SAKIT
-  LAINNYA
+// HR-Admin-managed catalog of leave/absence categories — replaces the old
+// fixed AbsenceType enum so new categories (and each one's approval shape)
+// no longer need a code deploy. `code` is the stable natural key everything
+// else joins against (query params, CSV values, the pre-existing seeded
+// CUTI/IZIN/SAKIT/LAINNYA rows) — immutable once created; only `label`,
+// `requiresFirstApproval` and `activeFlag` are editable afterward.
+model AbsenceTypeConfig {
+  id                    String   @id @default(cuid())
+  code                  String   @unique
+  label                 String
+  // Per-type approval shape: false skips straight to the mandatory HR Admin
+  // stage (e.g. Sakit) instead of the normal two-stage chain. HR Admin
+  // approval itself is never optional — always the final gate.
+  requiresFirstApproval Boolean  @default(true)
+  activeFlag            Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  updatedAt             DateTime @updatedAt
+
+  absenceRequests   AbsenceRequest[]
+  entitlementConfig AbsenceEntitlementConfig?
+  quotaOverrides    AbsenceQuotaOverride[]
 }
 
 // No HR Manager stage anywhere in this flow, per direct spec ("Absence does
@@ -755,40 +771,41 @@ model Account {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
 
-  auditEvents                            AuditLog[]
-  importBatches                          ImportBatch[]
-  uploadedFiles                          FileObject[]
-  recruitmentRequestsSubmittedBy         RecruitmentRequest[]            @relation("RecruitmentSubmittedBy")
-  recruitmentRequestsApprovedBy          RecruitmentRequest[]            @relation("RecruitmentApprovedBy")
-  recruitmentRequestsDeptHeadDecisionsBy RecruitmentRequest[]            @relation("RecruitmentDeptHeadDecisionBy")
-  recruitmentFulfillmentsLinked          RecruitmentRequestFulfillment[]
-  recruitmentRequestsCancelledBy         RecruitmentRequest[]            @relation("RecruitmentCancelledByAccount")
-  movementRequestsSubmittedBy            MovementRequest[]               @relation("MovementSubmittedBy")
-  movementRequestsDecidedBy              MovementRequest[]               @relation("MovementDecisionBy")
-  movementRequestsDeptHeadDecisionsBy    MovementRequest[]               @relation("MovementDeptHeadDecisionBy")
-  movementRequestsImplementedBy          MovementRequest[]               @relation("MovementImplementedBy")
-  movementRequestsCancelledBy            MovementRequest[]               @relation("MovementCancelledByAccount")
-  onboardingContractsCompletedBy         OnboardingCase[]                @relation("OnboardingContractCompletedBy")
-  contractDecisionsMade                  Contract[]                      @relation("ContractDecisionBy")
-  contractsReleasedBy                    Contract[]                      @relation("ContractReleasedBy")
-  renewalCasesDecidedBy                  ContractRenewalCase[]           @relation("RenewalDecisionBy")
-  evaluationsCreatedBy                   Evaluation[]                    @relation("EvaluationCreatedBy")
-  evaluationsResponsibleAsHrAdmin        Evaluation[]                    @relation("EvaluationResponsibleHrAdmin")
-  evaluationsReleasedBy                  Evaluation[]                    @relation("EvaluationReleasedBy")
-  offboardingCasesReportedBy             OffboardingCase[]               @relation("OffboardingReportedBy")
-  offboardingCasesDeptHeadDecisionBy     OffboardingCase[]               @relation("OffboardingDeptHeadDecisionBy")
-  offboardingCasesHrManagerDecisionBy    OffboardingCase[]               @relation("OffboardingHrManagerDecisionBy")
-  offboardingCasesClearanceCompletedBy   OffboardingCase[]               @relation("OffboardingClearanceCompletedBy")
-  offboardingCasesCancelledBy            OffboardingCase[]               @relation("OffboardingCancelledBy")
-  offboardingCasesGaAssetClearanceConfirmedBy OffboardingCase[]          @relation("OffboardingGaAssetClearanceConfirmedBy")
-  shiftAssignmentsSubmittedBy            ShiftAssignment[]               @relation("ShiftAssignmentSubmittedBy")
-  attendanceAssignmentsAssignedBy        AttendanceAssignment[]          @relation("AttendanceAssignmentAssignedBy")
-  absenceRequestsSubmittedBy             AbsenceRequest[]                @relation("AbsenceRequestSubmittedBy")
-  absenceRequestsFirstDecisionBy         AbsenceRequest[]                @relation("AbsenceFirstDecisionBy")
-  absenceRequestsHrAdminDecisionBy       AbsenceRequest[]                @relation("AbsenceHrAdminDecisionBy")
-  absenceRequestsHrOverrideBy            AbsenceRequest[]                @relation("AbsenceHrOverrideBy")
-  absenceRequestsCancelledBy             AbsenceRequest[]                @relation("AbsenceCancelledBy")
-  taskForceMembershipsAddedBy            TaskForceMembership[]           @relation("TaskForceMembershipAddedBy")
+  auditEvents                                 AuditLog[]
+  importBatches                               ImportBatch[]
+  uploadedFiles                               FileObject[]
+  recruitmentRequestsSubmittedBy              RecruitmentRequest[]            @relation("RecruitmentSubmittedBy")
+  recruitmentRequestsApprovedBy               RecruitmentRequest[]            @relation("RecruitmentApprovedBy")
+  recruitmentRequestsDeptHeadDecisionsBy      RecruitmentRequest[]            @relation("RecruitmentDeptHeadDecisionBy")
+  recruitmentFulfillmentsLinked               RecruitmentRequestFulfillment[]
+  recruitmentRequestsCancelledBy              RecruitmentRequest[]            @relation("RecruitmentCancelledByAccount")
+  movementRequestsSubmittedBy                 MovementRequest[]               @relation("MovementSubmittedBy")
+  movementRequestsDecidedBy                   MovementRequest[]               @relation("MovementDecisionBy")
+  movementRequestsDeptHeadDecisionsBy         MovementRequest[]               @relation("MovementDeptHeadDecisionBy")
+  movementRequestsImplementedBy               MovementRequest[]               @relation("MovementImplementedBy")
+  movementRequestsCancelledBy                 MovementRequest[]               @relation("MovementCancelledByAccount")
+  onboardingContractsCompletedBy              OnboardingCase[]                @relation("OnboardingContractCompletedBy")
+  contractDecisionsMade                       Contract[]                      @relation("ContractDecisionBy")
+  contractsReleasedBy                         Contract[]                      @relation("ContractReleasedBy")
+  renewalCasesDecidedBy                       ContractRenewalCase[]           @relation("RenewalDecisionBy")
+  evaluationsCreatedBy                        Evaluation[]                    @relation("EvaluationCreatedBy")
+  evaluationsResponsibleAsHrAdmin             Evaluation[]                    @relation("EvaluationResponsibleHrAdmin")
+  evaluationsReleasedBy                       Evaluation[]                    @relation("EvaluationReleasedBy")
+  offboardingCasesReportedBy                  OffboardingCase[]               @relation("OffboardingReportedBy")
+  offboardingCasesDeptHeadDecisionBy          OffboardingCase[]               @relation("OffboardingDeptHeadDecisionBy")
+  offboardingCasesHrManagerDecisionBy         OffboardingCase[]               @relation("OffboardingHrManagerDecisionBy")
+  offboardingCasesClearanceCompletedBy        OffboardingCase[]               @relation("OffboardingClearanceCompletedBy")
+  offboardingCasesCancelledBy                 OffboardingCase[]               @relation("OffboardingCancelledBy")
+  offboardingCasesGaAssetClearanceConfirmedBy OffboardingCase[]               @relation("OffboardingGaAssetClearanceConfirmedBy")
+  shiftAssignmentsSubmittedBy                 ShiftAssignment[]               @relation("ShiftAssignmentSubmittedBy")
+  attendanceAssignmentsAssignedBy             AttendanceAssignment[]          @relation("AttendanceAssignmentAssignedBy")
+  absenceRequestsSubmittedBy                  AbsenceRequest[]                @relation("AbsenceRequestSubmittedBy")
+  absenceRequestsFirstDecisionBy              AbsenceRequest[]                @relation("AbsenceFirstDecisionBy")
+  absenceRequestsHrAdminDecisionBy            AbsenceRequest[]                @relation("AbsenceHrAdminDecisionBy")
+  absenceRequestsHrOverrideBy                 AbsenceRequest[]                @relation("AbsenceHrOverrideBy")
+  absenceRequestsCancelledBy                  AbsenceRequest[]                @relation("AbsenceCancelledBy")
+  absenceQuotaOverridesUpdatedBy              AbsenceQuotaOverride[]          @relation("AbsenceQuotaOverrideUpdatedBy")
+  taskForceMembershipsAddedBy                 TaskForceMembership[]           @relation("TaskForceMembershipAddedBy")
 
   positionCompetencyRequirementsUpdatedBy  PositionCompetencyRequirement[] @relation("PositionCompetencyRequirementUpdatedBy")
   competencyCyclesOpenedBy                 CompetencyAssessmentCycle[]     @relation("CycleOpenedBy")
@@ -912,6 +929,7 @@ model Employee {
   attendanceEvents               AttendanceEvent[]              @relation("AttendanceEventEmployee")
   dailyAttendanceRecords         DailyAttendanceRecord[]        @relation("DailyAttendanceRecordEmployee")
   absenceRequests                AbsenceRequest[]               @relation("AbsenceRequestEmployee")
+  absenceQuotaOverrides          AbsenceQuotaOverride[]         @relation("AbsenceQuotaOverrideEmployee")
   taskForceMemberships           TaskForceMembership[]          @relation("TaskForceMember")
 
   competencyAssessments                       CompetencyAssessment[]      @relation("CompetencyAssessmentEmployee")
@@ -1630,24 +1648,26 @@ model AbsenceApproverConfig {
 
 // HR-Admin-configured annual entitlement (days/year) per Absence type.
 model AbsenceEntitlementConfig {
-  id          String      @id @default(cuid())
-  absenceType AbsenceType @unique
-  annualDays  Int
-  updatedAt   DateTime    @updatedAt
+  id              String            @id @default(cuid())
+  absenceTypeCode String            @unique
+  absenceType     AbsenceTypeConfig @relation(fields: [absenceTypeCode], references: [code])
+  annualDays      Int
+  updatedAt       DateTime          @updatedAt
 }
 
 model AbsenceRequest {
-  id               String        @id @default(cuid())
-  requestNumber    String        @unique
+  id               String            @id @default(cuid())
+  requestNumber    String            @unique
   employeeId       String
-  employee         Employee      @relation("AbsenceRequestEmployee", fields: [employeeId], references: [id])
-  absenceType      AbsenceType
+  employee         Employee          @relation("AbsenceRequestEmployee", fields: [employeeId], references: [id])
+  absenceTypeCode  String
+  absenceType      AbsenceTypeConfig @relation(fields: [absenceTypeCode], references: [code])
   startDate        DateTime
   endDate          DateTime
   reason           String
-  attachmentFileId String?       @unique
-  attachmentFile   FileObject?   @relation("AbsenceRequestAttachment", fields: [attachmentFileId], references: [id])
-  status           AbsenceStatus @default(SUBMITTED)
+  attachmentFileId String?           @unique
+  attachmentFile   FileObject?       @relation("AbsenceRequestAttachment", fields: [attachmentFileId], references: [id])
+  status           AbsenceStatus     @default(SUBMITTED)
 
   submittedAt          DateTime @default(now())
   submittedByAccountId String
@@ -1683,6 +1703,26 @@ model AbsenceRequest {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// HR-Admin-set per-employee exception to AbsenceEntitlementConfig's
+// company-wide default annual quota for one Absence type — e.g. raising one
+// employee's Cuti allowance above the default. Absent for an
+// (employee, type) pair means "follow the company default"; there is no
+// separate "unlimited override" value, since AbsenceEntitlementConfig's own
+// 0/unset already means unlimited.
+model AbsenceQuotaOverride {
+  id                 String            @id @default(cuid())
+  employeeId         String
+  employee           Employee          @relation("AbsenceQuotaOverrideEmployee", fields: [employeeId], references: [id])
+  absenceTypeCode    String
+  absenceType        AbsenceTypeConfig @relation(fields: [absenceTypeCode], references: [code])
+  annualDays         Int
+  updatedAt          DateTime          @updatedAt
+  updatedByAccountId String
+  updatedByAccount   Account           @relation("AbsenceQuotaOverrideUpdatedBy", fields: [updatedByAccountId], references: [id])
+
+  @@unique([employeeId, absenceTypeCode])
 }
 
 // ---------- Task Force membership (new, per direct user request) ----------

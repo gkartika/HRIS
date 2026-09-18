@@ -256,7 +256,7 @@ export default async function AttendanceRecordsPage({
                       href={`/absences/${row.activeAbsence.id}`}
                       className={`inline-block rounded-md px-2 py-1 text-xs font-medium hover:underline ${ABSENCE_BADGE_TONE[row.activeAbsence.status] ?? "bg-slate-100 text-slate-600"}`}
                     >
-                      {t(`absenceType.${row.activeAbsence.absenceType}`)} — {t(`absenceStatus.${row.activeAbsence.status}`)}
+                      {row.activeAbsence.absenceTypeLabel} — {t(`absenceStatus.${row.activeAbsence.status}`)}
                     </Link>
                   ) : (
                     <span className="text-slate-300">—</span>

@@ -20,6 +20,7 @@ import {
   canManageAttendanceAssignment,
   canViewAttendance,
   canManageTaskForceMembership,
+  canManageAttendanceMasterData,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
@@ -31,7 +32,9 @@ import { AssignmentManagementPanel } from "./assignment-panel";
 import { BpjsCardsPanel } from "./bpjs-cards-panel";
 import { AccountHoldPanel } from "./account-panel";
 import { AttendanceAssignmentPanel } from "./attendance-panel";
+import { AbsenceQuotaPanel } from "./absence-quota-panel";
 import { TaskForcePanel } from "./task-force-panel";
+import { usedDaysThisYear } from "@/lib/absence-quota";
 import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
 
 export default async function EmployeeDetailPage({
@@ -121,6 +124,28 @@ export default async function EmployeeDetailPage({
         }),
       ])
     : [[], null];
+
+  const canManageAbsenceQuota = canManageAttendanceMasterData(session);
+  const absenceQuotaRows = canManageAbsenceQuota
+    ? await (async () => {
+        const [types, entitlements, overrides] = await Promise.all([
+          prisma.absenceTypeConfig.findMany({ where: { activeFlag: true }, orderBy: { sortOrder: "asc" } }),
+          prisma.absenceEntitlementConfig.findMany(),
+          prisma.absenceQuotaOverride.findMany({ where: { employeeId: employee.id } }),
+        ]);
+        const defaultByCode = new Map(entitlements.map((e) => [e.absenceTypeCode, e.annualDays]));
+        const overrideByCode = new Map(overrides.map((o) => [o.absenceTypeCode, o.annualDays]));
+        return Promise.all(
+          types.map(async (tp) => ({
+            code: tp.code,
+            label: tp.label,
+            defaultAnnualDays: defaultByCode.has(tp.code) ? defaultByCode.get(tp.code)! : null,
+            overrideAnnualDays: overrideByCode.get(tp.code) ?? null,
+            usedDaysThisYear: await usedDaysThisYear(employee.id, tp.code),
+          }))
+        );
+      })()
+    : [];
 
   const canManageTaskForce = canManageTaskForceMembership(session);
   const canSeeTaskForce = isSelf || isHrAdmin(session);
@@ -275,6 +300,7 @@ export default async function EmployeeDetailPage({
           geofences={geofences}
         />
       )}
+      {canManageAbsenceQuota && <AbsenceQuotaPanel employeeId={employee.id} rows={absenceQuotaRows} />}
       {canSeeTaskForce && (
         <TaskForcePanel
           employeeId={employee.id}

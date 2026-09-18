@@ -4,10 +4,9 @@ import { isHrAdmin } from "@/lib/permissions";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import type { Prisma, AbsenceStatus, AbsenceType } from "@/generated/prisma/client";
+import type { Prisma, AbsenceStatus } from "@/generated/prisma/client";
 
 const ABSENCE_STATUSES: AbsenceStatus[] = ["SUBMITTED", "PENDING_HR_ADMIN", "APPROVED", "REJECTED", "CANCELLED"];
-const ABSENCE_TYPES: AbsenceType[] = ["CUTI", "IZIN", "SAKIT", "LAINNYA"];
 
 export default async function AbsencesPage({
   searchParams,
@@ -44,14 +43,17 @@ export default async function AbsencesPage({
     where.OR = scopes.length > 0 ? scopes : [{ id: "__none__" }];
   }
   if (status) where.status = status as AbsenceStatus;
-  if (absenceType) where.absenceType = absenceType as AbsenceType;
+  if (absenceType) where.absenceTypeCode = absenceType;
 
-  const requests = await prisma.absenceRequest.findMany({
-    where,
-    include: { employee: { select: { employeeNumber: true, fullLegalName: true } } },
-    orderBy: { submittedAt: "desc" },
-    take: 100,
-  });
+  const [requests, absenceTypes] = await Promise.all([
+    prisma.absenceRequest.findMany({
+      where,
+      include: { employee: { select: { employeeNumber: true, fullLegalName: true } }, absenceType: true },
+      orderBy: { submittedAt: "desc" },
+      take: 100,
+    }),
+    prisma.absenceTypeConfig.findMany({ orderBy: { sortOrder: "asc" }, select: { code: true, label: true } }),
+  ]);
 
   const hasFilters = !!(status || absenceType);
 
@@ -93,9 +95,9 @@ export default async function AbsencesPage({
           <label className="mb-1 block text-xs text-slate-500">{t("absence.filterTypeLabel")}</label>
           <select name="absenceType" defaultValue={absenceType ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">{t("common.allOption")}</option>
-            {ABSENCE_TYPES.map((tp) => (
-              <option key={tp} value={tp}>
-                {t(`absenceType.${tp}`)}
+            {absenceTypes.map((tp) => (
+              <option key={tp.code} value={tp.code}>
+                {tp.label}
               </option>
             ))}
           </select>
@@ -135,7 +137,7 @@ export default async function AbsencesPage({
                     </Link>
                   </td>
                   <td className="px-4 py-3">{r.employee.fullLegalName}</td>
-                  <td className="px-4 py-3 text-slate-600">{t(`absenceType.${r.absenceType}`)}</td>
+                  <td className="px-4 py-3 text-slate-600">{r.absenceType.label}</td>
                   <td className="px-4 py-3 text-slate-600">
                     {r.startDate.toISOString().slice(0, 10)} – {r.endDate.toISOString().slice(0, 10)}
                   </td>

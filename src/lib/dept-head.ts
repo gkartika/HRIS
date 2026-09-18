@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 // positionType or reporting-line check) — same live-resolved-from-Assignment
 // pattern as src/lib/hr-manager.ts, just scoped to a department and a fixed
 // job level instead of a grantsHrManagerAccess flag.
-const DEPT_HEAD_JOB_LEVEL = "3B";
+export const DEPT_HEAD_JOB_LEVEL = "3B";
 
 export interface DeptHeadPosition {
   assignmentId: string;

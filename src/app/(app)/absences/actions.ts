@@ -19,12 +19,12 @@ import {
   canHrOverrideAbsenceRequestStatus,
   canCancelAbsenceRequestStatus,
 } from "@/lib/absence";
-import { resolveDepartmentId } from "@/lib/level3-scope";
+import { resolveFirstApproverPositionId } from "@/lib/absence-routing";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
-import type { AbsenceType } from "@/generated/prisma/enums";
+import type { AbsenceStatus } from "@/generated/prisma/enums";
 
 function getExtension(fileName: string): string {
   const idx = fileName.lastIndexOf(".");
@@ -41,12 +41,15 @@ export async function submitAbsenceRequest(
   if (!employeeId) return "Karyawan wajib dipilih.";
   if (!canSubmitAbsenceRequest(session, employeeId)) return "Anda tidak memiliki akses.";
 
-  const absenceType = formData.get("absenceType") as AbsenceType;
+  const absenceTypeCode = formData.get("absenceType") as string;
   const startDateRaw = formData.get("startDate") as string;
   const endDateRaw = formData.get("endDate") as string;
   const reason = (formData.get("reason") as string)?.trim();
 
-  if (!["CUTI", "IZIN", "SAKIT", "LAINNYA"].includes(absenceType)) return "Jenis absensi wajib dipilih.";
+  const typeConfig = absenceTypeCode
+    ? await prisma.absenceTypeConfig.findUnique({ where: { code: absenceTypeCode } })
+    : null;
+  if (!typeConfig || !typeConfig.activeFlag) return "Jenis absensi wajib dipilih.";
   if (!startDateRaw || !endDateRaw) return "Tanggal mulai dan selesai wajib diisi.";
   if (!reason) return "Alasan wajib diisi.";
 
@@ -67,18 +70,12 @@ export async function submitAbsenceRequest(
   const overlap = overlapping.find((o) => doDateRangesOverlap(startDate, endDate, o.startDate, o.endDate));
   if (overlap) return `Rentang tanggal ini tumpang tindih dengan pengajuan ${overlap.requestNumber} yang masih berjalan.`;
 
-  let firstApproverPositionId: string | null = null;
-  if (employee.currentPositionId) {
-    const position = await prisma.position.findUnique({
-      where: { id: employee.currentPositionId },
-      select: { orgUnitId: true },
-    });
-    const departmentId = position ? await resolveDepartmentId(position.orgUnitId) : null;
-    if (departmentId) {
-      const config = await prisma.absenceApproverConfig.findUnique({ where: { departmentId } });
-      firstApproverPositionId = config?.approverPositionId ?? null;
-    }
-  }
+  // Types that skip the first-approval stage (e.g. Sakit) go straight to
+  // the mandatory HR Admin stage — no approver to resolve.
+  const firstApproverPositionId = typeConfig.requiresFirstApproval
+    ? await resolveFirstApproverPositionId(employeeId)
+    : null;
+  const initialStatus: AbsenceStatus = typeConfig.requiresFirstApproval ? "SUBMITTED" : "PENDING_HR_ADMIN";
 
   const file = formData.get("attachment") as File | null;
   let attachmentFileId: string | undefined;
@@ -114,7 +111,8 @@ export async function submitAbsenceRequest(
     data: {
       requestNumber,
       employeeId,
-      absenceType,
+      absenceTypeCode,
+      status: initialStatus,
       startDate,
       endDate,
       reason,
@@ -129,7 +127,7 @@ export async function submitAbsenceRequest(
     action: "CREATE",
     datasetName: "AbsenceRequest",
     recordId: created.id,
-    reason: `Submitted ${absenceType} request ${requestNumber}`,
+    reason: `Submitted ${absenceTypeCode} request ${requestNumber}`,
   });
 
   revalidatePath("/absences");

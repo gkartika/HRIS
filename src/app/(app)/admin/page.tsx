@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, UserCheck, CalendarDays, Award, ClipboardCheck } from "lucide-react";
+import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, Award, ClipboardCheck, Tags } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
@@ -42,16 +42,10 @@ const SECTIONS = [
     desc: "Titik lokasi dan radius untuk Check-in/Check-out Mobile",
   },
   {
-    href: "/admin/absence-approvers",
-    icon: UserCheck,
-    title: "Penyetuju Absensi",
-    desc: "Posisi penyetuju pertama per Departemen untuk Cuti/Izin/Sakit/Lainnya",
-  },
-  {
-    href: "/admin/absence-entitlements",
-    icon: CalendarDays,
-    title: "Jatah Absensi Tahunan",
-    desc: "Jumlah hari per tahun untuk setiap jenis Absensi",
+    href: "/admin/absence-settings",
+    icon: Tags,
+    title: "Pengaturan Absensi",
+    desc: "Jenis Absensi & alur persetujuan, penyetuju per Departemen, jatah tahunan, dan override jatah per karyawan",
   },
   {
     href: "/admin/competency",

@@ -16,6 +16,7 @@ import {
 } from "@/lib/absence";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
+import { resolveAnnualQuota, usedDaysThisYear } from "@/lib/absence-quota";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import {
@@ -38,6 +39,7 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
     include: {
       employee: { select: { fullLegalName: true, employeeNumber: true } },
       attachmentFile: true,
+      absenceType: true,
       firstApproverPosition: { include: { job: true } },
       firstDecisionByAccount: { select: { usernameOrEmail: true } },
       hrAdminDecisionByAccount: { select: { usernameOrEmail: true } },
@@ -47,14 +49,20 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
   });
   if (!request) notFound();
 
-  const [isLevel3InDepartment, approverPositionHolderEmployeeIds] = await Promise.all([
+  const [isLevel3InDepartment, approverPositionHolderEmployeeIds, quota, usedBeforeThis] = await Promise.all([
     isLevel3ForEmployeeDepartment(session.user.employeeId, request.employeeId),
     getCurrentHolderEmployeeIds(request.firstApproverPositionId),
+    resolveAnnualQuota(request.employeeId, request.absenceTypeCode),
+    usedDaysThisYear(request.employeeId, request.absenceTypeCode, request.id),
   ]);
 
   if (!canViewAbsenceRequest(session, request.employeeId, isLevel3InDepartment, approverPositionHolderEmployeeIds)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
+
+  const thisRequestDays = absenceDayCount(request.startDate, request.endDate);
+  const totalDaysIfApproved = usedBeforeThis + thisRequestDays;
+  const overQuota = quota !== null && totalDaysIfApproved > quota;
 
   const canDecideFirst =
     canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, approverPositionHolderEmployeeIds) &&
@@ -78,7 +86,7 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-xs text-slate-500">{t("absence.typeLabel")}</p>
-            <p className="mt-1 text-slate-900">{t(`absenceType.${request.absenceType}`)}</p>
+            <p className="mt-1 text-slate-900">{request.absenceType.label}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Status</p>
@@ -119,11 +127,25 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
             </div>
           )}
         </div>
+        {overQuota && (
+          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            {t("absence.overQuotaWarning", {
+              type: request.absenceType.label,
+              used: usedBeforeThis,
+              thisRequest: thisRequestDays,
+              total: totalDaysIfApproved,
+              quota: quota!,
+            })}
+          </p>
+        )}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <p className="text-sm font-medium text-slate-900">{t("absence.firstApproverDecisionTitle")}</p>
-        {!request.firstApproverPositionId && (
+        {!request.absenceType.requiresFirstApproval && (
+          <p className="mt-2 text-xs text-slate-500">{t("absence.firstApproverNotRequired")}</p>
+        )}
+        {request.absenceType.requiresFirstApproval && !request.firstApproverPositionId && (
           <p className="mt-2 text-xs text-amber-700">{t("absence.noFirstApproverWarning")}</p>
         )}
         {request.firstApproverPosition && (

@@ -83,7 +83,7 @@ export async function GET(request: Request) {
       checkInReason: r.checkInReason ?? "",
       checkOutReason: r.checkOutReason ?? "",
       absence: r.activeAbsence
-        ? `${t(`absenceType.${r.activeAbsence.absenceType}`)} (${t(`absenceStatus.${r.activeAbsence.status}`)}) — ${r.activeAbsence.requestNumber}`
+        ? `${r.activeAbsence.absenceTypeLabel} (${t(`absenceStatus.${r.activeAbsence.status}`)}) — ${r.activeAbsence.requestNumber}`
         : "",
     }))
   );

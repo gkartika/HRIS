@@ -22,9 +22,9 @@ export async function GET(request: Request) {
   const requests = await prisma.absenceRequest.findMany({
     where: {
       ...(status ? { status: status as never } : {}),
-      ...(absenceType ? { absenceType: absenceType as never } : {}),
+      ...(absenceType ? { absenceTypeCode: absenceType } : {}),
     },
-    include: { employee: { select: { employeeNumber: true, fullLegalName: true } } },
+    include: { employee: { select: { employeeNumber: true, fullLegalName: true } }, absenceType: true },
     orderBy: { submittedAt: "desc" },
   });
 
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
       requestNumber: r.requestNumber,
       employeeNumber: r.employee.employeeNumber,
       name: r.employee.fullLegalName,
-      absenceType: t(`absenceType.${r.absenceType}`),
+      absenceType: r.absenceType.label,
       startDate: r.startDate.toISOString().slice(0, 10),
       endDate: r.endDate.toISOString().slice(0, 10),
       status: t(`absenceStatus.${r.status}`),

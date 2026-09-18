@@ -631,7 +631,9 @@ export const strings = {
     endDateLabel: "Tanggal Selesai",
     reasonLabel: "Alasan",
     attachmentLabel: "Lampiran (opsional)",
-    remainingEntitlement: "Sisa jatah Cuti tahun ini: {days} hari",
+    remainingEntitlement: "Sisa jatah {type} tahun ini: {days} dari {quota} hari",
+    overQuotaWarning:
+      "Pengajuan ini melebihi jatah tahunan {type}: sudah {used} hari + pengajuan ini {thisRequest} hari = {total} hari, dari jatah {quota} hari.",
     firstApproverDecisionTitle: "Keputusan Penyetuju Pertama",
     hrAdminDecisionTitle: "Keputusan HR Admin",
     approveButton: "Setujui",
@@ -644,14 +646,9 @@ export const strings = {
     cancelButton: "Batalkan Pengajuan",
     cancellationReasonLabel: "Alasan Pembatalan",
     noFirstApproverWarning: "Departemen ini belum memiliki Penyetuju Pertama yang dikonfigurasi — hubungi HR Admin.",
+    firstApproverNotRequired: "Jenis Absensi ini tidak memerlukan tahap Penyetuju Pertama — langsung ke HR Admin.",
     filterStatusLabel: "Status",
     filterTypeLabel: "Jenis",
-  },
-  absenceType: {
-    CUTI: "Cuti",
-    IZIN: "Izin",
-    SAKIT: "Sakit",
-    LAINNYA: "Lainnya",
   },
   attendance: {
     navLabel: "Absensi",

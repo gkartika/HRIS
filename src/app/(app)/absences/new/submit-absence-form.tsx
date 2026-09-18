@@ -1,24 +1,41 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { submitAbsenceRequest } from "../actions";
+import { remainingEntitlementDays } from "@/lib/absence";
 import { t } from "@/lib/i18n/id";
-
-const ABSENCE_TYPES = ["CUTI", "IZIN", "SAKIT", "LAINNYA"] as const;
 
 export interface EmployeeOption {
   id: string;
   label: string;
 }
 
+export interface AbsenceTypeOption {
+  code: string;
+  label: string;
+}
+
+export interface AbsenceTypeQuota {
+  code: string;
+  quota: number | null;
+  usedDays: number;
+}
+
 export function SubmitAbsenceForm({
   employeeId,
   employees,
+  absenceTypes,
+  quotaByType,
 }: {
   employeeId?: string;
   employees?: EmployeeOption[];
+  absenceTypes: AbsenceTypeOption[];
+  quotaByType: AbsenceTypeQuota[];
 }) {
   const [error, formAction, isPending] = useActionState(submitAbsenceRequest, undefined);
+  const [selectedType, setSelectedType] = useState(absenceTypes[0]?.code ?? "");
+  const selectedQuota = quotaByType.find((q) => q.code === selectedType);
+  const selectedLabel = absenceTypes.find((tp) => tp.code === selectedType)?.label ?? "";
 
   return (
     <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
@@ -41,13 +58,28 @@ export function SubmitAbsenceForm({
       <div className="flex flex-wrap gap-3">
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("absence.typeLabel")}</label>
-          <select name="absenceType" required className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            {ABSENCE_TYPES.map((tp) => (
-              <option key={tp} value={tp}>
-                {t(`absenceType.${tp}`)}
+          <select
+            name="absenceType"
+            required
+            defaultValue={selectedType}
+            onChange={(e) => setSelectedType(e.target.value)}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            {absenceTypes.map((tp) => (
+              <option key={tp.code} value={tp.code}>
+                {tp.label}
               </option>
             ))}
           </select>
+          {selectedQuota?.quota != null && (
+            <p className="mt-1 text-xs text-slate-500">
+              {t("absence.remainingEntitlement", {
+                type: selectedLabel,
+                days: remainingEntitlementDays(selectedQuota.quota, selectedQuota.usedDays),
+                quota: selectedQuota.quota,
+              })}
+            </p>
+          )}
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("absence.startDateLabel")}</label>

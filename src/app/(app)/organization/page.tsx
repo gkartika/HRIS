@@ -1,11 +1,17 @@
 import { requireSession } from "@/lib/require-session";
+import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { getOrgChartData } from "@/lib/org-chart";
 import { t } from "@/lib/i18n/id";
 import { OrgChartClient } from "./org-chart-client";
 
+// Per direct request: HR-Admin-only now (was any logged-in account — no
+// gate at all before).
 export default async function OrganizationPage() {
-  await requireSession();
+  const session = await requireSession();
+  if (!isHrAdmin(session)) {
+    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+  }
 
   const [initialData, orgUnits] = await Promise.all([
     getOrgChartData(new Date()),

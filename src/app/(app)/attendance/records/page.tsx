@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, canExportAttendanceData } from "@/lib/permissions";
-import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { reconcileDueDailyAttendance } from "@/lib/attendance-reconciliation";
 import { computeAttendanceRecordsForDate } from "@/lib/attendance-records";
 import { formatDateOnly, type AttendanceException } from "@/lib/attendance";
@@ -40,11 +39,10 @@ export default async function AttendanceRecordsPage({
     shiftType?: string;
   }>;
 }) {
+  // Per direct request: HR-Admin-only now (was HR Admin or any Level-3
+  // holder, scoped to their own department).
   const session = await requireSession();
-  const isHrAdminUser = isHrAdmin(session);
-  const level3DepartmentIds = await getLevel3DepartmentIds(session.user.employeeId);
-
-  if (!isHrAdminUser && level3DepartmentIds.length === 0) {
+  if (!isHrAdmin(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
@@ -56,11 +54,6 @@ export default async function AttendanceRecordsPage({
   const dateIso = formatDateOnly(dayStart);
 
   const positionFilter: Prisma.PositionWhereInput = {};
-  if (!isHrAdminUser) {
-    positionFilter.orgUnit = {
-      OR: [{ id: { in: level3DepartmentIds } }, { parentUnitId: { in: level3DepartmentIds } }],
-    };
-  }
   if (orgUnitId) positionFilter.orgUnitId = orgUnitId;
   if (jobLevel) positionFilter.jobLevel = jobLevel;
 

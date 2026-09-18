@@ -63,7 +63,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (canSeeEmployees) {
     buckets.karyawanOrg.push({ href: "/employees", label: t("nav.employees"), icon: "Users" });
   }
-  buckets.karyawanOrg.push({ href: "/organization", label: t("nav.organization"), icon: "Building2" });
+  // Per direct request: Struktur Organisasi is now HR-Admin-only sidebar
+  // real estate — was previously unconditional for every employee-linked
+  // account.
+  if (isHrAdmin(session)) {
+    buckets.karyawanOrg.push({ href: "/organization", label: t("nav.organization"), icon: "Building2" });
+  }
   if (canSubmitRecruitmentRequest(session)) {
     buckets.rekrutmenMutasi.push({ href: "/recruitment", label: t("recruitment.navLabel"), icon: "FileText" });
   }
@@ -105,18 +110,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   // Version after UAT: self-service Mobile check-in/out moved onto Beranda
   // (dashboard) directly — no separate nav item/page anymore.
-  // Rekap Absensi (records + exceptions): same HR-Admin-or-Level-3 visibility
-  // scope as Shift Assignment, since it's the same "who can see this team's
-  // operational data" authority.
-  if (isHrAdmin(session) || isLevel3Anywhere) {
+  // Rekap Absensi (records + exceptions) — per direct request, narrowed to
+  // HR Admin only (was HR Admin or any Level-3 holder).
+  if (isHrAdmin(session)) {
     buckets.absensiCuti.push({ href: "/attendance/records", label: t("attendanceRecords.navLabel"), icon: "Clock" });
   }
-  // Absence (Cuti/Izin/Sakit/Lainnya) — same broad list-nav visibility as
-  // Contract/Movement/Offboarding: HR Admin or any employee-linked account
-  // (who may need to submit their own or decide one they're the configured
-  // first approver for), scoped further on the list page itself.
-  if (isHrAdmin(session) || session.user.employeeId) {
+  // Absence (Cuti/Izin/Sakit/Lainnya) list/detail — per direct request,
+  // narrowed to HR Admin only (was HR Admin or any employee-linked account,
+  // who could browse and decide their own configured approvals here). A
+  // plain Karyawan now only gets the "Ajukan Cuti" submit link below, under
+  // Saya — approving/deciding someone else's request is no longer nav-
+  // reachable for non-HR-Admin, only via the Dashboard's approval card.
+  if (isHrAdmin(session)) {
     buckets.absensiCuti.push({ href: "/absences", label: t("absence.navLabel"), icon: "CalendarOff" });
+  }
+  if (session.user.employeeId) {
+    buckets.saya.push({ href: "/absences/new", label: t("absence.newRequest"), icon: "CalendarOff" });
   }
   // ACC-15/DSH-13: the personal HR Manager workspace — separate from the HR
   // Admin operational nav below, and only visible while the login currently

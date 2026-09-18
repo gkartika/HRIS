@@ -1,47 +1,31 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
-import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import type { Prisma, AbsenceStatus } from "@/generated/prisma/client";
 
 const ABSENCE_STATUSES: AbsenceStatus[] = ["SUBMITTED", "PENDING_HR_ADMIN", "APPROVED", "REJECTED", "CANCELLED"];
 
+// Per direct request: this operational list/browse view is HR-Admin-only
+// now (was HR Admin, or any employee-linked account scoped to their own
+// requests/approvals/department). A plain Karyawan only gets the "Ajukan
+// Absensi" submit form; deciding a specific request they're the configured
+// First Approver for still works via its own detail page
+// (/absences/[id], reached from the Dashboard's approval card), which has
+// its own narrower, need-to-know access check untouched by this change.
 export default async function AbsencesPage({
   searchParams,
 }: {
   searchParams: Promise<{ status?: string; absenceType?: string }>;
 }) {
   const session = await requireSession();
-  const isHrAdminUser = isHrAdmin(session);
-  const { status, absenceType } = await searchParams;
-
-  if (!isHrAdminUser && !session.user.employeeId) {
+  if (!isHrAdmin(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
-
-  const level3DepartmentIds = session.user.employeeId ? await getLevel3DepartmentIds(session.user.employeeId) : [];
-  const employee = session.user.employeeId
-    ? await prisma.employee.findUnique({ where: { id: session.user.employeeId }, select: { currentPositionId: true } })
-    : null;
+  const { status, absenceType } = await searchParams;
 
   const where: Prisma.AbsenceRequestWhereInput = {};
-  if (!isHrAdminUser) {
-    const scopes: Prisma.AbsenceRequestWhereInput[] = [];
-    if (session.user.employeeId) scopes.push({ employeeId: session.user.employeeId });
-    if (employee?.currentPositionId) scopes.push({ firstApproverPositionId: employee.currentPositionId });
-    if (level3DepartmentIds.length > 0) {
-      scopes.push({
-        employee: {
-          currentPosition: {
-            orgUnit: { OR: [{ id: { in: level3DepartmentIds } }, { parentUnitId: { in: level3DepartmentIds } }] },
-          },
-        },
-      });
-    }
-    where.OR = scopes.length > 0 ? scopes : [{ id: "__none__" }];
-  }
   if (status) where.status = status as AbsenceStatus;
   if (absenceType) where.absenceTypeCode = absenceType;
 
@@ -62,14 +46,12 @@ export default async function AbsencesPage({
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-medium text-slate-900">{t("absence.listTitle")}</h1>
         <div className="flex gap-2">
-          {isHrAdminUser && (
-            <a
-              href={`/api/absences/export?${new URLSearchParams({ ...(status ? { status } : {}), ...(absenceType ? { absenceType } : {}) }).toString()}`}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              {t("attendanceRecords.exportButton")}
-            </a>
-          )}
+          <a
+            href={`/api/absences/export?${new URLSearchParams({ ...(status ? { status } : {}), ...(absenceType ? { absenceType } : {}) }).toString()}`}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            {t("attendanceRecords.exportButton")}
+          </a>
           <Link
             href="/absences/new"
             className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"

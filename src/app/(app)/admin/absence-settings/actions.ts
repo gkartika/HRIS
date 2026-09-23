@@ -6,6 +6,9 @@ import { requireSession } from "@/lib/require-session";
 import { canManageAttendanceMasterData } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { setAbsenceQuotaOverride } from "../../employees/[id]/absence-quota-actions";
+import type { ShiftAssignmentType } from "@/generated/prisma/enums";
+
+const VALID_SHIFT_TYPES: ShiftAssignmentType[] = ["SHIFT_1", "SHIFT_2", "SHIFT_3", "NON_SHIFT"];
 
 // Machine code derived from the admin-entered label so HR Admin never has to
 // invent one themselves — uppercase/underscore slug, uniqueness-checked
@@ -34,6 +37,7 @@ export async function createAbsenceTypeConfig(_prevState: string | undefined, fo
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Nama jenis absensi wajib diisi.";
   const requiresFirstApproval = formData.get("requiresFirstApproval") === "on";
+  const employeeRequestable = formData.get("employeeRequestable") === "on";
 
   const code = await deriveUniqueCode(label);
   const maxSortOrder = await prisma.absenceTypeConfig.aggregate({ _max: { sortOrder: true } });
@@ -43,6 +47,7 @@ export async function createAbsenceTypeConfig(_prevState: string | undefined, fo
       code,
       label,
       requiresFirstApproval,
+      employeeRequestable,
       sortOrder: (maxSortOrder._max.sortOrder ?? -1) + 1,
     },
   });
@@ -74,6 +79,20 @@ export async function updateAbsenceTypeAndQuota(
   if (!label) return "Nama jenis absensi wajib diisi.";
   const requiresFirstApproval = formData.get("requiresFirstApproval") === "on";
   const activeFlag = formData.get("activeFlag") === "on";
+  const employeeRequestable = formData.get("employeeRequestable") === "on";
+  const countsTowardTdl = formData.get("countsTowardTdl") === "on";
+
+  const pointsWeightRaw = (formData.get("pointsWeight") as string)?.trim();
+  const pointsWeight = pointsWeightRaw ? Number(pointsWeightRaw) : 0;
+  if (!Number.isFinite(pointsWeight) || !Number.isInteger(pointsWeight)) return "Bobot Poin wajib berupa angka bulat.";
+
+  // Fraction of that day's scheduled shift hours to credit toward Total
+  // Jam Kerja when this type is used to classify a day — 0 (not counted),
+  // 1 (full day, e.g. SDSD/IK), 0.5 (half day, e.g. SH), or any other
+  // fraction HR wants.
+  const hoursMultiplierRaw = (formData.get("hoursMultiplier") as string)?.trim();
+  const hoursMultiplier = hoursMultiplierRaw ? Number(hoursMultiplierRaw) : 0;
+  if (!Number.isFinite(hoursMultiplier) || hoursMultiplier < 0) return "Pengali Jam Kerja wajib berupa angka 0 atau lebih.";
 
   // Blank clears any company-wide default entirely (unlimited / not
   // configured — resolveAnnualQuota treats "no row" as unlimited). A number,
@@ -88,7 +107,10 @@ export async function updateAbsenceTypeAndQuota(
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.absenceTypeConfig.update({ where: { code: absenceTypeCode }, data: { label, requiresFirstApproval, activeFlag } });
+    await tx.absenceTypeConfig.update({
+      where: { code: absenceTypeCode },
+      data: { label, requiresFirstApproval, activeFlag, employeeRequestable, pointsWeight, countsTowardTdl, hoursMultiplier },
+    });
     if (annualDays === null) {
       await tx.absenceEntitlementConfig.deleteMany({ where: { absenceTypeCode } });
     } else {
@@ -105,7 +127,63 @@ export async function updateAbsenceTypeAndQuota(
     action: "UPDATE",
     datasetName: "AbsenceTypeConfig",
     recordId: absenceTypeCode,
-    reason: `Updated ${absenceTypeCode}: label=${label}, requiresFirstApproval=${requiresFirstApproval}, activeFlag=${activeFlag}, annualDays=${annualDays ?? "unlimited"}`,
+    reason: `Updated ${absenceTypeCode}: label=${label}, requiresFirstApproval=${requiresFirstApproval}, activeFlag=${activeFlag}, employeeRequestable=${employeeRequestable}, pointsWeight=${pointsWeight}, countsTowardTdl=${countsTowardTdl}, hoursMultiplier=${hoursMultiplier}, annualDays=${annualDays ?? "unlimited"}`,
+  });
+
+  revalidatePath("/admin/absence-settings");
+}
+
+// Archives instead of deleting — per direct request, a hard delete only
+// ever works when nothing real references the type (every historical
+// AbsenceRequest/DailyAttendanceRecord would first need migrating to some
+// other type, a real judgment call each time). Archiving needs none of
+// that: it's just a visibility flag hiding an already-deactivated type from
+// the main Jenis Absensi list, never touching a single historical record.
+// `activeFlag` must already be false, same guard hard-delete had.
+export async function archiveAbsenceTypeConfig(
+  code: string,
+  _prevState: string | undefined,
+  _formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+
+  const type = await prisma.absenceTypeConfig.findUnique({ where: { code } });
+  if (!type) return "Jenis absensi tidak ditemukan.";
+  if (type.activeFlag) return "Nonaktifkan dahulu sebelum diarsipkan.";
+
+  await prisma.absenceTypeConfig.update({ where: { code }, data: { archived: true } });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "AbsenceTypeConfig",
+    recordId: code,
+    reason: `Archived Absence type ${code} (${type.label})`,
+  });
+
+  revalidatePath("/admin/absence-settings");
+}
+
+export async function unarchiveAbsenceTypeConfig(
+  code: string,
+  _prevState: string | undefined,
+  _formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+
+  const type = await prisma.absenceTypeConfig.findUnique({ where: { code } });
+  if (!type) return "Jenis absensi tidak ditemukan.";
+
+  await prisma.absenceTypeConfig.update({ where: { code }, data: { archived: false } });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "AbsenceTypeConfig",
+    recordId: code,
+    reason: `Unarchived Absence type ${code} (${type.label})`,
   });
 
   revalidatePath("/admin/absence-settings");
@@ -150,6 +228,50 @@ export async function setAbsenceApproverConfig(
     datasetName: "AbsenceApproverConfig",
     recordId: departmentId,
     reason: `Set first-approver Position to ${approverPositionId}`,
+  });
+
+  revalidatePath("/admin/absence-settings");
+}
+
+// Jadwal Jam Kerja per Shift — per direct request ("this will need to be
+// able to be configured within the apps if we decided to change it"): the
+// scheduled-minutes-per-day source Total Jam Kerja reads from
+// (attendance-hours.ts), never hardcoded. One form per Shift, one field per
+// day-of-week (0=Sunday..6=Saturday), all 7 upserted together.
+export async function updateWorkSchedule(
+  shiftType: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!VALID_SHIFT_TYPES.includes(shiftType as ShiftAssignmentType)) return "Shift tidak valid.";
+  const validShiftType = shiftType as ShiftAssignmentType;
+
+  const minutesByDay: number[] = [];
+  for (let day = 0; day <= 6; day++) {
+    const raw = (formData.get(`minutes_${day}`) as string)?.trim();
+    const minutes = raw ? Number(raw) : 0;
+    if (!Number.isFinite(minutes) || minutes < 0 || !Number.isInteger(minutes)) return "Jam kerja wajib berupa menit (angka bulat 0 atau lebih).";
+    minutesByDay.push(minutes);
+  }
+
+  await prisma.$transaction(
+    minutesByDay.map((minutes, day) =>
+      prisma.workScheduleConfig.upsert({
+        where: { shiftType_dayOfWeek: { shiftType: validShiftType, dayOfWeek: day } },
+        create: { shiftType: validShiftType, dayOfWeek: day, minutes },
+        update: { minutes },
+      })
+    )
+  );
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "WorkScheduleConfig",
+    recordId: shiftType,
+    reason: `Updated schedule for ${shiftType}: ${minutesByDay.join(",")} minutes (Sun..Sat)`,
   });
 
   revalidatePath("/admin/absence-settings");

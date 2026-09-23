@@ -21,6 +21,10 @@ export function NewTypeForm() {
         <input type="checkbox" name="requiresFirstApproval" defaultChecked />
         Perlu Penyetuju Pertama
       </label>
+      <label className="mb-2 flex items-center gap-1.5 text-xs text-slate-600">
+        <input type="checkbox" name="employeeRequestable" defaultChecked />
+        Bisa Diajukan Karyawan
+      </label>
       <button
         type="submit"
         disabled={isPending}

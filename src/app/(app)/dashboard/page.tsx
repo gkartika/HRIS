@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin, isGaAdmin, canListEmployees } from "@/lib/permissions";
 import { computeExpiryUrgency, type ExpiryUrgency } from "@/lib/contract";
+import { absenceDayCount } from "@/lib/absence";
 import { isManagerOfAnyPosition } from "@/lib/manager-scope";
 import { getActiveDeptHeadPositions, getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -152,12 +153,22 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
       <div className="mt-1">
         <ApprovalCategory label="Absensi & Cuti" count={pending.pendingAbsenceHrAdmin.length + pending.pendingAbsenceFirstApprover.length}>
           {pending.pendingAbsenceHrAdmin.map((r) => (
-            <ApprovalRow key={r.id} title={`Cuti — ${r.employee.fullLegalName}`} subtitle={`${r.absenceType.label} · ${r.requestNumber}`} href={`/absences/${r.id}`}>
+            <ApprovalRow
+              key={r.id}
+              title={`${r.absenceType.label} — ${r.employee.fullLegalName}`}
+              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceDayCount(r.startDate, r.endDate)} hari)`}
+              href={`/absences/${r.id}`}
+            >
               <HrAdminDecisionButtons requestId={r.id} />
             </ApprovalRow>
           ))}
           {pending.pendingAbsenceFirstApprover.map((r) => (
-            <ApprovalRow key={r.id} title={`Cuti — ${r.employee.fullLegalName}`} subtitle={`${r.absenceType.label} · ${r.requestNumber}`} href={`/absences/${r.id}`}>
+            <ApprovalRow
+              key={r.id}
+              title={`${r.absenceType.label} — ${r.employee.fullLegalName}`}
+              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceDayCount(r.startDate, r.endDate)} hari)`}
+              href={`/absences/${r.id}`}
+            >
               <FirstApproverDecisionButtons requestId={r.id} />
             </ApprovalRow>
           ))}

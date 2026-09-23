@@ -707,9 +707,43 @@ model AbsenceTypeConfig {
   sortOrder             Int      @default(0)
   updatedAt             DateTime @updatedAt
 
-  absenceRequests   AbsenceRequest[]
-  entitlementConfig AbsenceEntitlementConfig?
-  quotaOverrides    AbsenceQuotaOverride[]
+  // Attendance-tracker migration, per direct request:
+  // - employeeRequestable: true for a type an employee can pick when
+  //   submitting Ajukan Absensi (Cuti, Izin, ...) — false for a type only
+  //   HR assigns after the fact during Rekonsiliasi Absensi (Alpha, Sakit
+  //   Tanpa Surat Dokter, ...); never shown on the self-service submit
+  //   form when false.
+  // - pointsWeight: admin-configurable discipline-score delta per
+  //   occurrence (e.g. -2 for STSD, -1 for SDSD), summed per employee into
+  //   a running Points total. 0 = no scoring impact. Same value for every
+  //   employee — not role/position-dependent.
+  // - countsTowardTdl: whether an occurrence counts toward Total Deviasi/
+  //   Loss (mandays lost) — off only for Cuti Bersama today.
+  // - hoursMultiplier: fraction of that day's scheduled shift hours to
+  //   credit toward Total Jam Kerja — 0 (default) = not counted, 1 = paid
+  //   in full (e.g. SDSD, IK), 0.5 = half day (SH/Setengah Hari). Only
+  //   applies when the classification carries an explicit shiftType (see
+  //   DailyAttendanceRecord) — a category entered with no shift never
+  //   contributes hours, since there's no schedule to look the figure up
+  //   against.
+  employeeRequestable Boolean @default(true)
+  pointsWeight        Int     @default(0)
+  countsTowardTdl     Boolean @default(true)
+  hoursMultiplier     Float   @default(0)
+
+  // Per direct request: hard-deleting a type only ever works when nothing
+  // real references it (every historical AbsenceRequest/DailyAttendanceRecord
+  // would first need migrating to some other type — a real, sometimes
+  // judgment-heavy data change). Archiving needs none of that: it's just a
+  // visibility flag on an already-deactivated type, hiding it from the main
+  // Jenis Absensi list without touching any historical record. Requires
+  // activeFlag=false first, same guard hard-delete had.
+  archived Boolean @default(false)
+
+  absenceRequests        AbsenceRequest[]
+  entitlementConfig      AbsenceEntitlementConfig?
+  quotaOverrides         AbsenceQuotaOverride[]
+  dailyAttendanceRecords DailyAttendanceRecord[]
 }
 
 // No HR Manager stage anywhere in this flow, per direct spec ("Absence does
@@ -750,6 +784,46 @@ model ShiftAssignment {
   updatedAt DateTime @updatedAt
 
   @@unique([employeeId, weekStartDate])
+}
+
+// Admin-configurable scheduled work minutes per Shift per day-of-week, per
+// direct request ("this will need to be able to be configured within the
+// app if we decided to change it") — the source of truth for Total Jam
+// Kerja, never hardcoded. dayOfWeek follows JS's Date.getUTCDay() (0=Sunday
+// .. 6=Saturday), matching every other date-only value in this app.
+// A missing (shiftType, dayOfWeek) row reads as 0 minutes (day off) —
+// only real working days need a row, same "absence of a row is the
+// default" convention as ShiftAssignment/DEFAULT_SHIFT_TYPE.
+model WorkScheduleConfig {
+  id        String              @id @default(cuid())
+  shiftType ShiftAssignmentType
+  dayOfWeek Int
+  minutes   Int                 @default(0)
+  updatedAt DateTime            @updatedAt
+
+  @@unique([shiftType, dayOfWeek])
+}
+
+// Bulk-enterable calendar of specific dates, per direct request: "input a
+// year of national holiday in one go" instead of classifying every employee
+// one by one. TANGGAL_MERAH auto-fills every active employee's day with
+// shiftType=NON_SHIFT (no absence code, just "not a scheduled work day",
+// same as a weekend); CUTI_BERSAMA auto-fills the existing CTB absence
+// type. Both are still just an ordinary DailyAttendanceRecord row after
+// that, so HR can overwrite any individual employee's day via Rekonsiliasi
+// exactly like any other classification — this table is only the source
+// that triggered the bulk fill, not a live override.
+enum HolidayType {
+  TANGGAL_MERAH
+  CUTI_BERSAMA
+}
+
+model CompanyHoliday {
+  id          String      @id @default(cuid())
+  date        DateTime    @unique
+  label       String
+  holidayType HolidayType
+  updatedAt   DateTime    @updatedAt
 }
 
 // ---------- User Accounts (separate from Employee Master, per ACC-01) ----------
@@ -799,6 +873,7 @@ model Account {
   offboardingCasesGaAssetClearanceConfirmedBy OffboardingCase[]               @relation("OffboardingGaAssetClearanceConfirmedBy")
   shiftAssignmentsSubmittedBy                 ShiftAssignment[]               @relation("ShiftAssignmentSubmittedBy")
   attendanceAssignmentsAssignedBy             AttendanceAssignment[]          @relation("AttendanceAssignmentAssignedBy")
+  dailyAttendanceRecordsClassifiedBy          DailyAttendanceRecord[]         @relation("DailyAttendanceRecordClassifiedBy")
   absenceRequestsSubmittedBy                  AbsenceRequest[]                @relation("AbsenceRequestSubmittedBy")
   absenceRequestsFirstDecisionBy              AbsenceRequest[]                @relation("AbsenceFirstDecisionBy")
   absenceRequestsHrAdminDecisionBy            AbsenceRequest[]                @relation("AbsenceHrAdminDecisionBy")
@@ -1629,6 +1704,27 @@ model DailyAttendanceRecord {
   checkOutEventId String?          @unique
   checkOutEvent   AttendanceEvent? @relation("DailyRecordCheckOutEvent", fields: [checkOutEventId], references: [id])
   reconciledAt    DateTime         @default(now())
+
+  // Rekonsiliasi Absensi, per direct request: HR's day-level classification
+  // when a day isn't explained by punches or an approved Absence request
+  // alone (Opsi A — the exception queue). Also the same field Opsi B's
+  // full-grid "check & override" view writes to when correcting an
+  // already-explained day — always carries who/when it was set, never a
+  // second set of actor fields (same "in-place overwrite with mandatory
+  // identity/timestamp" convention as AbsenceRequest's HR override).
+  absenceTypeCode       String?
+  absenceType           AbsenceTypeConfig?  @relation(fields: [absenceTypeCode], references: [code])
+  shiftType             ShiftAssignmentType?
+  classificationNote    String?
+  classifiedAt          DateTime?
+  classifiedByAccountId String?
+  classifiedByAccount   Account?            @relation("DailyAttendanceRecordClassifiedBy", fields: [classifiedByAccountId], references: [id])
+
+  // "Masuk (Lupa Absen)" override, per direct request: a day with no punch
+  // is often just a forgotten scan, not a real absence — HR marks it
+  // present directly (no absenceTypeCode) and it counts full shift hours,
+  // same as a genuine check-in/check-out day.
+  presentOverride Boolean @default(false)
 
   @@unique([employeeId, attendanceDate])
 }

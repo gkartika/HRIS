@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
-import { resolveAnnualQuota, usedDaysThisYear } from "@/lib/absence-quota";
+import { resolveAnnualQuotaByType, usedDaysThisYearByType } from "@/lib/absence-quota";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { SubmitAbsenceForm } from "./submit-absence-form";
@@ -22,7 +22,7 @@ export default async function NewAbsenceRequestPage() {
         })
       : Promise.resolve([]),
     prisma.absenceTypeConfig.findMany({
-      where: { activeFlag: true },
+      where: { activeFlag: true, employeeRequestable: true },
       orderBy: { sortOrder: "asc" },
       select: { code: true, label: true },
     }),
@@ -36,15 +36,15 @@ export default async function NewAbsenceRequestPage() {
   let quotaByType: { code: string; quota: number | null; usedDays: number }[] = [];
   if (!isHrAdminUser && session.user.employeeId) {
     const employeeId = session.user.employeeId;
-    quotaByType = await Promise.all(
-      absenceTypes.map(async (tp) => {
-        const [quota, usedDays] = await Promise.all([
-          resolveAnnualQuota(employeeId, tp.code),
-          usedDaysThisYear(employeeId, tp.code),
-        ]);
-        return { code: tp.code, quota, usedDays };
-      })
-    );
+    // 2 queries total regardless of how many requestable types exist —
+    // was previously 4 per type (resolveAnnualQuota + usedDaysThisYear
+    // each firing 2 queries, looped per type).
+    const [quotaMap, usedMap] = await Promise.all([resolveAnnualQuotaByType(employeeId), usedDaysThisYearByType(employeeId)]);
+    quotaByType = absenceTypes.map((tp) => ({
+      code: tp.code,
+      quota: quotaMap.get(tp.code) ?? null,
+      usedDays: usedMap.get(tp.code) ?? 0,
+    }));
   }
 
   return (

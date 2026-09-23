@@ -50,7 +50,7 @@ export default async function AbsencesPage({
             href={`/api/absences/export?${new URLSearchParams({ ...(status ? { status } : {}), ...(absenceType ? { absenceType } : {}) }).toString()}`}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
           >
-            {t("attendanceRecords.exportButton")}
+            {t("common.exportCsvButton")}
           </a>
           <Link
             href="/absences/new"

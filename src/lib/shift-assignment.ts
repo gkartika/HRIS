@@ -22,3 +22,27 @@ export function normalizeWeekStart(date: Date): Date {
   d.setUTCDate(d.getUTCDate() + diffToMonday);
   return d;
 }
+
+// The "scheduled minutes for a shift/day-of-week" and "which shift is this
+// employee assigned for this week" lookups were being rebuilt from scratch
+// (same two Map constructions, copy-pasted) in every reconciliation/report
+// query that needs them — attendance-reconciliation-queue.ts's
+// getUnresolvedDays/getReconciliationGrid and mandays-lost.ts. Centralized
+// here since they're this module's own domain (WorkScheduleConfig/
+// ShiftAssignment), taking already-fetched rows rather than querying
+// themselves, so callers keep control over batching/filtering their own
+// Prisma calls.
+
+export function buildScheduleMinutesLookup(
+  rows: { shiftType: ShiftAssignmentType; dayOfWeek: number; minutes: number }[]
+): (shiftType: string, dayOfWeek: number) => number {
+  const byKey = new Map(rows.map((r) => [`${r.shiftType}:${r.dayOfWeek}`, r.minutes]));
+  return (shiftType, dayOfWeek) => byKey.get(`${shiftType}:${dayOfWeek}`) ?? 0;
+}
+
+export function buildAssignedShiftLookup(
+  rows: { employeeId: string; weekStartDate: Date; shiftType: ShiftAssignmentType }[]
+): (employeeId: string, weekStart: Date) => ShiftAssignmentType {
+  const byKey = new Map(rows.map((r) => [`${r.employeeId}:${r.weekStartDate.getTime()}`, r.shiftType]));
+  return (employeeId, weekStart) => byKey.get(`${employeeId}:${weekStart.getTime()}`) ?? DEFAULT_SHIFT_TYPE;
+}

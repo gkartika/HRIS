@@ -5,7 +5,6 @@ import {
   isWorkingDay,
   defaultEndTimeLabel,
   isLateCheckIn,
-  deriveDailyAttendanceExceptions,
   DEFAULT_END_TIME_MON_THU,
   DEFAULT_END_TIME_FRIDAY,
 } from "./attendance";
@@ -77,81 +76,5 @@ describe("isLateCheckIn (07:30 start, 10 minute grace)", () => {
 
   it("is late past the grace window", () => {
     expect(isLateCheckIn(new Date("2026-08-10T07:41:00"))).toBe(true);
-  });
-});
-
-describe("deriveDailyAttendanceExceptions", () => {
-  it("returns no exceptions on a non-working day even with no events", () => {
-    const exceptions = deriveDailyAttendanceExceptions({
-      attendanceDate: new Date("2026-08-09T00:00:00"), // Sunday
-      checkInEvent: null,
-      checkOutEvent: null,
-      activeGeofences: [],
-    });
-    expect(exceptions).toEqual([]);
-  });
-
-  it("flags missing check-in and check-out on a working day", () => {
-    const exceptions = deriveDailyAttendanceExceptions({
-      attendanceDate: new Date("2026-08-10T00:00:00"), // Monday
-      checkInEvent: null,
-      checkOutEvent: null,
-      activeGeofences: [],
-    });
-    expect(exceptions).toEqual(["MISSING_CHECK_IN", "MISSING_CHECK_OUT"]);
-  });
-
-  it("treats a check-out with no check-in as a late check-in, not a missing one", () => {
-    const exceptions = deriveDailyAttendanceExceptions({
-      attendanceDate: new Date("2026-08-10T00:00:00"), // Monday
-      checkInEvent: null,
-      checkOutEvent: { eventAt: new Date("2026-08-10T16:30:00"), latitude: 0, longitude: 0 },
-      activeGeofences: [],
-    });
-    expect(exceptions).toEqual(["LATE_CHECK_IN"]);
-  });
-
-  it("flags a late, out-of-geofence check-in", () => {
-    const geofence = { latitude: 0, longitude: 0, radiusMeters: 100 };
-    const exceptions = deriveDailyAttendanceExceptions({
-      attendanceDate: new Date("2026-08-10T00:00:00"),
-      checkInEvent: { eventAt: new Date("2026-08-10T07:45:00"), latitude: 5, longitude: 5 },
-      checkOutEvent: { eventAt: new Date("2026-08-10T16:30:00"), latitude: 0, longitude: 0 },
-      activeGeofences: [geofence],
-    });
-    expect(exceptions).toEqual(["LATE_CHECK_IN", "OUTSIDE_GEOFENCE_CHECK_IN"]);
-  });
-
-  it("has no exceptions for a clean on-time, in-geofence day", () => {
-    const geofence = { latitude: 0, longitude: 0, radiusMeters: 100 };
-    const exceptions = deriveDailyAttendanceExceptions({
-      attendanceDate: new Date("2026-08-10T00:00:00"),
-      checkInEvent: { eventAt: new Date("2026-08-10T07:25:00"), latitude: 0, longitude: 0 },
-      checkOutEvent: { eventAt: new Date("2026-08-10T16:30:00"), latitude: 0, longitude: 0 },
-      activeGeofences: [geofence],
-    });
-    expect(exceptions).toEqual([]);
-  });
-
-  it("has no exceptions for an on-time check-in within a SECOND configured geofence", () => {
-    const geofenceA = { latitude: 0, longitude: 0, radiusMeters: 100 };
-    const geofenceB = { latitude: 10, longitude: 10, radiusMeters: 100 };
-    const exceptions = deriveDailyAttendanceExceptions({
-      attendanceDate: new Date("2026-08-10T00:00:00"),
-      checkInEvent: { eventAt: new Date("2026-08-10T07:25:00"), latitude: 10, longitude: 10 },
-      checkOutEvent: { eventAt: new Date("2026-08-10T16:30:00"), latitude: 10, longitude: 10 },
-      activeGeofences: [geofenceA, geofenceB],
-    });
-    expect(exceptions).toEqual([]);
-  });
-
-  it("does not flag OUTSIDE_GEOFENCE when no active geofences are configured at all", () => {
-    const exceptions = deriveDailyAttendanceExceptions({
-      attendanceDate: new Date("2026-08-10T00:00:00"),
-      checkInEvent: { eventAt: new Date("2026-08-10T07:25:00"), latitude: 5, longitude: 5 },
-      checkOutEvent: { eventAt: new Date("2026-08-10T16:30:00"), latitude: 5, longitude: 5 },
-      activeGeofences: [],
-    });
-    expect(exceptions).toEqual([]);
   });
 });

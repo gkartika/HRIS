@@ -114,10 +114,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   // Version after UAT: self-service Mobile check-in/out moved onto Beranda
   // (dashboard) directly — no separate nav item/page anymore.
-  // Rekap Absensi (records + exceptions) — per direct request, narrowed to
-  // HR Admin only (was HR Admin or any Level-3 holder).
+  // Rekap Absensi dropped entirely, per direct request — Rekonsiliasi
+  // Absensi (below) already covers everything it did.
+  // Rekonsiliasi Absensi (Opsi A exception queue + Opsi B full grid), per
+  // direct request — HR-Admin-only, same as the rest of Absensi & Cuti now.
   if (isHrAdmin(session)) {
-    buckets.absensiCuti.push({ href: "/attendance/records", label: t("attendanceRecords.navLabel"), icon: "Clock" });
+    buckets.absensiCuti.push({ href: "/attendance/reconciliation", label: "Rekonsiliasi Absensi", icon: "ListChecks" });
   }
   // Absence (Cuti/Izin/Sakit/Lainnya) list/detail — per direct request,
   // narrowed to HR Admin only (was HR Admin or any employee-linked account,
@@ -142,6 +144,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (isHrAdmin(session)) {
     bottomItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: "Settings" });
     buckets.laporanAudit.push({ href: "/audit-log", label: t("nav.auditLog"), icon: "ShieldCheck" });
+  }
+  // "Report 2026" replacement — weekly mandays-lost report per direct
+  // request, HR-Admin-only same as the rest of Absensi & Cuti/Laporan.
+  if (isHrAdmin(session)) {
+    buckets.laporanAudit.push({ href: "/attendance/mandays-lost", label: "Mandays Lost", icon: "TrendingDown" });
   }
   // Phase 3B: Training Admin also reaches the shared import hub now, solely
   // for the mandatory-training-participants/training-attendance datasets

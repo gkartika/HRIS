@@ -34,7 +34,7 @@ import { AccountHoldPanel } from "./account-panel";
 import { AttendanceAssignmentPanel } from "./attendance-panel";
 import { AbsenceQuotaPanel } from "./absence-quota-panel";
 import { TaskForcePanel } from "./task-force-panel";
-import { usedDaysThisYear } from "@/lib/absence-quota";
+import { usedDaysThisYearByType } from "@/lib/absence-quota";
 import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
 
 export default async function EmployeeDetailPage({
@@ -128,22 +128,23 @@ export default async function EmployeeDetailPage({
   const canManageAbsenceQuota = canManageAttendanceMasterData(session);
   const absenceQuotaRows = canManageAbsenceQuota
     ? await (async () => {
-        const [types, entitlements, overrides] = await Promise.all([
+        // 4 queries total regardless of how many Absence types exist — was
+        // previously 3 + 2 per type (usedDaysThisYear looped per type).
+        const [types, entitlements, overrides, usedByType] = await Promise.all([
           prisma.absenceTypeConfig.findMany({ where: { activeFlag: true }, orderBy: { sortOrder: "asc" } }),
           prisma.absenceEntitlementConfig.findMany(),
           prisma.absenceQuotaOverride.findMany({ where: { employeeId: employee.id } }),
+          usedDaysThisYearByType(employee.id),
         ]);
         const defaultByCode = new Map(entitlements.map((e) => [e.absenceTypeCode, e.annualDays]));
         const overrideByCode = new Map(overrides.map((o) => [o.absenceTypeCode, o.annualDays]));
-        return Promise.all(
-          types.map(async (tp) => ({
-            code: tp.code,
-            label: tp.label,
-            defaultAnnualDays: defaultByCode.has(tp.code) ? defaultByCode.get(tp.code)! : null,
-            overrideAnnualDays: overrideByCode.get(tp.code) ?? null,
-            usedDaysThisYear: await usedDaysThisYear(employee.id, tp.code),
-          }))
-        );
+        return types.map((tp) => ({
+          code: tp.code,
+          label: tp.label,
+          defaultAnnualDays: defaultByCode.has(tp.code) ? defaultByCode.get(tp.code)! : null,
+          overrideAnnualDays: overrideByCode.get(tp.code) ?? null,
+          usedDaysThisYear: usedByType.get(tp.code) ?? 0,
+        }));
       })()
     : [];
 

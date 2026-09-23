@@ -18,15 +18,16 @@ import {
   BarChart3,
   ArrowLeftRight,
   ClipboardCheck,
+  ListChecks,
   FileSignature,
   UserMinus,
   CalendarClock,
-  Clock,
   CalendarOff,
   GraduationCap,
   Package,
   Wrench,
   Trash2,
+  TrendingDown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,15 +49,16 @@ const ICONS: Record<string, LucideIcon> = {
   BarChart3,
   ArrowLeftRight,
   ClipboardCheck,
+  ListChecks,
   FileSignature,
   UserMinus,
   CalendarClock,
-  Clock,
   CalendarOff,
   GraduationCap,
   Package,
   Wrench,
   Trash2,
+  TrendingDown,
 };
 
 export interface SidebarNavItem {

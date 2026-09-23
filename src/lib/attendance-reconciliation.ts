@@ -3,8 +3,13 @@ import { isWorkingDay } from "@/lib/attendance";
 
 const LOOKBACK_DAYS = 14;
 
+// UTC-midnight "date-only" value — same convention as shift-assignment.ts's
+// normalizeWeekStart. A plain local-midnight Date would store a different
+// instant depending on which timezone the server process happens to run
+// in, silently drifting DailyAttendanceRecord rows out of sync with each
+// other across environments/restarts.
 function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
 }
 
 // Idempotent daily reconciliation trigger — same "derive/act on read"

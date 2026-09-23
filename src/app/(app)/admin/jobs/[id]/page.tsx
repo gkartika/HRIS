@@ -13,7 +13,10 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const job = await prisma.job.findUnique({ where: { id } });
+  const [job, orgUnits] = await Promise.all([
+    prisma.job.findUnique({ where: { id } }),
+    prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+  ]);
   if (!job) notFound();
 
   return (
@@ -21,7 +24,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
       <h1 className="text-lg font-medium text-slate-900">Ubah Jabatan Standar</h1>
       <p className="mt-1 font-mono text-xs text-slate-400">{job.jobCode}</p>
       <div className="mt-4 max-w-lg">
-        <EditJobForm job={job} />
+        <EditJobForm job={job} orgUnits={orgUnits} />
       </div>
       {canManageCompetencyFramework(session) && (
         <div className="mt-6">

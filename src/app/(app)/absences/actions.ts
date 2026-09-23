@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/require-session";
 import {
   canSubmitAbsenceRequest,
   canDecideAbsenceRequestAsFirstApprover,
+  canDecideAbsenceRequestAsSecondApprover,
   canDecideAbsenceRequestAsHrAdmin,
   canOverrideAbsenceRequest,
   canCancelAbsenceRequest,
@@ -15,11 +16,12 @@ import {
   formatAbsenceRequestNumber,
   doDateRangesOverlap,
   canDecideAbsenceRequestAsFirstApproverStatus,
+  canDecideAbsenceRequestAsSecondApproverStatus,
   canDecideAbsenceRequestAsHrAdminStatus,
   canHrOverrideAbsenceRequestStatus,
   canCancelAbsenceRequestStatus,
 } from "@/lib/absence";
-import { resolveFirstApproverPositionId } from "@/lib/absence-routing";
+import { resolveAbsenceApprovalChain } from "@/lib/absence-routing";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
@@ -64,17 +66,18 @@ export async function submitAbsenceRequest(
   if (!employee) return "Karyawan tidak ditemukan.";
 
   const overlapping = await prisma.absenceRequest.findMany({
-    where: { employeeId, status: { in: ["SUBMITTED", "PENDING_HR_ADMIN", "APPROVED"] } },
+    where: { employeeId, status: { in: ["SUBMITTED", "PENDING_SECOND_APPROVER", "PENDING_HR_ADMIN", "APPROVED"] } },
     select: { startDate: true, endDate: true, requestNumber: true },
   });
   const overlap = overlapping.find((o) => doDateRangesOverlap(startDate, endDate, o.startDate, o.endDate));
   if (overlap) return `Rentang tanggal ini tumpang tindih dengan pengajuan ${overlap.requestNumber} yang masih berjalan.`;
 
   // Types that skip the first-approval stage (e.g. Sakit) go straight to
-  // the mandatory HR Admin stage — no approver to resolve.
-  const firstApproverPositionId = typeConfig.requiresFirstApproval
-    ? await resolveFirstApproverPositionId(employeeId)
-    : null;
+  // the mandatory HR Admin stage — no approver chain to resolve at all,
+  // not just its first link.
+  const { firstApproverPositionId, secondApproverPositionId } = typeConfig.requiresFirstApproval
+    ? await resolveAbsenceApprovalChain(employeeId)
+    : { firstApproverPositionId: null, secondApproverPositionId: null };
   const initialStatus: AbsenceStatus = typeConfig.requiresFirstApproval ? "SUBMITTED" : "PENDING_HR_ADMIN";
 
   const file = formData.get("attachment") as File | null;
@@ -119,6 +122,7 @@ export async function submitAbsenceRequest(
       attachmentFileId,
       submittedByAccountId: session.user.id,
       firstApproverPositionId,
+      secondApproverPositionId,
     },
   });
 
@@ -156,10 +160,16 @@ export async function decideAbsenceRequestAsFirstApprover(
   const note = (formData.get("note") as string)?.trim() || null;
   if (decision === "REJECT" && !note) return "Alasan penolakan wajib diisi.";
 
+  // Approving moves to the second stage when this request's resolved chain
+  // has one (Section-level config on top of the Department's), otherwise
+  // straight to HR Admin as always.
+  const nextStatus: AbsenceStatus =
+    decision === "APPROVE" ? (request.secondApproverPositionId ? "PENDING_SECOND_APPROVER" : "PENDING_HR_ADMIN") : "REJECTED";
+
   await prisma.absenceRequest.update({
     where: { id: requestId },
     data: {
-      status: decision === "APPROVE" ? "PENDING_HR_ADMIN" : "REJECTED",
+      status: nextStatus,
       firstDecisionAt: new Date(),
       firstDecisionByAccountId: session.user.id,
       firstDecisionNote: note,
@@ -172,6 +182,50 @@ export async function decideAbsenceRequestAsFirstApprover(
     datasetName: "AbsenceRequest",
     recordId: requestId,
     reason: `First approver ${decision === "APPROVE" ? "approved" : "rejected"} ${request.requestNumber}`,
+  });
+
+  revalidatePath(`/absences/${requestId}`);
+  revalidatePath("/absences");
+}
+
+export async function decideAbsenceRequestAsSecondApprover(
+  requestId: string,
+  decision: "APPROVE" | "REJECT",
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+
+  const request = await prisma.absenceRequest.findUnique({ where: { id: requestId } });
+  if (!request) return "Pengajuan tidak ditemukan.";
+
+  const holderIds = await getCurrentHolderEmployeeIds(request.secondApproverPositionId);
+  if (!canDecideAbsenceRequestAsSecondApprover(session.user.employeeId, holderIds)) {
+    return "Anda tidak memiliki akses.";
+  }
+  if (!canDecideAbsenceRequestAsSecondApproverStatus(request.status)) {
+    return "Pengajuan ini sudah tidak berada pada tahap penyetuju kedua.";
+  }
+
+  const note = (formData.get("note") as string)?.trim() || null;
+  if (decision === "REJECT" && !note) return "Alasan penolakan wajib diisi.";
+
+  await prisma.absenceRequest.update({
+    where: { id: requestId },
+    data: {
+      status: decision === "APPROVE" ? "PENDING_HR_ADMIN" : "REJECTED",
+      secondDecisionAt: new Date(),
+      secondDecisionByAccountId: session.user.id,
+      secondDecisionNote: note,
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "AbsenceRequest",
+    recordId: requestId,
+    reason: `Second approver ${decision === "APPROVE" ? "approved" : "rejected"} ${request.requestNumber}`,
   });
 
   revalidatePath(`/absences/${requestId}`);

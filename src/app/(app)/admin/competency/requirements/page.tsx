@@ -22,7 +22,9 @@ export default async function CompetencyRequirementsJobPickerPage({
 
   const [jobs, requirementCounts] = await Promise.all([
     prisma.job.findMany({
-      where: query ? { OR: [{ jobCode: { contains: query } }, { jobTitle: { contains: query } }] } : undefined,
+      where: query
+        ? { OR: [{ jobCode: { contains: query, mode: "insensitive" } }, { jobTitle: { contains: query, mode: "insensitive" } }] }
+        : undefined,
       orderBy: { jobTitle: "asc" },
     }),
     prisma.positionCompetencyRequirement.groupBy({ by: ["jobId"], _count: true }),

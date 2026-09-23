@@ -4,6 +4,7 @@ import {
   doDateRangesOverlap,
   absenceDayCount,
   canDecideAbsenceRequestAsFirstApproverStatus,
+  canDecideAbsenceRequestAsSecondApproverStatus,
   canDecideAbsenceRequestAsHrAdminStatus,
   canCancelAbsenceRequestStatus,
   canHrOverrideAbsenceRequestStatus,
@@ -52,13 +53,20 @@ describe("status predicates", () => {
     expect(canDecideAbsenceRequestAsFirstApproverStatus("PENDING_HR_ADMIN")).toBe(false);
   });
 
+  it("only PENDING_SECOND_APPROVER can be decided by the second approver", () => {
+    expect(canDecideAbsenceRequestAsSecondApproverStatus("PENDING_SECOND_APPROVER")).toBe(true);
+    expect(canDecideAbsenceRequestAsSecondApproverStatus("SUBMITTED")).toBe(false);
+    expect(canDecideAbsenceRequestAsSecondApproverStatus("PENDING_HR_ADMIN")).toBe(false);
+  });
+
   it("only PENDING_HR_ADMIN can be decided by HR Admin", () => {
     expect(canDecideAbsenceRequestAsHrAdminStatus("PENDING_HR_ADMIN")).toBe(true);
     expect(canDecideAbsenceRequestAsHrAdminStatus("SUBMITTED")).toBe(false);
   });
 
-  it("SUBMITTED and PENDING_HR_ADMIN can be cancelled, terminal states cannot", () => {
+  it("SUBMITTED, PENDING_SECOND_APPROVER and PENDING_HR_ADMIN can be cancelled, terminal states cannot", () => {
     expect(canCancelAbsenceRequestStatus("SUBMITTED")).toBe(true);
+    expect(canCancelAbsenceRequestStatus("PENDING_SECOND_APPROVER")).toBe(true);
     expect(canCancelAbsenceRequestStatus("PENDING_HR_ADMIN")).toBe(true);
     expect(canCancelAbsenceRequestStatus("APPROVED")).toBe(false);
     expect(canCancelAbsenceRequestStatus("REJECTED")).toBe(false);

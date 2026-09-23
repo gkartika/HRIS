@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import type { PositionType } from "@/generated/prisma/enums";
 
 export async function createJob(
   _prevState: string | undefined,
@@ -52,12 +53,14 @@ export async function updateJob(
   const jobTitle = (formData.get("jobTitle") as string)?.trim();
   const jobPurpose = (formData.get("jobPurpose") as string)?.trim() || null;
   const approvalStatus = (formData.get("approvalStatus") as string)?.trim();
+  const defaultOrgUnitId = (formData.get("defaultOrgUnitId") as string) || null;
+  const defaultPositionType = ((formData.get("defaultPositionType") as string) || null) as PositionType | null;
 
   if (!jobTitle) return "Nama jabatan wajib diisi.";
 
   await prisma.job.update({
     where: { id: jobId },
-    data: { jobTitle, jobPurpose, approvalStatus },
+    data: { jobTitle, jobPurpose, approvalStatus, defaultOrgUnitId, defaultPositionType },
   });
 
   await logAudit({

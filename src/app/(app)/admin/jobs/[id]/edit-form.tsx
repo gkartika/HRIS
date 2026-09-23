@@ -2,11 +2,17 @@
 
 import { useActionState } from "react";
 import { updateJob } from "../actions";
-import type { Job } from "@/generated/prisma/client";
+import { POSITION_TYPES } from "@/lib/position-type";
+import type { Job, OrgUnit } from "@/generated/prisma/client";
 
-const APPROVAL_STATUSES = ["Draft", "Under Review", "Approved", "Retired"];
+// "Active" is the value every real imported Job actually carries (61/61 in
+// production data) — missing from this list, any save would silently fall
+// back to the first option ("Draft") and corrupt real data. Kept alongside
+// "Approved" rather than merged/renamed since that's a data-meaning call
+// that isn't this fix's to make.
+const APPROVAL_STATUSES = ["Active", "Draft", "Under Review", "Approved", "Retired"];
 
-export function EditJobForm({ job }: { job: Job }) {
+export function EditJobForm({ job, orgUnits }: { job: Job; orgUnits: OrgUnit[] }) {
   const updateWithId = updateJob.bind(null, job.id);
   const [error, formAction, isPending] = useActionState(updateWithId, undefined);
 
@@ -43,6 +49,45 @@ export function EditJobForm({ job }: { job: Job }) {
             </option>
           ))}
         </select>
+      </div>
+      <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+        <p className="text-xs font-medium text-slate-700">Default untuk Posisi Baru (opsional)</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Saat jabatan ini dipilih di formulir tambah Posisi, Unit Organisasi dan Jenis Posisi di bawah otomatis
+          terisi — HR Admin tetap bisa mengubahnya untuk kursi tertentu. Tidak mengunci Posisi yang sudah ada.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Unit Organisasi Default</label>
+            <select
+              name="defaultOrgUnitId"
+              defaultValue={job.defaultOrgUnitId ?? ""}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="">— Tidak ada —</option>
+              {orgUnits.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.unitName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Jenis Posisi Default</label>
+            <select
+              name="defaultPositionType"
+              defaultValue={job.defaultPositionType ?? ""}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="">— Tidak ada —</option>
+              {POSITION_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <button

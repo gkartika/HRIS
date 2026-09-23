@@ -47,7 +47,11 @@ export default async function ContractListPage({
       },
       orderBy: { createdAt: "desc" },
     }),
-    isHrAdmin(session) ? prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }) : Promise.resolve([]),
+    // DEPARTMENT-only — feeds the "Departemen" filter, which must not list
+    // Section/Group/Team-tier units (ORG-01 depth work).
+    isHrAdmin(session)
+      ? prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } })
+      : Promise.resolve([]),
   ]);
 
   const hasFilters = !!(status || orgUnitId);

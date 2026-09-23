@@ -2,9 +2,9 @@
 
 import { useActionState } from "react";
 import { updatePosition } from "../actions";
+import { POSITION_TYPES } from "@/lib/position-type";
 import type { Job, OrgUnit, Position } from "@/generated/prisma/client";
 
-const POSITION_TYPES = ["STAFF", "TEAM_LEAD", "SECTION_HEAD", "DEPARTMENT_HEAD", "DIRECTOR"];
 const POSITION_STATUSES = ["PLANNED", "VACANT", "FILLED", "FROZEN", "CLOSED"];
 
 export function EditPositionForm({

@@ -189,12 +189,17 @@ export async function unarchiveAbsenceTypeConfig(
   revalidatePath("/admin/absence-settings");
 }
 
-// Upsert-per-Department: an empty selection clears the configured
-// approver (leaving that Department's Absence requests unable to reach the
-// first-approval stage until HR Admin sets one) rather than leaving a
-// dangling reference to a Position that was intentionally unset.
+// Upsert-per-OrgUnit (any tier): an empty selection clears the configured
+// approver (leaving that OrgUnit's Absence requests unable to reach that
+// stage until HR Admin sets one) rather than leaving a dangling reference
+// to a Position that was intentionally unset. `requiresSecondStage` is an
+// explicit, per-unit opt-in into a 2nd stage (continuing up to the next
+// configured ancestor above this one) — NOT implied by the parent
+// Department also having its own row, which it usually needs regardless
+// for employees who sit directly on it. See resolveAbsenceApprovalChain
+// (absence-routing.ts).
 export async function setAbsenceApproverConfig(
-  departmentId: string,
+  orgUnitId: string,
   _prevState: string | undefined,
   formData: FormData
 ): Promise<string | undefined> {
@@ -202,32 +207,33 @@ export async function setAbsenceApproverConfig(
   if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
 
   const approverPositionId = formData.get("approverPositionId") as string;
+  const requiresSecondStage = formData.get("requiresSecondStage") === "on";
 
   if (!approverPositionId) {
-    await prisma.absenceApproverConfig.deleteMany({ where: { departmentId } });
+    await prisma.absenceApproverConfig.deleteMany({ where: { orgUnitId } });
     await logAudit({
       actorAccountId: session.user.id,
       action: "UPDATE",
       datasetName: "AbsenceApproverConfig",
-      recordId: departmentId,
-      reason: "Cleared configured first-approver Position",
+      recordId: orgUnitId,
+      reason: "Cleared configured approver Position",
     });
     revalidatePath("/admin/absence-settings");
     return undefined;
   }
 
   await prisma.absenceApproverConfig.upsert({
-    where: { departmentId },
-    create: { departmentId, approverPositionId },
-    update: { approverPositionId },
+    where: { orgUnitId },
+    create: { orgUnitId, approverPositionId, requiresSecondStage },
+    update: { approverPositionId, requiresSecondStage },
   });
 
   await logAudit({
     actorAccountId: session.user.id,
     action: "UPDATE",
     datasetName: "AbsenceApproverConfig",
-    recordId: departmentId,
-    reason: `Set first-approver Position to ${approverPositionId}`,
+    recordId: orgUnitId,
+    reason: `Set approver Position to ${approverPositionId}, requiresSecondStage=${requiresSecondStage}`,
   });
 
   revalidatePath("/admin/absence-settings");

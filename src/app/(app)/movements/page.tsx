@@ -85,7 +85,7 @@ export default async function MovementListPage({
       ],
     });
   }
-  if (requestNumber) conditions.push({ requestNumber: { contains: requestNumber } });
+  if (requestNumber) conditions.push({ requestNumber: { contains: requestNumber, mode: "insensitive" } });
   if (employeeId) conditions.push({ employeeId });
   if (status) conditions.push({ status: status as MovementRequestStatus });
   if (movementType) conditions.push({ movementType: movementType as MovementType });

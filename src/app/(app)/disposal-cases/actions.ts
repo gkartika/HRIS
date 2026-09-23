@@ -27,6 +27,13 @@ function getExtension(fileName: string): string {
 // BEYOND_REPAIR outcome, confirmed loss review) plus the manual OBSOLETE
 // action below — same "one internal creator, no duplicated insert" pattern
 // as offboarding's createOffboardingCaseInternal.
+//
+// requireSession() here is defense-in-depth, not the real permission gate
+// (every current caller already checked its own specific permission before
+// reaching this point) — it just guarantees this exported "use server"
+// function can never execute unauthenticated if a future change ever wires
+// it up to a Client Component directly, bypassing today's server-to-server-
+// only call graph.
 export async function createDisposalCaseInternal(params: {
   assetId: string;
   reason: DisposalReason;
@@ -35,6 +42,7 @@ export async function createDisposalCaseInternal(params: {
   sourceGaRequestId?: string | null;
   proposalNote?: string | null;
 }): Promise<{ id: string; caseNumber: string }> {
+  await requireSession();
   const year = new Date().getFullYear();
   const countThisYear = await prisma.disposalCase.count({
     where: { caseNumber: { startsWith: `DSP-${year}-` } },

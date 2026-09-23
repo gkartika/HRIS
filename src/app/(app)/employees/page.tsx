@@ -45,9 +45,9 @@ export default async function EmployeesPage({
     // Department/Level combination.
     const query = q.trim();
     where.OR = [
-      { employeeNumber: { contains: query } },
-      { fullLegalName: { contains: query } },
-      { currentPosition: { job: { jobTitle: { contains: query } } } },
+      { employeeNumber: { contains: query, mode: "insensitive" } },
+      { fullLegalName: { contains: query, mode: "insensitive" } },
+      { currentPosition: { job: { jobTitle: { contains: query, mode: "insensitive" } } } },
     ];
   }
   const positionFilter: Prisma.PositionWhereInput = {};
@@ -70,7 +70,9 @@ export default async function EmployeesPage({
       take: PAGE_SIZE,
     }),
     prisma.employee.count({ where }),
-    prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+    // DEPARTMENT-only — feeds the "Departemen" filter, which must not list
+    // Section/Group/Team-tier units (ORG-01 depth work).
+    prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
     prisma.position.findMany({ distinct: ["jobLevel"], select: { jobLevel: true }, orderBy: { jobLevel: "asc" } }),
     prisma.employee.count(),
     // Doesn't depend on the reads above and they don't depend on it —

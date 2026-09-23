@@ -1,19 +1,80 @@
+import { Fragment } from "react";
 import { requireSession } from "@/lib/require-session";
 import { canManageAttendanceMasterData } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { TypeQuotaRowForm } from "./type-quota-row-form";
 import { NewTypeForm } from "./new-type-form";
-import { ApproverRowForm } from "./approver-row-form";
+import { ApproverRowForm, type PositionOption } from "./approver-row-form";
 import { QuotaOverrideRowForm } from "./quota-override-row-form";
 import { AddQuotaOverrideForm } from "./add-quota-override-form";
 import { WorkScheduleRowForm } from "./work-schedule-row-form";
 import { HolidayBulkForm } from "./holiday-bulk-form";
 import { DeleteHolidayButton } from "./delete-holiday-button";
 import { UnarchiveTypeButton } from "./unarchive-type-button";
+import type { OrgUnit } from "@/generated/prisma/client";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(date);
+}
+
+const UNIT_TYPE_LABELS: Record<string, string> = {
+  DEPARTMENT: "Departemen",
+  SECTION: "Seksi",
+  GROUP: "Grup",
+  TEAM: "Tim",
+};
+
+// Any OrgUnit tier (Departemen/Seksi/Grup/Tim) can have its own approver
+// row — renders the whole tree, indenting each level under its parent, so
+// HR Admin can configure an approver as granularly as the org chart goes,
+// not just at Department level. See resolveAbsenceApprovalChain
+// (absence-routing.ts) for how a chain picks the 2 closest configured
+// tiers to a given employee.
+function OrgUnitApproverRows({
+  unit,
+  depth,
+  childrenByParentId,
+  positionOptions,
+  configByOrgUnitId,
+}: {
+  unit: OrgUnit;
+  depth: number;
+  childrenByParentId: Map<string, OrgUnit[]>;
+  positionOptions: PositionOption[];
+  configByOrgUnitId: Map<string, { approverPositionId: string; requiresSecondStage: boolean }>;
+}) {
+  const children = childrenByParentId.get(unit.id) ?? [];
+  const config = configByOrgUnitId.get(unit.id);
+  return (
+    <Fragment>
+      <tr className={`border-t border-slate-100 ${depth > 0 ? "bg-slate-50/50" : ""}`}>
+        <td className={depth === 0 ? "px-4 py-3 font-medium text-slate-900" : "px-4 py-3 text-slate-600"} style={{ paddingLeft: `${16 + depth * 20}px` }}>
+          {depth > 0 && "↳ "}
+          {unit.unitName}
+          <span className="ml-2 text-[10px] uppercase tracking-wide text-slate-400">{UNIT_TYPE_LABELS[unit.unitType] ?? unit.unitType}</span>
+        </td>
+        <td className="px-4 py-3">
+          <ApproverRowForm
+            orgUnitId={unit.id}
+            positions={positionOptions}
+            currentApproverPositionId={config?.approverPositionId ?? null}
+            currentRequiresSecondStage={config?.requiresSecondStage ?? false}
+          />
+        </td>
+      </tr>
+      {children.map((child) => (
+        <OrgUnitApproverRows
+          key={child.id}
+          unit={child}
+          depth={depth + 1}
+          childrenByParentId={childrenByParentId}
+          positionOptions={positionOptions}
+          configByOrgUnitId={configByOrgUnitId}
+        />
+      ))}
+    </Fragment>
+  );
 }
 
 export default async function AbsenceSettingsPage() {
@@ -25,10 +86,14 @@ export default async function AbsenceSettingsPage() {
   // One query for every type (active + archived), split in memory below —
   // was two separate round trips for what's ultimately the same small
   // table read twice with complementary filters.
-  const [allTypes, entitlements, departments, positions, approverConfigs, overrides, employees, workSchedule, companyHolidays] = await Promise.all([
+  const [allTypes, entitlements, orgUnits, positions, approverConfigs, overrides, employees, workSchedule, companyHolidays] = await Promise.all([
     prisma.absenceTypeConfig.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.absenceEntitlementConfig.findMany(),
-    prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
+    // Every OrgUnit, any tier — Department, Section, Group, or Team can
+    // each have their own approver row (see resolveAbsenceApprovalChain,
+    // absence-routing.ts, which picks the 2 closest configured tiers to a
+    // given employee). Rendered as a tree below, indented by depth.
+    prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
     prisma.position.findMany({
       select: { id: true, jobLevel: true, job: { select: { jobTitle: true } }, orgUnit: { select: { unitName: true } } },
       orderBy: { positionCode: "asc" },
@@ -49,6 +114,16 @@ export default async function AbsenceSettingsPage() {
     prisma.workScheduleConfig.findMany(),
     prisma.companyHoliday.findMany({ orderBy: { date: "asc" } }),
   ]);
+
+  const rootOrgUnits = orgUnits.filter((u) => !u.parentUnitId);
+  const childrenByParentId = new Map<string, typeof orgUnits>();
+  for (const u of orgUnits) {
+    if (u.parentUnitId) {
+      const list = childrenByParentId.get(u.parentUnitId) ?? [];
+      list.push(u);
+      childrenByParentId.set(u.parentUnitId, list);
+    }
+  }
 
   const types = allTypes.filter((tp) => !tp.archived);
   const archivedTypes = allTypes.filter((tp) => tp.archived).sort((a, b) => a.label.localeCompare(b.label));
@@ -74,7 +149,9 @@ export default async function AbsenceSettingsPage() {
     minutesByDay: Array.from({ length: 7 }, (_, day) => minutesByShiftDay.get(`${shiftType}:${day}`) ?? 0),
   }));
 
-  const configByDepartmentId = new Map(approverConfigs.map((c) => [c.departmentId, c.approverPositionId]));
+  const configByOrgUnitId = new Map(
+    approverConfigs.map((c) => [c.orgUnitId, { approverPositionId: c.approverPositionId, requiresSecondStage: c.requiresSecondStage }])
+  );
   const positionOptions = positions.map((p) => ({
     id: p.id,
     label: `${p.jobLevel} ${p.job.jobTitle} — ${p.orgUnit.unitName}`,
@@ -96,7 +173,7 @@ export default async function AbsenceSettingsPage() {
       <div>
         <h1 className="text-lg font-medium text-slate-900">Pengaturan Absensi</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Jenis Absensi, alur persetujuan, jatah tahunan, penyetuju per Departemen, dan pengecualian jatah per
+          Jenis Absensi, alur persetujuan, jatah tahunan, penyetuju per unit organisasi, dan pengecualian jatah per
           karyawan — semua dalam satu halaman.
         </p>
       </div>
@@ -153,35 +230,37 @@ export default async function AbsenceSettingsPage() {
       )}
 
       <section>
-        <h2 className="text-sm font-medium text-slate-900">Penyetuju Pertama per Departemen</h2>
+        <h2 className="text-sm font-medium text-slate-900">Penyetuju per Unit Organisasi</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Setiap Departemen memiliki satu Posisi yang menjadi penyetuju tahap pertama, untuk jenis Absensi yang
-          memerlukannya.
+          Departemen, Seksi, Grup, atau Tim — semuanya bisa diberi satu Posisi penyetuju sendiri, untuk jenis Absensi
+          yang memerlukannya. Unit yang dibiarkan kosong otomatis memakai penyetuju dari unit induk di atasnya.
+          Centang &quot;Teruskan ke unit induk&quot; jika karyawan di unit ini perlu melalui DUA tahap (unit ini, lalu
+          unit induk terdekat yang juga punya penyetuju) — biarkan tidak tercentang untuk satu tahap saja, meskipun
+          unit induknya sendiri punya penyetuju (unit induk itu tetap dipakai langsung oleh karyawan yang berada di
+          unit induk itu sendiri, bukan otomatis jadi tahap ke-2 untuk unit-unit di bawahnya).
         </p>
         <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs text-slate-500">
               <tr>
-                <th className="px-4 py-3 font-medium">Departemen</th>
-                <th className="px-4 py-3 font-medium">Penyetuju Pertama</th>
+                <th className="px-4 py-3 font-medium">Unit Organisasi</th>
+                <th className="px-4 py-3 font-medium">Penyetuju</th>
               </tr>
             </thead>
             <tbody>
-              {departments.map((d) => (
-                <tr key={d.id} className="border-t border-slate-100">
-                  <td className="px-4 py-3">{d.unitName}</td>
-                  <td className="px-4 py-3">
-                    <ApproverRowForm
-                      departmentId={d.id}
-                      positions={positionOptions}
-                      currentApproverPositionId={configByDepartmentId.get(d.id) ?? null}
-                    />
-                  </td>
-                </tr>
+              {rootOrgUnits.map((u) => (
+                <OrgUnitApproverRows
+                  key={u.id}
+                  unit={u}
+                  depth={0}
+                  childrenByParentId={childrenByParentId}
+                  positionOptions={positionOptions}
+                  configByOrgUnitId={configByOrgUnitId}
+                />
               ))}
             </tbody>
           </table>
-          {departments.length === 0 && <p className="p-4 text-sm text-slate-400">Belum ada Departemen.</p>}
+          {rootOrgUnits.length === 0 && <p className="p-4 text-sm text-slate-400">Belum ada Unit Organisasi.</p>}
         </div>
       </section>
 

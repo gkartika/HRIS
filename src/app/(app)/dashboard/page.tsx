@@ -13,7 +13,7 @@ import { TriggerEvaluationButton } from "./trigger-evaluation-button";
 import { AttendanceCheckSection } from "./attendance-check-section";
 import { SimpleKaryawanHome } from "./simple-karyawan-home";
 import { ApprovalCategory } from "./approval-category";
-import { FirstApproverDecisionButtons, HrAdminDecisionButtons } from "../absences/[id]/decision-forms";
+import { FirstApproverDecisionButtons, SecondApproverDecisionButtons, HrAdminDecisionButtons } from "../absences/[id]/decision-forms";
 import {
   MovementDecisionButtons,
   DeptHeadDecisionButtons as MovementDeptHeadDecisionButtons,
@@ -151,7 +151,10 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
       </div>
 
       <div className="mt-1">
-        <ApprovalCategory label="Absensi & Cuti" count={pending.pendingAbsenceHrAdmin.length + pending.pendingAbsenceFirstApprover.length}>
+        <ApprovalCategory
+          label="Absensi & Cuti"
+          count={pending.pendingAbsenceHrAdmin.length + pending.pendingAbsenceFirstApprover.length + pending.pendingAbsenceSecondApprover.length}
+        >
           {pending.pendingAbsenceHrAdmin.map((r) => (
             <ApprovalRow
               key={r.id}
@@ -160,6 +163,16 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
               href={`/absences/${r.id}`}
             >
               <HrAdminDecisionButtons requestId={r.id} />
+            </ApprovalRow>
+          ))}
+          {pending.pendingAbsenceSecondApprover.map((r) => (
+            <ApprovalRow
+              key={r.id}
+              title={`${r.absenceType.label} — ${r.employee.fullLegalName}`}
+              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceDayCount(r.startDate, r.endDate)} hari)`}
+              href={`/absences/${r.id}`}
+            >
+              <SecondApproverDecisionButtons requestId={r.id} />
             </ApprovalRow>
           ))}
           {pending.pendingAbsenceFirstApprover.map((r) => (
@@ -359,7 +372,10 @@ export default async function DashboardPage({
           prisma.position.count({ where: { positionStatus: "VACANT" } }),
           prisma.importBatch.count(),
           prisma.auditLog.count(),
-          prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+          // DEPARTMENT-only — feeds the "Departemen" filter on the
+          // expiring-contracts table below, which must not list Section/
+          // Group/Team-tier units (ORG-01 depth work).
+          prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
           prisma.contract.findMany({
             where: {
               status: "ACTIVE",

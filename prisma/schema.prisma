@@ -751,6 +751,7 @@ model AbsenceTypeConfig {
 // then HR Admin.
 enum AbsenceStatus {
   SUBMITTED
+  PENDING_SECOND_APPROVER
   PENDING_HR_ADMIN
   APPROVED
   REJECTED
@@ -876,6 +877,7 @@ model Account {
   dailyAttendanceRecordsClassifiedBy          DailyAttendanceRecord[]         @relation("DailyAttendanceRecordClassifiedBy")
   absenceRequestsSubmittedBy                  AbsenceRequest[]                @relation("AbsenceRequestSubmittedBy")
   absenceRequestsFirstDecisionBy              AbsenceRequest[]                @relation("AbsenceFirstDecisionBy")
+  absenceRequestsSecondDecisionBy             AbsenceRequest[]                @relation("AbsenceSecondDecisionBy")
   absenceRequestsHrAdminDecisionBy            AbsenceRequest[]                @relation("AbsenceHrAdminDecisionBy")
   absenceRequestsHrOverrideBy                 AbsenceRequest[]                @relation("AbsenceHrOverrideBy")
   absenceRequestsCancelledBy                  AbsenceRequest[]                @relation("AbsenceCancelledBy")
@@ -1062,6 +1064,7 @@ model OrgUnit {
   positions             Position[]
   recruitmentRequests   RecruitmentRequest[]
   absenceApproverConfig AbsenceApproverConfig?
+  jobsWithDefaultOrgUnit Job[]
 
   competencyAssessments        CompetencyAssessment[]
   trainingRequestsSnapshot     TrainingRequest[]
@@ -1084,6 +1087,18 @@ model Job {
   approvalStatus    String   @default("Approved")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // Optional convenience defaults — per direct request, so re-selecting the
+  // same Job for a new Position doesn't require re-picking its usual
+  // OrgUnit/PositionType every time. Deliberately NOT authoritative: only
+  // pre-fills the Position create form (create-form.tsx), never written
+  // back onto Position.orgUnitId/positionType directly and never enforced
+  // on save — a Position can still diverge from its Job's default (the
+  // same Job legitimately used across different units/tiers), same
+  // reasoning as jobLevel staying per-seat on Position, not on Job.
+  defaultOrgUnitId    String?
+  defaultOrgUnit      OrgUnit?     @relation(fields: [defaultOrgUnitId], references: [id])
+  defaultPositionType PositionType?
 
   positions           Position[]
   recruitmentRequests RecruitmentRequest[]
@@ -1151,6 +1166,7 @@ model Position {
   shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]       @relation("ShiftAssignmentSubmittedByPosition")
   absenceApproverConfigOf                     AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
   absenceRequestsAsFirstApproverPosition      AbsenceRequest[]        @relation("AbsenceFirstApproverPosition")
+  absenceRequestsAsSecondApproverPosition     AbsenceRequest[]        @relation("AbsenceSecondApproverPosition")
 
   gaApprovalConfigsOf             GaApprovalConfig[] @relation("GaApprovalConfigPosition")
   gaRequestsDecisionPositionOf    GaRequest[]        @relation("GaRequestDecisionPosition")
@@ -1729,17 +1745,31 @@ model DailyAttendanceRecord {
   @@unique([employeeId, attendanceDate])
 }
 
-// HR-Admin-configured first-approver Position per Department for Absence
-// requests — deliberately separate from the Dept-Head-3B-derived-from-
-// jobLevel pattern used elsewhere, because the spec calls for an explicitly
-// configured Position, not a derived one.
+// HR-Admin-configured approver Position per OrgUnit — any tier (Department,
+// Section, Group, or Team) can have its own row, deliberately separate from
+// the Dept-Head-3B-derived-from-jobLevel pattern used elsewhere, because
+// the spec calls for an explicitly configured Position, not a derived one.
+//
+// Per direct correction: whether an employee's chain has 1 or 2 stages is
+// an explicit per-unit choice (`requiresSecondStage`), NOT an automatic
+// consequence of how many ancestor tiers happen to have their own row. A
+// Department needs its own row regardless — some employees sit directly on
+// it, with no Section/Group/Team beneath them at all — so a Section using
+// that same Department's row as ITS single stage must not be forced into 2
+// stages just because the Department also has a row (which exists for
+// those other, direct-to-Department employees' sake, not for this
+// Section's escalation). `requiresSecondStage=true` is what opts a
+// specific unit's chain into continuing up to the next configured
+// ancestor above it; false (the default) stops at this unit's own
+// approver. See resolveAbsenceApprovalChain (absence-routing.ts).
 model AbsenceApproverConfig {
-  id                 String   @id @default(cuid())
-  departmentId       String   @unique
-  department         OrgUnit  @relation(fields: [departmentId], references: [id])
-  approverPositionId String
-  approverPosition   Position @relation("AbsenceApproverPosition", fields: [approverPositionId], references: [id])
-  updatedAt          DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  orgUnitId           String   @unique
+  orgUnit             OrgUnit  @relation(fields: [orgUnitId], references: [id])
+  approverPositionId  String
+  approverPosition    Position @relation("AbsenceApproverPosition", fields: [approverPositionId], references: [id])
+  requiresSecondStage Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
 }
 
 // HR-Admin-configured annual entitlement (days/year) per Absence type.
@@ -1770,13 +1800,29 @@ model AbsenceRequest {
   submittedByAccount   Account  @relation("AbsenceRequestSubmittedBy", fields: [submittedByAccountId], references: [id])
 
   // First-approval stage: whichever Position was configured for the
-  // employee's Department (AbsenceApproverConfig) at submission time.
+  // employee's nearest Section or Department (AbsenceApproverConfig) at
+  // submission time — see resolveAbsenceApprovalChain (absence-routing.ts).
   firstApproverPositionId  String?
   firstApproverPosition    Position? @relation("AbsenceFirstApproverPosition", fields: [firstApproverPositionId], references: [id])
   firstDecisionAt          DateTime?
   firstDecisionByAccountId String?
   firstDecisionByAccount   Account?  @relation("AbsenceFirstDecisionBy", fields: [firstDecisionByAccountId], references: [id])
   firstDecisionNote        String?
+
+  // Second-approval stage: only set when the resolved first-stage
+  // AbsenceApproverConfig row had requiresSecondStage=true AND a further
+  // ancestor OrgUnit above it also had its own row at submission time —
+  // otherwise null, and the chain stays the original single
+  // first-approver-then-HR-Admin shape. Same column pattern as the first
+  // stage, deliberately not a generalized N-step table since the chain is
+  // capped at 2 configurable stages before the fixed HR Admin one, by
+  // direct spec.
+  secondApproverPositionId  String?
+  secondApproverPosition    Position? @relation("AbsenceSecondApproverPosition", fields: [secondApproverPositionId], references: [id])
+  secondDecisionAt          DateTime?
+  secondDecisionByAccountId String?
+  secondDecisionByAccount   Account?  @relation("AbsenceSecondDecisionBy", fields: [secondDecisionByAccountId], references: [id])
+  secondDecisionNote        String?
 
   hrAdminDecisionAt          DateTime?
   hrAdminDecisionByAccountId String?

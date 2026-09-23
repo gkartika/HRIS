@@ -39,7 +39,7 @@ export default async function AuditLogPage({
   if (action) where.action = action as AuditAction;
   if (datasetName) where.datasetName = datasetName;
   if (actor?.trim()) {
-    where.actorAccount = { usernameOrEmail: { contains: actor.trim() } };
+    where.actorAccount = { usernameOrEmail: { contains: actor.trim(), mode: "insensitive" } };
   }
   if (from || to) {
     where.eventAt = {

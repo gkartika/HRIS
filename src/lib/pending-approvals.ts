@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { canDecideAsConfiguredGaApprover, isHrAdmin } from "@/lib/permissions";
-import { canDecideAbsenceRequestAsFirstApprover } from "@/lib/permissions";
+import { canDecideAbsenceRequestAsFirstApprover, canDecideAbsenceRequestAsSecondApprover } from "@/lib/permissions";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { getDirectReportEmployeeIds } from "@/lib/manager-scope";
 
@@ -34,6 +34,7 @@ export async function getPendingApprovals(session: Session) {
     disposalConfig,
     pendingAbsenceHrAdmin,
     submittedAbsenceRequests,
+    pendingSecondApproverAbsenceRequests,
     pendingCompetencyAssessments,
     directReportIds,
   ] = await Promise.all([
@@ -72,6 +73,13 @@ export async function getPendingApprovals(session: Session) {
           orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
+    session.user.employeeId
+      ? prisma.absenceRequest.findMany({
+          where: { status: "PENDING_SECOND_APPROVER", secondApproverPositionId: { not: null } },
+          include: { employee: true, absenceType: true },
+          orderBy: { submittedAt: "asc" },
+        })
+      : Promise.resolve([]),
     // Competency Assessment P1 scoring (P2 dropped from the workflow — see
     // lib/competency.ts/competency-routing.ts) — same "I'm the evaluator,
     // not the evaluatee" shape as pendingOwnEvaluations above.
@@ -87,7 +95,12 @@ export async function getPendingApprovals(session: Session) {
 
   const isHrManager = hrManagerPositions.length > 0;
   const isDeptHead = deptHeadDepartmentIds.length > 0;
-  const absencePositionIds = [...new Set(submittedAbsenceRequests.map((r) => r.firstApproverPositionId!))];
+  const absencePositionIds = [
+    ...new Set([
+      ...submittedAbsenceRequests.map((r) => r.firstApproverPositionId!),
+      ...pendingSecondApproverAbsenceRequests.map((r) => r.secondApproverPositionId!),
+    ]),
+  ];
 
   // Stage 2 — depends on Stage 1's results (isHrManager/isDeptHead/
   // deptHeadDepartmentIds, the 3 GA configs, absencePositionIds,
@@ -230,6 +243,9 @@ export async function getPendingApprovals(session: Session) {
   const pendingAbsenceFirstApprover = submittedAbsenceRequests.filter((r) =>
     canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, absenceHolderIdsByPosition.get(r.firstApproverPositionId!) ?? [])
   );
+  const pendingAbsenceSecondApprover = pendingSecondApproverAbsenceRequests.filter((r) =>
+    canDecideAbsenceRequestAsSecondApprover(session.user.employeeId, absenceHolderIdsByPosition.get(r.secondApproverPositionId!) ?? [])
+  );
 
   // Stage 3 — depends on Stage 2's approver flags.
   const [pendingGaNewAssetNeeds, pendingGaLossReviews, pendingGaDisposals] = await Promise.all([
@@ -279,6 +295,7 @@ export async function getPendingApprovals(session: Session) {
     pendingDeptHeadTrainingRequests,
     pendingAbsenceHrAdmin,
     pendingAbsenceFirstApprover,
+    pendingAbsenceSecondApprover,
     pendingCompetencyAssessments,
     pendingEffectivenessTasks,
   };
@@ -304,6 +321,7 @@ export function countPendingApprovals(p: PendingApprovals): number {
     p.pendingDeptHeadTrainingRequests.length +
     p.pendingAbsenceHrAdmin.length +
     p.pendingAbsenceFirstApprover.length +
+    p.pendingAbsenceSecondApprover.length +
     p.pendingCompetencyAssessments.length +
     p.pendingEffectivenessTasks.length
   );

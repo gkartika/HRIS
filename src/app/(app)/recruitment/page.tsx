@@ -42,7 +42,10 @@ export default async function RecruitmentListPage({
       include: { department: true, job: true, fulfillments: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+    // DEPARTMENT-only — RecruitmentRequest.departmentId is meant to be a
+    // Department, matched exactly elsewhere in the module (recruitment
+    // fulfillment); must not offer Section/Group/Team-tier units here.
+    prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
   ]);
 
   const hasFilters = !!(status || departmentId);

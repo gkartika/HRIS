@@ -33,7 +33,9 @@ export default async function OnboardingListPage({
       include: { employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } } },
       orderBy: { plannedStartDate: "desc" },
     }),
-    prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
+    // DEPARTMENT-only — feeds the "Departemen" filter, which must not list
+    // Section/Group/Team-tier units (ORG-01 depth work).
+    prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
   ]);
 
   // Batch-fetch every onboarding-required assignment for every case's

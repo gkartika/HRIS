@@ -44,10 +44,10 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
     ? [
         {
           OR: [
-            { requestedTopic: { contains: q.trim() } },
-            { requestNumber: { contains: q.trim() } },
-            { employee: { fullLegalName: { contains: q.trim() } } },
-            { employee: { employeeNumber: { contains: q.trim() } } },
+            { requestedTopic: { contains: q.trim(), mode: "insensitive" } },
+            { requestNumber: { contains: q.trim(), mode: "insensitive" } },
+            { employee: { fullLegalName: { contains: q.trim(), mode: "insensitive" } } },
+            { employee: { employeeNumber: { contains: q.trim(), mode: "insensitive" } } },
           ],
         },
       ]

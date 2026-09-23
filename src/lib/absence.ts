@@ -21,10 +21,16 @@ export function absenceDayCount(startDate: Date, endDate: Date): number {
   return Math.round((end - start) / msPerDay) + 1;
 }
 
-// Two-stage chain: configured first-approver Position, then HR Admin — no
-// HR Manager stage anywhere in this flow, per direct spec.
+// Chain: configured first-approver Position, optionally a second (only for
+// requesters whose Section AND Department both have their own
+// AbsenceApproverConfig row), then HR Admin — no HR Manager stage anywhere
+// in this flow, per direct spec.
 export function canDecideAbsenceRequestAsFirstApproverStatus(status: AbsenceStatus): boolean {
   return status === "SUBMITTED";
+}
+
+export function canDecideAbsenceRequestAsSecondApproverStatus(status: AbsenceStatus): boolean {
+  return status === "PENDING_SECOND_APPROVER";
 }
 
 export function canDecideAbsenceRequestAsHrAdminStatus(status: AbsenceStatus): boolean {
@@ -32,7 +38,7 @@ export function canDecideAbsenceRequestAsHrAdminStatus(status: AbsenceStatus): b
 }
 
 export function canCancelAbsenceRequestStatus(status: AbsenceStatus): boolean {
-  return status === "SUBMITTED" || status === "PENDING_HR_ADMIN";
+  return status === "SUBMITTED" || status === "PENDING_SECOND_APPROVER" || status === "PENDING_HR_ADMIN";
 }
 
 // HR Admin override: an already-decided request (APPROVED/REJECTED) can be

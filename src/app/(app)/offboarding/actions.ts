@@ -36,6 +36,13 @@ import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
 // renewal-actions.ts's createOffboardingHandoff) both call this directly
 // (server-to-server), same "one internal creator, no duplicated insert"
 // pattern as evaluations/actions.ts's createDraftEvaluation.
+//
+// requireSession() here is defense-in-depth, not the real permission gate
+// (every current caller already checked its own specific permission before
+// reaching this point) — it just guarantees this exported "use server"
+// function can never execute unauthenticated if a future change ever wires
+// it up to a Client Component directly, bypassing today's server-to-server-
+// only call graph.
 export async function createOffboardingCaseInternal(params: {
   employeeId: string;
   reason: OffboardingReason;
@@ -44,6 +51,7 @@ export async function createOffboardingCaseInternal(params: {
   managerNote?: string | null;
   sourceRenewalCaseId?: string | null;
 }): Promise<{ id: string; caseNumber: string }> {
+  await requireSession();
   const year = new Date().getFullYear();
   const countThisYear = await prisma.offboardingCase.count({
     where: { caseNumber: { startsWith: `OFB-${year}-` } },

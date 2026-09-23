@@ -4,24 +4,11 @@ import { useActionState } from "react";
 import { loginAction } from "./actions";
 import { t } from "@/lib/i18n/id";
 
-const DEMO_ACCOUNTS = [
-  { role: "roles.HR_ADMIN", user: "hr.admin@cbp.demo" },
-  { role: "roles.TRAINING_ADMIN", user: "training.admin@cbp.demo" },
-  { role: "roles.GA_ADMIN", user: "ga.admin@cbp.demo" },
-  { role: "roles.HR_MANAGER", user: "hr.manager@cbp.demo" },
-  { role: "roles.DEPT_HEAD", user: "depthead.production@cbp.demo" },
-  { role: "roles.LEVEL_3", user: "level3.production@cbp.demo" },
-  { role: "roles.LEVEL_2", user: "level2.production@cbp.demo" },
-  { role: "roles.EMPLOYEE", user: "level1.production@cbp.demo" },
-];
-
-const DEMO_PASSWORD = "Demo12345!";
-
 export function LoginForm() {
   const [error, formAction, isPending] = useActionState(loginAction, undefined);
 
   return (
-    <div className="grid w-full max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
+    <div className="w-full max-w-sm">
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-lg font-medium text-slate-900">{t("auth.loginTitle")}</h1>
         <p className="mt-1 text-sm text-slate-500">{t("auth.loginSubtitle")}</p>
@@ -36,7 +23,7 @@ export function LoginForm() {
               name="usernameOrEmail"
               type="text"
               required
-              defaultValue="hr.admin@cbp.demo"
+              autoFocus
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
@@ -49,7 +36,6 @@ export function LoginForm() {
               name="password"
               type="password"
               required
-              defaultValue={DEMO_PASSWORD}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
@@ -62,24 +48,6 @@ export function LoginForm() {
             {isPending ? t("common.loading") : t("auth.loginButton")}
           </button>
         </form>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-sm font-medium text-slate-900">{t("auth.demoAccountsTitle")}</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Kata sandi semua akun demo: <code className="font-mono">{DEMO_PASSWORD}</code>
-        </p>
-        <div className="mt-4 space-y-2">
-          {DEMO_ACCOUNTS.map((acc) => (
-            <div
-              key={acc.user}
-              className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
-            >
-              <span className="text-slate-600">{t(acc.role)}</span>
-              <code className="font-mono text-xs text-indigo-600">{acc.user}</code>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

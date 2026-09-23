@@ -21,7 +21,10 @@ export default async function JobsPage({
   const where: Prisma.JobWhereInput = {};
   if (q?.trim()) {
     const query = q.trim();
-    where.OR = [{ jobCode: { contains: query } }, { jobTitle: { contains: query } }];
+    where.OR = [
+      { jobCode: { contains: query, mode: "insensitive" } },
+      { jobTitle: { contains: query, mode: "insensitive" } },
+    ];
   }
 
   const [jobs, totalCount] = await Promise.all([

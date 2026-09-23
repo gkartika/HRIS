@@ -22,6 +22,13 @@ import type { Prisma } from "@/generated/prisma/client";
 // Contract Renewal's D-30 trigger and Perubahan Posisi's submit action both
 // call this directly (server-to-server, no client-reachable "request
 // evaluation" button anywhere — ACC-16/17: "no requester-trigger control").
+//
+// requireSession() here is defense-in-depth, not the real permission gate
+// (every current caller already checked its own specific permission before
+// reaching this point) — it just guarantees this exported "use server"
+// function can never execute unauthenticated if a future change ever wires
+// it up to a Client Component directly, bypassing today's server-to-server-
+// only call graph.
 export async function createDraftEvaluation(params: {
   employeeId: string;
   purpose: EvaluationPurpose;
@@ -29,6 +36,7 @@ export async function createDraftEvaluation(params: {
   snapshotPositionId?: string | null;
   createdByAccountId?: string | null;
 }): Promise<{ id: string; evaluationNumber: string }> {
+  await requireSession();
   const year = new Date().getFullYear();
   const countThisYear = await prisma.evaluation.count({
     where: { evaluationNumber: { startsWith: `EVL-${year}-` } },

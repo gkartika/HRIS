@@ -23,7 +23,10 @@ export default async function PositionsPage({
   const where: Prisma.PositionWhereInput = {};
   if (q?.trim()) {
     const query = q.trim();
-    where.OR = [{ positionCode: { contains: query } }, { job: { jobTitle: { contains: query } } }];
+    where.OR = [
+      { positionCode: { contains: query, mode: "insensitive" } },
+      { job: { jobTitle: { contains: query, mode: "insensitive" } } },
+    ];
   }
   if (orgUnitId) where.orgUnitId = orgUnitId;
   if (jobLevel) where.jobLevel = jobLevel;
@@ -70,7 +73,11 @@ export default async function PositionsPage({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("employee.department")}</label>
+          {/* Deliberately "Unit Organisasi", not "{t("employee.department")}"
+              (Departemen) — a Position can sit at any OrgUnit tier
+              (Departemen/Seksi/Grup/Tim), and this list intentionally
+              includes all of them so HR Admin can filter by any of them. */}
+          <label className="mb-1 block text-xs text-slate-500">Unit Organisasi</label>
           <select
             name="orgUnitId"
             defaultValue={orgUnitId ?? ""}

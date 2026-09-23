@@ -3,12 +3,14 @@ import { requireSession } from "@/lib/require-session";
 import {
   canViewAbsenceRequest,
   canDecideAbsenceRequestAsFirstApprover,
+  canDecideAbsenceRequestAsSecondApprover,
   canDecideAbsenceRequestAsHrAdmin,
   canOverrideAbsenceRequest,
   canCancelAbsenceRequest,
 } from "@/lib/permissions";
 import {
   canDecideAbsenceRequestAsFirstApproverStatus,
+  canDecideAbsenceRequestAsSecondApproverStatus,
   canDecideAbsenceRequestAsHrAdminStatus,
   canHrOverrideAbsenceRequestStatus,
   canCancelAbsenceRequestStatus,
@@ -21,6 +23,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import {
   FirstApproverDecisionButtons,
+  SecondApproverDecisionButtons,
   HrAdminDecisionButtons,
   OverrideForm,
   CancelAbsenceForm,
@@ -28,6 +31,47 @@ import {
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(date);
+}
+
+// Shared shape between the first- and second-approver cards below — same
+// title/approver-line/decision-line/buttons structure, differing only in
+// which fields feed them and (for the first stage only) the two extra
+// "not required"/"no approver configured" messages passed via `extra`.
+function ApprovalStageCard({
+  title,
+  approverPosition,
+  decisionAt,
+  decisionByUsername,
+  decisionNote,
+  extra,
+  children,
+}: {
+  title: string;
+  approverPosition: { jobLevel: string; job: { jobTitle: string } } | null | undefined;
+  decisionAt: Date | null;
+  decisionByUsername: string | null | undefined;
+  decisionNote: string | null;
+  extra?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <p className="text-sm font-medium text-slate-900">{title}</p>
+      {extra}
+      {approverPosition && (
+        <p className="mt-1 text-xs text-slate-500">
+          Penyetuju: {approverPosition.jobLevel} {approverPosition.job.jobTitle}
+        </p>
+      )}
+      {decisionAt && (
+        <p className="mt-2 text-xs text-slate-500">
+          {formatDate(decisionAt)} — {decisionByUsername ?? "—"}
+          {decisionNote && `: ${decisionNote}`}
+        </p>
+      )}
+      {children && <div className="mt-3">{children}</div>}
+    </div>
+  );
 }
 
 export default async function AbsenceRequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -42,6 +86,8 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
       absenceType: true,
       firstApproverPosition: { include: { job: true } },
       firstDecisionByAccount: { select: { usernameOrEmail: true } },
+      secondApproverPosition: { include: { job: true } },
+      secondDecisionByAccount: { select: { usernameOrEmail: true } },
       hrAdminDecisionByAccount: { select: { usernameOrEmail: true } },
       hrOverrideByAccount: { select: { usernameOrEmail: true } },
       cancelledByAccount: { select: { usernameOrEmail: true } },
@@ -49,14 +95,24 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
   });
   if (!request) notFound();
 
-  const [isLevel3InDepartment, approverPositionHolderEmployeeIds, quota, usedBeforeThis] = await Promise.all([
-    isLevel3ForEmployeeDepartment(session.user.employeeId, request.employeeId),
-    getCurrentHolderEmployeeIds(request.firstApproverPositionId),
-    resolveAnnualQuota(request.employeeId, request.absenceTypeCode),
-    usedDaysThisYear(request.employeeId, request.absenceTypeCode, request.id),
-  ]);
+  const [isLevel3InDepartment, approverPositionHolderEmployeeIds, secondApproverPositionHolderEmployeeIds, quota, usedBeforeThis] =
+    await Promise.all([
+      isLevel3ForEmployeeDepartment(session.user.employeeId, request.employeeId),
+      getCurrentHolderEmployeeIds(request.firstApproverPositionId),
+      getCurrentHolderEmployeeIds(request.secondApproverPositionId),
+      resolveAnnualQuota(request.employeeId, request.absenceTypeCode),
+      usedDaysThisYear(request.employeeId, request.absenceTypeCode, request.id),
+    ]);
 
-  if (!canViewAbsenceRequest(session, request.employeeId, isLevel3InDepartment, approverPositionHolderEmployeeIds)) {
+  if (
+    !canViewAbsenceRequest(
+      session,
+      request.employeeId,
+      isLevel3InDepartment,
+      approverPositionHolderEmployeeIds,
+      secondApproverPositionHolderEmployeeIds
+    )
+  ) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
@@ -67,6 +123,9 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
   const canDecideFirst =
     canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, approverPositionHolderEmployeeIds) &&
     canDecideAbsenceRequestAsFirstApproverStatus(request.status);
+  const canDecideSecond =
+    canDecideAbsenceRequestAsSecondApprover(session.user.employeeId, secondApproverPositionHolderEmployeeIds) &&
+    canDecideAbsenceRequestAsSecondApproverStatus(request.status);
   const canDecideHr = canDecideAbsenceRequestAsHrAdmin(session) && canDecideAbsenceRequestAsHrAdminStatus(request.status);
   const canOverride = canOverrideAbsenceRequest(session) && canHrOverrideAbsenceRequestStatus(request.status);
   const canCancel =
@@ -140,31 +199,37 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-medium text-slate-900">{t("absence.firstApproverDecisionTitle")}</p>
-        {!request.absenceType.requiresFirstApproval && (
-          <p className="mt-2 text-xs text-slate-500">{t("absence.firstApproverNotRequired")}</p>
-        )}
-        {request.absenceType.requiresFirstApproval && !request.firstApproverPositionId && (
-          <p className="mt-2 text-xs text-amber-700">{t("absence.noFirstApproverWarning")}</p>
-        )}
-        {request.firstApproverPosition && (
-          <p className="mt-1 text-xs text-slate-500">
-            Penyetuju: {request.firstApproverPosition.jobLevel} {request.firstApproverPosition.job.jobTitle}
-          </p>
-        )}
-        {request.firstDecisionAt && (
-          <p className="mt-2 text-xs text-slate-500">
-            {formatDate(request.firstDecisionAt)} — {request.firstDecisionByAccount?.usernameOrEmail ?? "—"}
-            {request.firstDecisionNote && `: ${request.firstDecisionNote}`}
-          </p>
-        )}
-        {canDecideFirst && (
-          <div className="mt-3">
-            <FirstApproverDecisionButtons requestId={request.id} />
-          </div>
-        )}
-      </div>
+      <ApprovalStageCard
+        title={t("absence.firstApproverDecisionTitle")}
+        approverPosition={request.firstApproverPosition}
+        decisionAt={request.firstDecisionAt}
+        decisionByUsername={request.firstDecisionByAccount?.usernameOrEmail}
+        decisionNote={request.firstDecisionNote}
+        extra={
+          <>
+            {!request.absenceType.requiresFirstApproval && (
+              <p className="mt-2 text-xs text-slate-500">{t("absence.firstApproverNotRequired")}</p>
+            )}
+            {request.absenceType.requiresFirstApproval && !request.firstApproverPositionId && (
+              <p className="mt-2 text-xs text-amber-700">{t("absence.noFirstApproverWarning")}</p>
+            )}
+          </>
+        }
+      >
+        {canDecideFirst && <FirstApproverDecisionButtons requestId={request.id} />}
+      </ApprovalStageCard>
+
+      {request.secondApproverPositionId && (
+        <ApprovalStageCard
+          title={t("absence.secondApproverDecisionTitle")}
+          approverPosition={request.secondApproverPosition}
+          decisionAt={request.secondDecisionAt}
+          decisionByUsername={request.secondDecisionByAccount?.usernameOrEmail}
+          decisionNote={request.secondDecisionNote}
+        >
+          {canDecideSecond && <SecondApproverDecisionButtons requestId={request.id} />}
+        </ApprovalStageCard>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <p className="text-sm font-medium text-slate-900">{t("absence.hrAdminDecisionTitle")}</p>

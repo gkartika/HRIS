@@ -43,9 +43,9 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
       ...(q?.trim()
         ? {
             OR: [
-              { employee: { fullLegalName: { contains: q.trim() } } },
-              { employee: { employeeNumber: { contains: q.trim() } } },
-              { course: { title: { contains: q.trim() } } },
+              { employee: { fullLegalName: { contains: q.trim(), mode: "insensitive" } } },
+              { employee: { employeeNumber: { contains: q.trim(), mode: "insensitive" } } },
+              { course: { title: { contains: q.trim(), mode: "insensitive" } } },
             ],
           }
         : {}),

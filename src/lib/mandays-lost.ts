@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { MONTH_LABELS_ID } from "@/lib/absence-cutoff";
 import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
+import { resolveDepartmentId } from "@/lib/level3-scope";
 import type { ReportPeriod } from "@/lib/report-period";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -118,7 +119,7 @@ export async function getMandaysLostReport(period: ReportPeriod, bucketBy: Bucke
     // full ~30-column Employee row (NIK, bank account, addresses, ...).
     prisma.employee.findMany({
       where: { activeFlag: true },
-      select: { id: true, currentPosition: { select: { orgUnitId: true, orgUnit: { select: { unitName: true } } } } },
+      select: { id: true, currentPosition: { select: { orgUnitId: true } } },
     }),
   ]);
 
@@ -129,10 +130,31 @@ export async function getMandaysLostReport(period: ReportPeriod, bucketBy: Bucke
   const isScheduledWorkDay = (employeeId: string, date: Date) =>
     scheduleMinutesFor(assignedShiftFor(employeeId, normalizeWeekStart(date)), date.getUTCDay()) > 0;
 
-  const departmentOf = (employee: (typeof employees)[number]) => ({
-    departmentId: employee.currentPosition?.orgUnitId ?? "none",
-    departmentName: employee.currentPosition?.orgUnit.unitName ?? "Tanpa Departemen",
+  // Walked up to the actual Department (not the raw Position.orgUnitId) —
+  // now that Positions can sit at Section/Group/Team tiers below
+  // Department (ORG-01 depth work), grouping by the raw orgUnitId would
+  // fragment one department's totals across its own sub-units instead of
+  // rolling them up together. Resolved once per distinct orgUnitId, not
+  // per employee.
+  const distinctOrgUnitIds = [...new Set(employees.map((e) => e.currentPosition?.orgUnitId).filter((id): id is string => !!id))];
+  const departmentIdByOrgUnitId = new Map(
+    await Promise.all(distinctOrgUnitIds.map(async (id) => [id, await resolveDepartmentId(id)] as const))
+  );
+  const resolvedDepartmentIds = [...new Set([...departmentIdByOrgUnitId.values()].filter((id): id is string => !!id))];
+  const departmentUnits = await prisma.orgUnit.findMany({
+    where: { id: { in: resolvedDepartmentIds } },
+    select: { id: true, unitName: true },
   });
+  const departmentNameById = new Map(departmentUnits.map((u) => [u.id, u.unitName]));
+
+  const departmentOf = (employee: (typeof employees)[number]) => {
+    const orgUnitId = employee.currentPosition?.orgUnitId;
+    const departmentId = orgUnitId ? (departmentIdByOrgUnitId.get(orgUnitId) ?? null) : null;
+    return {
+      departmentId: departmentId ?? "none",
+      departmentName: departmentId ? (departmentNameById.get(departmentId) ?? "Tanpa Departemen") : "Tanpa Departemen",
+    };
+  };
 
   const deptAccum = new Map<string, DepartmentMandaysRow>();
   const ensureDeptRow = (employee: (typeof employees)[number]) => {

@@ -546,6 +546,13 @@ export function canDecideAbsenceRequestAsFirstApprover(
   return !!actingEmployeeId && approverPositionHolderEmployeeIds.includes(actingEmployeeId);
 }
 
+// Identical check as the first stage (same "is this employee among the
+// configured Position's current holders" logic as canDecideAsConfiguredGaApprover
+// below) — kept as its own exported name so call sites read as "second
+// approver" rather than reusing the first-stage name under a different
+// meaning.
+export const canDecideAbsenceRequestAsSecondApprover = canDecideAbsenceRequestAsFirstApprover;
+
 // Final stage — HR Admin only, no HR Manager step in this workflow.
 export function canDecideAbsenceRequestAsHrAdmin(session: Session): boolean {
   return isHrAdmin(session);
@@ -566,18 +573,20 @@ export function canCancelAbsenceRequest(session: Session, employeeId: string, su
 }
 
 // Visibility: HR Admin, the subject employee, their Level-3 (own
-// department), or the configured first-approver Position's current holder.
+// department), or either configured approver Position's current holder.
 export function canViewAbsenceRequest(
   session: Session,
   employeeId: string,
   isLevel3InDepartment: boolean,
-  approverPositionHolderEmployeeIds: string[]
+  approverPositionHolderEmployeeIds: string[],
+  secondApproverPositionHolderEmployeeIds: string[] = []
 ): boolean {
   return (
     isHrAdmin(session) ||
     session.user.employeeId === employeeId ||
     isLevel3InDepartment ||
-    canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, approverPositionHolderEmployeeIds)
+    canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, approverPositionHolderEmployeeIds) ||
+    canDecideAbsenceRequestAsSecondApprover(session.user.employeeId, secondApproverPositionHolderEmployeeIds)
   );
 }
 

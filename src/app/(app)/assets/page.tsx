@@ -31,9 +31,9 @@ export default async function AssetsPage({
   if (q?.trim()) {
     const query = q.trim();
     where.OR = [
-      { assetCode: { contains: query } },
-      { assetName: { contains: query } },
-      { category: { contains: query } },
+      { assetCode: { contains: query, mode: "insensitive" } },
+      { assetName: { contains: query, mode: "insensitive" } },
+      { category: { contains: query, mode: "insensitive" } },
     ];
   }
   if (trackingType === "INDIVIDUAL" || trackingType === "QUANTITY_TRACKED") where.trackingType = trackingType;

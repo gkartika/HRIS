@@ -24,7 +24,7 @@ export default async function TrainingCoursesPage({
   // must only ever offer PUBLISHED courses for assignment.
   const courses = await prisma.trainingCourse.findMany({
     where: {
-      ...(q?.trim() ? { title: { contains: q.trim() } } : {}),
+      ...(q?.trim() ? { title: { contains: q.trim(), mode: "insensitive" } } : {}),
       ...(status ? { status: status as "DRAFT" | "PUBLISHED" | "ARCHIVED" } : {}),
       ...(mode ? { mode: mode as "ONLINE" | "IN_PERSON" | "BLENDED" } : {}),
     },

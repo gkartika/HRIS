@@ -5,7 +5,14 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import type { Prisma, AbsenceStatus } from "@/generated/prisma/client";
 
-const ABSENCE_STATUSES: AbsenceStatus[] = ["SUBMITTED", "PENDING_HR_ADMIN", "APPROVED", "REJECTED", "CANCELLED"];
+const ABSENCE_STATUSES: AbsenceStatus[] = [
+  "SUBMITTED",
+  "PENDING_SECOND_APPROVER",
+  "PENDING_HR_ADMIN",
+  "APPROVED",
+  "REJECTED",
+  "CANCELLED",
+];
 
 // Per direct request: this operational list/browse view is HR-Admin-only
 // now (was HR Admin, or any employee-linked account scoped to their own

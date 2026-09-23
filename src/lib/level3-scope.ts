@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import type { OrgUnit } from "@/generated/prisma/client";
 
 // Perubahan Posisi refactor: "Level 3" submit eligibility is broader than
 // the Department Head 3B approval tier (src/lib/dept-head.ts) — it's
@@ -45,34 +46,51 @@ export async function getActiveLevel3Positions(
 }
 
 /**
- * Walks up OrgUnit.parentUnit until it finds a DEPARTMENT-type ancestor (or
- * itself, if it already is one). Returns null if the chain is broken/
- * circular or never reaches a Department — matches Section-under-Department
+ * Self, then every ancestor OrgUnit up to the root, closest first — the
+ * shared walk-up primitive resolveDepartmentId/resolveSectionId below and
+ * the Absensi approval chain (absence-routing.ts's
+ * resolveAbsenceApprovalChain) all build on, so there's exactly one
+ * cycle-guarded parentUnit-walking loop in the codebase instead of one per
+ * caller. Stops (without erroring) if the chain loops back on itself.
+ */
+export async function resolveOrgUnitAncestorChain(orgUnitId: string): Promise<OrgUnit[]> {
+  const chain: OrgUnit[] = [];
+  const visited = new Set<string>();
+  let current = await prisma.orgUnit.findUnique({ where: { id: orgUnitId } });
+  while (current) {
+    if (visited.has(current.id)) break;
+    visited.add(current.id);
+    chain.push(current);
+    if (!current.parentUnitId) break;
+    current = await prisma.orgUnit.findUnique({ where: { id: current.parentUnitId } });
+  }
+  return chain;
+}
+
+/**
+ * Nearest DEPARTMENT-type ancestor (or itself, if it already is one), or
+ * null if the chain never reaches one — matches Section-under-Department
  * and Department-directly org shapes alike (FR-HC-01-09's "Section" +
  * "Department" fields).
  */
 export async function resolveDepartmentId(orgUnitId: string): Promise<string | null> {
-  let current = await prisma.orgUnit.findUnique({ where: { id: orgUnitId } });
-  const visited = new Set<string>();
-  while (current) {
-    if (current.unitType === "DEPARTMENT") return current.id;
-    if (visited.has(current.id)) return null;
-    visited.add(current.id);
-    if (!current.parentUnitId) return null;
-    current = await prisma.orgUnit.findUnique({ where: { id: current.parentUnitId } });
-  }
-  return null;
+  const chain = await resolveOrgUnitAncestorChain(orgUnitId);
+  return chain.find((u) => u.unitType === "DEPARTMENT")?.id ?? null;
 }
 
 /**
- * Section-tier ancestor (or the OrgUnit itself, if it already is one) —
- * null when the Position sits directly under a Department with no
- * intermediate Section, matching FR-HC-01-09's blank "Section" field in
- * that case.
+ * Nearest SECTION-type ancestor (or itself, if it already is one) — null
+ * once the walk reaches a DEPARTMENT or runs out of chain first, matching
+ * FR-HC-01-09's blank "Section" field for a Position with no intermediate
+ * Section at all (including one sitting directly under a Department, or
+ * under Group/Team tiers with no Section in between).
  */
 export async function resolveSectionId(orgUnitId: string): Promise<string | null> {
-  const unit = await prisma.orgUnit.findUnique({ where: { id: orgUnitId } });
-  return unit?.unitType === "SECTION" ? unit.id : null;
+  for (const unit of await resolveOrgUnitAncestorChain(orgUnitId)) {
+    if (unit.unitType === "SECTION") return unit.id;
+    if (unit.unitType === "DEPARTMENT") return null;
+  }
+  return null;
 }
 
 /**

@@ -15,7 +15,9 @@ export default async function OrganizationPage() {
 
   const [initialData, orgUnits] = await Promise.all([
     getOrgChartData(new Date()),
-    prisma.orgUnit.findMany({ where: { activeFlag: true }, orderBy: { unitName: "asc" } }),
+    // DEPARTMENT-only — this feeds the "Departemen" filter dropdown, which
+    // must not list Section/Group/Team-tier units (ORG-01 depth work).
+    prisma.orgUnit.findMany({ where: { activeFlag: true, unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
   ]);
 
   return (

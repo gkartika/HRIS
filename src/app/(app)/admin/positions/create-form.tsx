@@ -1,10 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef } from "react";
 import { createPosition } from "./actions";
+import { POSITION_TYPES } from "@/lib/position-type";
 import type { Job, OrgUnit, Position } from "@/generated/prisma/client";
-
-const POSITION_TYPES = ["STAFF", "TEAM_LEAD", "SECTION_HEAD", "DEPARTMENT_HEAD", "DIRECTOR"];
 
 export function CreatePositionForm({
   jobs,
@@ -16,6 +15,19 @@ export function CreatePositionForm({
   positions: Position[];
 }) {
   const [error, formAction, isPending] = useActionState(createPosition, undefined);
+  const orgUnitRef = useRef<HTMLSelectElement>(null);
+  const positionTypeRef = useRef<HTMLSelectElement>(null);
+
+  // Pre-fills Unit Organisasi/Jenis Posisi from the selected Job's own
+  // defaults (set on the Job's edit page) — a convenience only, never
+  // required: HR Admin can still change either field afterward for this
+  // specific seat, same Job reusable across different units/tiers as
+  // always.
+  function handleJobChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const job = jobs.find((j) => j.id === e.target.value);
+    if (job?.defaultOrgUnitId && orgUnitRef.current) orgUnitRef.current.value = job.defaultOrgUnitId;
+    if (job?.defaultPositionType && positionTypeRef.current) positionTypeRef.current.value = job.defaultPositionType;
+  }
 
   return (
     <form
@@ -33,7 +45,12 @@ export function CreatePositionForm({
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">Jabatan Standar</label>
-        <select name="jobId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        <select
+          name="jobId"
+          required
+          onChange={handleJobChange}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
           <option value="">Pilih jabatan</option>
           {jobs.map((j) => (
             <option key={j.id} value={j.id}>
@@ -53,7 +70,12 @@ export function CreatePositionForm({
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">Unit Organisasi</label>
-        <select name="orgUnitId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        <select
+          name="orgUnitId"
+          required
+          ref={orgUnitRef}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
           <option value="">Pilih unit</option>
           {orgUnits.map((u) => (
             <option key={u.id} value={u.id}>
@@ -64,7 +86,12 @@ export function CreatePositionForm({
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">Jenis Posisi</label>
-        <select name="positionType" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        <select
+          name="positionType"
+          required
+          ref={positionTypeRef}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
           {POSITION_TYPES.map((t) => (
             <option key={t} value={t}>
               {t}

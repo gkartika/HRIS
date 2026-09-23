@@ -10,7 +10,7 @@ export const strings = {
   },
   auth: {
     loginTitle: "Masuk ke Aplikasi SDM",
-    loginSubtitle: "Gunakan akun demo Anda untuk masuk",
+    loginSubtitle: "Masuk menggunakan akun perusahaan Anda",
     usernameLabel: "Email atau Nama Pengguna",
     passwordLabel: "Kata Sandi",
     loginButton: "Masuk",
@@ -18,7 +18,6 @@ export const strings = {
     accountLocked: "Akun terkunci karena terlalu banyak percobaan gagal. Hubungi admin.",
     accountDisabled: "Akun ini telah dinonaktifkan.",
     logoutButton: "Keluar",
-    demoAccountsTitle: "Akun Demo",
     signedInAs: "Masuk sebagai",
   },
   nav: {
@@ -636,6 +635,7 @@ export const strings = {
     overQuotaWarning:
       "Pengajuan ini melebihi jatah tahunan {type}: sudah {used} hari + pengajuan ini {thisRequest} hari = {total} hari, dari jatah {quota} hari.",
     firstApproverDecisionTitle: "Keputusan Penyetuju Pertama",
+    secondApproverDecisionTitle: "Keputusan Penyetuju Kedua",
     hrAdminDecisionTitle: "Keputusan HR Admin",
     approveButton: "Setujui",
     rejectButton: "Tolak",
@@ -673,6 +673,7 @@ export const strings = {
   },
   absenceStatus: {
     SUBMITTED: "Menunggu Penyetuju Pertama",
+    PENDING_SECOND_APPROVER: "Menunggu Penyetuju Kedua",
     PENDING_HR_ADMIN: "Menunggu HR Admin",
     APPROVED: "Disetujui",
     REJECTED: "Ditolak",

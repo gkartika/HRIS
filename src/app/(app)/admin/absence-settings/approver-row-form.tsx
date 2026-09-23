@@ -9,19 +9,21 @@ export interface PositionOption {
 }
 
 export function ApproverRowForm({
-  departmentId,
+  orgUnitId,
   positions,
   currentApproverPositionId,
+  currentRequiresSecondStage,
 }: {
-  departmentId: string;
+  orgUnitId: string;
   positions: PositionOption[];
   currentApproverPositionId: string | null;
+  currentRequiresSecondStage: boolean;
 }) {
-  const action = setAbsenceApproverConfig.bind(null, departmentId);
+  const action = setAbsenceApproverConfig.bind(null, orgUnitId);
   const [error, formAction, isPending] = useActionState(action, undefined);
 
   return (
-    <form action={formAction} className="flex items-center gap-2">
+    <form action={formAction} className="flex flex-wrap items-center gap-2">
       <select
         name="approverPositionId"
         defaultValue={currentApproverPositionId ?? ""}
@@ -34,6 +36,10 @@ export function ApproverRowForm({
           </option>
         ))}
       </select>
+      <label className="flex items-center gap-1.5 text-xs text-slate-600">
+        <input type="checkbox" name="requiresSecondStage" defaultChecked={currentRequiresSecondStage} />
+        Teruskan ke unit induk (tahap ke-2)
+      </label>
       <button
         type="submit"
         disabled={isPending}

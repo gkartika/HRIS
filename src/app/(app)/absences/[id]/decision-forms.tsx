@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import {
   decideAbsenceRequestAsFirstApprover,
+  decideAbsenceRequestAsSecondApprover,
   decideAbsenceRequestAsHrAdmin,
   overrideAbsenceRequest,
   cancelAbsenceRequest,
@@ -75,6 +76,29 @@ export function FirstApproverDecisionButtons({ requestId }: { requestId: string 
         tone="border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
         requireNote={true}
         decideAction={decideAbsenceRequestAsFirstApprover}
+      />
+    </div>
+  );
+}
+
+export function SecondApproverDecisionButtons({ requestId }: { requestId: string }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <DecisionButton
+        requestId={requestId}
+        decision="APPROVE"
+        label={t("absence.approveButton")}
+        tone="bg-emerald-600 text-white hover:bg-emerald-700"
+        requireNote={false}
+        decideAction={decideAbsenceRequestAsSecondApprover}
+      />
+      <DecisionButton
+        requestId={requestId}
+        decision="REJECT"
+        label={t("absence.rejectButton")}
+        tone="border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+        requireNote={true}
+        decideAction={decideAbsenceRequestAsSecondApprover}
       />
     </div>
   );

@@ -17,7 +17,7 @@ export default async function NewRecruitmentRequestPage() {
     prisma.orgUnit.findMany({ where: { activeFlag: true, unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
     prisma.job.findMany({ orderBy: { jobTitle: "asc" } }),
     isHrAdmin(session)
-      ? prisma.employee.findMany({ where: { activeFlag: true }, orderBy: { fullLegalName: "asc" } })
+      ? prisma.employee.findMany({ where: { activeFlag: true }, orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } })
       : Promise.resolve([]),
   ]);
 

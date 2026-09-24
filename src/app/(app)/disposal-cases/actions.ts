@@ -1,11 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
+import { createDisposalCaseInternal } from "@/lib/disposal-create";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations, canDecideAsConfiguredGaApprover } from "@/lib/permissions";
 import {
-  formatDisposalCaseNumber,
   canSubmitDisposalCaseForApproval,
   canDecideDisposalCase,
   decideDisposalCaseStatus,
@@ -16,62 +17,8 @@ import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
-import type { DisposalReason, DisposalMethod } from "@/generated/prisma/enums";
+import type { DisposalMethod } from "@/generated/prisma/enums";
 
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
-
-// The ONE shared creator for every auto-draft trigger (maintenance
-// BEYOND_REPAIR outcome, confirmed loss review) plus the manual OBSOLETE
-// action below — same "one internal creator, no duplicated insert" pattern
-// as offboarding's createOffboardingCaseInternal.
-//
-// requireSession() here is defense-in-depth, not the real permission gate
-// (every current caller already checked its own specific permission before
-// reaching this point) — it just guarantees this exported "use server"
-// function can never execute unauthenticated if a future change ever wires
-// it up to a Client Component directly, bypassing today's server-to-server-
-// only call graph.
-export async function createDisposalCaseInternal(params: {
-  assetId: string;
-  reason: DisposalReason;
-  createdByAccountId: string;
-  sourceWorkOrderId?: string | null;
-  sourceGaRequestId?: string | null;
-  proposalNote?: string | null;
-}): Promise<{ id: string; caseNumber: string }> {
-  await requireSession();
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.disposalCase.count({
-    where: { caseNumber: { startsWith: `DSP-${year}-` } },
-  });
-  const caseNumber = formatDisposalCaseNumber(countThisYear + 1, year);
-
-  const created = await prisma.disposalCase.create({
-    data: {
-      caseNumber,
-      assetId: params.assetId,
-      reason: params.reason,
-      status: "DRAFT",
-      sourceWorkOrderId: params.sourceWorkOrderId ?? null,
-      sourceGaRequestId: params.sourceGaRequestId ?? null,
-      proposalNote: params.proposalNote ?? null,
-      createdByAccountId: params.createdByAccountId,
-    },
-  });
-
-  await logAudit({
-    actorAccountId: params.createdByAccountId,
-    action: "CREATE",
-    datasetName: "DisposalCase",
-    recordId: created.id,
-    reason: `${caseNumber} drafted (reason: ${params.reason})`,
-  });
-
-  return { id: created.id, caseNumber: created.caseNumber };
-}
 
 // Manual trigger — the PDF lists OBSOLETE as a disposal reason but shows no
 // separate flow producing it, unlike BEYOND_REPAIR (maintenance outcome) or

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { deactivateMandatoryTrainingRule } from "./actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export function DeactivateRuleButton({ ruleId }: { ruleId: string }) {
   const [error, formAction, isPending] = useActionState(deactivateMandatoryTrainingRule.bind(null, ruleId), undefined);
@@ -9,9 +10,7 @@ export function DeactivateRuleButton({ ruleId }: { ruleId: string }) {
   return (
     <form action={formAction}>
       {error && <p className="mb-1 text-xs text-rose-600">{error}</p>}
-      <button type="submit" disabled={isPending} className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-60">
-        {isPending ? "..." : "Nonaktifkan"}
-      </button>
+      <ConfirmButton label="Nonaktifkan" pending={isPending} className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-60" />
     </form>
   );
 }

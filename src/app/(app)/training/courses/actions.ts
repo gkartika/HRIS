@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -9,11 +10,6 @@ import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { canPublishCourse, canArchiveCourse } from "@/lib/lms";
 import type { CourseDeliveryMode, CourseMaterialType, QuizQuestionType } from "@/generated/prisma/enums";
-
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
 
 // Only PDF/DOCX/PPTX are file-backed materials (VIDEO/URL are always
 // external links, never uploaded — see CourseMaterial's schema comment).

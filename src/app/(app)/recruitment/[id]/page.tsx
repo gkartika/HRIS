@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateLong } from "@/lib/format";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -14,11 +15,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { computeFulfillmentCounts, canRequestAcceptFulfillment, canCancelRequestStatus } from "@/lib/recruitment";
 import { StartReviewButton, DecisionButtons, DeptHeadDecisionButtons, CancelRequestForm } from "./decision-forms";
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function RecruitmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,7 +26,6 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
     include: {
       department: true,
       job: true,
-      requestedPosition: { include: { job: true, orgUnit: true } },
       requesterEmployee: true,
       requesterPosition: { include: { job: true } },
       submittedByAccount: true,
@@ -74,6 +70,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Rekrutmen", href: "/recruitment" }, { label: "Detail Permintaan" }]} />
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -90,7 +87,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3">
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.requestDate")}</p>
-            <p className="text-sm text-slate-900">{formatDate(request.requestDate)}</p>
+            <p className="text-sm text-slate-900">{formatDateLong(request.requestDate)}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.reasonCode")}</p>
@@ -99,10 +96,6 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.shiftCode")}</p>
             <p className="text-sm text-slate-900">{t(`shiftCode.${request.shiftCode}`)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">{t("recruitment.requestedPosition")}</p>
-            <p className="text-sm text-slate-900">{request.requestedPosition?.positionCode ?? "—"}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.requestedHeadcount")}</p>
@@ -171,12 +164,12 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
         )}
         <p className="mt-4 text-xs text-slate-400">
           {t("recruitment.submittedBy")}: {request.submittedByAccount?.usernameOrEmail ?? "—"} (
-          {formatDate(request.submittedAt)})
+          {formatDateLong(request.submittedAt)})
           {request.deptHeadDecisionByAccount && (
             <>
               {" · "}
               {t("recruitment.deptHeadDecisionBy")}: {request.deptHeadDecisionByAccount.usernameOrEmail} (
-              {formatDate(request.deptHeadDecisionAt)})
+              {formatDateLong(request.deptHeadDecisionAt)})
               {request.deptHeadDecisionPosition && (
                 <>
                   {" — "}
@@ -189,7 +182,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
           {request.approvedByAccount && (
             <>
               {" · "}
-              {t("recruitment.approvedBy")}: {request.approvedByAccount.usernameOrEmail} ({formatDate(request.approvedAt)})
+              {t("recruitment.approvedBy")}: {request.approvedByAccount.usernameOrEmail} ({formatDateLong(request.approvedAt)})
               {request.decisionPosition && (
                 <> — {t("recruitment.decisionPosition")}: {request.decisionPosition.job.jobTitle} ({request.decisionPosition.positionCode})</>
               )}
@@ -200,7 +193,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
               {" · "}
               {t("recruitment.cancelledBy")}:{" "}
               {request.cancelledByEmployee?.fullLegalName ?? request.cancelledByAccount?.usernameOrEmail ?? "—"}
-              {" "}({t(`cancellationAuthority.${request.cancellationAuthority}`)}, {formatDate(request.cancelledAt)})
+              {" "}({t(`cancellationAuthority.${request.cancellationAuthority}`)}, {formatDateLong(request.cancelledAt)})
               {request.cancellationReason && <> — {request.cancellationReason}</>}
             </>
           )}

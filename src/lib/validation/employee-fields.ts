@@ -35,7 +35,7 @@ export const ALLOWED_DOCUMENT_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"] as 
 
 export const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB, per CTL-12/DM-18
 
-function getExtension(fileName: string): string {
+export function getExtension(fileName: string): string {
   const idx = fileName.lastIndexOf(".");
   return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
 }

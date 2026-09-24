@@ -1,3 +1,5 @@
+import { SettingsTabs } from "../settings-tabs";
+import { formatDateMedium } from "@/lib/format";
 import { Fragment } from "react";
 import { requireSession } from "@/lib/require-session";
 import { canManageAttendanceMasterData } from "@/lib/permissions";
@@ -13,10 +15,6 @@ import { HolidayBulkForm } from "./holiday-bulk-form";
 import { DeleteHolidayButton } from "./delete-holiday-button";
 import { UnarchiveTypeButton } from "./unarchive-type-button";
 import type { OrgUnit } from "@/generated/prisma/client";
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(date);
-}
 
 const UNIT_TYPE_LABELS: Record<string, string> = {
   DEPARTMENT: "Departemen",
@@ -77,7 +75,18 @@ function OrgUnitApproverRows({
   );
 }
 
-export default async function AbsenceSettingsPage() {
+const TAB_TITLES: Record<string, string> = {
+  jenis: "Jenis Absensi & Jatah Default",
+  penyetuju: "Penyetuju per Unit Organisasi",
+  jatah: "Jatah per Karyawan",
+  libur: "Libur & Jadwal Kerja",
+};
+const TABS = ["jenis", "penyetuju", "jatah", "libur"] as const;
+type Tab = (typeof TABS)[number];
+
+export default async function AbsenceSettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab: tabParam } = await searchParams;
+  const tab: Tab = TABS.find((x) => x === tabParam) ?? "jenis";
   const session = await requireSession();
   if (!canManageAttendanceMasterData(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
@@ -141,7 +150,7 @@ export default async function AbsenceSettingsPage() {
     hoursMultiplier: tp.hoursMultiplier,
   }));
 
-  const SHIFT_LABELS: Record<string, string> = { SHIFT_1: "Shift 1", SHIFT_2: "Shift 2", SHIFT_3: "Shift 3", NON_SHIFT: "Non-Shift" };
+  const SHIFT_LABELS: Record<string, string> = { SHIFT_1: "Shift 1", SHIFT_2: "Shift 2", SHIFT_3: "Shift 3", NON_SHIFT: "Libur" };
   const minutesByShiftDay = new Map(workSchedule.map((s) => [`${s.shiftType}:${s.dayOfWeek}`, s.minutes]));
   const workScheduleRows = (["SHIFT_1", "SHIFT_2", "SHIFT_3", "NON_SHIFT"] as const).map((shiftType) => ({
     shiftType,
@@ -163,7 +172,7 @@ export default async function AbsenceSettingsPage() {
     absenceTypeCode: o.absenceTypeCode,
     absenceTypeLabel: o.absenceType.label,
     annualDays: o.annualDays,
-    updatedAt: formatDate(o.updatedAt),
+    updatedAt: formatDateMedium(o.updatedAt),
   }));
   const employeeOptions = employees.map((e) => ({ id: e.id, label: `${e.employeeNumber} — ${e.fullLegalName}` }));
   const activeTypeOptions = types.filter((tp) => tp.activeFlag).map((tp) => ({ code: tp.code, label: tp.label }));
@@ -171,33 +180,32 @@ export default async function AbsenceSettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-lg font-medium text-slate-900">Pengaturan Absensi</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Jenis Absensi, alur persetujuan, jatah tahunan, penyetuju per unit organisasi, dan pengecualian jatah per
-          karyawan — semua dalam satu halaman.
-        </p>
+        <SettingsTabs groupId="absensi" current={`/admin/absence-settings?tab=${tab}`} />
+        <h1 className="text-lg font-medium text-slate-900">{TAB_TITLES[tab]}</h1>
       </div>
 
-      <section>
-        <h2 className="text-sm font-medium text-slate-900">Jenis Absensi, Alur Persetujuan & Jatah Default</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          &quot;Perlu Penyetuju Pertama&quot; menentukan apakah jenis ini melalui tahap Penyetuju Pertama sebelum HR Admin
-          (mis. Sakit biasanya tidak). Persetujuan HR Admin selalu menjadi tahap akhir wajib. Jatah Tahunan Default:
-          kosongkan untuk tidak dibatasi (dievaluasi kasus per kasus), isi 0 jika jenis ini tidak diberikan secara
-          default (mis. Cuti — lalu atur jatah per orang lewat Override Jatah per Karyawan di bawah).
-        </p>
-        <div className="mt-3 space-y-3">
-          {typeQuotaRows.map((row) => (
-            <TypeQuotaRowForm key={row.code} row={row} />
-          ))}
-          {typeQuotaRows.length === 0 && <p className="text-sm text-slate-400">Belum ada jenis Absensi.</p>}
-        </div>
-        <div className="mt-3">
-          <NewTypeForm />
-        </div>
-      </section>
+      {tab === "jenis" && (
+        <section>
+          <h2 className="text-sm font-medium text-slate-900">Jenis Absensi, Alur Persetujuan & Jatah Default</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            &quot;Perlu Penyetuju Pertama&quot; menentukan apakah jenis ini melalui tahap Penyetuju Pertama sebelum HR Admin
+            (mis. Sakit biasanya tidak). Persetujuan HR Admin selalu menjadi tahap akhir wajib. Jatah Tahunan Default:
+            kosongkan untuk tidak dibatasi (dievaluasi kasus per kasus), isi 0 jika jenis ini tidak diberikan secara
+            default (mis. Cuti — lalu atur jatah per orang lewat Override Jatah per Karyawan di bawah).
+          </p>
+          <div className="mt-3 space-y-3">
+            {typeQuotaRows.map((row) => (
+              <TypeQuotaRowForm key={row.code} row={row} />
+            ))}
+            {typeQuotaRows.length === 0 && <p className="text-sm text-slate-400">Belum ada jenis Absensi.</p>}
+          </div>
+          <div className="mt-3">
+            <NewTypeForm />
+          </div>
+        </section>
+      )}
 
-      {archivedTypes.length > 0 && (
+      {tab === "jenis" && archivedTypes.length > 0 && (
         <section>
           <h2 className="text-sm font-medium text-slate-900">Jenis Absensi Diarsipkan</h2>
           <p className="mt-1 text-xs text-slate-500">
@@ -229,130 +237,138 @@ export default async function AbsenceSettingsPage() {
         </section>
       )}
 
-      <section>
-        <h2 className="text-sm font-medium text-slate-900">Penyetuju per Unit Organisasi</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Departemen, Seksi, Grup, atau Tim — semuanya bisa diberi satu Posisi penyetuju sendiri, untuk jenis Absensi
-          yang memerlukannya. Unit yang dibiarkan kosong otomatis memakai penyetuju dari unit induk di atasnya.
-          Centang &quot;Teruskan ke unit induk&quot; jika karyawan di unit ini perlu melalui DUA tahap (unit ini, lalu
-          unit induk terdekat yang juga punya penyetuju) — biarkan tidak tercentang untuk satu tahap saja, meskipun
-          unit induknya sendiri punya penyetuju (unit induk itu tetap dipakai langsung oleh karyawan yang berada di
-          unit induk itu sendiri, bukan otomatis jadi tahap ke-2 untuk unit-unit di bawahnya).
-        </p>
-        <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">Unit Organisasi</th>
-                <th className="px-4 py-3 font-medium">Penyetuju</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rootOrgUnits.map((u) => (
-                <OrgUnitApproverRows
-                  key={u.id}
-                  unit={u}
-                  depth={0}
-                  childrenByParentId={childrenByParentId}
-                  positionOptions={positionOptions}
-                  configByOrgUnitId={configByOrgUnitId}
-                />
-              ))}
-            </tbody>
-          </table>
-          {rootOrgUnits.length === 0 && <p className="p-4 text-sm text-slate-400">Belum ada Unit Organisasi.</p>}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-medium text-slate-900">Override Jatah per Karyawan</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Pengecualian jatah tahunan untuk karyawan tertentu, di luar jatah default perusahaan di atas. Kosongkan
-          jumlah hari pada baris yang sudah ada untuk menghapus override tersebut.
-        </p>
-        <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
-          {overrideRows.map((row) => (
-            <QuotaOverrideRowForm key={`${row.employeeId}:${row.absenceTypeCode}`} row={row} />
-          ))}
-          {overrideRows.length === 0 && <p className="text-sm text-slate-400">Belum ada override jatah.</p>}
-        </div>
-        <div className="mt-3">
-          <AddQuotaOverrideForm employees={employeeOptions} absenceTypes={activeTypeOptions} />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-medium text-slate-900">Jadwal Jam Kerja per Shift</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Menit kerja terjadwal per hari, per Shift — sumber perhitungan Total Jam Kerja di Rekonsiliasi Absensi. 0 =
-          hari libur untuk Shift tersebut.
-        </p>
-        <div className="mt-3 space-y-3">
-          {workScheduleRows.map((row) => (
-            <WorkScheduleRowForm key={row.shiftType} row={row} />
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-medium text-slate-900">Kalender Hari Libur</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Tempel sekaligus satu tahun Tanggal Merah nasional atau Cuti Bersama — setiap karyawan aktif otomatis
-          terisi untuk tanggal tersebut, tanpa perlu diklasifikasikan satu per satu di Rekonsiliasi Absensi. Hari
-          yang sudah punya klasifikasi lain (Absensi, override shift, atau Masuk) tidak akan ditimpa.
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <HolidayBulkForm
-            holidayType="TANGGAL_MERAH"
-            title="Tanggal Merah (Libur Nasional)"
-            placeholder={"2026-01-01 Tahun Baru Masehi\n2026-08-17 Hari Kemerdekaan RI"}
-          />
-          <HolidayBulkForm
-            holidayType="CUTI_BERSAMA"
-            title="Cuti Bersama"
-            placeholder={"2026-04-20 Cuti Bersama Idul Fitri\n2026-04-21 Cuti Bersama Idul Fitri"}
-          />
-        </div>
-        <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs text-slate-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">Tanggal</th>
-                <th className="px-4 py-3 font-medium">Nama</th>
-                <th className="px-4 py-3 font-medium">Jenis</th>
-                <th className="px-4 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {companyHolidays.map((h) => (
-                <tr key={h.id} className="border-t border-slate-100">
-                  <td className="px-4 py-2.5 font-mono text-xs">{formatDate(h.date)}</td>
-                  <td className="px-4 py-2.5">{h.label}</td>
-                  <td className="px-4 py-2.5">
-                    <span
-                      className={`rounded-md px-2 py-1 text-xs font-medium ${
-                        h.holidayType === "CUTI_BERSAMA" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"
-                      }`}
-                    >
-                      {h.holidayType === "CUTI_BERSAMA" ? "Cuti Bersama" : "Tanggal Merah"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <DeleteHolidayButton id={h.id} />
-                  </td>
-                </tr>
-              ))}
-              {companyHolidays.length === 0 && (
+      {tab === "penyetuju" && (
+        <section>
+          <h2 className="text-sm font-medium text-slate-900">Penyetuju per Unit Organisasi</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Departemen, Seksi, Grup, atau Tim — semuanya bisa diberi satu Posisi penyetuju sendiri, untuk jenis Absensi
+            yang memerlukannya. Unit yang dibiarkan kosong otomatis memakai penyetuju dari unit induk di atasnya.
+            Centang &quot;Teruskan ke unit induk&quot; jika karyawan di unit ini perlu melalui DUA tahap (unit ini, lalu
+            unit induk terdekat yang juga punya penyetuju) — biarkan tidak tercentang untuk satu tahap saja, meskipun
+            unit induknya sendiri punya penyetuju (unit induk itu tetap dipakai langsung oleh karyawan yang berada di
+            unit induk itu sendiri, bukan otomatis jadi tahap ke-2 untuk unit-unit di bawahnya).
+          </p>
+          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs text-slate-500">
                 <tr>
-                  <td className="px-4 py-4 text-sm text-slate-400" colSpan={4}>
-                    Belum ada tanggal yang dikonfigurasi.
-                  </td>
+                  <th className="px-4 py-3 font-medium">Unit Organisasi</th>
+                  <th className="px-4 py-3 font-medium">Penyetuju</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {rootOrgUnits.map((u) => (
+                  <OrgUnitApproverRows
+                    key={u.id}
+                    unit={u}
+                    depth={0}
+                    childrenByParentId={childrenByParentId}
+                    positionOptions={positionOptions}
+                    configByOrgUnitId={configByOrgUnitId}
+                  />
+                ))}
+              </tbody>
+            </table>
+            {rootOrgUnits.length === 0 && <p className="p-4 text-sm text-slate-400">Belum ada Unit Organisasi.</p>}
+          </div>
+        </section>
+      )}
+
+      {tab === "jatah" && (
+        <section>
+          <h2 className="text-sm font-medium text-slate-900">Override Jatah per Karyawan</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Pengecualian jatah tahunan untuk karyawan tertentu, di luar jatah default perusahaan di atas. Kosongkan
+            jumlah hari pada baris yang sudah ada untuk menghapus override tersebut.
+          </p>
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
+            {overrideRows.map((row) => (
+              <QuotaOverrideRowForm key={`${row.employeeId}:${row.absenceTypeCode}`} row={row} />
+            ))}
+            {overrideRows.length === 0 && <p className="text-sm text-slate-400">Belum ada override jatah.</p>}
+          </div>
+          <div className="mt-3">
+            <AddQuotaOverrideForm employees={employeeOptions} absenceTypes={activeTypeOptions} />
+          </div>
+        </section>
+      )}
+
+      {tab === "libur" && (
+        <section>
+          <h2 className="text-sm font-medium text-slate-900">Jadwal Jam Kerja per Shift</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Menit kerja terjadwal per hari, per Shift — sumber perhitungan Total Jam Kerja di Rekonsiliasi Absensi. 0 =
+            hari libur untuk Shift tersebut.
+          </p>
+          <div className="mt-3 space-y-3">
+            {workScheduleRows.map((row) => (
+              <WorkScheduleRowForm key={row.shiftType} row={row} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tab === "libur" && (
+        <section>
+          <h2 className="text-sm font-medium text-slate-900">Kalender Hari Libur</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Tempel sekaligus satu tahun Tanggal Merah nasional atau Cuti Bersama — setiap karyawan aktif otomatis
+            terisi untuk tanggal tersebut, tanpa perlu diklasifikasikan satu per satu di Rekonsiliasi Absensi. Hari
+            yang sudah punya klasifikasi lain (Absensi, override shift, atau Masuk) tidak akan ditimpa.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <HolidayBulkForm
+              holidayType="TANGGAL_MERAH"
+              title="Tanggal Merah (Libur Nasional)"
+              placeholder={"2026-01-01 Tahun Baru Masehi\n2026-08-17 Hari Kemerdekaan RI"}
+            />
+            <HolidayBulkForm
+              holidayType="CUTI_BERSAMA"
+              title="Cuti Bersama"
+              placeholder={"2026-04-20 Cuti Bersama Idul Fitri\n2026-04-21 Cuti Bersama Idul Fitri"}
+            />
+          </div>
+          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Tanggal</th>
+                  <th className="px-4 py-3 font-medium">Nama</th>
+                  <th className="px-4 py-3 font-medium">Jenis</th>
+                  <th className="px-4 py-3 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {companyHolidays.map((h) => (
+                  <tr key={h.id} className="border-t border-slate-100">
+                    <td className="px-4 py-2.5 font-mono text-xs">{formatDateMedium(h.date)}</td>
+                    <td className="px-4 py-2.5">{h.label}</td>
+                    <td className="px-4 py-2.5">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-medium ${
+                          h.holidayType === "CUTI_BERSAMA" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"
+                        }`}
+                      >
+                        {h.holidayType === "CUTI_BERSAMA" ? "Cuti Bersama" : "Tanggal Merah"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <DeleteHolidayButton id={h.id} />
+                    </td>
+                  </tr>
+                ))}
+                {companyHolidays.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-4 text-sm text-slate-400" colSpan={4}>
+                      Belum ada tanggal yang dikonfigurasi.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

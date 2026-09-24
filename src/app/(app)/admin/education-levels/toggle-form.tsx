@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { toggleEducationLevel } from "./actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export function ToggleActiveForm({ levelId, currentActive }: { levelId: string; currentActive: boolean }) {
   const action = toggleEducationLevel.bind(null, levelId);
@@ -10,13 +11,13 @@ export function ToggleActiveForm({ levelId, currentActive }: { levelId: string; 
   return (
     <form action={formAction}>
       <input type="hidden" name="activeFlag" value={currentActive ? "" : "on"} />
-      <button
-        type="submit"
-        disabled={isPending}
-        className="text-xs text-indigo-600 hover:underline disabled:opacity-60"
-      >
-        {currentActive ? "Nonaktifkan" : "Aktifkan"}
-      </button>
+      {currentActive ? (
+        <ConfirmButton label="Nonaktifkan" pending={isPending} className="text-xs text-indigo-600 hover:underline disabled:opacity-60" />
+      ) : (
+        <button type="submit" disabled={isPending} className="text-xs text-indigo-600 hover:underline disabled:opacity-60">
+          Aktifkan
+        </button>
+      )}
     </form>
   );
 }

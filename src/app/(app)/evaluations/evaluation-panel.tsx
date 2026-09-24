@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateLong } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, canReleaseEvaluation, canSubmitEvaluationAs, canViewEvaluation } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -9,11 +10,6 @@ import { t } from "@/lib/i18n/id";
 import { canReleaseEvaluationStatus, canSubmitEvaluationSlot, type EvaluationScores } from "@/lib/evaluation";
 import { isOverdue } from "@/lib/work-calendar";
 import { ReleaseEvaluationForm, EvaluationSlotForm } from "./decision-forms";
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
 
 function EvaluationScoreSummary({ scores, total }: { scores: unknown; total: number | null }) {
   const s = (scores ?? {}) as EvaluationScores;
@@ -99,7 +95,7 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
   const canP1Submit = isViewerP1 && canSubmitEvaluationSlot(evaluation.status, evaluation.p1SubmittedAt);
   const canP2Submit = isViewerP2 && canSubmitEvaluationSlot(evaluation.status, evaluation.p2SubmittedAt);
 
-  const employees = canRelease ? await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" } }) : [];
+  const employees = canRelease ? await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } }) : [];
   const overdue = isOverdue(evaluation.evaluationDueDate);
 
   return (
@@ -122,7 +118,7 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
 
       {evaluation.evaluationDueDate && (
         <p className={`text-xs ${overdue ? "text-rose-600" : "text-slate-500"}`}>
-          {t("evaluation.dueDate")}: {formatDate(evaluation.evaluationDueDate)}
+          {t("evaluation.dueDate")}: {formatDateLong(evaluation.evaluationDueDate)}
           {overdue && ` — ${t("evaluation.overdueNotice")}`}
         </p>
       )}

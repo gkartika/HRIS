@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { FilePlus } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, canSubmitMovementRequest } from "@/lib/permissions";
@@ -7,6 +9,7 @@ import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { getActiveLevel3Positions } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import type { Prisma, MovementRequestStatus, MovementType } from "@/generated/prisma/client";
 
 const MOVEMENT_STATUSES: MovementRequestStatus[] = [
@@ -23,7 +26,7 @@ const MOVEMENT_TYPES: MovementType[] = ["PROMOTION", "ROTATION", "MUTATION", "DE
 export default async function MovementListPage({
   searchParams,
 }: {
-  searchParams: Promise<{
+  searchParams: Promise<{ page?: string;
     requestNumber?: string;
     employeeId?: string;
     status?: string;
@@ -58,6 +61,7 @@ export default async function MovementListPage({
     approverAccountId,
     effectiveFrom,
     effectiveTo,
+    page: pageRaw,
   } = await searchParams;
 
   // Perubahan Posisi refactor: Department Head 3B sees every request within
@@ -112,8 +116,12 @@ export default async function MovementListPage({
   }
   const where: Prisma.MovementRequestWhereInput = conditions.length > 0 ? { AND: conditions } : {};
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.movementRequest.count({ where });
   const [requests, departments, positions, employees, approverAccounts] = await Promise.all([
     prisma.movementRequest.findMany({
+      skip,
+      take,
       where,
       include: {
         employee: true,
@@ -124,7 +132,7 @@ export default async function MovementListPage({
     }),
     prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
     prisma.position.findMany({ include: { job: true }, orderBy: { positionCode: "asc" } }),
-    prisma.employee.findMany({ orderBy: { fullLegalName: "asc" } }),
+    prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } }),
     prisma.account.findMany({
       where: { OR: [{ movementRequestsDecidedBy: { some: {} } }, { movementRequestsDeptHeadDecisionsBy: { some: {} } }] },
       orderBy: { usernameOrEmail: "asc" },
@@ -281,9 +289,7 @@ export default async function MovementListPage({
       </form>
 
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          {hasFilters ? t("common.noFilteredResults") : t("movement.emptyState")}
-        </p>
+        <EmptyState filtered={hasFilters} message={t("movement.emptyState")} resetHref="/movements" action={canSubmit ? { href: "/movements/new", label: "Ajukan Perubahan Posisi" } : undefined} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -322,6 +328,7 @@ export default async function MovementListPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/movements" params={{ requestNumber, employeeId, status, movementType, departmentId, currentPositionId, proposedPositionId, requesterEmployeeId, approverAccountId, effectiveFrom, effectiveTo }} />
     </div>
   );
 }

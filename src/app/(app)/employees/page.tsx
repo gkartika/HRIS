@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { InviteAllButton } from "./invite-all-button";
 import { UserPlus } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { canListEmployees, canCreateEmployee, isHrAdmin, projectEmployee } from "@/lib/permissions";
+import { canManageAccountAccess, canListEmployees, canCreateEmployee, isHrAdmin, projectEmployee } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import { isEmployeeProfileIncomplete } from "@/lib/employee-completeness";
 import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
 import type { Prisma } from "@/generated/prisma/client";
@@ -103,6 +105,8 @@ export default async function EmployeesPage({
           <h1 className="text-lg font-medium text-slate-900">{t("employee.listTitle")}</h1>
           <p className="mt-1 text-xs text-slate-400">{t("common.filteredCount", { shown: filteredCount, total: totalCount })}</p>
         </div>
+        <div className="flex flex-wrap items-start justify-end gap-4">
+        {canManageAccountAccess(session) && <InviteAllButton />}
         {canCreateEmployee(session) && (
           <Link
             href="/employees/new"
@@ -112,6 +116,7 @@ export default async function EmployeesPage({
             {t("employee.addEmployee")}
           </Link>
         )}
+        </div>
       </div>
 
       <form className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -198,9 +203,7 @@ export default async function EmployeesPage({
       </form>
 
       {employees.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          {hasFilters ? t("common.noFilteredResults") : t("employee.emptyState")}
-        </p>
+        <EmptyState filtered={hasFilters} message={t("employee.emptyState")} resetHref="/employees" action={canCreateEmployee(session) ? { href: "/employees/new", label: "Tambah Karyawan" } : undefined} />
       ) : (
         <>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">

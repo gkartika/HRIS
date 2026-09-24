@@ -10,7 +10,7 @@ const SHIFT_DIGIT: Record<string, string> = { SHIFT_1: "1", SHIFT_2: "2", SHIFT_
 // Per direct request: "CT1" (Cuti, Shift 1), "SD2" (SDSD, Shift 2), etc. —
 // the absence code as-is (CUTI/IZIN were renamed to CT/I directly in the
 // database for this) plus a digit for the shift the entry carried, or "L"
-// for Non-Shift/Libur (never combined into the code itself, e.g. never
+// for Libur (never combined into the code itself, e.g. never
 // "CTL" — a Libur day is just "L", full stop, per direct correction).
 // A day with no absence code shows the shift alone (digit or "L") — a
 // "Masuk" override reuses this exact same branch, no separate "H" code:

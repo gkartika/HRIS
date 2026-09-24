@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -52,9 +54,9 @@ export async function submitTrainingRequest(_prevState: string | undefined, form
 
   const departmentIdSnapshot = employee.currentPosition ? await resolveDepartmentId(employee.currentPosition.orgUnitId) : null;
 
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.trainingRequest.count({ where: { requestNumber: { startsWith: `TRN-${year}-` } } });
-  const requestNumber = formatTrainingRequestNumber(countThisYear + 1, year);
+  const year = companyYear();
+  const seq = await nextSequence(`TRN-${year}`);
+  const requestNumber = formatTrainingRequestNumber(seq, year);
 
   const requesterType: TrainingRequesterType = isSelf ? "SELF" : "LEVEL_3";
 

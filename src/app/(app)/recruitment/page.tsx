@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { FilePlus } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import { computeFulfillmentCounts } from "@/lib/recruitment";
 import type { Prisma, RecruitmentRequestStatus } from "@/generated/prisma/client";
 
@@ -25,10 +28,10 @@ const RECRUITMENT_STATUSES: RecruitmentRequestStatus[] = [
 export default async function RecruitmentListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; departmentId?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; departmentId?: string }>;
 }) {
   const session = await requireSession();
-  const { status, departmentId } = await searchParams;
+  const { status, departmentId, page: pageRaw } = await searchParams;
 
   const where: Prisma.RecruitmentRequestWhereInput = isHrAdmin(session)
     ? {}
@@ -36,8 +39,12 @@ export default async function RecruitmentListPage({
   if (status) where.status = status as RecruitmentRequestStatus;
   if (departmentId) where.departmentId = departmentId;
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.recruitmentRequest.count({ where });
   const [requests, departments] = await Promise.all([
     prisma.recruitmentRequest.findMany({
+      skip,
+      take,
       where,
       include: { department: true, job: true, fulfillments: true },
       orderBy: { createdAt: "desc" },
@@ -121,9 +128,7 @@ export default async function RecruitmentListPage({
       </form>
 
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          {hasFilters ? t("common.noFilteredResults") : "Belum ada permintaan tenaga kerja."}
-        </p>
+        <EmptyState filtered={hasFilters} message={"Belum ada permintaan tenaga kerja."} resetHref="/recruitment" action={canSubmitRecruitmentRequest(session) ? { href: "/recruitment/new", label: "Buat Permintaan Tenaga Kerja" } : undefined} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -163,6 +168,7 @@ export default async function RecruitmentListPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/recruitment" params={{ status, departmentId }} />
     </div>
   );
 }

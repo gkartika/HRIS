@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin } from "@/lib/permissions";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { prisma } from "@/lib/db";
@@ -16,7 +16,7 @@ const HEADERS = ["requestNumber", "employeeNumber", "employeeName", "requestedTo
 // requests (submitted or subject) plus any Department they hold Level-3
 // Department Head authority in.
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const isAdmin = isHrAdmin(session) || isTrainingAdmin(session);

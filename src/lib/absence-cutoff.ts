@@ -1,3 +1,4 @@
+import { companyDateParts } from "@/lib/company-time";
 // Rekonsiliasi Absensi cutoff period — per direct request, the company's
 // payroll cutoff runs 21st through the 20th of the next month (both
 // inclusive), the same convention the old spreadsheet tracker used. Pure/
@@ -35,9 +36,9 @@ function formatPeriodLabel(start: Date, end: Date): string {
 // started the 21st of the PREVIOUS month; day 21-31 falls in the period
 // starting the 21st of THIS month.
 export function resolveCutoffPeriod(referenceDate: Date): CutoffPeriod {
-  const day = referenceDate.getDate();
-  const startMonthDate = day >= 21 ? referenceDate : new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1);
-  const start = new Date(Date.UTC(startMonthDate.getFullYear(), startMonthDate.getMonth(), 21));
+  const { year, month, day } = companyDateParts(referenceDate);
+  // month is 1-based here; the period starts on the 21st of this month (day >= 21) or of the previous one.
+  const start = new Date(Date.UTC(year, day >= 21 ? month - 1 : month - 2, 21));
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 20));
   return { start, end, label: formatPeriodLabel(start, end) };
 }

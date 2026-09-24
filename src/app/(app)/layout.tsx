@@ -13,9 +13,11 @@ import {
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
-import { getActiveDirectorCandidates } from "@/lib/org-chart";
+import { getActiveAssignmentsOf } from "@/lib/active-assignments";
+import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
+import { AppShell } from "./app-shell";
 import { SidebarNav, type SidebarNavGroup, type SidebarNavItem } from "./sidebar-nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -32,14 +34,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   //   same as Perubahan Posisi.
   // - COM-10/COM-15: Director gap-report/P1 authority, resolved live from
   //   the org root Position's active Assignment.
-  const [hrManagerPositions, level3DepartmentIds, directorCandidates] = await Promise.all([
+  const [hrManagerPositions, level3DepartmentIds, myAssignments] = await Promise.all([
     getActiveHrManagerPositions(session.user.employeeId),
     getLevel3DepartmentIds(session.user.employeeId),
-    getActiveDirectorCandidates(),
+    getActiveAssignmentsOf(session.user.employeeId),
   ]);
   const isHrManagerNow = hrManagerPositions.length > 0;
   const isLevel3Anywhere = level3DepartmentIds.length > 0;
-  const isDirectorAnywhere = directorCandidates.some((c) => c.employeeId === session.user.employeeId);
+  // Director = holder of the single root DIRECTOR position (ORG-15/DEC-011),
+  // read from this employee's own assignments — no company-wide lookup.
+  const isDirectorAnywhere = myAssignments.some(
+    (a) => a.position.positionType === "DIRECTOR" && !a.position.reportsToPositionId
+  );
 
   // Categorized sidebar: every visibility condition below is unchanged from
   // before — each item is just tagged into one of 8 buckets instead of one
@@ -98,12 +104,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (session.user.employeeId) {
     buckets.saya.push({ href: "/my-evaluations", label: t("evaluation.myEvaluationsTitle"), icon: "FileSignature" });
   }
-  // LIF-06/DSH-14: same broad list-nav visibility as Contract/Movement —
-  // HR Admin (full operational access) or any employee-linked account (who
-  // may need to report a direct report's resignation, or view their own
-  // case), scoped further on the list page itself.
-  if (isHrAdmin(session) || session.user.employeeId) {
+  // Offboarding is opened by HR Admin alone; a leaving employee only gets the
+  // entry once HR has opened a case for them.
+  if (isHrAdmin(session)) {
     buckets.rekrutmenMutasi.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: "UserMinus" });
+  } else if (session.user.employeeId) {
+    const ownCase = await prisma.offboardingCase.findFirst({
+      where: { employeeId: session.user.employeeId, status: { not: "CANCELLED" } },
+      select: { id: true },
+    });
+    if (ownCase) {
+      buckets.rekrutmenMutasi.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: "UserMinus" });
+    }
   }
   // New Shift Assignment module, per direct user request — HR Admin or any
   // active Level-3 (3A/3B) holder (same eligibility as Perubahan Posisi
@@ -142,7 +154,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     buckets.saya.push({ href: "/hr-reports", label: t("nav.hrReports"), icon: "BarChart3" });
   }
   if (isHrAdmin(session)) {
-    bottomItems.push({ href: "/admin", label: "Pengaturan Organisasi", icon: "Settings" });
+    bottomItems.push({ href: "/admin", label: "Pengaturan", icon: "Settings" });
     buckets.laporanAudit.push({ href: "/audit-log", label: t("nav.auditLog"), icon: "ShieldCheck" });
   }
   // "Report 2026" replacement — weekly mandays-lost report per direct
@@ -257,11 +269,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { key: "laporanAudit", label: "Laporan & Audit", items: buckets.laporanAudit },
   ].filter((g) => g.items.length > 0);
 
+  // Every account can change its own password.
+  bottomItems.push({ href: "/change-password", label: "Ganti Kata Sandi", icon: "ShieldCheck" });
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <aside className="flex w-64 shrink-0 flex-col bg-brand">
+    <AppShell
+      appName={t("app.name")}
+      sidebar={
+        <>
         <div className="border-b border-white/10 px-5 py-5">
           <p className="text-[11px] font-extrabold uppercase tracking-wide text-brand-accent">{t("app.company")}</p>
           <p className="mt-0.5 text-sm font-bold text-white">{t("app.name")}</p>
@@ -273,10 +289,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <p className="text-xs text-white/65">{roleLabels}</p>
           <LogoutButton />
         </div>
-      </aside>
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
-      </main>
-    </div>
+        </>
+      }
+    >
+      {children}
+    </AppShell>
   );
 }

@@ -3,7 +3,6 @@ import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { reconcileDueDailyAttendance } from "@/lib/attendance-reconciliation";
 import { resolveCutoffPeriod, previousCutoffPeriod, nextCutoffPeriod, formatCutoffParam, parseCutoffParam } from "@/lib/absence-cutoff";
 import { getUnresolvedDays } from "@/lib/attendance-reconciliation-queue";
 import { ClassifyRowForm } from "./classify-row-form";
@@ -28,7 +27,6 @@ export default async function AttendanceReconciliationPage({
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  await reconcileDueDailyAttendance();
 
   const { cutoff } = await searchParams;
   const referenceDate = parseCutoffParam(cutoff) ?? new Date();

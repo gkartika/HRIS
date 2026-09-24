@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -16,11 +17,6 @@ import {
   computeAvailableQuantityAfterReturn,
 } from "@/lib/assets";
 import type { AssetCustodyTargetType, AssetInspectionResult, AssetTrackingType } from "@/generated/prisma/enums";
-
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
 
 export async function createFixedAsset(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();

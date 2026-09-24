@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { formatDateLong } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import {
   canApproveMovementRequest,
@@ -27,11 +28,7 @@ import {
   MovementHrFieldsForm,
 } from "./decision-forms";
 import { EvaluationPanel } from "../../evaluations/evaluation-panel";
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function MovementDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -121,6 +118,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Perubahan Posisi", href: "/movements" }, { label: "Detail Permintaan" }]} />
       {isLegacyType && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           {t("movement.legacyTypeNotice")}
@@ -168,7 +166,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           )}
           <div>
             <p className="text-xs text-slate-500">{t("movement.proposedEffectiveDate")}</p>
-            <p className="text-sm text-slate-900">{formatDate(request.proposedEffectiveDate)}</p>
+            <p className="text-sm text-slate-900">{formatDateLong(request.proposedEffectiveDate)}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.submittedBy")}</p>
@@ -256,12 +254,12 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
         )}
 
         <p className="mt-4 text-xs text-slate-400">
-          {t("recruitment.submittedBy")}: {request.submittedByAccount.usernameOrEmail} ({formatDate(request.submittedAt)})
+          {t("recruitment.submittedBy")}: {request.submittedByAccount.usernameOrEmail} ({formatDateLong(request.submittedAt)})
           {request.deptHeadDecisionByAccount && (
             <>
               {" · "}
               {t("recruitment.deptHeadDecisionBy")}: {request.deptHeadDecisionByAccount.usernameOrEmail} (
-              {formatDate(request.deptHeadDecisionAt)})
+              {formatDateLong(request.deptHeadDecisionAt)})
               {request.deptHeadDecisionPosition && (
                 <>
                   {" — "}
@@ -274,7 +272,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           {request.decisionByAccount && (
             <>
               {" · "}
-              {t("recruitment.approvedBy")}: {request.decisionByAccount.usernameOrEmail} ({formatDate(request.decisionAt)})
+              {t("recruitment.approvedBy")}: {request.decisionByAccount.usernameOrEmail} ({formatDateLong(request.decisionAt)})
               {request.decisionPosition && (
                 <> — {t("recruitment.decisionPosition")}: {request.decisionPosition.job.jobTitle} ({request.decisionPosition.positionCode})</>
               )}
@@ -283,7 +281,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           {request.implementedByAccount && (
             <>
               {" · "}
-              {t("movement.implementedBy")}: {request.implementedByAccount.usernameOrEmail} ({formatDate(request.implementedAt)})
+              {t("movement.implementedBy")}: {request.implementedByAccount.usernameOrEmail} ({formatDateLong(request.implementedAt)})
             </>
           )}
           {request.status === "CANCELLED" && (
@@ -291,7 +289,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
               {" · "}
               {t("recruitment.cancelledBy")}:{" "}
               {request.cancelledByEmployee?.fullLegalName ?? request.cancelledByAccount?.usernameOrEmail ?? "—"}
-              {" "}({t(`cancellationAuthority.${request.cancellationAuthority}`)}, {formatDate(request.cancelledAt)})
+              {" "}({t(`cancellationAuthority.${request.cancellationAuthority}`)}, {formatDateLong(request.cancelledAt)})
               {request.cancellationReason && <> — {request.cancellationReason}</>}
             </>
           )}

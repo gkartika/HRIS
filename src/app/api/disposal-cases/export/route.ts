@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -9,7 +9,7 @@ const HEADERS = ["caseNumber", "asset", "reason", "status", "executionMethod", "
 
 // GA-Admin-only, matching the /disposal-cases list page's own gate.
 export async function GET() {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canManageGaOperations(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

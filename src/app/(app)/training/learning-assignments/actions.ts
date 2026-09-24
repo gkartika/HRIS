@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -17,11 +18,6 @@ import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 import type { EffectivenessResult } from "@/generated/prisma/enums";
-
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
 
 // PDF workflow section C, In-person/Blended branch: "Training Admin records
 // attendance and evidence." Evidence upload is optional (a sign-in sheet

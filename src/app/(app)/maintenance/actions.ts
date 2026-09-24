@@ -1,25 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
 import {
   formatWorkOrderNumber,
   canExecuteMaintenanceWorkOrder,
-  shouldDraftDisposalCaseForMaintenanceOutcome,
+  disposalReasonForMaintenanceOutcome,
   computeAssetStatusAfterMaintenanceOutcome,
 } from "@/lib/ga-operations";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
-import { createDisposalCaseInternal } from "@/app/(app)/disposal-cases/actions";
+import { createDisposalCaseInternal } from "@/lib/disposal-create";
 import type { MaintenanceWorkType, MaintenanceOutcome } from "@/generated/prisma/enums";
-
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
 
 export async function createMaintenancePlan(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
@@ -98,11 +96,9 @@ async function createWorkOrder(params: {
   const workType = workTypeRaw as MaintenanceWorkType;
   const checklistNotes = (params.formData.get("checklistNotes") as string)?.trim() || null;
 
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.maintenanceWorkOrder.count({
-    where: { workOrderNumber: { startsWith: `WO-${year}-` } },
-  });
-  const workOrderNumber = formatWorkOrderNumber(countThisYear + 1, year);
+  const year = companyYear();
+  const seq = await nextSequence(`WO-${year}`);
+  const workOrderNumber = formatWorkOrderNumber(seq, year);
 
   const workOrder = await prisma.maintenanceWorkOrder.create({
     data: {
@@ -270,10 +266,11 @@ export async function executeMaintenanceWorkOrder(
     }
   });
 
-  if (shouldDraftDisposalCaseForMaintenanceOutcome(outcome)) {
+  const disposalReason = disposalReasonForMaintenanceOutcome(outcome);
+  if (disposalReason) {
     await createDisposalCaseInternal({
       assetId: workOrder.assetId,
-      reason: "BEYOND_REPAIR",
+      reason: disposalReason,
       createdByAccountId: session.user.id,
       sourceWorkOrderId: workOrderId,
       proposalNote: diagnosisNote,
@@ -292,6 +289,6 @@ export async function executeMaintenanceWorkOrder(
   revalidatePath("/maintenance/work-orders");
   revalidatePath(`/assets/${workOrder.assetId}`);
   if (workOrder.sourceGaRequestId) revalidatePath(`/ga-requests/${workOrder.sourceGaRequestId}`);
-  if (shouldDraftDisposalCaseForMaintenanceOutcome(outcome)) revalidatePath("/disposal-cases");
+  if (disposalReason) revalidatePath("/disposal-cases");
   return undefined;
 }

@@ -26,10 +26,6 @@ import {
   HrManagerDecisionButtons as RenewalHrManagerDecisionButtons,
   DeptHeadRecommendationForm as RenewalDeptHeadForm,
 } from "../contracts/[id]/renewal-decision-forms";
-import {
-  DecideOffboardingCaseAsDeptHeadForm,
-  DecideOffboardingCaseForm,
-} from "../offboarding/[id]/decision-forms";
 import { DeptHeadDecisionForm as TrainingDeptHeadDecisionForm } from "../training-requests/[id]/dept-head-decision-form";
 import {
   ApproverDecisionButtons as GaNewAssetDecisionButtons,
@@ -246,25 +242,6 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
               <Link href={`/evaluations/${e.id}`} className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">
                 Isi Sekarang
               </Link>
-            </ApprovalRow>
-          ))}
-        </ApprovalCategory>
-
-        <ApprovalCategory label="Offboarding" count={pending.pendingDeptHeadOffboarding.length + pending.pendingHrManagerOffboarding.length}>
-          {pending.pendingDeptHeadOffboarding.map((c) => (
-            <ApprovalRow key={c.id} title={`Offboarding — ${c.employee.fullLegalName}`} subtitle={`${c.caseNumber} (Kepala Departemen)`} href={`/offboarding/${c.id}`}>
-              <DecideOffboardingCaseAsDeptHeadForm
-                caseId={c.id}
-                decisionPositions={deptHeadPositions.map((p) => ({ positionId: p.positionId, positionCode: p.positionCode, jobTitle: p.jobTitle }))}
-              />
-            </ApprovalRow>
-          ))}
-          {pending.pendingHrManagerOffboarding.map((c) => (
-            <ApprovalRow key={c.id} title={`Offboarding — ${c.employee.fullLegalName}`} subtitle={c.caseNumber} href={`/offboarding/${c.id}`}>
-              <DecideOffboardingCaseForm
-                caseId={c.id}
-                decisionPositions={pending.hrManagerPositions.map((p) => ({ positionId: p.positionId, positionCode: p.positionCode, jobTitle: p.jobTitle }))}
-              />
             </ApprovalRow>
           ))}
         </ApprovalCategory>
@@ -584,7 +561,7 @@ export default async function DashboardPage({
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-slate-600">
-                        {new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(row.endDate)}
+                        {new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium" }).format(row.endDate)}
                       </td>
                       <td className="px-4 py-3">
                         <span

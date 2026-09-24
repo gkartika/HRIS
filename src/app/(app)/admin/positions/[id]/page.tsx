@@ -3,7 +3,8 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { EditPositionForm } from "./edit-form";
+import { EditPositionForm } from "./edit-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditPositionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,6 +23,7 @@ export default async function EditPositionPage({ params }: { params: Promise<{ i
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Pengaturan", href: "/admin" }, { label: "Posisi Organisasi", href: "/admin/positions" }, { label: "Detail Posisi" }]} />
       <h1 className="text-lg font-medium text-slate-900">Ubah Posisi Organisasi</h1>
       <p className="mt-1 font-mono text-xs text-slate-400">{position.positionCode}</p>
       <div className="mt-4 max-w-lg">

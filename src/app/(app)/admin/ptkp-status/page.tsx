@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { SettingsTabs } from "../settings-tabs";
 import { CreatePtkpStatusForm } from "./create-form";
 import { ToggleActiveForm } from "./toggle-form";
 
@@ -17,6 +18,7 @@ export default async function PtkpStatusPage() {
 
   return (
     <div>
+      <SettingsTabs groupId="karyawan" current="/admin/ptkp-status" />
       <h1 className="text-lg font-medium text-slate-900">PTKP Pajak</h1>
       <p className="mt-1 text-sm text-slate-500">
         Daftar kode status PTKP untuk field PTKP Pajak pada data karyawan.

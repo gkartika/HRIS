@@ -8,6 +8,7 @@ import { resolveDepartmentId } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EvaluationPanel } from "../evaluation-panel";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EvaluationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,6 +49,7 @@ export default async function EvaluationDetailPage({ params }: { params: Promise
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Evaluasi", href: "/evaluations" }, { label: "Detail Evaluasi" }]} />
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex items-start justify-between">
           <div>

@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n/id";
 import { AssignForms } from "./assign-forms";
 import { CustodyActions } from "./custody-actions";
 import { MarkObsoleteForm } from "./mark-obsolete-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const STATUS_TONE: Record<string, string> = {
   AVAILABLE: "bg-emerald-50 text-emerald-700",
@@ -82,6 +83,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Aset", href: "/assets" }, { label: "Detail Aset" }]} />
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">

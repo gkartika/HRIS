@@ -27,7 +27,7 @@ describe("formatDayCode", () => {
     expect(formatDayCode(makeCell({ absenceTypeCode: "SD", shiftType: null, assignedShiftType: "SHIFT_2" }))).toBe("SD2");
   });
 
-  it("a Non-Shift/Libur day is just \"L\", never combined with the absence code", () => {
+  it("a Libur day is just \"L\", never combined with the absence code", () => {
     expect(formatDayCode(makeCell({ absenceTypeCode: "CT", shiftType: "NON_SHIFT" }))).toBe("L");
   });
 
@@ -35,7 +35,7 @@ describe("formatDayCode", () => {
     expect(formatDayCode(makeCell({ presentOverride: true, shiftType: "SHIFT_2" }))).toBe("2");
   });
 
-  it("a Masuk override on Non-Shift is \"L\"", () => {
+  it("a Masuk override on a Libur day is \"L\"", () => {
     expect(formatDayCode(makeCell({ presentOverride: true, shiftType: "NON_SHIFT" }))).toBe("L");
   });
 
@@ -43,7 +43,7 @@ describe("formatDayCode", () => {
     expect(formatDayCode(makeCell({ hasCheckIn: true, hasCheckOut: true, shiftType: "SHIFT_3" }))).toBe("3");
   });
 
-  it("a real present day on Non-Shift is \"L\"", () => {
+  it("a real present day on a Libur day is \"L\"", () => {
     expect(formatDayCode(makeCell({ hasCheckIn: true, hasCheckOut: true, shiftType: "NON_SHIFT" }))).toBe("L");
   });
 

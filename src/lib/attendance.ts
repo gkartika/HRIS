@@ -1,3 +1,4 @@
+import { companyDateParts } from "@/lib/company-time";
 // Pure business logic for Phase 2 Extension: Attendance. No Prisma/Next
 // imports — unit testable with plain values, same pattern as
 // offboarding.ts/contract-renewal.ts/work-calendar.ts.
@@ -12,7 +13,6 @@ export const DEFAULT_START_TIME = "07:30";
 // flagged), so it never needs to be day-aware in the exception logic itself.
 export const DEFAULT_END_TIME_MON_THU = "16:30";
 export const DEFAULT_END_TIME_FRIDAY = "17:00";
-export const DEFAULT_WORK_DAYS_CSV = "1,2,3,4,5"; // Mon-Fri
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -55,7 +55,7 @@ export function isEventWithinAnyGeofence(
 }
 
 function isoWeekday(date: Date): number {
-  const day = date.getDay(); // 0=Sunday..6=Saturday
+  const day = companyDateParts(date).weekday; // 0=Sunday..6=Saturday, in company time
   return day === 0 ? 7 : day;
 }
 
@@ -75,7 +75,8 @@ function parseTimeToMinutes(hhmm: string): number {
 }
 
 export function isLateCheckIn(checkInAt: Date): boolean {
-  const checkInMinutes = checkInAt.getHours() * 60 + checkInAt.getMinutes();
+  const { hour, minute } = companyDateParts(checkInAt);
+  const checkInMinutes = hour * 60 + minute;
   return checkInMinutes > parseTimeToMinutes(DEFAULT_START_TIME) + DEFAULT_GRACE_MINUTES;
 }
 

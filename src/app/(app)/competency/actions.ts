@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -99,11 +101,9 @@ export async function openCompetencyCycle(
     },
   });
 
-  const year = startDate.getFullYear();
-  const countThisYear = await prisma.competencyAssessmentCycle.count({
-    where: { cycleCode: { startsWith: `CYC-${year}-` } },
-  });
-  const cycleCode = formatCycleCode(countThisYear + 1, year);
+  const year = companyYear(startDate);
+  const seq = await nextSequence(`CYC-${year}`);
+  const cycleCode = formatCycleCode(seq, year);
 
   const cycle = await prisma.competencyAssessmentCycle.create({
     data: {

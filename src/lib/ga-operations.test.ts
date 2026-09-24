@@ -16,7 +16,6 @@ import {
   computeAssetStatusAfterMaintenanceOutcome,
   computeAssetStatusAfterDisposalExecution,
   canExecuteMaintenanceWorkOrder,
-  shouldDraftDisposalCaseForMaintenanceOutcome,
   canSubmitDisposalCaseForApproval,
   canDecideDisposalCase,
   decideDisposalCaseStatus,
@@ -126,13 +125,6 @@ describe("canExecuteMaintenanceWorkOrder", () => {
   it("only OPEN can be executed", () => {
     expect(canExecuteMaintenanceWorkOrder("OPEN")).toBe(true);
     expect(canExecuteMaintenanceWorkOrder("COMPLETED")).toBe(false);
-  });
-});
-
-describe("shouldDraftDisposalCaseForMaintenanceOutcome", () => {
-  it("only BEYOND_REPAIR drafts a disposal case", () => {
-    expect(shouldDraftDisposalCaseForMaintenanceOutcome("BEYOND_REPAIR")).toBe(true);
-    expect(shouldDraftDisposalCaseForMaintenanceOutcome("OPERATIONAL")).toBe(false);
   });
 });
 

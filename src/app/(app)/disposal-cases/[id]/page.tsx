@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations, canDecideAsConfiguredGaApprover } from "@/lib/permissions";
@@ -7,6 +8,7 @@ import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { SubmitForApprovalForm, DisposalDecisionButtons, ExecuteDisposalForm } from "./decision-forms";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const REASON_LABEL: Record<string, string> = {
   BEYOND_REPAIR: "Tidak Dapat Diperbaiki",
@@ -21,11 +23,6 @@ const STATUS_LABEL: Record<string, string> = {
   REJECTED: "Ditolak",
   EXECUTED: "Dilaksanakan",
 };
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(date);
-}
 
 export default async function DisposalCaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -60,6 +57,7 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Kasus Disposal", href: "/disposal-cases" }, { label: "Detail Kasus" }]} />
       <div>
         <h1 className="text-lg font-medium text-slate-900">{disposalCase.caseNumber}</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -103,7 +101,7 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
           <p className="text-sm font-medium text-slate-900">Persetujuan Akhir</p>
           {disposalCase.decisionAt && (
             <p className="mt-2 text-xs text-slate-500">
-              {formatDate(disposalCase.decisionAt)} — {disposalCase.decisionByAccount?.usernameOrEmail ?? "—"}
+              {formatDateLong(disposalCase.decisionAt)} — {disposalCase.decisionByAccount?.usernameOrEmail ?? "—"}
               {disposalCase.decisionPosition && ` (${disposalCase.decisionPosition.jobLevel} ${disposalCase.decisionPosition.job.jobTitle})`}
               {disposalCase.decisionNote && `: ${disposalCase.decisionNote}`}
             </p>
@@ -123,7 +121,7 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
               </div>
               <div>
                 <p className="text-xs text-slate-500">Tanggal</p>
-                <p className="mt-1 text-slate-900">{formatDate(disposalCase.executionDate)}</p>
+                <p className="mt-1 text-slate-900">{formatDateLong(disposalCase.executionDate)}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500">Nilai</p>

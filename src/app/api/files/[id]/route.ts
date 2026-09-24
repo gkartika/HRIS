@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
 import { readPrivateFile } from "@/lib/file-storage";
 import { logAudit } from "@/lib/audit";
@@ -19,7 +19,7 @@ import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 // records a CTL-02 sensitive-access audit event before returning bytes.
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

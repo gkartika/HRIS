@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageExitClearanceQuestions } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { SettingsTabs } from "../settings-tabs";
 import { CreateExitClearanceQuestionForm } from "./create-form";
 import { ToggleActiveForm } from "./toggle-form";
 import { MoveButtons } from "./move-buttons";
@@ -18,6 +19,7 @@ export default async function ExitClearanceQuestionsPage() {
 
   return (
     <div>
+      <SettingsTabs groupId="offboarding" current="/admin/exit-clearance-questions" />
       <h1 className="text-lg font-medium text-slate-900">Pertanyaan Klirens Keluar</h1>
       <p className="mt-1 text-sm text-slate-500">
         Daftar pertanyaan pada formulir Klirens Keluar yang diisi sendiri oleh karyawan yang mengundurkan diri/berakhir

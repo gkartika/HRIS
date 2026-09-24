@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { submitAbsenceRequest } from "../actions";
 import { remainingEntitlementDays } from "@/lib/absence";
 import { t } from "@/lib/i18n/id";
+import { FieldError, FormErrorSummary, invalidClass } from "@/components/field-error";
 
 export interface EmployeeOption {
   id: string;
@@ -32,7 +33,7 @@ export function SubmitAbsenceForm({
   absenceTypes: AbsenceTypeOption[];
   quotaByType: AbsenceTypeQuota[];
 }) {
-  const [error, formAction, isPending] = useActionState(submitAbsenceRequest, undefined);
+  const [state, formAction, isPending] = useActionState(submitAbsenceRequest, undefined);
   const [selectedType, setSelectedType] = useState(absenceTypes[0]?.code ?? "");
   const selectedQuota = quotaByType.find((q) => q.code === selectedType);
   const selectedLabel = absenceTypes.find((tp) => tp.code === selectedType)?.label ?? "";
@@ -44,7 +45,12 @@ export function SubmitAbsenceForm({
       ) : (
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("employee.fullLegalName")}</label>
-          <select name="employeeId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <select
+            name="employeeId"
+            required
+            defaultValue={state?.values.employeeId ?? ""}
+            className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-sm ${invalidClass(state, "employeeId")}`}
+          >
             <option value="">— Pilih Karyawan —</option>
             {employees?.map((e) => (
               <option key={e.id} value={e.id}>
@@ -52,6 +58,7 @@ export function SubmitAbsenceForm({
               </option>
             ))}
           </select>
+          <FieldError state={state} name="employeeId" />
         </div>
       )}
 
@@ -63,7 +70,7 @@ export function SubmitAbsenceForm({
             required
             defaultValue={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className={`rounded-lg border border-slate-200 px-3 py-2 text-sm ${invalidClass(state, "absenceType")}`}
           >
             {absenceTypes.map((tp) => (
               <option key={tp.code} value={tp.code}>
@@ -83,25 +90,47 @@ export function SubmitAbsenceForm({
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("absence.startDateLabel")}</label>
-          <input name="startDate" type="date" required className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+          <input
+            name="startDate"
+            type="date"
+            required
+            defaultValue={state?.values.startDate ?? ""}
+            className={`rounded-lg border border-slate-200 px-3 py-2 text-sm ${invalidClass(state, "startDate")}`}
+          />
+          <FieldError state={state} name="startDate" />
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("absence.endDateLabel")}</label>
-          <input name="endDate" type="date" required className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+          <input
+            name="endDate"
+            type="date"
+            required
+            defaultValue={state?.values.endDate ?? ""}
+            className={`rounded-lg border border-slate-200 px-3 py-2 text-sm ${invalidClass(state, "endDate")}`}
+          />
+          <FieldError state={state} name="endDate" />
         </div>
       </div>
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("absence.reasonLabel")}</label>
-        <textarea name="reason" required rows={3} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        <textarea
+          name="reason"
+          required
+          rows={3}
+          defaultValue={state?.values.reason ?? ""}
+          className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-sm ${invalidClass(state, "reason")}`}
+        />
+        <FieldError state={state} name="reason" />
       </div>
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("absence.attachmentLabel")}</label>
         <input name="attachment" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <FieldError state={state} name="attachment" />
       </div>
 
-      {error && <p className="text-xs text-rose-600">{error}</p>}
+      <FormErrorSummary state={state} />
 
       <button
         type="submit"

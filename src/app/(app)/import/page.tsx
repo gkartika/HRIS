@@ -96,7 +96,7 @@ export default async function ImportPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" }).format(
+                    {new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" }).format(
                       b.uploadedAt
                     )}
                   </td>

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { toggleExitClearanceQuestion } from "./actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export function ToggleActiveForm({ questionId, currentActive }: { questionId: string; currentActive: boolean }) {
   const action = toggleExitClearanceQuestion.bind(null, questionId);
@@ -10,13 +11,13 @@ export function ToggleActiveForm({ questionId, currentActive }: { questionId: st
   return (
     <form action={formAction}>
       <input type="hidden" name="activeFlag" value={currentActive ? "" : "on"} />
-      <button
-        type="submit"
-        disabled={isPending}
-        className="text-xs text-indigo-600 hover:underline disabled:opacity-60"
-      >
-        {currentActive ? "Nonaktifkan" : "Aktifkan"}
-      </button>
+      {currentActive ? (
+        <ConfirmButton label="Nonaktifkan" pending={isPending} className="text-xs text-indigo-600 hover:underline disabled:opacity-60" />
+      ) : (
+        <button type="submit" disabled={isPending} className="text-xs text-indigo-600 hover:underline disabled:opacity-60">
+          Aktifkan
+        </button>
+      )}
     </form>
   );
 }

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { computeCompetencyGap } from "@/lib/competency";
 import { requireSession } from "@/lib/require-session";
 import {
   isTrainingAdmin,
@@ -12,6 +13,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { P1ScoringForm } from "./p1-scoring-form";
 import { ReassignEvaluatorForm } from "./reassign-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function CompetencyAssessmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -74,6 +76,7 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Kompetensi", href: "/competency" }, { label: "Detail Penilaian" }]} />
       <h1 className="text-lg font-medium text-slate-900">Penilaian Kompetensi — {employeeName}</h1>
       <p className="mt-1 text-sm text-slate-500">
         {assessment.employee.employeeNumber} · {assessment.position?.job.jobTitle ?? "—"} · {assessment.cycle.periodLabel}
@@ -141,7 +144,7 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
             <tbody>
               {assessment.items.map((item) => {
                 const actual = canSeeP1Scores ? item.actualLevel : null;
-                const gap = actual !== null && item.requiredLevel !== null ? Math.max(item.requiredLevel - actual, 0) : null;
+                const gap = actual !== null && item.requiredLevel !== null ? computeCompetencyGap(item.requiredLevel, actual) : null;
                 return (
                   <tr key={item.id} className="border-t border-slate-100">
                     <td className="px-4 py-2 text-slate-900">{item.competencyNameSnapshot}</td>

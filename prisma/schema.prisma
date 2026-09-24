@@ -205,9 +205,13 @@ enum RecruitmentReasonCode {
   DEVELOPMENT // Penyesuaian perkembangan PT CBP
 }
 
+// Which shift the vacancy works — Shift 1/2/3 only. There is deliberately no
+// "non-shift" option here (attendance's own weekly "Libur" is a different
+// concept, see ShiftAssignmentType).
 enum ShiftCode {
-  SHIFT
-  NON_SHIFT
+  SHIFT_1
+  SHIFT_2
+  SHIFT_3
 }
 
 enum EducationRequirementCode {
@@ -424,7 +428,6 @@ model Evaluation {
 
   completedAt     DateTime?
   cancelledAt     DateTime?
-  cancelledReason String?
   notes           String?
 
   createdAt DateTime @default(now())
@@ -434,6 +437,9 @@ model Evaluation {
   // above on why the FK lives on the source, not here.
   contractRenewalCase ContractRenewalCase?
   movementRequest     MovementRequest?
+
+  @@index([employeeId])
+  @@index([status])
 }
 
 model ContractRenewalCase {
@@ -511,6 +517,8 @@ model ContractRenewalCase {
   // Reverse of OffboardingCase.sourceRenewalCaseId — see the note there on
   // why a non-renewal handoff never re-runs this case's own decision.
   offboardingCase OffboardingCase?
+
+  @@index([status])
 }
 
 enum OffboardingReason {
@@ -518,25 +526,10 @@ enum OffboardingReason {
   CONTRACT_NON_RENEWAL
 }
 
-// LIF-06: "Resignation or contract-end case > manager input when required >
-// HR Manager decision/oversight > HR Admin exit-clearance execution >
-// Account Disable." Manager input is captured as data at report time (see
-// OffboardingCase.managerNote), not a separate stored stage — so a
-// RESIGNATION case starts at PENDING_HR_MANAGER. LIF-12: a
-// CONTRACT_NON_RENEWAL handoff's Dept-Head/HR-Manager rationale was already
-// recorded on the source ContractRenewalCase's own combined decision, so
-// that case starts directly at PENDING_CLEARANCE — it never re-runs the
-// same decision a second time.
-// PENDING_DEPT_HEAD added ahead of PENDING_HR_MANAGER per direct user
-// request: a RESIGNATION case now needs the same Dept Head (3B, scoped to
-// the employee's own department) -> HR Manager two-stage chain already used
-// by Recruitment/Movement/Contract Renewal, instead of HR Manager alone.
-// CONTRACT_NON_RENEWAL is unaffected — its Dept-Head/HR-Manager rationale
-// already lives on the source ContractRenewalCase (see
-// initialOffboardingCaseStatus), so it still starts at PENDING_CLEARANCE.
+// HR Admin alone opens an offboarding case (resignation or contract non-renewal
+// handoff) — no Dept Head / HR Manager approval stage exists. Every case
+// therefore starts at PENDING_CLEARANCE.
 enum OffboardingCaseStatus {
-  PENDING_DEPT_HEAD
-  PENDING_HR_MANAGER
   PENDING_CLEARANCE
   COMPLETED
   CANCELLED
@@ -554,7 +547,7 @@ model OffboardingCase {
   employeeId String
   employee   Employee              @relation("OffboardingCaseEmployee", fields: [employeeId], references: [id])
   reason     OffboardingReason
-  status     OffboardingCaseStatus @default(PENDING_HR_MANAGER)
+  status     OffboardingCaseStatus @default(PENDING_CLEARANCE)
 
   lastWorkingDay   DateTime
   // No explicit day-count rule is given for offboarding anywhere in the
@@ -572,24 +565,11 @@ model OffboardingCase {
   sourceRenewalCaseId String?              @unique
   sourceRenewalCase   ContractRenewalCase? @relation(fields: [sourceRenewalCaseId], references: [id])
 
-  // Dept Head (3B, scoped to the employee's own department) approval stage
-  // — same evidence shape as every other Dept-Head-then-HR-Manager chain in
-  // this app (Recruitment/Movement/Contract Renewal). Only ever populated
-  // for a RESIGNATION case; a CONTRACT_NON_RENEWAL handoff skips straight to
-  // PENDING_CLEARANCE and never touches these fields (LIF-12).
-  deptHeadDecisionAt          DateTime?
-  deptHeadDecisionByAccountId String?
-  deptHeadDecisionByAccount   Account?  @relation("OffboardingDeptHeadDecisionBy", fields: [deptHeadDecisionByAccountId], references: [id])
-  deptHeadDecisionPositionId  String?
-  deptHeadDecisionPosition    Position? @relation("OffboardingDeptHeadDecisionPosition", fields: [deptHeadDecisionPositionId], references: [id])
-  deptHeadNote                String?
-
-  hrManagerDecisionAt          DateTime?
-  hrManagerDecisionByAccountId String?
-  hrManagerDecisionByAccount   Account?  @relation("OffboardingHrManagerDecisionBy", fields: [hrManagerDecisionByAccountId], references: [id])
-  hrManagerDecisionPositionId  String?
-  hrManagerDecisionPosition    Position? @relation("OffboardingHrManagerDecisionPosition", fields: [hrManagerDecisionPositionId], references: [id])
-  hrManagerNote                String?
+  // HR-Admin-maintained "Alasan" dropdown (Pengaturan > Offboarding). Nullable
+  // only so cases created before this existed (and contract non-renewal
+  // handoffs, which have no HR-picked reason) stay valid.
+  exitReasonId String?
+  exitReason   OffboardingReasonOption? @relation(fields: [exitReasonId], references: [id])
 
   // LIF-06's "exit-clearance execution > Account Disable" is one combined
   // HR Admin action, not two gated steps — nothing in the spec describes an
@@ -620,6 +600,8 @@ model OffboardingCase {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([employeeId, status])
 }
 
 // Version after UAT: admin-configurable Exit Clearance questions, answered
@@ -627,6 +609,18 @@ model OffboardingCase {
 // reaches PENDING_CLEARANCE. Structurally the same "admin-defined ordered
 // items + per-submission answers" shape as the LMS Quiz chain, but with a
 // free-text answer instead of multiple-choice options.
+// Editable dropdown behind OffboardingCase.exitReason — never deleted, only
+// deactivated, so old cases keep showing the reason they were opened with.
+model OffboardingReasonOption {
+  id           String   @id @default(cuid())
+  label        String
+  displayOrder Int      @default(0)
+  activeFlag   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  cases OffboardingCase[]
+}
+
 model ExitClearanceQuestion {
   id           String   @id @default(cuid())
   questionText String
@@ -847,6 +841,7 @@ model Account {
   updatedAt             DateTime      @updatedAt
 
   auditEvents                                 AuditLog[]
+  accountTokens                               AccountToken[]
   importBatches                               ImportBatch[]
   uploadedFiles                               FileObject[]
   recruitmentRequestsSubmittedBy              RecruitmentRequest[]            @relation("RecruitmentSubmittedBy")
@@ -867,8 +862,6 @@ model Account {
   evaluationsResponsibleAsHrAdmin             Evaluation[]                    @relation("EvaluationResponsibleHrAdmin")
   evaluationsReleasedBy                       Evaluation[]                    @relation("EvaluationReleasedBy")
   offboardingCasesReportedBy                  OffboardingCase[]               @relation("OffboardingReportedBy")
-  offboardingCasesDeptHeadDecisionBy          OffboardingCase[]               @relation("OffboardingDeptHeadDecisionBy")
-  offboardingCasesHrManagerDecisionBy         OffboardingCase[]               @relation("OffboardingHrManagerDecisionBy")
   offboardingCasesClearanceCompletedBy        OffboardingCase[]               @relation("OffboardingClearanceCompletedBy")
   offboardingCasesCancelledBy                 OffboardingCase[]               @relation("OffboardingCancelledBy")
   offboardingCasesGaAssetClearanceConfirmedBy OffboardingCase[]               @relation("OffboardingGaAssetClearanceConfirmedBy")
@@ -1020,6 +1013,9 @@ model Employee {
   mandatoryTrainingRuleTargets                MandatoryTrainingRule[]     @relation("MandatoryTrainingRuleTargetEmployee")
 
   gaRequests GaRequest[] @relation("GaRequestRequester")
+
+  @@index([currentPositionId])
+  @@index([activeFlag])
 }
 
 // DM-19: admin-maintained master list for Pendidikan Terakhir. Managed via
@@ -1070,6 +1066,8 @@ model OrgUnit {
   trainingRequestsSnapshot     TrainingRequest[]
   mandatoryTrainingRuleTargets MandatoryTrainingRule[]
   assetCustodies               AssetCustody[]
+
+  @@index([parentUnitId])
 }
 
 model Job {
@@ -1077,13 +1075,6 @@ model Job {
   jobCode           String   @unique
   jobTitle          String
   jobPurpose        String?
-  pdcaPlan          String?
-  pdcaDo            String?
-  pdcaCheck         String?
-  pdcaAct           String?
-  decisionAuthority String?
-  keyCollaboration  String?
-  jobVersion        Int      @default(1)
   approvalStatus    String   @default("Approved")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -1142,7 +1133,6 @@ model Position {
 
   currentHolders                              Employee[]              @relation("PositionHolder")
   assignments                                 Assignment[]
-  requestedForRecruitment                     RecruitmentRequest[]    @relation("RequestedPosition")
   requesterForRecruitment                     RecruitmentRequest[]    @relation("RequesterPosition")
   recruitmentDecisions                        RecruitmentRequest[]    @relation("RecruitmentDecisionPosition")
   recruitmentDeptHeadDecisions                RecruitmentRequest[]    @relation("RecruitmentDeptHeadDecisionPosition")
@@ -1160,8 +1150,6 @@ model Position {
   evaluationsAsSnapshotPosition               Evaluation[]            @relation("EvaluationSnapshotPosition")
   evaluationsAsP1Position                     Evaluation[]            @relation("EvaluationP1Position")
   evaluationsAsP2Position                     Evaluation[]            @relation("EvaluationP2Position")
-  offboardingCasesDeptHeadDecisionPositionOf  OffboardingCase[]       @relation("OffboardingDeptHeadDecisionPosition")
-  offboardingCasesHrManagerDecisionPositionOf OffboardingCase[]       @relation("OffboardingHrManagerDecisionPosition")
   contractsReleasedByPositionOf               Contract[]              @relation("ContractReleasedByPosition")
   shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]       @relation("ShiftAssignmentSubmittedByPosition")
   absenceApproverConfigOf                     AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
@@ -1179,6 +1167,10 @@ model Position {
   trainingRequestsAsPositionSnapshot         TrainingRequest[]       @relation("TrainingRequestPositionSnapshot")
   trainingRequestsAsDeptHeadDecisionPosition TrainingRequest[]       @relation("TrainingRequestDeptHeadDecisionPosition")
   mandatoryTrainingRuleTargetPositionOf      MandatoryTrainingRule[] @relation("MandatoryTrainingRuleTargetPosition")
+
+  @@index([orgUnitId])
+  @@index([reportsToPositionId])
+  @@index([jobId])
 }
 
 model Assignment {
@@ -1201,6 +1193,9 @@ model Assignment {
   evaluationsAsPrimaryAssignment           Evaluation[]
   contractsAsPrimaryAssignment             Contract[]                     @relation("ContractPrimaryAssignment")
   competencyAssessmentsAsPrimaryAssignment CompetencyAssessment[]
+
+  @@index([employeeId, status])
+  @@index([positionId, status])
 }
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
@@ -1222,8 +1217,6 @@ model RecruitmentRequest {
   job                      Job?                     @relation(fields: [jobId], references: [id])
   // Specific approved seat, when one is already known/vacant (DM-21: "when
   // available") — otherwise HR resolves a Position at fulfillment time.
-  requestedPositionId      String?
-  requestedPosition        Position?                @relation("RequestedPosition", fields: [requestedPositionId], references: [id])
   shiftCode                ShiftCode
   requestedHeadcount       Int
   jobDescriptionSnapshot   String
@@ -1285,6 +1278,8 @@ model RecruitmentRequest {
   updatedAt DateTime @updatedAt
 
   fulfillments RecruitmentRequestFulfillment[]
+
+  @@index([status])
 }
 
 // DM-23: supports multiple Employees per request, up to requestedHeadcount.
@@ -1381,8 +1376,6 @@ model MovementRequest {
   // an optional HR-only supplementary note/legacy field for pre-refactor
   // rows, no longer required or treated as "the evaluation" for any type.
   performanceEvaluationRef    String?
-  performanceEvaluationFileId String?     @unique
-  performanceEvaluationFile   FileObject? @relation(fields: [performanceEvaluationFileId], references: [id])
   hrConfidentialNotes         String?
 
   // DM-27/WF-17/LIF-14: every Promosi, Mutasi or Demotasi auto-creates one
@@ -1422,6 +1415,9 @@ model MovementRequest {
   // workflow (Mutasi/Demosi outcome) — reverse of ContractRenewalCase's
   // linkedMovementRequestId.
   renewalCase ContractRenewalCase? @relation("RenewalLinkedMovement")
+
+  @@index([employeeId])
+  @@index([status])
 }
 
 // ---------- Phase 2: Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding") ----------
@@ -1465,6 +1461,8 @@ model OnboardingCase {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
 }
 
 // ---------- Phase 2: Contract + renewal pipeline (WF-10, LIF-08..12) ----------
@@ -1543,14 +1541,14 @@ model Contract {
   signedAt             DateTime?
   activatedAt          DateTime?
 
-  contractFileId String?     @unique
-  contractFile   FileObject? @relation(fields: [contractFileId], references: [id])
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   renewalCaseAsCurrentContract   ContractRenewalCase? @relation("RenewalCurrentContract")
   renewalCaseAsGeneratedContract ContractRenewalCase? @relation("RenewalGeneratedContract")
+
+  @@index([employeeId])
+  @@index([status])
 }
 
 // ---------- Controls: audit, import, private files ----------
@@ -1568,6 +1566,10 @@ model AuditLog {
   newValueMasked    String?
   reason            String?
   sessionOrDeviceId String?
+
+  @@index([datasetName, eventAt])
+  @@index([actorAccountId])
+  @@index([eventAt])
 }
 
 model ImportBatch {
@@ -1580,7 +1582,6 @@ model ImportBatch {
   totalRows           Int
   validRows           Int
   errorRows           Int
-  duplicateRows       Int          @default(0)
   importStatus        ImportStatus @default(UPLOADED)
   previewConfirmedAt  DateTime?
   postedAt            DateTime?
@@ -1602,6 +1603,8 @@ model ImportRow {
   // dataset's natural key).
   rowAction       String?
   createdRecordId String?
+
+  @@index([importBatchId])
 }
 
 model FileObject {
@@ -1623,8 +1626,6 @@ model FileObject {
 
   employeeBpjsTkOf                       Employee?             @relation("EmployeeBpjsTkFile")
   employeeBpjsKesehatanOf                Employee?             @relation("EmployeeBpjsKesehatanFile")
-  contractOf                             Contract?
-  movementPerformanceEvaluationOf        MovementRequest?
   absenceRequestAttachmentOf             AbsenceRequest?       @relation("AbsenceRequestAttachment")
   courseMaterialOf                       CourseMaterial?       @relation("CourseMaterialFile")
   learningAssignmentCertificateOf        LearningAssignment?   @relation("LearningAssignmentCertificateFile")
@@ -1635,6 +1636,8 @@ model FileObject {
   maintenanceWorkOrderEvidenceOf         MaintenanceWorkOrder? @relation("MaintenanceWorkOrderEvidence")
   disposalCaseProposalEvidenceOf         DisposalCase?         @relation("DisposalCaseProposalEvidence")
   disposalCaseExecutionEvidenceOf        DisposalCase?         @relation("DisposalCaseExecutionEvidence")
+
+  @@index([employeeId])
 }
 
 // ---------- Phase 2 Extension: Attendance & Absence ----------
@@ -1703,6 +1706,8 @@ model AttendanceEvent {
 
   dailyRecordsAsCheckIn  DailyAttendanceRecord[] @relation("DailyRecordCheckInEvent")
   dailyRecordsAsCheckOut DailyAttendanceRecord[] @relation("DailyRecordCheckOutEvent")
+
+  @@index([employeeId, eventAt])
 }
 
 // One row per employee per calendar day, produced by the idempotent daily
@@ -1743,6 +1748,8 @@ model DailyAttendanceRecord {
   presentOverride Boolean @default(false)
 
   @@unique([employeeId, attendanceDate])
+
+  @@index([attendanceDate])
 }
 
 // HR-Admin-configured approver Position per OrgUnit — any tier (Department,
@@ -1845,6 +1852,9 @@ model AbsenceRequest {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([employeeId, status])
+  @@index([status])
 }
 
 // HR-Admin-set per-employee exception to AbsenceEntitlementConfig's
@@ -1987,7 +1997,6 @@ model CompetencyFrameworkVersion {
   versionLabel    String
   sourceDocNumber String?
   sourceDocDate   DateTime?
-  revision        String?
   effectiveFrom   DateTime
   effectiveTo     DateTime?
   status          FrameworkStatus @default(ACTIVE)
@@ -2037,7 +2046,6 @@ model CompanyValueFrameworkVersion {
   versionLabel    String
   sourceDocNumber String?
   sourceDocDate   DateTime?
-  revision        String?
   effectiveFrom   DateTime
   effectiveTo     DateTime?
   status          FrameworkStatus @default(ACTIVE)
@@ -2174,6 +2182,8 @@ model CompetencyAssessment {
   evaluatorChanges CompetencyEvaluatorChange[]
 
   @@unique([cycleId, employeeId])
+
+  @@index([employeeId])
 }
 
 // Mandatory-reason, full-audit-trail HR Admin reassignment of P1 or P2
@@ -2263,7 +2273,6 @@ model TrainingCourse {
   // Rule still uses.
   isOnboardingRequired      Boolean            @default(false)
   plannedCost               Float?
-  actualCost                Float?
   certificateRequired       Boolean            @default(false)
   effectivenessRequired     Boolean            @default(false)
   effectivenessFollowupDays Int                @default(30)
@@ -2345,6 +2354,9 @@ model TrainingRequest {
   updatedAt DateTime @updatedAt
 
   learningAssignment LearningAssignment?
+
+  @@index([employeeId])
+  @@index([status])
 }
 
 // Created only from an approved TrainingRequest or an active
@@ -2401,6 +2413,9 @@ model LearningAssignment {
 
   materialProgress LearningAssignmentMaterialProgress[]
   quizAttempts     QuizAttempt[]
+
+  @@index([employeeId, status])
+  @@index([courseId, status])
 }
 
 // Exactly five target types (TRN-13/DM-41): Employee, Department, Job,
@@ -2691,6 +2706,9 @@ model AssetCustody {
   transferredToCustodyId String?                @unique
 
   createdAt DateTime @default(now())
+
+  @@index([employeeId, status])
+  @@index([assetId])
 }
 
 model TaskForceMembership {
@@ -2823,6 +2841,9 @@ model GaRequest {
   cancellationReason   String?
 
   createdAt DateTime @default(now())
+
+  @@index([requesterEmployeeId])
+  @@index([status])
 }
 
 enum GaApprovalType {
@@ -2926,6 +2947,8 @@ model MaintenanceWorkOrder {
   completedByAccountId String?
   completedByAccount   Account?  @relation("MaintenanceWorkOrderCompletedBy", fields: [completedByAccountId], references: [id])
   completedAt          DateTime?
+
+  @@index([status])
 }
 
 enum DisposalReason {
@@ -2992,4 +3015,35 @@ model DisposalCase {
   createdByAccountId String
   createdByAccount   Account  @relation("DisposalCaseCreatedBy", fields: [createdByAccountId], references: [id])
   createdAt          DateTime @default(now())
+
+  @@index([status])
+}
+
+// One row per numbering series and year (key like "OFB-2026"). nextSequence()
+// (src/lib/number-sequence.ts) bumps lastValue atomically, so two people
+// saving at the same moment can never receive the same case number.
+model NumberSequence {
+  key       String @id
+  lastValue Int    @default(0)
+}
+
+enum AccountTokenPurpose {
+  INVITE
+  RESET
+}
+
+// One-time link behind "Buat kata sandi" (invitation) and "Atur ulang kata
+// sandi". Only the SHA-256 of the token is stored, so a database leak can't be
+// used to take over an account. See src/lib/account-tokens.ts.
+model AccountToken {
+  id        String              @id @default(cuid())
+  accountId String
+  account   Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenHash String              @unique
+  purpose   AccountTokenPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([accountId])
 }

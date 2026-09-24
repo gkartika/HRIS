@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { deleteCompanyHoliday } from "./holiday-actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export function DeleteHolidayButton({ id }: { id: string }) {
   const action = deleteCompanyHoliday.bind(null, id);
@@ -9,9 +10,7 @@ export function DeleteHolidayButton({ id }: { id: string }) {
 
   return (
     <form action={formAction} className="inline">
-      <button type="submit" disabled={isPending} className="text-xs text-rose-600 hover:underline disabled:opacity-60">
-        {isPending ? "…" : "Hapus"}
-      </button>
+      <ConfirmButton label="Hapus" pending={isPending} className="text-xs text-rose-600 hover:underline disabled:opacity-60" />
       {error && <p className="mt-1 text-xs text-rose-600">{error}</p>}
     </form>
   );

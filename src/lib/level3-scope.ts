@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { getActiveAssignmentsOf, getOrgUnitMap } from "@/lib/active-assignments";
 import type { OrgUnit } from "@/generated/prisma/client";
 
 // Perubahan Posisi refactor: "Level 3" submit eligibility is broader than
@@ -20,29 +21,19 @@ export interface Level3Position {
 
 export async function getActiveLevel3Positions(
   employeeId: string | null | undefined,
-  asOf: Date = new Date()
+  asOf?: Date
 ): Promise<Level3Position[]> {
-  if (!employeeId) return [];
-
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      employeeId,
-      status: "ACTIVE",
-      effectiveFrom: { lte: asOf },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { jobLevel: { in: LEVEL_3_JOB_LEVELS } },
-    },
-    include: { position: { include: { job: true } } },
-  });
-
-  return assignments.map((a) => ({
-    assignmentId: a.id,
-    positionId: a.positionId,
-    positionCode: a.position.positionCode,
-    jobTitle: a.position.job.jobTitle,
-    jobLevel: a.position.jobLevel,
-    orgUnitId: a.position.orgUnitId,
-  }));
+  const assignments = await getActiveAssignmentsOf(employeeId, asOf);
+  return assignments
+    .filter((a) => LEVEL_3_JOB_LEVELS.includes(a.position.jobLevel))
+    .map((a) => ({
+      assignmentId: a.id,
+      positionId: a.positionId,
+      positionCode: a.position.positionCode,
+      jobTitle: a.position.job.jobTitle,
+      jobLevel: a.position.jobLevel,
+      orgUnitId: a.position.orgUnitId,
+    }));
 }
 
 /**
@@ -54,15 +45,15 @@ export async function getActiveLevel3Positions(
  * caller. Stops (without erroring) if the chain loops back on itself.
  */
 export async function resolveOrgUnitAncestorChain(orgUnitId: string): Promise<OrgUnit[]> {
+  const units = await getOrgUnitMap();
   const chain: OrgUnit[] = [];
   const visited = new Set<string>();
-  let current = await prisma.orgUnit.findUnique({ where: { id: orgUnitId } });
+  let current = units.get(orgUnitId);
   while (current) {
     if (visited.has(current.id)) break;
     visited.add(current.id);
     chain.push(current);
-    if (!current.parentUnitId) break;
-    current = await prisma.orgUnit.findUnique({ where: { id: current.parentUnitId } });
+    current = current.parentUnitId ? units.get(current.parentUnitId) : undefined;
   }
   return chain;
 }
@@ -102,7 +93,7 @@ export async function resolveSectionId(orgUnitId: string): Promise<string | null
  */
 export async function getLevel3DepartmentIds(
   employeeId: string | null | undefined,
-  asOf: Date = new Date()
+  asOf?: Date
 ): Promise<string[]> {
   const positions = await getActiveLevel3Positions(employeeId, asOf);
   const departmentIds = await Promise.all(positions.map((p) => resolveDepartmentId(p.orgUnitId)));
@@ -123,20 +114,13 @@ export async function isLevel3ForEmployeeDepartment(
 
   const target = await prisma.employee.findUnique({
     where: { id: targetEmployeeId },
-    select: { currentPositionId: true },
+    select: { currentPosition: { select: { orgUnitId: true } } },
   });
-  if (!target?.currentPositionId) return false;
-  const targetPosition = await prisma.position.findUnique({
-    where: { id: target.currentPositionId },
-    select: { orgUnitId: true },
-  });
-  if (!targetPosition) return false;
+  if (!target?.currentPosition) return false;
+  const targetPosition = target.currentPosition;
   const targetDepartmentId = await resolveDepartmentId(targetPosition.orgUnitId);
   if (!targetDepartmentId) return false;
 
-  for (const pos of level3Positions) {
-    const posDepartmentId = await resolveDepartmentId(pos.orgUnitId);
-    if (posDepartmentId === targetDepartmentId) return true;
-  }
-  return false;
+  const ownDepartmentIds = await Promise.all(level3Positions.map((pos) => resolveDepartmentId(pos.orgUnitId)));
+  return ownDepartmentIds.includes(targetDepartmentId);
 }

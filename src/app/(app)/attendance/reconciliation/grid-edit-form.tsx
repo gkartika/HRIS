@@ -9,7 +9,7 @@ const SHIFT_OPTIONS = [
   { value: "SHIFT_1", label: "M1 — Shift 1" },
   { value: "SHIFT_2", label: "M2 — Shift 2" },
   { value: "SHIFT_3", label: "M3 — Shift 3" },
-  { value: "NON_SHIFT", label: "L — Libur / Non-Shift" },
+  { value: "NON_SHIFT", label: "L — Libur" },
 ];
 
 export function GridEditForm({

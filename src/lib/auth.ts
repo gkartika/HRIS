@@ -20,8 +20,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = credentials?.password as string | undefined;
         if (!usernameOrEmail || !password) return null;
 
-        const account = await prisma.account.findUnique({
-          where: { usernameOrEmail },
+        // Email addresses are matched without regard to upper/lower case.
+        const account = await prisma.account.findFirst({
+          where: { usernameOrEmail: { equals: usernameOrEmail.trim(), mode: "insensitive" } },
           include: { roles: true, employee: true },
         });
 
@@ -45,6 +46,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           });
           return null;
         }
+
+        // An invited account has no password yet — it must be created from the emailed link first.
+        if (account.accountStatus === "INVITED") return null;
 
         const passwordValid = await bcrypt.compare(password, account.passwordHash);
         if (!passwordValid) {

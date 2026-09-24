@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateLong } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import { canManageAssets } from "@/lib/permissions";
 import { blocksOffboarding } from "@/lib/assets";
@@ -7,21 +8,13 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { ConfirmGaAssetClearanceForm } from "./confirm-form";
 
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
-
 const STATUS_LABEL: Record<string, string> = {
-  PENDING_DEPT_HEAD: "Menunggu Kepala Departemen",
-  PENDING_HR_MANAGER: "Menunggu HR Manager",
   PENDING_CLEARANCE: "Menunggu Exit Clearance",
 };
 
 // GA-Admin-scoped view of who's currently offboarding, purpose-built so GA
 // Admin can proactively confirm every asset has been returned — deliberately
-// NOT the full Offboarding case (reason, Dept Head/HR Manager decisions,
-// clearance notes stay HR-only; GA Admin only ever needed the asset/GA-
+// NOT the full Offboarding case (reason, clearance notes stay HR-only; GA Admin only ever needed the asset/GA-
 // request piece, same access-boundary reasoning as everywhere else in
 // Phase 4A/4B). Case numbers here are plain text, not links — GA Admin
 // can't open the full case detail page.
@@ -32,7 +25,7 @@ export default async function OffboardingAssetClearancePage() {
   }
 
   const activeCases = await prisma.offboardingCase.findMany({
-    where: { status: { in: ["PENDING_DEPT_HEAD", "PENDING_HR_MANAGER", "PENDING_CLEARANCE"] } },
+    where: { status: "PENDING_CLEARANCE" },
     include: {
       employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
       gaAssetClearanceConfirmedBy: { select: { usernameOrEmail: true } },
@@ -117,7 +110,7 @@ export default async function OffboardingAssetClearancePage() {
                 {c.gaAssetClearanceConfirmedAt ? (
                   <p className="mt-3 text-xs text-slate-500">
                     ✓ Dikonfirmasi oleh {c.gaAssetClearanceConfirmedBy?.usernameOrEmail ?? "—"} pada{" "}
-                    {formatDate(c.gaAssetClearanceConfirmedAt)}
+                    {formatDateLong(c.gaAssetClearanceConfirmedAt)}
                     {c.gaAssetClearanceNote && ` — "${c.gaAssetClearanceNote}"`}
                   </p>
                 ) : (

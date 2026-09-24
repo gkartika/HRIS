@@ -13,7 +13,7 @@ export default async function NewManualEvaluationPage() {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const employees = await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" } });
+  const employees = await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } });
 
   return (
     <div>

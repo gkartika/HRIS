@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { companyYear } from "@/lib/company-time";
 import { absenceDayCount } from "@/lib/absence";
 
 /**
@@ -37,7 +38,7 @@ export async function usedDaysThisYear(
   absenceTypeCode: string,
   excludeRequestId?: string
 ): Promise<number> {
-  const yearStart = new Date(new Date().getFullYear(), 0, 1);
+  const yearStart = new Date(Date.UTC(companyYear(), 0, 1));
   const [requests, classifiedDays] = await Promise.all([
     prisma.absenceRequest.findMany({
       where: {
@@ -83,7 +84,7 @@ export async function resolveAnnualQuotaByType(employeeId: string): Promise<Map<
  * `usedByType.get(code) ?? 0`.
  */
 export async function usedDaysThisYearByType(employeeId: string, excludeRequestId?: string): Promise<Map<string, number>> {
-  const yearStart = new Date(new Date().getFullYear(), 0, 1);
+  const yearStart = new Date(Date.UTC(companyYear(), 0, 1));
   const [requests, classifiedGroups] = await Promise.all([
     prisma.absenceRequest.findMany({
       where: {

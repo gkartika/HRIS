@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateLong } from "@/lib/format";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -45,11 +46,7 @@ import {
 } from "./renewal-decision-forms";
 import { EvaluationPanel } from "../../evaluations/evaluation-panel";
 import type { Position, Job, OrgUnit } from "@/generated/prisma/client";
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function ContractDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -128,7 +125,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   const canSign = canSignContract(session, contract.employeeId) && canSignContractStatus(contract.status);
   const canActivate = canManage && canActivateContract(contract.status);
 
-  const employees = canRecommend && isHrAdmin(session) ? await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" } }) : [];
+  const employees = canRecommend && isHrAdmin(session) ? await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } }) : [];
 
   // Contract + its D-30 Renewal Case are one module/workflow — render the
   // whole case inline on this same page rather than a separate route.
@@ -173,6 +170,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Kontrak", href: "/contracts" }, { label: "Detail Kontrak" }]} />
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -196,12 +194,12 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("contract.startDate")}</p>
-            <p className="text-sm text-slate-900">{formatDate(contract.startDate)}</p>
+            <p className="text-sm text-slate-900">{formatDateLong(contract.startDate)}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("contract.endDate")}</p>
             <p className="text-sm text-slate-900">
-              {contract.endDate ? formatDate(contract.endDate) : t("contract.indefinite")}
+              {contract.endDate ? formatDateLong(contract.endDate) : t("contract.indefinite")}
             </p>
           </div>
           <div>
@@ -250,7 +248,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
         {contract.decisionByAccount && (
           <p className="mt-4 text-xs text-slate-400">
-            {t("recruitment.approvedBy")}: {contract.decisionByAccount.usernameOrEmail} ({formatDate(contract.decisionAt)})
+            {t("recruitment.approvedBy")}: {contract.decisionByAccount.usernameOrEmail} ({formatDateLong(contract.decisionAt)})
             {contract.decisionPosition && (
               <> — {t("recruitment.decisionPosition")}: {contract.decisionPosition.job.jobTitle} ({contract.decisionPosition.positionCode})</>
             )}
@@ -365,7 +363,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
               <p className="text-xs text-slate-500">{t("contractRenewal.hrManagerDecisionTitle")}</p>
               <p className="text-sm text-slate-900">
                 {renewalCase.finalRecommendation && t(`renewalRecommendation.${renewalCase.finalRecommendation}`)} —{" "}
-                {renewalCase.decisionByAccount.usernameOrEmail} ({formatDate(renewalCase.decisionAt)})
+                {renewalCase.decisionByAccount.usernameOrEmail} ({formatDateLong(renewalCase.decisionAt)})
                 {renewalCase.decisionPosition && ` (${renewalCase.decisionPosition.job.jobTitle})`}
               </p>
               {renewalCase.changeReason && (

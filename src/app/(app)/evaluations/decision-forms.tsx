@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { releaseEvaluation, submitEvaluation, createManualEvaluation } from "./actions";
 import { t } from "@/lib/i18n/id";
 import type { Employee } from "@/generated/prisma/client";
+type EmployeeOption = Pick<Employee, "id" | "fullLegalName" | "employeeNumber">;
 
 const SCORE_OPTIONS = [2, 4, 6, 8] as const;
 
@@ -23,7 +24,7 @@ function ScoreField({ name, label }: { name: string; label: string }) {
   );
 }
 
-export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationId: string; employees: Employee[] }) {
+export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationId: string; employees: EmployeeOption[] }) {
   const action = releaseEvaluation.bind(null, evaluationId);
   const [error, formAction, isPending] = useActionState(action, undefined);
 
@@ -132,7 +133,7 @@ export function EvaluationSlotForm({ evaluationId, slot }: { evaluationId: strin
   );
 }
 
-export function CreateManualEvaluationForm({ employees }: { employees: Employee[] }) {
+export function CreateManualEvaluationForm({ employees }: { employees: EmployeeOption[] }) {
   const [error, formAction, isPending] = useActionState(createManualEvaluation, undefined);
 
   return (

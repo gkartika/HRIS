@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { formatDateLong } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import {
   canViewAbsenceRequest,
@@ -21,6 +22,7 @@ import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { resolveAnnualQuota, usedDaysThisYear } from "@/lib/absence-quota";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   FirstApproverDecisionButtons,
   SecondApproverDecisionButtons,
@@ -28,10 +30,6 @@ import {
   OverrideForm,
   CancelAbsenceForm,
 } from "./decision-forms";
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(date);
-}
 
 // Shared shape between the first- and second-approver cards below — same
 // title/approver-line/decision-line/buttons structure, differing only in
@@ -65,7 +63,7 @@ function ApprovalStageCard({
       )}
       {decisionAt && (
         <p className="mt-2 text-xs text-slate-500">
-          {formatDate(decisionAt)} — {decisionByUsername ?? "—"}
+          {formatDateLong(decisionAt)} — {decisionByUsername ?? "—"}
           {decisionNote && `: ${decisionNote}`}
         </p>
       )}
@@ -134,6 +132,7 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Absensi", href: "/absences" }, { label: "Detail Pengajuan" }]} />
       <div>
         <h1 className="text-lg font-medium text-slate-900">{request.requestNumber}</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -160,12 +159,12 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("absence.startDateLabel")}</p>
-            <p className="mt-1 text-slate-900">{formatDate(request.startDate)}</p>
+            <p className="mt-1 text-slate-900">{formatDateLong(request.startDate)}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("absence.endDateLabel")}</p>
             <p className="mt-1 text-slate-900">
-              {formatDate(request.endDate)} ({absenceDayCount(request.startDate, request.endDate)} hari)
+              {formatDateLong(request.endDate)} ({absenceDayCount(request.startDate, request.endDate)} hari)
             </p>
           </div>
           <div className="col-span-2">
@@ -235,19 +234,19 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
         <p className="text-sm font-medium text-slate-900">{t("absence.hrAdminDecisionTitle")}</p>
         {request.hrAdminDecisionAt && (
           <p className="mt-2 text-xs text-slate-500">
-            {formatDate(request.hrAdminDecisionAt)} — {request.hrAdminDecisionByAccount?.usernameOrEmail ?? "—"}
+            {formatDateLong(request.hrAdminDecisionAt)} — {request.hrAdminDecisionByAccount?.usernameOrEmail ?? "—"}
             {request.hrAdminDecisionNote && `: ${request.hrAdminDecisionNote}`}
           </p>
         )}
         {request.hrOverrideAt && (
           <p className="mt-2 text-xs text-amber-700">
-            {t("absence.overrideBadge")}: {formatDate(request.hrOverrideAt)} — {request.hrOverrideByAccount?.usernameOrEmail ?? "—"}
+            {t("absence.overrideBadge")}: {formatDateLong(request.hrOverrideAt)} — {request.hrOverrideByAccount?.usernameOrEmail ?? "—"}
             {request.hrOverrideReason && `: ${request.hrOverrideReason}`}
           </p>
         )}
         {request.cancelledAt && (
           <p className="mt-2 text-xs text-rose-700">
-            Dibatalkan {formatDate(request.cancelledAt)} — {request.cancelledByAccount?.usernameOrEmail ?? "—"}
+            Dibatalkan {formatDateLong(request.cancelledAt)} — {request.cancelledByAccount?.usernameOrEmail ?? "—"}
             {request.cancellationReason && `: ${request.cancellationReason}`}
           </p>
         )}

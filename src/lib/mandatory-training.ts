@@ -87,37 +87,26 @@ export async function applyMandatoryTrainingRule(
   const alreadyAssignedIds = new Set(existing.map((e) => e.employeeId));
 
   const toAssign = audience.filter((id) => !alreadyAssignedIds.has(id));
-  for (const employeeId of toAssign) {
-    await prisma.learningAssignment.create({
-      data: {
-        employeeId,
-        courseId: rule.courseId,
-        sourceType: "MANDATORY_RULE",
-        sourceMandatoryRuleId: rule.id,
-        assignedByAccountId,
-        status: "ASSIGNED",
-        effectivenessRequiredSnapshot: rule.course.effectivenessRequired,
-      },
-    });
+  const assignmentData = (employeeId: string, overrideReason?: string) => ({
+    employeeId,
+    courseId: rule.courseId,
+    sourceType: "MANDATORY_RULE" as const,
+    sourceMandatoryRuleId: rule.id,
+    assignedByAccountId,
+    status: "ASSIGNED" as const,
+    effectivenessRequiredSnapshot: rule.course.effectivenessRequired,
+    ...(overrideReason ? { overrideReason } : {}),
+  });
+  if (toAssign.length > 0) {
+    await prisma.learningAssignment.createMany({ data: toAssign.map((id) => assignmentData(id)) });
   }
 
   let refresherAssigned = 0;
-  if (refresherReason) {
-    for (const employeeId of alreadyAssignedIds) {
-      await prisma.learningAssignment.create({
-        data: {
-          employeeId,
-          courseId: rule.courseId,
-          sourceType: "MANDATORY_RULE",
-          sourceMandatoryRuleId: rule.id,
-          assignedByAccountId,
-          status: "ASSIGNED",
-          effectivenessRequiredSnapshot: rule.course.effectivenessRequired,
-          overrideReason: refresherReason,
-        },
-      });
-      refresherAssigned++;
-    }
+  if (refresherReason && alreadyAssignedIds.size > 0) {
+    await prisma.learningAssignment.createMany({
+      data: [...alreadyAssignedIds].map((id) => assignmentData(id, refresherReason)),
+    });
+    refresherAssigned = alreadyAssignedIds.size;
   }
 
   return { audienceSize: audience.length, newlyAssigned: toAssign.length, alreadyAssigned: alreadyAssignedIds.size, refresherAssigned };
@@ -147,34 +136,65 @@ export async function applyOnboardingMandatoryTrainingForEmployee(
   employeeId: string,
   assignedByAccountId: string
 ): Promise<{ assignedCount: number }> {
-  const rules = await prisma.mandatoryTrainingRule.findMany({
-    where: { activeFlag: true, course: { isOnboardingRequired: true, status: "PUBLISHED" } },
-    include: { course: true },
+  const [rules, employee] = await Promise.all([
+    prisma.mandatoryTrainingRule.findMany({
+      where: { activeFlag: true, course: { isOnboardingRequired: true, status: "PUBLISHED" } },
+      include: { course: true },
+    }),
+    prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { activeFlag: true, currentPositionId: true, currentPosition: { select: { jobId: true, orgUnitId: true } } },
+    }),
+  ]);
+  if (!employee || !employee.activeFlag || rules.length === 0) return { assignedCount: 0 };
+
+  // Only this one employee is checked against each rule — not the whole
+  // company's audience resolved once per rule just to look one person up.
+  const departmentId = employee.currentPosition ? await resolveDepartmentId(employee.currentPosition.orgUnitId) : null;
+  const inAudience = (rule: (typeof rules)[number]): boolean => {
+    switch (rule.targetType) {
+      case "EVERYONE":
+        return true;
+      case "EMPLOYEE":
+        return rule.targetEmployeeId === employeeId;
+      case "PRIMARY_POSITION":
+        return !!rule.targetPositionId && rule.targetPositionId === employee.currentPositionId;
+      case "JOB":
+        return !!rule.targetJobId && rule.targetJobId === employee.currentPosition?.jobId;
+      case "DEPARTMENT":
+        return !!rule.targetDepartmentId && rule.targetDepartmentId === departmentId;
+      default:
+        return false;
+    }
+  };
+  const matching = rules.filter(inAudience);
+  if (matching.length === 0) return { assignedCount: 0 };
+
+  const existing = await prisma.learningAssignment.findMany({
+    where: { employeeId, courseId: { in: matching.map((r) => r.courseId) }, status: { not: "CANCELLED" } },
+    select: { courseId: true },
   });
+  const assignedCourseIds = new Set(existing.map((e) => e.courseId));
 
-  let assignedCount = 0;
-  for (const rule of rules) {
-    const audience = await resolveMandatoryTrainingAudience(rule);
-    if (!audience.includes(employeeId)) continue;
-
-    const existing = await prisma.learningAssignment.findFirst({
-      where: { employeeId, courseId: rule.courseId, status: { not: "CANCELLED" } },
-    });
-    if (existing) continue;
-
-    await prisma.learningAssignment.create({
-      data: {
+  const toCreate: (typeof matching)[number][] = [];
+  for (const rule of matching) {
+    if (assignedCourseIds.has(rule.courseId)) continue;
+    assignedCourseIds.add(rule.courseId); // two rules on one course still assign it once
+    toCreate.push(rule);
+  }
+  if (toCreate.length > 0) {
+    await prisma.learningAssignment.createMany({
+      data: toCreate.map((rule) => ({
         employeeId,
         courseId: rule.courseId,
-        sourceType: "MANDATORY_RULE",
+        sourceType: "MANDATORY_RULE" as const,
         sourceMandatoryRuleId: rule.id,
         assignedByAccountId,
-        status: "ASSIGNED",
+        status: "ASSIGNED" as const,
         effectivenessRequiredSnapshot: rule.course.effectivenessRequired,
-      },
+      })),
     });
-    assignedCount++;
   }
 
-  return { assignedCount };
+  return { assignedCount: toCreate.length };
 }

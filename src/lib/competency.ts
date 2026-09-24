@@ -71,9 +71,3 @@ export function computeCompanyValuesScore(items: CompanyValueScoreItem[]): numbe
   return (scores as number[]).reduce((sum, s) => sum + s, 0);
 }
 
-// Revised per direct request (was COM-06/COM-15 "both P1 and P2 required"):
-// P1's own submission (competency levels + Company Values) is now
-// sufficient on its own — P2 is no longer part of the workflow.
-export function isCompetencyAssessmentComplete(p1SubmittedAt: Date | null): boolean {
-  return p1SubmittedAt !== null;
-}

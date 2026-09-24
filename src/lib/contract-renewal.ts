@@ -54,10 +54,6 @@ export function recommendationDurationMonths(recommendation: RenewalRecommendati
   return RENEWAL_DURATION_MONTHS[recommendation] ?? null;
 }
 
-export function isRenewalRecommendation(recommendation: RenewalRecommendation): boolean {
-  return recommendationDurationMonths(recommendation) !== null;
-}
-
 // WF-12: "may change with mandatory reason" — only when the HR Manager's
 // final recommendation actually differs from the Dept Head's.
 export function requiresChangeReason(

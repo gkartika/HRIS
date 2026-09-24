@@ -5,6 +5,7 @@ import { isTrainingAdmin, canOpenCompetencyCycle } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { CloseCycleButton } from "./close-cycle-button";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function CompetencyCycleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,6 +30,7 @@ export default async function CompetencyCycleDetailPage({ params }: { params: Pr
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Kompetensi", href: "/competency" }, { label: "Detail Siklus" }]} />
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-lg font-medium text-slate-900">

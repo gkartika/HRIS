@@ -1,20 +1,13 @@
 import Link from "next/link";
+import { formatDateLong } from "@/lib/format";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import {
   canViewOffboardingCase,
-  canDecideOffboardingCaseAsDeptHead,
-  canDecideOffboardingCase,
   canExecuteExitClearance,
   canCancelOffboardingCase,
 } from "@/lib/permissions";
-import { getActiveHrManagerPositions } from "@/lib/hr-manager";
-import { getActiveDeptHeadPositions } from "@/lib/dept-head";
-import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
-import { resolveDepartmentId } from "@/lib/level3-scope";
 import {
-  canDecideOffboardingCaseAsDeptHeadStatus,
-  canDecideOffboardingCaseStatus,
   canExecuteExitClearanceStatus,
   canCancelOffboardingCaseStatus,
 } from "@/lib/offboarding";
@@ -23,17 +16,11 @@ import { isOverdue } from "@/lib/work-calendar";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import {
-  DecideOffboardingCaseAsDeptHeadForm,
-  DecideOffboardingCaseForm,
   ExecuteExitClearanceForm,
   CancelOffboardingCaseForm,
 } from "./decision-forms";
 import { ExitClearanceEmployeeForm } from "./exit-clearance-form";
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function OffboardingCaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -44,49 +31,20 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
     include: {
       employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
       reportedByAccount: true,
-      hrManagerDecisionByAccount: true,
-      hrManagerDecisionPosition: { include: { job: true } },
-      deptHeadDecisionByAccount: true,
-      deptHeadDecisionPosition: { include: { job: true } },
       clearanceCompletedByAccount: true,
       cancelledByAccount: true,
       sourceRenewalCase: true,
+      exitReason: true,
     },
   });
   if (!offboardingCase) notFound();
 
-  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
-  const activeHrManagerPositionIds = hrManagerPositions.map((p) => p.positionId);
-  const isEmployeesManager = await isDirectManagerOfEmployee(session.user.employeeId, offboardingCase.employeeId);
-  const employeeDepartmentId = offboardingCase.employee.currentPosition
-    ? await resolveDepartmentId(offboardingCase.employee.currentPosition.orgUnitId)
-    : null;
-  const deptHeadPositions = employeeDepartmentId
-    ? await getActiveDeptHeadPositions(session.user.employeeId, employeeDepartmentId)
-    : [];
-  const activeDeptHeadPositionIds = deptHeadPositions.map((p) => p.positionId);
-
-  if (
-    !canViewOffboardingCase(
-      session,
-      offboardingCase.employeeId,
-      activeHrManagerPositionIds,
-      isEmployeesManager,
-      activeDeptHeadPositionIds
-    )
-  ) {
+  if (!canViewOffboardingCase(session, offboardingCase.employeeId)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const canDecideAsDeptHead =
-    canDecideOffboardingCaseAsDeptHead(activeDeptHeadPositionIds) &&
-    canDecideOffboardingCaseAsDeptHeadStatus(offboardingCase.status);
-  const canDecide =
-    canDecideOffboardingCase(activeHrManagerPositionIds) && canDecideOffboardingCaseStatus(offboardingCase.status);
   const canExecute = canExecuteExitClearance(session) && canExecuteExitClearanceStatus(offboardingCase.status);
-  const canCancel =
-    canCancelOffboardingCase(session, offboardingCase.reportedByAccountId, activeHrManagerPositionIds) &&
-    canCancelOffboardingCaseStatus(offboardingCase.status);
+  const canCancel = canCancelOffboardingCase(session) && canCancelOffboardingCaseStatus(offboardingCase.status);
   const overdue = offboardingCase.status === "PENDING_CLEARANCE" && isOverdue(offboardingCase.clearanceDueDate);
   const isSelf = session.user.employeeId === offboardingCase.employeeId;
 
@@ -129,6 +87,7 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Offboarding", href: "/offboarding" }, { label: "Detail Kasus" }]} />
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -153,14 +112,20 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
             <p className="text-xs text-slate-500">{t("offboarding.reason")}</p>
             <p className="text-sm text-slate-900">{t(`offboardingReason.${offboardingCase.reason}`)}</p>
           </div>
+          {offboardingCase.exitReason && (
+            <div>
+              <p className="text-xs text-slate-500">Alasan</p>
+              <p className="text-sm text-slate-900">{offboardingCase.exitReason.label}</p>
+            </div>
+          )}
           <div>
             <p className="text-xs text-slate-500">{t("offboarding.lastWorkingDay")}</p>
-            <p className="text-sm text-slate-900">{formatDate(offboardingCase.lastWorkingDay)}</p>
+            <p className="text-sm text-slate-900">{formatDateLong(offboardingCase.lastWorkingDay)}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("offboarding.clearanceDueDate")}</p>
             <p className={`text-sm ${overdue ? "font-medium text-rose-600" : "text-slate-900"}`}>
-              {formatDate(offboardingCase.clearanceDueDate)}
+              {formatDateLong(offboardingCase.clearanceDueDate)}
               {overdue && ` (${t("offboarding.overdueBadge")})`}
             </p>
           </div>
@@ -176,7 +141,7 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
         )}
 
         <p className="mt-4 text-xs text-slate-400">
-          {t("offboarding.reportedBy")}: {offboardingCase.reportedByAccount?.usernameOrEmail ?? "—"} ({formatDate(offboardingCase.reportedAt)})
+          {t("offboarding.reportedBy")}: {offboardingCase.reportedByAccount?.usernameOrEmail ?? "—"} ({formatDateLong(offboardingCase.reportedAt)})
         </p>
         {offboardingCase.managerNote && (
           <div className="mt-4">
@@ -186,47 +151,11 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
         )}
       </div>
 
-      {offboardingCase.deptHeadDecisionByAccount && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <p className="text-xs text-slate-500">{t("offboarding.deptHeadDecisionTitle")}</p>
-          <p className="text-sm text-slate-900">
-            {offboardingCase.deptHeadDecisionByAccount.usernameOrEmail} ({formatDate(offboardingCase.deptHeadDecisionAt)})
-            {offboardingCase.deptHeadDecisionPosition && ` — ${offboardingCase.deptHeadDecisionPosition.job.jobTitle}`}
-          </p>
-          {offboardingCase.deptHeadNote && <p className="mt-1 text-sm text-slate-600">{offboardingCase.deptHeadNote}</p>}
-        </div>
-      )}
-
-      {canDecideAsDeptHead && (
-        <DecideOffboardingCaseAsDeptHeadForm
-          caseId={offboardingCase.id}
-          decisionPositions={deptHeadPositions.map((p) => ({ positionId: p.positionId, positionCode: p.positionCode, jobTitle: p.jobTitle }))}
-        />
-      )}
-
-      {offboardingCase.hrManagerDecisionByAccount && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <p className="text-xs text-slate-500">{t("offboarding.hrManagerDecisionTitle")}</p>
-          <p className="text-sm text-slate-900">
-            {offboardingCase.hrManagerDecisionByAccount.usernameOrEmail} ({formatDate(offboardingCase.hrManagerDecisionAt)})
-            {offboardingCase.hrManagerDecisionPosition && ` — ${offboardingCase.hrManagerDecisionPosition.job.jobTitle}`}
-          </p>
-          {offboardingCase.hrManagerNote && <p className="mt-1 text-sm text-slate-600">{offboardingCase.hrManagerNote}</p>}
-        </div>
-      )}
-
-      {canDecide && (
-        <DecideOffboardingCaseForm
-          caseId={offboardingCase.id}
-          decisionPositions={hrManagerPositions.map((p) => ({ positionId: p.positionId, positionCode: p.positionCode, jobTitle: p.jobTitle }))}
-        />
-      )}
-
       {offboardingCase.clearanceCompletedByAccount && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="text-xs text-slate-500">{t("offboarding.clearanceTitle")}</p>
           <p className="text-sm text-slate-900">
-            {offboardingCase.clearanceCompletedByAccount.usernameOrEmail} ({formatDate(offboardingCase.clearanceCompletedAt)})
+            {offboardingCase.clearanceCompletedByAccount.usernameOrEmail} ({formatDateLong(offboardingCase.clearanceCompletedAt)})
           </p>
           {offboardingCase.clearanceNote && <p className="mt-1 text-sm text-slate-600">{offboardingCase.clearanceNote}</p>}
           <p className="mt-2 text-xs text-slate-400">{t("offboarding.completedNotice")}</p>
@@ -270,7 +199,7 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="text-sm font-medium text-slate-900">Formulir Klirens Keluar (Diisi Karyawan)</p>
           <p className="mt-1 text-xs text-slate-400">
-            Dikirim pada {formatDate(exitClearanceSubmission.submittedAt)}
+            Dikirim pada {formatDateLong(exitClearanceSubmission.submittedAt)}
           </p>
           <div className="mt-3 space-y-3">
             {exitClearanceSubmission.answers
@@ -291,7 +220,7 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="text-xs text-slate-500">{t("offboarding.cancelButton")}</p>
           <p className="text-sm text-slate-900">
-            {offboardingCase.cancelledByAccount?.usernameOrEmail} ({formatDate(offboardingCase.cancelledAt)})
+            {offboardingCase.cancelledByAccount?.usernameOrEmail} ({formatDateLong(offboardingCase.cancelledAt)})
           </p>
           {offboardingCase.cancellationReason && <p className="mt-1 text-sm text-slate-600">{offboardingCase.cancellationReason}</p>}
         </div>

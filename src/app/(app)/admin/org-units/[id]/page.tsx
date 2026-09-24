@@ -3,7 +3,8 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { EditOrgUnitForm } from "./edit-form";
+import { EditOrgUnitForm } from "./edit-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditOrgUnitPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,6 +21,7 @@ export default async function EditOrgUnitPage({ params }: { params: Promise<{ id
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Pengaturan", href: "/admin" }, { label: "Unit Organisasi", href: "/admin/org-units" }, { label: "Detail Unit" }]} />
       <h1 className="text-lg font-medium text-slate-900">Ubah Unit Organisasi</h1>
       <p className="mt-1 font-mono text-xs text-slate-400">{unit.unitCode}</p>
       <div className="mt-4 max-w-lg">

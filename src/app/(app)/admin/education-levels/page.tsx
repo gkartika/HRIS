@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { SettingsTabs } from "../settings-tabs";
 import { CreateEducationLevelForm } from "./create-form";
 import { ToggleActiveForm } from "./toggle-form";
 
@@ -17,6 +18,7 @@ export default async function EducationLevelsPage() {
 
   return (
     <div>
+      <SettingsTabs groupId="karyawan" current="/admin/education-levels" />
       <h1 className="text-lg font-medium text-slate-900">Pendidikan Terakhir</h1>
       <p className="mt-1 text-sm text-slate-500">
         Daftar pilihan dropdown untuk field Pendidikan Terakhir pada data karyawan.

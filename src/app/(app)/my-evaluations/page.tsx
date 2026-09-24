@@ -1,12 +1,8 @@
 import Link from "next/link";
+import { formatDateMedium } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(date));
-}
 
 // ACC-17/15-In-App-Review "Shared Evaluation workflow": "P1/P2 see only My
 // Evaluations and their own scoring slot" — any employee-linked account may
@@ -59,7 +55,7 @@ export default async function MyEvaluationsPage() {
                   <td className="px-4 py-3 text-slate-600">{e.employee.fullLegalName}</td>
                   <td className="px-4 py-3 text-slate-600">{t(`evaluationPurpose.${e.purpose}`)}</td>
                   <td className="px-4 py-3 text-slate-600">{e.p1EmployeeId === employeeId ? "P1" : "P2"}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(e.evaluationDueDate)}</td>
+                  <td className="px-4 py-3 text-slate-600">{formatDateMedium(e.evaluationDueDate)}</td>
                   <td className="px-4 py-3">
                     <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                       {t(`evaluationStatus.${e.status}`)}

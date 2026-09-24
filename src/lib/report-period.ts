@@ -10,6 +10,7 @@
 // actually in, while the stored start/end stay UTC-midnight date-only
 // values comparable against attendanceDate/startDate columns.
 import { resolveCutoffPeriod, previousCutoffPeriod, nextCutoffPeriod, type CutoffPeriod } from "@/lib/absence-cutoff";
+import { companyYear } from "@/lib/company-time";
 
 export type ReportViewType = "cycle" | "year";
 
@@ -20,7 +21,7 @@ export interface ReportPeriod {
 }
 
 export function resolveYearPeriod(referenceDate: Date): ReportPeriod {
-  const year = referenceDate.getFullYear();
+  const year = companyYear(referenceDate);
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year, 11, 31));
   return { start, end, label: `${year}` };

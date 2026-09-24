@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canUploadEmployeeDocument } from "@/lib/permissions";
@@ -9,11 +10,6 @@ import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 
 type BpjsCardCategory = "BPJS_TK" | "BPJS_KESEHATAN";
-
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
 
 export async function uploadBpjsCard(
   employeeId: string,

@@ -14,9 +14,10 @@ import {
   canSubmitMovementRequest,
   canViewContract,
   canManageContracts,
-  canReportResignation,
+  canStartOffboarding,
   canSubmitShiftAssignment,
   canManageAccountHold,
+  canManageAccountAccess,
   canManageAttendanceAssignment,
   canViewAttendance,
   canManageTaskForceMembership,
@@ -24,18 +25,19 @@ import {
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
-import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { EmployeeProfileView } from "@/components/employee-profile-view";
 import { AssignmentManagementPanel } from "./assignment-panel";
 import { BpjsCardsPanel } from "./bpjs-cards-panel";
 import { AccountHoldPanel } from "./account-panel";
+import { AccountAccessPanel } from "./account-access-panel";
 import { AttendanceAssignmentPanel } from "./attendance-panel";
 import { AbsenceQuotaPanel } from "./absence-quota-panel";
 import { TaskForcePanel } from "./task-force-panel";
 import { usedDaysThisYearByType } from "@/lib/absence-quota";
-import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
+import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EmployeeDetailPage({
   params,
@@ -107,8 +109,7 @@ export default async function EmployeeDetailPage({
   const isLevel3InDepartment = await isLevel3ForEmployeeDepartment(session.user.employeeId, employee.id);
   const canSubmitMovement =
     !!employee.currentPositionId && canSubmitMovementRequest(session, isLevel3InDepartment);
-  const isEmployeesManager = await isDirectManagerOfEmployee(session.user.employeeId, employee.id);
-  const canReportThisResignation = canReportResignation(session, isEmployeesManager);
+  const canReportThisResignation = canStartOffboarding(session);
   const canSetShift = !!employee.currentPositionId && canSubmitShiftAssignment(session, isLevel3InDepartment);
   const canManageAttendance = canManageAttendanceAssignment(session);
   const canSeeAttendance = canViewAttendance(session, employee.id, isLevel3InDepartment);
@@ -231,6 +232,7 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Karyawan", href: "/employees" }, { label: "Detail Karyawan" }]} />
       {(canEdit || canSubmitMovement || canReportThisResignation || canSetShift) && (
         <div className="flex justify-end gap-4">
           {canSubmitMovement && (
@@ -277,6 +279,13 @@ export default async function EmployeeDetailPage({
         ptkpLabel={ptkpLabel}
         reportsTo={reportsTo}
       />
+      {canManageAccountAccess(session) && (
+        <AccountAccessPanel
+          employeeId={employee.id}
+          accountStatus={employee.account?.accountStatus ?? null}
+          personalEmail={employee.personalEmail}
+        />
+      )}
       {canHoldAccount && employee.account && (
         <AccountHoldPanel
           employeeId={employee.id}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { companyToday } from "@/lib/company-time";
 import type { CutoffPeriod } from "@/lib/absence-cutoff";
 import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
 import { computeDayMinutes, computeActualDayMinutes } from "@/lib/attendance-hours";
@@ -26,7 +27,7 @@ export interface UnresolvedDay {
 // most employee-days need zero action, per direct request.
 export async function getUnresolvedDays(period: CutoffPeriod): Promise<UnresolvedDay[]> {
   const now = new Date();
-  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const today = companyToday(now);
   const queryEnd = period.end < today ? new Date(period.end.getTime() + 24 * 60 * 60 * 1000) : today;
   if (queryEnd <= period.start) return [];
 
@@ -139,7 +140,7 @@ export interface GridEmployeeRow {
 export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: string[]): Promise<GridEmployeeRow[]> {
   if (employeeIds.length === 0) return [];
   const now = new Date();
-  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const today = companyToday(now);
   const queryEnd = period.end < today ? new Date(period.end.getTime() + 24 * 60 * 60 * 1000) : today;
 
   const dayCount = Math.round((queryEnd.getTime() - period.start.getTime()) / (24 * 60 * 60 * 1000));

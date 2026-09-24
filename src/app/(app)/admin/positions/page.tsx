@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { SettingsTabs } from "../settings-tabs";
 import { CreatePositionForm } from "./create-form";
 import type { Prisma, PositionStatus } from "@/generated/prisma/client";
 
@@ -52,6 +53,7 @@ export default async function PositionsPage({
 
   return (
     <div>
+      <SettingsTabs groupId="org" current="/admin/positions" />
       <h1 className="text-lg font-medium text-slate-900">Posisi Organisasi</h1>
       <p className="mt-1 text-sm text-slate-500">
         Kursi jabatan yang disetujui. Sebuah posisi dapat kosong dan tetap ada di struktur.

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { requireSession } from "@/lib/require-session";
 import { isTrainingAdmin } from "@/lib/permissions";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
@@ -16,9 +18,9 @@ const STATUS_TONE: Record<string, string> = {
   CANCELLED: "bg-slate-100 text-slate-500",
 };
 
-export default async function TrainingRequestsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
+export default async function TrainingRequestsPage({ searchParams }: { searchParams: Promise<{ page?: string; status?: string; q?: string }> }) {
   const session = await requireSession();
-  const { status, q } = await searchParams;
+  const { status, q, page: pageRaw } = await searchParams;
 
   const isAdmin = isTrainingAdmin(session);
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
@@ -54,11 +56,14 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
     : [];
   if (visibilityFilter.length > 0 || searchFilter.length > 0) where.AND = [...visibilityFilter, ...searchFilter];
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.trainingRequest.count({ where });
   const requests = await prisma.trainingRequest.findMany({
+      skip,
+      take,
     where,
     include: { employee: { select: { fullLegalName: true, employeeNumber: true } }, course: { select: { title: true } } },
     orderBy: { createdAt: "desc" },
-    take: 100,
   });
 
   return (
@@ -151,6 +156,7 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
           </tbody>
         </table>
       </div>
+      <Pager page={page} total={total} basePath="/training-requests" params={{ status, q }} />
     </div>
   );
 }

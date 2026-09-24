@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin } from "@/lib/permissions";
 import { getLevel3DepartmentIds, resolveDepartmentId } from "@/lib/level3-scope";
 import { getActiveDirectorCandidates } from "@/lib/org-chart";
@@ -14,7 +14,7 @@ const HEADERS = ["employeeNumber", "employeeName", "position", "level3", "compet
 // gets only Level-3 employees, HR/Training Admin get everything in the
 // selected cycle.
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const isAdmin = isHrAdmin(session) || isTrainingAdmin(session);

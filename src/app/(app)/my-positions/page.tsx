@@ -1,11 +1,7 @@
 import { requireSession } from "@/lib/require-session";
+import { formatDateLong } from "@/lib/format";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
 
 // ACC-15/DSH-13: "My Positions" — every active Assignment this employee
 // currently holds, always reconstructed live from Assignment rows (never a
@@ -53,7 +49,7 @@ export default async function MyPositionsPage() {
                 </span>
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                {t("assignmentUi.effectiveFrom")}: {formatDate(a.effectiveFrom)}
+                {t("assignmentUi.effectiveFrom")}: {formatDateLong(a.effectiveFrom)}
               </p>
               {a.position.grantsHrManagerAccess && (
                 <span className="mt-2 inline-block rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">

@@ -26,9 +26,7 @@ import {
   canViewEmployeeDocument,
   canUploadEmployeeDocument,
   canViewBpjsCard,
-  canReportResignation,
-  canDecideOffboardingCaseAsDeptHead,
-  canDecideOffboardingCase,
+  canStartOffboarding,
   canExecuteExitClearance,
   canCancelOffboardingCase,
   canViewOffboardingCase,
@@ -36,7 +34,6 @@ import {
   canManageExitClearanceQuestions,
   canConfirmGaAssetClearance,
   canSubmitShiftAssignment,
-  canViewShiftAssignments,
   isDirector,
   canManageCompetencyFramework,
   canOpenCompetencyCycle,
@@ -62,13 +59,11 @@ import {
   canManageAssets,
   canViewAssetMaster,
   canImportAssetMaster,
-  canViewOwnAssetCustody,
   canManageGaOperations,
   canManageGaApprovalConfig,
   canSubmitGaRequest,
   canViewGaRequest,
   canDecideAsConfiguredGaApprover,
-  canExportGaOperationsData,
   canCancelGaRequest,
   projectEmployee,
 } from "./permissions";
@@ -389,28 +384,10 @@ describe("projectEmployee field-level scope (ACC-10 / DM-17 sensitivity)", () =>
   });
 });
 
-describe("canReportResignation (LIF-06)", () => {
-  it("allows the employee's direct manager or HR Admin", () => {
-    expect(canReportResignation(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
-    expect(canReportResignation(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(true);
-  });
-
-  it("denies anyone else", () => {
-    expect(canReportResignation(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
-  });
-});
-
-describe("canDecideOffboardingCaseAsDeptHead", () => {
-  it("only an active Dept Head (3B) Position holder", () => {
-    expect(canDecideOffboardingCaseAsDeptHead(["pos-dept-head"])).toBe(true);
-    expect(canDecideOffboardingCaseAsDeptHead([])).toBe(false);
-  });
-});
-
-describe("canDecideOffboardingCase", () => {
-  it("only an active HR Manager Position holder", () => {
-    expect(canDecideOffboardingCase(["pos-hr-manager"])).toBe(true);
-    expect(canDecideOffboardingCase([])).toBe(false);
+describe("canStartOffboarding", () => {
+  it("HR Admin only — no manager report", () => {
+    expect(canStartOffboarding(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canStartOffboarding(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
   });
 });
 
@@ -422,38 +399,20 @@ describe("canExecuteExitClearance (LIF-06)", () => {
 });
 
 describe("canCancelOffboardingCase", () => {
-  it("allows the reporter (matching Account id), an active HR Manager, or HR Admin", () => {
-    expect(canCancelOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "account-1", [])).toBe(true);
-    expect(canCancelOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "someone-else", ["pos-hr-manager"])).toBe(
-      true
-    );
-    expect(canCancelOffboardingCase(mockSession({ roles: ["HR_ADMIN"] }), "someone-else", [])).toBe(true);
-  });
-
-  it("denies a bystander", () => {
-    expect(canCancelOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "someone-else", [])).toBe(false);
+  it("HR Admin only", () => {
+    expect(canCancelOffboardingCase(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canCancelOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }))).toBe(false);
   });
 });
 
 describe("canViewOffboardingCase", () => {
-  it("allows HR Admin, an active HR Manager, an active Dept Head, the subject employee, or their direct manager", () => {
-    expect(canViewOffboardingCase(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", [], false)).toBe(true);
-    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", ["pos-hr-manager"], false)).toBe(
-      true
-    );
-    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1", [], false)).toBe(
-      true
-    );
-    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", [], true)).toBe(true);
-    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", [], false, ["pos-dept-head"])).toBe(
-      true
-    );
+  it("allows HR Admin or the leaving employee themself", () => {
+    expect(canViewOffboardingCase(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(true);
+    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1")).toBe(true);
   });
 
-  it("denies a bystander", () => {
-    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", [], false)).toBe(
-      false
-    );
+  it("denies everyone else, including a manager or another employee", () => {
+    expect(canViewOffboardingCase(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1")).toBe(false);
   });
 });
 
@@ -484,19 +443,6 @@ describe("canSubmitShiftAssignment", () => {
     expect(canSubmitShiftAssignment(mockSession({ roles: ["HR_ADMIN"] }), false)).toBe(true);
     expect(canSubmitShiftAssignment(mockSession({ roles: ["EMPLOYEE"] }), true)).toBe(true);
     expect(canSubmitShiftAssignment(mockSession({ roles: ["EMPLOYEE"] }), false)).toBe(false);
-  });
-});
-
-describe("canViewShiftAssignments", () => {
-  it("allows HR Admin, the employee themself, or their department's Level-3", () => {
-    expect(canViewShiftAssignments(mockSession({ roles: ["HR_ADMIN"] }), "emp-1", false)).toBe(true);
-    expect(canViewShiftAssignments(mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" }), "emp-1", false)).toBe(
-      true
-    );
-    expect(canViewShiftAssignments(mockSession({ roles: ["EMPLOYEE"] }), "emp-1", true)).toBe(true);
-    expect(canViewShiftAssignments(mockSession({ roles: ["EMPLOYEE"], employeeId: "bystander-1" }), "emp-1", false)).toBe(
-      false
-    );
   });
 });
 
@@ -688,16 +634,11 @@ describe("Phase 4A asset permissions — GA Admin only, never HR Admin", () => {
     }
   });
 
-  it("canViewOwnAssetCustody: only the exact custody employee, never GA/HR Admin", () => {
-    expect(canViewOwnAssetCustody(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
-    expect(canViewOwnAssetCustody(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
-    expect(canViewOwnAssetCustody(mockSession({ roles: ["GA_ADMIN"] }), "emp-1")).toBe(false);
-  });
 });
 
 describe("Phase 4B GA Operations permissions — GA Admin only, never HR Admin", () => {
-  it("canManageGaOperations/canManageGaApprovalConfig/canExportGaOperationsData are GA Admin only", () => {
-    for (const fn of [canManageGaOperations, canManageGaApprovalConfig, canExportGaOperationsData]) {
+  it("canManageGaOperations/canManageGaApprovalConfig are GA Admin only", () => {
+    for (const fn of [canManageGaOperations, canManageGaApprovalConfig]) {
       expect(fn(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
       expect(fn(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
       expect(fn(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);

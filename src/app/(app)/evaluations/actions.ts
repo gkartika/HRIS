@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createDraftEvaluation } from "@/lib/evaluation-create";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canCreateManualEvaluation, canReleaseEvaluation, canSubmitEvaluationAs } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import {
-  formatEvaluationNumber,
   canReleaseEvaluationStatus,
   canSubmitEvaluationSlot,
   isValidScoreValue,
@@ -15,56 +15,8 @@ import {
   type EvaluationScores,
 } from "@/lib/evaluation";
 import { addWorkingDays } from "@/lib/work-calendar";
-import type { EvaluationPurpose } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
 
-// PER-07/WF-19/DEC-020: the ONE shared creator for every source workflow —
-// Contract Renewal's D-30 trigger and Perubahan Posisi's submit action both
-// call this directly (server-to-server, no client-reachable "request
-// evaluation" button anywhere — ACC-16/17: "no requester-trigger control").
-//
-// requireSession() here is defense-in-depth, not the real permission gate
-// (every current caller already checked its own specific permission before
-// reaching this point) — it just guarantees this exported "use server"
-// function can never execute unauthenticated if a future change ever wires
-// it up to a Client Component directly, bypassing today's server-to-server-
-// only call graph.
-export async function createDraftEvaluation(params: {
-  employeeId: string;
-  purpose: EvaluationPurpose;
-  primaryAssignmentId?: string | null;
-  snapshotPositionId?: string | null;
-  createdByAccountId?: string | null;
-}): Promise<{ id: string; evaluationNumber: string }> {
-  await requireSession();
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.evaluation.count({
-    where: { evaluationNumber: { startsWith: `EVL-${year}-` } },
-  });
-  const evaluationNumber = formatEvaluationNumber(countThisYear + 1, year);
-
-  const evaluation = await prisma.evaluation.create({
-    data: {
-      evaluationNumber,
-      employeeId: params.employeeId,
-      purpose: params.purpose,
-      status: "DRAFT",
-      primaryAssignmentId: params.primaryAssignmentId ?? null,
-      snapshotPositionId: params.snapshotPositionId ?? null,
-      createdByAccountId: params.createdByAccountId ?? null,
-    },
-  });
-
-  await logAudit({
-    actorAccountId: params.createdByAccountId ?? null,
-    action: "CREATE",
-    datasetName: "Evaluation",
-    recordId: evaluation.id,
-    reason: `Draft ${evaluationNumber} created (purpose: ${params.purpose})`,
-  });
-
-  return { id: evaluation.id, evaluationNumber: evaluation.evaluationNumber };
-}
 
 // WF-19/LIF-14 note: HR Admin may also create a Manual HR evaluation for
 // other authorized needs, reachable from the Evaluation list.

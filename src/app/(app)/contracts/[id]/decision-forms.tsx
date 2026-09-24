@@ -12,6 +12,7 @@ import {
 } from "../actions";
 import { t } from "@/lib/i18n/id";
 import type { Employee, EmploymentStatus } from "@/generated/prisma/client";
+type EmployeeOption = Pick<Employee, "id" | "fullLegalName" | "employeeNumber">;
 
 export interface DecisionPositionOption {
   positionId: string;
@@ -113,7 +114,7 @@ export function RecommendationForm({
   isHrAdmin,
 }: {
   contractId: string;
-  employees: Employee[];
+  employees: EmployeeOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
 }) {

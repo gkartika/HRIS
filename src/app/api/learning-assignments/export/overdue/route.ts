@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { canManageLearningAssignment } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -15,7 +15,7 @@ const HEADERS = ["employeeNumber", "employeeName", "course", "status", "sessionS
 // comparable schedule signal in the schema, so they're not included here
 // rather than inventing an arbitrary day-count threshold.
 export async function GET() {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canManageLearningAssignment(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { canManageLearningAssignment } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -11,7 +11,7 @@ const HEADERS = ["employeeNumber", "employeeName", "course", "session", "sourceT
 // CTL-13: Training/HR Admin-only (matches the Learning Assignment list
 // page's own gate — same as canManageLearningAssignment everywhere else).
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canManageLearningAssignment(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

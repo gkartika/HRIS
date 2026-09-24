@@ -54,6 +54,10 @@ next-env.d.ts
 # Private file storage (never committed — dev-only fictional documents)
 /storage/
 
+# Full-database backups taken before a risky reset/migration against the
+# live Supabase Postgres instance — real employee PII, never committed.
+/backups/
+
 # Vendor-bundled agent/skill reference docs (from `prisma init`), not project content
 /.agents/
 /.windsurf/

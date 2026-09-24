@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -71,13 +73,11 @@ export async function createEmployee(
       },
     });
 
-    const year = hireDateObj.getFullYear();
-    const countThisYear = await tx.onboardingCase.count({
-      where: { caseNumber: { startsWith: `ONB-${year}-` } },
-    });
+    const year = companyYear(hireDateObj);
+    const seq = await nextSequence(`ONB-${year}`, tx);
     await tx.onboardingCase.create({
       data: {
-        caseNumber: formatOnboardingCaseNumber(countThisYear + 1, year),
+        caseNumber: formatOnboardingCaseNumber(seq, year),
         employeeId: created.id,
         plannedStartDate: hireDateObj,
       },

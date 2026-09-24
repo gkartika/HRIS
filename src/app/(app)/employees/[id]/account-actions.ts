@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { canManageAccountHold } from "@/lib/permissions";
+import { canManageAccountAccess, canManageAccountHold } from "@/lib/permissions";
+import { inviteEmployee } from "@/lib/account-access";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { logAudit } from "@/lib/audit";
 
@@ -81,4 +82,73 @@ export async function reactivateAccount(
   });
 
   revalidatePath(`/employees/${employeeId}`);
+}
+
+export type AccountLinkResult = { ok: boolean; message: string } | undefined;
+
+// Admin SDM: create the login (if none) and email the invitation, or a
+// password-reset link to an existing account. The employee chooses the
+// password themselves — Admin SDM never sees or sets it.
+export async function sendAccountLink(
+  employeeId: string,
+  _prevState: AccountLinkResult,
+  _formData: FormData
+): Promise<AccountLinkResult> {
+  const session = await requireSession();
+  if (!canManageAccountAccess(session)) return { ok: false, message: "Anda tidak memiliki akses." };
+
+  const result = await inviteEmployee(employeeId, session.user.id);
+  if (!result.ok) return { ok: false, message: result.error };
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+  return {
+    ok: true,
+    message: result.kind === "INVITE" ? "Undangan terkirim ke email karyawan." : "Tautan atur ulang kata sandi terkirim.",
+  };
+}
+
+const MAX_INVITES_PER_CLICK = 40;
+
+// "Undang semua yang belum punya akun". Capped per click so one request stays
+// well inside the server time limit; the message says how many are left.
+export async function inviteAllWithoutAccount(): Promise<{ ok: boolean; message: string }> {
+  const session = await requireSession();
+  if (!canManageAccountAccess(session)) return { ok: false, message: "Anda tidak memiliki akses." };
+
+  const candidates = await prisma.employee.findMany({
+    where: { activeFlag: true, account: { is: null }, personalEmail: { not: null } },
+    select: { id: true, personalEmail: true },
+    orderBy: { employeeNumber: "asc" },
+  });
+  const withEmail = candidates.filter((e) => e.personalEmail?.trim());
+  const withoutEmail = await prisma.employee.count({
+    where: { activeFlag: true, account: { is: null }, OR: [{ personalEmail: null }, { personalEmail: "" }] },
+  });
+  if (withEmail.length === 0) {
+    return {
+      ok: withoutEmail === 0,
+      message:
+        withoutEmail === 0
+          ? "Semua karyawan aktif sudah punya akun."
+          : `Tidak ada yang bisa diundang: ${withoutEmail} karyawan belum punya Email Pribadi.`,
+    };
+  }
+
+  const batch = withEmail.slice(0, MAX_INVITES_PER_CLICK);
+  let sent = 0;
+  let failed = 0;
+  for (const employee of batch) {
+    const result = await inviteEmployee(employee.id, session.user.id);
+    if (result.ok) sent++;
+    else failed++;
+  }
+
+  revalidatePath("/employees");
+  const remaining = withEmail.length - batch.length;
+  const parts = [`${sent} undangan terkirim`];
+  if (failed) parts.push(`${failed} gagal`);
+  if (remaining) parts.push(`${remaining} lagi belum — tekan tombol lagi`);
+  if (withoutEmail) parts.push(`${withoutEmail} belum punya Email Pribadi`);
+  return { ok: failed === 0, message: parts.join(" · ") + "." };
 }

@@ -5,7 +5,6 @@ import {
   canTrainingAdminValidateTrainingRequest,
   canTrainingAdminScheduleTrainingRequest,
   canCancelTrainingRequest,
-  isTerminalTrainingRequestStatus,
   DEFAULT_EFFECTIVENESS_FOLLOWUP_DAYS,
   computeEffectivenessDueDate,
   canConfirmLearningAssignmentAttendance,
@@ -45,12 +44,6 @@ describe("TrainingRequest lifecycle (TRN-02/TRN-10)", () => {
     expect(canCancelTrainingRequest("CANCELLED")).toBe(false);
   });
 
-  it("REJECTED/SCHEDULED/CANCELLED are terminal", () => {
-    expect(isTerminalTrainingRequestStatus("REJECTED")).toBe(true);
-    expect(isTerminalTrainingRequestStatus("SCHEDULED")).toBe(true);
-    expect(isTerminalTrainingRequestStatus("CANCELLED")).toBe(true);
-    expect(isTerminalTrainingRequestStatus("VALIDATED")).toBe(false);
-  });
 });
 
 describe("computeEffectivenessDueDate (TRN-04)", () => {

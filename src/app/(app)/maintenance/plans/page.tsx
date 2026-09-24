@@ -1,14 +1,10 @@
 import { requireSession } from "@/lib/require-session";
+import { formatDateMedium } from "@/lib/format";
 import { canManageGaOperations } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { CreatePlanForm } from "./create-plan-form";
 import { CreateWorkOrderFromPlanForm, DeactivatePlanButton } from "./plan-row-actions";
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(date);
-}
 
 export default async function MaintenancePlansPage() {
   const session = await requireSession();
@@ -59,7 +55,7 @@ export default async function MaintenancePlansPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">{p.description}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      {formatDate(p.dueDate)}
+                      {formatDateMedium(p.dueDate)}
                       {isDue && <span className="ml-2 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Jatuh Tempo</span>}
                     </td>
                     <td className="px-4 py-3">

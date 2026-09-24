@@ -4,16 +4,16 @@
 // single new draft Contract is created the same way regardless of which
 // workflow approved the renewal.
 import { prisma } from "@/lib/db";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { logAudit } from "@/lib/audit";
 import { formatContractNumber } from "@/lib/contract";
 import type { EmploymentStatus } from "@/generated/prisma/enums";
 
 export async function nextContractNumber(contractType: EmploymentStatus): Promise<string> {
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.contract.count({
-    where: { contractNumber: { startsWith: `${contractType}/CBP/${year}/` } },
-  });
-  return formatContractNumber(contractType, countThisYear + 1, year);
+  const year = companyYear();
+  const seq = await nextSequence(`${contractType}/CBP/${year}`);
+  return formatContractNumber(contractType, seq, year);
 }
 
 // Per direct user request (11_FIELD_MAP's primary_assignment_code): every

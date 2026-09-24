@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { getActiveAssignmentsOf } from "@/lib/active-assignments";
 
 // Department Manager/Head approval gate, added ahead of the HR Manager per
 // direct user request. Defined literally as "Job level 3B" (not a
@@ -22,50 +22,17 @@ export interface DeptHeadPosition {
 export async function getActiveDeptHeadPositions(
   employeeId: string | null | undefined,
   departmentId: string,
-  asOf: Date = new Date()
+  asOf?: Date
 ): Promise<DeptHeadPosition[]> {
-  if (!employeeId) return [];
-
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      employeeId,
-      status: "ACTIVE",
-      effectiveFrom: { lte: asOf },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { orgUnitId: departmentId, jobLevel: DEPT_HEAD_JOB_LEVEL },
-    },
-    include: { position: { include: { job: true } } },
-  });
-
-  return assignments.map((a) => ({
-    assignmentId: a.id,
-    positionId: a.positionId,
-    positionCode: a.position.positionCode,
-    jobTitle: a.position.job.jobTitle,
-  }));
-}
-
-/**
- * Every Employee currently holding level-3B approval authority in one
- * department, company-wide (not scoped to a single Employee) — Perubahan
- * Posisi's self-approval guard: if the requester IS one of these, routing
- * must fall back to a different entry here (e.g. an Acting-type Assignment
- * covering the same Position) rather than silently bypass or self-approve.
- */
-export async function getDeptHeadApprovers(
-  departmentId: string,
-  asOf: Date = new Date()
-): Promise<{ employeeId: string; positionId: string; assignmentType: string }[]> {
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      status: "ACTIVE",
-      effectiveFrom: { lte: asOf },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { orgUnitId: departmentId, jobLevel: DEPT_HEAD_JOB_LEVEL },
-    },
-    select: { employeeId: true, positionId: true, assignmentType: true },
-  });
-  return assignments;
+  const assignments = await getActiveAssignmentsOf(employeeId, asOf);
+  return assignments
+    .filter((a) => a.position.orgUnitId === departmentId && a.position.jobLevel === DEPT_HEAD_JOB_LEVEL)
+    .map((a) => ({
+      assignmentId: a.id,
+      positionId: a.positionId,
+      positionCode: a.position.positionCode,
+      jobTitle: a.position.job.jobTitle,
+    }));
 }
 
 /**
@@ -75,20 +42,10 @@ export async function getDeptHeadApprovers(
  */
 export async function getDeptHeadDepartmentIds(
   employeeId: string | null | undefined,
-  asOf: Date = new Date()
+  asOf?: Date
 ): Promise<string[]> {
-  if (!employeeId) return [];
-
-  const assignments = await prisma.assignment.findMany({
-    where: {
-      employeeId,
-      status: "ACTIVE",
-      effectiveFrom: { lte: asOf },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
-      position: { jobLevel: DEPT_HEAD_JOB_LEVEL },
-    },
-    select: { position: { select: { orgUnitId: true } } },
-  });
-
-  return [...new Set(assignments.map((a) => a.position.orgUnitId))];
+  const assignments = await getActiveAssignmentsOf(employeeId, asOf);
+  return [
+    ...new Set(assignments.filter((a) => a.position.jobLevel === DEPT_HEAD_JOB_LEVEL).map((a) => a.position.orgUnitId)),
+  ];
 }

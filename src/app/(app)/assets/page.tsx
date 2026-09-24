@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canViewAssetMaster, canManageAssets } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import type { Prisma } from "@/generated/prisma/client";
 import { CreateAssetForm } from "./create-form";
 
@@ -18,14 +21,14 @@ const STATUS_TONE: Record<string, string> = {
 export default async function AssetsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; trackingType?: string; status?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; trackingType?: string; status?: string }>;
 }) {
   const session = await requireSession();
   if (!canViewAssetMaster(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const { q, trackingType, status } = await searchParams;
+  const { q, trackingType, status, page: pageRaw } = await searchParams;
 
   const where: Prisma.FixedAssetWhereInput = {};
   if (q?.trim()) {
@@ -41,8 +44,12 @@ export default async function AssetsPage({
     where.status = status;
   }
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.fixedAsset.count({ where });
   const [assets, filteredCount, totalCount] = await Promise.all([
     prisma.fixedAsset.findMany({
+      skip,
+      take,
       where,
       orderBy: { assetCode: "asc" },
       include: { _count: { select: { custodies: { where: { status: { not: "RETURNED" } } } } } },
@@ -127,7 +134,7 @@ export default async function AssetsPage({
       </form>
 
       {assets.length === 0 ? (
-        <p className="text-sm text-slate-400">{hasFilters ? t("common.noFilteredResults") : t("asset.emptyState")}</p>
+        <EmptyState filtered={hasFilters} message={t("asset.emptyState")} resetHref="/assets" />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -168,6 +175,7 @@ export default async function AssetsPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/assets" params={{ q, trackingType, status }} />
     </div>
   );
 }

@@ -48,7 +48,7 @@ export default async function NewMovementRequestPage({
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),
-    isHrAdminUser ? prisma.employee.findMany({ orderBy: { fullLegalName: "asc" } }) : Promise.resolve([]),
+    isHrAdminUser ? prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } }) : Promise.resolve([]),
   ]);
 
   if (eligibleEmployees.length === 0) {

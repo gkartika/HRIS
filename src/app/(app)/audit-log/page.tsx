@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/require-session";
 import { canAccessAuditLog } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import Link from "next/link";
 import type { Prisma, AuditAction } from "@/generated/prisma/client";
 
@@ -146,9 +147,7 @@ export default async function AuditLogPage({
       </p>
 
       {events.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-400">
-          {hasFilters ? t("common.noFilteredResults") : t("auditUi.empty")}
-        </p>
+        <EmptyState filtered={hasFilters} message={t("auditUi.empty")} resetHref="/audit-log" />
       ) : (
         <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">

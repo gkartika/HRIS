@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations, canSubmitGaRequest } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import type { Prisma, GaRequestStatus, GaRequestType } from "@/generated/prisma/client";
 
 const REQUEST_TYPES: GaRequestType[] = ["NEW_ASSET_NEED", "DAMAGE_OR_ABNORMAL_CONDITION", "LOSS"];
@@ -54,7 +57,7 @@ const STATUS_TONE: Record<GaRequestStatus, string> = {
 export default async function GaRequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ requestType?: string; status?: string }>;
+  searchParams: Promise<{ page?: string; requestType?: string; status?: string }>;
 }) {
   const session = await requireSession();
   const isGaAdminUser = canManageGaOperations(session);
@@ -63,7 +66,7 @@ export default async function GaRequestsPage({
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const { requestType, status } = await searchParams;
+  const { requestType, status, page: pageRaw } = await searchParams;
 
   // "Requester sees only own requests" — GA Admin sees everything, anyone
   // else sees only what they submitted themselves. Approvers reach a
@@ -72,14 +75,17 @@ export default async function GaRequestsPage({
   if (requestType) where.requestType = requestType as GaRequestType;
   if (status) where.status = status as GaRequestStatus;
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.gaRequest.count({ where });
   const requests = await prisma.gaRequest.findMany({
+      skip,
+      take,
     where,
     include: {
       requester: { select: { employeeNumber: true, fullLegalName: true } },
       asset: { select: { assetName: true, assetCode: true } },
     },
     orderBy: { submittedAt: "desc" },
-    take: 100,
   });
 
   const hasFilters = !!(requestType || status);
@@ -139,7 +145,7 @@ export default async function GaRequestsPage({
       </form>
 
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-400">Belum ada permintaan.</p>
+        <EmptyState message="Belum ada permintaan." action={{ href: "/ga-requests/new", label: "Buat Permintaan" }} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -174,6 +180,7 @@ export default async function GaRequestsPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/ga-requests" params={{ requestType, status }} />
     </div>
   );
 }

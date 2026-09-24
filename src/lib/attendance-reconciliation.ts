@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db";
+import { companyToday } from "@/lib/company-time";
+import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
 import { isWorkingDay } from "@/lib/attendance";
 
 const LOOKBACK_DAYS = 14;
@@ -9,7 +11,7 @@ const LOOKBACK_DAYS = 14;
 // in, silently drifting DailyAttendanceRecord rows out of sync with each
 // other across environments/restarts.
 function startOfDay(date: Date): Date {
-  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  return companyToday(date);
 }
 
 // Idempotent daily reconciliation trigger — same "derive/act on read"
@@ -43,28 +45,20 @@ export async function reconcileDueDailyAttendance(): Promise<void> {
   });
   if (assignments.length === 0) return;
 
-  const dueDays: Date[] = [];
+  // Every calendar day in the window is a candidate; whether an employee was
+  // actually due to work that day is decided per employee below (shift
+  // schedule, Libur, company holidays) rather than a fixed Mon-Fri rule.
+  const candidateDays: Date[] = [];
   for (let offset = 1; offset <= LOOKBACK_DAYS; offset++) {
-    const day = new Date(today.getTime() - offset * 24 * 60 * 60 * 1000);
-    if (isWorkingDay(day)) dueDays.push(day);
+    candidateDays.push(new Date(today.getTime() - offset * 24 * 60 * 60 * 1000));
   }
-  if (dueDays.length === 0) return;
-  const windowStart = dueDays[dueDays.length - 1];
+  const windowStart = candidateDays[candidateDays.length - 1];
 
-  const duePairs: { employeeId: string; day: Date }[] = [];
-  for (const assignment of assignments) {
-    const assignmentStart = startOfDay(assignment.effectiveFrom);
-    for (const day of dueDays) {
-      if (day < assignmentStart) continue;
-      duePairs.push({ employeeId: assignment.employeeId, day });
-    }
-  }
-  if (duePairs.length === 0) return;
-
-  const employeeIds = [...new Set(duePairs.map((p) => p.employeeId))];
+  const employeeIds = [...new Set(assignments.map((a) => a.employeeId))];
   const keyOf = (employeeId: string, day: Date) => `${employeeId}|${day.getTime()}`;
 
-  const [existingRecords, checkInEvents, checkOutEvents] = await Promise.all([
+  const weekStarts = [...new Set(candidateDays.map((d) => normalizeWeekStart(d).getTime()))].map((t) => new Date(t));
+  const [existingRecords, checkInEvents, checkOutEvents, shiftAssignments, scheduleRows, holidays] = await Promise.all([
     prisma.dailyAttendanceRecord.findMany({
       where: { employeeId: { in: employeeIds }, attendanceDate: { gte: windowStart, lt: today } },
       select: { employeeId: true, attendanceDate: true },
@@ -77,20 +71,40 @@ export async function reconcileDueDailyAttendance(): Promise<void> {
       where: { employeeId: { in: employeeIds }, eventType: "CHECK_OUT", eventAt: { gte: windowStart, lt: today } },
       select: { id: true, employeeId: true, eventAt: true },
     }),
+    prisma.shiftAssignment.findMany({ where: { employeeId: { in: employeeIds }, weekStartDate: { in: weekStarts } } }),
+    prisma.workScheduleConfig.findMany(),
+    prisma.companyHoliday.findMany({ where: { date: { gte: windowStart, lt: today } }, select: { date: true } }),
   ]);
 
   const existingKeys = new Set(existingRecords.map((r) => keyOf(r.employeeId, r.attendanceDate)));
   const checkInByKey = new Map(checkInEvents.map((e) => [keyOf(e.employeeId, startOfDay(e.eventAt)), e.id]));
   const checkOutByKey = new Map(checkOutEvents.map((e) => [keyOf(e.employeeId, startOfDay(e.eventAt)), e.id]));
+  const holidayTimes = new Set(holidays.map((h) => h.date.getTime()));
+  const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
+  const scheduledMinutes = buildScheduleMinutesLookup(scheduleRows);
 
-  const toCreate = duePairs
-    .filter((p) => !existingKeys.has(keyOf(p.employeeId, p.day)))
-    .map((p) => ({
-      employeeId: p.employeeId,
-      attendanceDate: p.day,
-      checkInEventId: checkInByKey.get(keyOf(p.employeeId, p.day)),
-      checkOutEventId: checkOutByKey.get(keyOf(p.employeeId, p.day)),
-    }));
+  // Is this employee due to work this day? No schedule table filled in yet
+  // falls back to the old Mon-Fri rule so a fresh setup still sweeps.
+  const isScheduled = (employeeId: string, day: Date): boolean => {
+    if (holidayTimes.has(day.getTime())) return false;
+    if (scheduleRows.length === 0) return isWorkingDay(day);
+    return scheduledMinutes(assignedShiftFor(employeeId, normalizeWeekStart(day)), day.getUTCDay()) > 0;
+  };
+
+  const toCreate: { employeeId: string; attendanceDate: Date; checkInEventId?: string; checkOutEventId?: string }[] = [];
+  for (const assignment of assignments) {
+    const assignmentStart = startOfDay(assignment.effectiveFrom);
+    for (const day of candidateDays) {
+      if (day < assignmentStart) continue;
+      const key = keyOf(assignment.employeeId, day);
+      if (existingKeys.has(key)) continue;
+      const checkInEventId = checkInByKey.get(key);
+      const checkOutEventId = checkOutByKey.get(key);
+      // Someone who punched on a day off (e.g. worked a Libur day) still gets a record.
+      if (!isScheduled(assignment.employeeId, day) && !checkInEventId && !checkOutEventId) continue;
+      toCreate.push({ employeeId: assignment.employeeId, attendanceDate: day, checkInEventId, checkOutEventId });
+    }
+  }
 
   if (toCreate.length > 0) {
     await prisma.dailyAttendanceRecord.createMany({ data: toCreate, skipDuplicates: true });

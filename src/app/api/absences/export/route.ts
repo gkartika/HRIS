@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { canExportAbsenceData } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -11,7 +11,7 @@ const HEADERS = ["requestNumber", "employeeNumber", "name", "absenceType", "star
 // CTL-13: "permission-filtered XLSX/CSV export" — HR Admin only, same as
 // every other sensitive export in this app (canExportAbsenceData).
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canExportAbsenceData(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

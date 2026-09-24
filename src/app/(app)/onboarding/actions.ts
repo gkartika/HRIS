@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { redirect } from "next/navigation";
@@ -39,13 +41,11 @@ export async function createOnboardingCaseManually(
   if (existing) return `Karyawan ini sudah memiliki kasus Onboarding (${existing.caseNumber}).`;
 
   const plannedStartDateObj = new Date(plannedStartDate);
-  const year = plannedStartDateObj.getFullYear();
-  const countThisYear = await prisma.onboardingCase.count({
-    where: { caseNumber: { startsWith: `ONB-${year}-` } },
-  });
+  const year = companyYear(plannedStartDateObj);
+  const seq = await nextSequence(`ONB-${year}`);
   const onboardingCase = await prisma.onboardingCase.create({
     data: {
-      caseNumber: formatOnboardingCaseNumber(countThisYear + 1, year),
+      caseNumber: formatOnboardingCaseNumber(seq, year),
       employeeId,
       plannedStartDate: plannedStartDateObj,
     },

@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { formatDateMedium } from "@/lib/format";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -8,30 +11,29 @@ import type { Prisma, EvaluationStatus, EvaluationPurpose } from "@/generated/pr
 const STATUSES: EvaluationStatus[] = ["DRAFT", "RELEASED", "COMPLETED", "RETURNED", "CANCELLED", "VOIDED"];
 const PURPOSES: EvaluationPurpose[] = ["CONTRACT_RENEWAL", "PROMOTION", "MUTATION", "DEMOTION", "MANUAL_HR"];
 
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(date));
-}
-
 // WF-19/ACC-17: this operational list is HR-Admin-only — P1/P2 reach their
 // own assigned evaluations via /my-evaluations, and the primary Dept
 // Head/HR Manager reach a specific one through its source workflow page.
 export default async function EvaluationListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; purpose?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; purpose?: string }>;
 }) {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
-  const { status, purpose } = await searchParams;
+  const { status, purpose, page: pageRaw } = await searchParams;
 
   const where: Prisma.EvaluationWhereInput = {};
   if (status) where.status = status as EvaluationStatus;
   if (purpose) where.purpose = purpose as EvaluationPurpose;
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.evaluation.count({ where });
   const evaluations = await prisma.evaluation.findMany({
+      skip,
+      take,
     where,
     include: { employee: true, p1Employee: true, p2Employee: true },
     orderBy: { createdAt: "desc" },
@@ -120,7 +122,7 @@ export default async function EvaluationListPage({
                     {e.p2Employee ? (e.p2Employee.fullLegalName) : "—"}
                     {e.p2SubmittedAt ? " ✓" : ""}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(e.evaluationDueDate)}</td>
+                  <td className="px-4 py-3 text-slate-600">{formatDateMedium(e.evaluationDueDate)}</td>
                   <td className="px-4 py-3">
                     <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                       {t(`evaluationStatus.${e.status}`)}
@@ -132,6 +134,7 @@ export default async function EvaluationListPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/evaluations" params={{ status, purpose }} />
     </div>
   );
 }

@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import type { Prisma, AbsenceStatus } from "@/generated/prisma/client";
 
 const ABSENCE_STATUSES: AbsenceStatus[] = [
@@ -24,24 +27,27 @@ const ABSENCE_STATUSES: AbsenceStatus[] = [
 export default async function AbsencesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; absenceType?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; absenceType?: string }>;
 }) {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
-  const { status, absenceType } = await searchParams;
+  const { status, absenceType, page: pageRaw } = await searchParams;
 
   const where: Prisma.AbsenceRequestWhereInput = {};
   if (status) where.status = status as AbsenceStatus;
   if (absenceType) where.absenceTypeCode = absenceType;
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.absenceRequest.count({ where });
   const [requests, absenceTypes] = await Promise.all([
     prisma.absenceRequest.findMany({
+      skip,
+      take,
       where,
       include: { employee: { select: { employeeNumber: true, fullLegalName: true } }, absenceType: true },
       orderBy: { submittedAt: "desc" },
-      take: 100,
     }),
     prisma.absenceTypeConfig.findMany({ orderBy: { sortOrder: "asc" }, select: { code: true, label: true } }),
   ]);
@@ -104,7 +110,7 @@ export default async function AbsencesPage({
       </form>
 
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-400">{t("absence.emptyState")}</p>
+        <EmptyState message={t("absence.emptyState")} action={{ href: "/absences/new", label: "Ajukan Absensi" }} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -137,6 +143,7 @@ export default async function AbsencesPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/absences" params={{ status, absenceType }} />
     </div>
   );
 }

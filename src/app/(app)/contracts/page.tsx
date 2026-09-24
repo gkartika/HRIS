@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import { computeExpiryUrgency } from "@/lib/contract";
-import { triggerDueRenewalCases } from "./renewal-actions";
 import type { Prisma, ContractStatus } from "@/generated/prisma/client";
 
 const CONTRACT_STATUSES: ContractStatus[] = [
@@ -22,15 +24,10 @@ const CONTRACT_STATUSES: ContractStatus[] = [
 export default async function ContractListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; orgUnitId?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; orgUnitId?: string }>;
 }) {
   const session = await requireSession();
-  const { status, orgUnitId } = await searchParams;
-
-  // LIF-08: idempotent D-30 scan — Contract and its automated renewal case
-  // are one module, so this page's own load is the trigger point (same
-  // "derive/act on read" pattern as computeExpiryUrgency below).
-  await triggerDueRenewalCases();
+  const { status, orgUnitId, page: pageRaw } = await searchParams;
 
   const where: Prisma.ContractWhereInput = isHrAdmin(session)
     ? {}
@@ -38,8 +35,12 @@ export default async function ContractListPage({
   if (status) where.status = status as ContractStatus;
   if (orgUnitId) where.employee = { currentPosition: { orgUnitId } };
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.contract.count({ where });
   const [contracts, orgUnits] = await Promise.all([
     prisma.contract.findMany({
+      skip,
+      take,
       where,
       include: {
         employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } },
@@ -118,9 +119,7 @@ export default async function ContractListPage({
       </form>
 
       {contracts.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          {hasFilters ? t("common.noFilteredResults") : t("contract.emptyState")}
-        </p>
+        <EmptyState filtered={hasFilters} message={t("contract.emptyState")} resetHref="/contracts" hint="Kontrak dibuat dari halaman masing-masing karyawan." />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -151,7 +150,7 @@ export default async function ContractListPage({
                     <td className="px-4 py-3 text-slate-600">{t(`employmentStatus.${c.contractType}`)}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {c.endDate
-                        ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(c.endDate)
+                        ? new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium" }).format(c.endDate)
                         : t("contract.indefinite")}
                     </td>
                     <td className="px-4 py-3">
@@ -186,6 +185,7 @@ export default async function ContractListPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/contracts" params={{ status, orgUnitId }} />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { publishTrainingCourse, archiveTrainingCourse } from "../actions";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export function PublishArchiveButtons({ courseId, canPublish, canArchive }: { courseId: string; canPublish: boolean; canArchive: boolean }) {
   const [isPending, startTransition] = useTransition();
@@ -21,14 +22,7 @@ export function PublishArchiveButtons({ courseId, canPublish, canArchive }: { co
         </button>
       )}
       {canArchive && (
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => startTransition(() => archiveTrainingCourse(courseId))}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-        >
-          Arsipkan
-        </button>
+        <ConfirmButton label="Arsipkan" onConfirm={() => startTransition(() => archiveTrainingCourse(courseId))} pending={isPending} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60" />
       )}
     </div>
   );

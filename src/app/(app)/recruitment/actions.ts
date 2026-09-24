@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { authorizeDeptHeadDecision, authorizeHrManagerDecision } from "@/lib/approval-authority";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import {
   canSubmitRecruitmentRequest,
   canApproveRecruitmentRequest,
-  canApproveRecruitmentRequestAsDeptHead,
   canCreateEmployeeFromRequest,
   canCancelRecruitmentRequest,
   isHrManager,
@@ -83,11 +85,9 @@ export async function submitRecruitmentRequest(
   const requesterDeptHeadPositions = await getActiveDeptHeadPositions(requesterEmployeeId, departmentId);
   const initialStatus = initialRecruitmentStatus(requesterDeptHeadPositions.length > 0);
 
-  const year = new Date(requestDate).getFullYear();
-  const countThisYear = await prisma.recruitmentRequest.count({
-    where: { requestNumber: { startsWith: `REQ-${year}-` } },
-  });
-  const requestNumber = formatRequestNumber(countThisYear + 1, year);
+  const year = companyYear(new Date(requestDate));
+  const seq = await nextSequence(`REQ-${year}`);
+  const requestNumber = formatRequestNumber(seq, year);
   const now = new Date();
 
   const request = await prisma.recruitmentRequest.create({
@@ -170,15 +170,13 @@ export async function decideRecruitmentRequestAsDeptHead(
     return "Permintaan ini sudah diproses.";
   }
 
-  const deptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, request.departmentId);
-  if (!canApproveRecruitmentRequestAsDeptHead(deptHeadPositions.map((p) => p.positionId))) {
-    return "Anda tidak memiliki akses. Hanya Kepala Departemen/Manajer (Level 3B) di department ini yang dapat memutuskan permintaan ini.";
-  }
-
-  const decisionPositionId = formData.get("decisionPositionId") as string;
-  if (!deptHeadPositions.some((p) => p.positionId === decisionPositionId)) {
-    return "Posisi Kepala Departemen/Manajer yang dipilih tidak valid atau tidak lagi aktif.";
-  }
+  const authority = await authorizeDeptHeadDecision({
+    employeeId: session.user.employeeId,
+    departmentId: request.departmentId,
+    formData,
+  });
+  if (!authority.ok) return authority.error;
+  const { decisionPositionId } = authority;
 
   const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
   if ((decision === "REJECTED" || decision === "RETURNED") && !decisionNote) {
@@ -219,15 +217,9 @@ export async function decideRecruitmentRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
-  if (!canApproveRecruitmentRequest(hrManagerPositions.map((p) => p.positionId))) {
-    return "Anda tidak memiliki akses. Hanya HR Manager aktif yang dapat memutuskan permintaan ini.";
-  }
-
-  const decisionPositionId = formData.get("decisionPositionId") as string;
-  if (!hrManagerPositions.some((p) => p.positionId === decisionPositionId)) {
-    return "Posisi HR Manager yang dipilih tidak valid atau tidak lagi aktif.";
-  }
+  const authority = await authorizeHrManagerDecision({ employeeId: session.user.employeeId, formData });
+  if (!authority.ok) return authority.error;
+  const { decisionPositionId } = authority;
 
   const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -445,13 +437,11 @@ export async function createEmployeeFromRecruitmentRequest(
     // LIF-03: same automatic Onboarding Case as direct Employee creation —
     // this path must not skip it just because the Employee came from a
     // Recruitment Request.
-    const onbYear = hireDateObj.getFullYear();
-    const onbCountThisYear = await tx.onboardingCase.count({
-      where: { caseNumber: { startsWith: `ONB-${onbYear}-` } },
-    });
+    const onbYear = companyYear(hireDateObj);
+    const onbSeq = await nextSequence(`ONB-${onbYear}`, tx);
     await tx.onboardingCase.create({
       data: {
-        caseNumber: formatOnboardingCaseNumber(onbCountThisYear + 1, onbYear),
+        caseNumber: formatOnboardingCaseNumber(onbSeq, onbYear),
         employeeId: employee.id,
         plannedStartDate: hireDateObj,
       },

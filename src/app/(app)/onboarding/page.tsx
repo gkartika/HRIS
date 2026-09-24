@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { requireSession } from "@/lib/require-session";
 import { canViewOnboarding, canCreateOnboardingCase } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import { computeOnboardingStatus, isOnboardingTrainingComplete, isOnboardingAssetsComplete } from "@/lib/onboarding";
 import type { Prisma, OnboardingOverallStatus } from "@/generated/prisma/client";
 
@@ -12,7 +15,7 @@ const ONBOARDING_STATUSES: OnboardingOverallStatus[] = ["NOT_STARTED", "IN_PROGR
 export default async function OnboardingListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; orgUnitId?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; orgUnitId?: string }>;
 }) {
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
@@ -20,15 +23,19 @@ export default async function OnboardingListPage({
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const { status, orgUnitId } = await searchParams;
+  const { status, orgUnitId, page: pageRaw } = await searchParams;
 
   const where: Prisma.OnboardingCaseWhereInput = {};
   if (orgUnitId) {
     where.employee = { currentPosition: { orgUnitId } };
   }
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.onboardingCase.count({ where });
   const [cases, orgUnits] = await Promise.all([
     prisma.onboardingCase.findMany({
+      skip,
+      take,
       where,
       include: { employee: { include: { currentPosition: { include: { job: true, orgUnit: true } } } } },
       orderBy: { plannedStartDate: "desc" },
@@ -151,9 +158,7 @@ export default async function OnboardingListPage({
       </form>
 
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-400">
-          {hasFilters ? t("common.noFilteredResults") : t("onboarding.emptyState")}
-        </p>
+        <EmptyState filtered={hasFilters} message={t("onboarding.emptyState")} resetHref="/onboarding" hint="Kasus onboarding muncul otomatis saat karyawan baru ditambahkan." />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -183,7 +188,7 @@ export default async function OnboardingListPage({
                       : t("employee.noPosition")}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(c.plannedStartDate)}
+                    {new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium" }).format(c.plannedStartDate)}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -204,6 +209,7 @@ export default async function OnboardingListPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/onboarding" params={{ status, orgUnitId }} />
     </div>
   );
 }

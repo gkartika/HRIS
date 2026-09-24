@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -23,13 +26,8 @@ import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 import { assignAssetToEmployee, assignAssetToDepartment, assignAssetToLocation } from "@/app/(app)/assets/actions";
-import { createDisposalCaseInternal } from "@/app/(app)/disposal-cases/actions";
+import { createDisposalCaseInternal } from "@/lib/disposal-create";
 import type { GaRequestType, GaRequestUrgency } from "@/generated/prisma/enums";
-
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
 
 export async function submitGaRequest(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
@@ -83,11 +81,9 @@ export async function submitGaRequest(_prevState: string | undefined, formData: 
     evidenceFileId = fileObject.id;
   }
 
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.gaRequest.count({
-    where: { requestNumber: { startsWith: `GAR-${year}-` } },
-  });
-  const requestNumber = formatGaRequestNumber(countThisYear + 1, year);
+  const year = companyYear();
+  const seq = await nextSequence(`GAR-${year}`);
+  const requestNumber = formatGaRequestNumber(seq, year);
 
   const created = await prisma.gaRequest.create({
     data: {

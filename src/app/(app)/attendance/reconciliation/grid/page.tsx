@@ -4,7 +4,6 @@ import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { reconcileDueDailyAttendance } from "@/lib/attendance-reconciliation";
 import { resolveCutoffPeriod, previousCutoffPeriod, nextCutoffPeriod, formatCutoffParam, parseCutoffParam } from "@/lib/absence-cutoff";
 import { getReconciliationGrid } from "@/lib/attendance-reconciliation-queue";
 import { formatMinutesAsHours } from "@/lib/attendance-hours";
@@ -49,7 +48,6 @@ export default async function AttendanceReconciliationGridPage({
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  await reconcileDueDailyAttendance();
 
   const { cutoff, orgUnitId, q, sortBy: sortByParam, sortDir: sortDirParam, editEmployeeId, editDate } = await searchParams;
   const search = q?.trim() ?? "";

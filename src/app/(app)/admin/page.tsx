@@ -1,65 +1,8 @@
 import Link from "next/link";
-import { Building2, Briefcase, Network, GraduationCap, Receipt, MapPin, Award, ClipboardCheck, Tags } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
-
-const SECTIONS = [
-  {
-    href: "/admin/org-units",
-    icon: Building2,
-    title: "Unit Organisasi",
-    desc: "Departemen, Seksi, Grup, dan Tim",
-  },
-  {
-    href: "/admin/jobs",
-    icon: Briefcase,
-    title: "Jabatan Standar",
-    desc: "Definisi jabatan yang dapat dipakai ulang",
-  },
-  {
-    href: "/admin/positions",
-    icon: Network,
-    title: "Posisi Organisasi",
-    desc: "Kursi jabatan yang disetujui, termasuk yang kosong",
-  },
-  {
-    href: "/admin/education-levels",
-    icon: GraduationCap,
-    title: "Pendidikan Terakhir",
-    desc: "Daftar dropdown untuk data karyawan",
-  },
-  {
-    href: "/admin/ptkp-status",
-    icon: Receipt,
-    title: "PTKP Pajak",
-    desc: "Daftar kode PTKP untuk data karyawan",
-  },
-  {
-    href: "/admin/attendance-geofences",
-    icon: MapPin,
-    title: "Lokasi Absensi",
-    desc: "Titik lokasi dan radius untuk Check-in/Check-out Mobile",
-  },
-  {
-    href: "/admin/absence-settings",
-    icon: Tags,
-    title: "Pengaturan Absensi",
-    desc: "Jenis Absensi & alur persetujuan, penyetuju per Departemen, jatah tahunan, dan override jatah per karyawan",
-  },
-  {
-    href: "/admin/competency",
-    icon: Award,
-    title: "Kerangka Kompetensi",
-    desc: "Matrik Kompetensi dan Tata Nilai Perusahaan (juga dapat diakses Admin Pelatihan & Kompetensi)",
-  },
-  {
-    href: "/admin/exit-clearance-questions",
-    icon: ClipboardCheck,
-    title: "Pertanyaan Klirens Keluar",
-    desc: "Daftar pertanyaan formulir Klirens Keluar yang diisi karyawan saat offboarding",
-  },
-];
+import { SETTINGS_GROUPS } from "./settings-groups";
 
 export default async function AdminHomePage() {
   const session = await requireSession();
@@ -69,23 +12,36 @@ export default async function AdminHomePage() {
 
   return (
     <div>
-      <h1 className="text-lg font-medium text-slate-900">Pengaturan Struktur Organisasi</h1>
+      <h1 className="text-lg font-medium text-slate-900">Pengaturan</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Kelola Unit Organisasi, Jabatan Standar, Posisi Organisasi, dan data master karyawan.
+        Semua pengaturan aplikasi ada di sini. Pilih tombol di kartu untuk membuka halamannya.
       </p>
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {SECTIONS.map((s) => {
-          const Icon = s.icon;
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        {SETTINGS_GROUPS.map((g) => {
+          const Icon = g.icon;
           return (
-            <Link
-              key={s.href}
-              href={s.href}
-              className="rounded-xl border border-slate-200 bg-white p-5 hover:border-slate-300"
-            >
-              <Icon size={18} className="text-indigo-500" />
-              <p className="mt-2 text-sm font-medium text-slate-900">{s.title}</p>
-              <p className="mt-1 text-xs text-slate-500">{s.desc}</p>
-            </Link>
+            <section key={g.id} className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <Icon size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">{g.title}</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">{g.desc}</p>
+                </div>
+              </div>
+              <div className="mt-auto flex flex-wrap gap-2">
+                {g.pages.map((p) => (
+                  <Link
+                    key={p.href}
+                    href={p.href}
+                    className="rounded-full border border-slate-300 px-3.5 py-1.5 text-sm font-medium text-slate-700 hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-600"
+                  >
+                    {p.label}
+                  </Link>
+                ))}
+              </div>
+            </section>
           );
         })}
       </div>

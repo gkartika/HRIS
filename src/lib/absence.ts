@@ -16,8 +16,8 @@ export function doDateRangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd
 // Inclusive day count — e.g. Monday to Wednesday is 3 days, not 2.
 export function absenceDayCount(startDate: Date, endDate: Date): number {
   const msPerDay = 24 * 60 * 60 * 1000;
-  const start = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-  const end = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const start = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
+  const end = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
   return Math.round((end - start) / msPerDay) + 1;
 }
 

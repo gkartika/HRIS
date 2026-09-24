@@ -10,6 +10,7 @@ import { MaterialMoveButtons } from "./material-move-buttons";
 import { CreateQuizForm } from "./create-quiz-form";
 import { AddQuestionForm } from "./add-question-form";
 import { PublishArchiveButtons } from "./publish-archive-buttons";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", PUBLISHED: "Dipublikasikan", ARCHIVED: "Diarsipkan" };
 const MODE_LABELS: Record<string, string> = { ONLINE: "Daring", IN_PERSON: "Tatap Muka", BLENDED: "Campuran" };
@@ -39,6 +40,7 @@ export default async function TrainingCourseDetailPage({ params }: { params: Pro
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Pelatihan", href: "/training/courses" }, { label: "Detail Pelatihan" }]} />
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">

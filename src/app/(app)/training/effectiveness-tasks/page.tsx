@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/require-session";
+import { EFFECTIVENESS_DUE_WHERE } from "@/lib/training";
 import { canManageLearningAssignment, canRecordLearningEffectiveness } from "@/lib/permissions";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { prisma } from "@/lib/db";
@@ -21,7 +22,7 @@ export default async function EffectivenessTasksPage() {
   }
 
   const candidates = await prisma.learningAssignment.findMany({
-    where: { status: "COMPLETED", effectivenessRequiredSnapshot: true, effectivenessCompletedAt: null },
+    where: EFFECTIVENESS_DUE_WHERE,
     include: {
       employee: { select: { id: true, fullLegalName: true, employeeNumber: true } },
       course: { select: { title: true } },

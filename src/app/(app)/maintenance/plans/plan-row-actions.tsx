@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createWorkOrderFromPlan, deactivateMaintenancePlan } from "../actions";
 import { t } from "@/lib/i18n/id";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export function CreateWorkOrderFromPlanForm({ planId }: { planId: string }) {
   const [open, setOpen] = useState(false);
@@ -52,13 +53,7 @@ export function DeactivatePlanButton({ planId }: { planId: string }) {
 
   return (
     <div>
-      <button
-        onClick={handleClick}
-        disabled={isPending}
-        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-      >
-        {isPending ? t("common.loading") : "Nonaktifkan"}
-      </button>
+      <ConfirmButton label="Nonaktifkan" onConfirm={handleClick} pending={isPending} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-60" />
       {error && <p className="mt-1 text-xs text-rose-600">{error}</p>}
     </div>
   );

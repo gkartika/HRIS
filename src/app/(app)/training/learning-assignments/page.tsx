@@ -1,4 +1,7 @@
 import { requireSession } from "@/lib/require-session";
+import type { Prisma } from "@/generated/prisma/client";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { canManageLearningAssignment, canViewCompanyWideLmsReporting } from "@/lib/permissions";
 import { areRequiredMaterialsComplete } from "@/lib/lms";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -23,7 +26,7 @@ const STATUS_TONE: Record<string, string> = {
 // hidden for them below (canManage gate). HR Manager's scope is company-
 // wide and read-only (canViewCompanyWideLmsReporting); a plain Manager only
 // sees their own direct reports' rows (getDirectReportEmployeeIds).
-export default async function LearningAssignmentsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
+export default async function LearningAssignmentsPage({ searchParams }: { searchParams: Promise<{ page?: string; status?: string; q?: string }> }) {
   const session = await requireSession();
   const canManage = canManageLearningAssignment(session);
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
@@ -34,22 +37,27 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
   if (!canManage && !isCompanyWideReporting && directReportIds.length === 0) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
-  const { status, q } = await searchParams;
+  const { status, q, page: pageRaw } = await searchParams;
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const where: Prisma.LearningAssignmentWhereInput = {
+    ...(canManage || isCompanyWideReporting ? {} : { employeeId: { in: directReportIds } }),
+    ...(status ? { status: status as LearningAssignmentStatus } : {}),
+    ...(q?.trim()
+      ? {
+          OR: [
+            { employee: { fullLegalName: { contains: q.trim(), mode: "insensitive" } } },
+            { employee: { employeeNumber: { contains: q.trim(), mode: "insensitive" } } },
+            { course: { title: { contains: q.trim(), mode: "insensitive" } } },
+          ],
+        }
+      : {}),
+  };
+  const total = await prisma.learningAssignment.count({ where });
   const assignments = await prisma.learningAssignment.findMany({
-    where: {
-      ...(canManage || isCompanyWideReporting ? {} : { employeeId: { in: directReportIds } }),
-      ...(status ? { status: status as LearningAssignmentStatus } : {}),
-      ...(q?.trim()
-        ? {
-            OR: [
-              { employee: { fullLegalName: { contains: q.trim(), mode: "insensitive" } } },
-              { employee: { employeeNumber: { contains: q.trim(), mode: "insensitive" } } },
-              { course: { title: { contains: q.trim(), mode: "insensitive" } } },
-            ],
-          }
-        : {}),
-    },
+    skip,
+    take,
+    where,
     include: {
       employee: { select: { fullLegalName: true, employeeNumber: true } },
       course: {
@@ -66,7 +74,6 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
       quizAttempts: { select: { passed: true } },
     },
     orderBy: { assignedAt: "desc" },
-    take: 200,
   });
 
   return (
@@ -197,6 +204,7 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
           </tbody>
         </table>
       </div>
+      <Pager page={page} total={total} basePath="/training/learning-assignments" params={{ status, q }} />
     </div>
   );
 }

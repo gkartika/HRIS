@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import { reconcileDueDailyAttendance } from "@/lib/attendance-reconciliation";
 import { resolveCutoffPeriod, parseCutoffParam, formatCutoffParam } from "@/lib/absence-cutoff";
 import { getReconciliationGrid } from "@/lib/attendance-reconciliation-queue";
 import { buildReconciliationExportSheet } from "@/lib/attendance-reconciliation-export";
@@ -17,7 +16,7 @@ import { buildReconciliationExportSheet } from "@/lib/attendance-reconciliation-
 // accepted there since the upload path is HR-Admin-only — same access
 // boundary applies here); this is its first *writing* use.
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isHrAdmin(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -26,7 +25,6 @@ export async function GET(request: Request) {
   const orgUnitId = searchParams.get("orgUnitId") ?? undefined;
   const search = searchParams.get("q")?.trim() ?? "";
 
-  await reconcileDueDailyAttendance();
 
   const referenceDate = parseCutoffParam(cutoff) ?? new Date();
   const period = resolveCutoffPeriod(referenceDate);

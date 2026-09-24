@@ -4,7 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { submitMovementRequest } from "../actions";
 import { t } from "@/lib/i18n/id";
 import type { Employee, Position, Job, OrgUnit, Assignment } from "@/generated/prisma/client";
-
+type CandidateOption = Pick<Employee, "id" | "fullLegalName" | "employeeNumber">;
 type PositionOption = Position & { job: Job; orgUnit: OrgUnit };
 type AssignmentOption = Assignment & { position: PositionOption };
 type EmployeeOption = Employee & {
@@ -36,7 +36,7 @@ export function SubmitMovementForm({
   employees: EmployeeOption[];
   defaultEmployeeId: string;
   positions: PositionOption[];
-  requesterCandidates: Employee[];
+  requesterCandidates: CandidateOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
 }) {

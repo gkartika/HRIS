@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { canViewAssetMaster } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
@@ -23,7 +23,7 @@ const HEADERS = [
 // Phase 4A (HR Admin never reaches this, only the completion/blocker status
 // folded into Onboarding/Offboarding).
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canViewAssetMaster(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

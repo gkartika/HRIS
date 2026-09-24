@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import {
   canManageOrgStructure,
   canListEmployees,
@@ -33,7 +33,7 @@ function canAccessDataset(session: Session, dataset: string): boolean {
 // view already shows.
 export async function GET(_request: Request, { params }: { params: Promise<{ dataset: string }> }) {
   const { dataset } = await params;
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isDatasetKey(dataset)) return NextResponse.json({ error: "Unknown dataset" }, { status: 404 });
   if (!canAccessDataset(session, dataset)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

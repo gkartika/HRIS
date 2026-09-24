@@ -2333,3 +2333,31 @@ easy to revisit before UI finalization, per the Decision Log's own note.
   revocation UI) needs the notification-channel decision (DEC-008) first —
   will revisit alongside Phase 5 (dashboards & notifications) or sooner if
   the user wants it earlier.
+
+### Offboarding: HR Admin starts it, no approval (2026-09-24)
+Per direct user request, quitting is no longer approved in the app. HR Admin
+alone opens an offboarding case (`/offboarding/new`, or the button on the
+employee page); every case starts at `PENDING_CLEARANCE` and goes
+straight to exit clearance. This supersedes the LIF-06/07/12 Dept Head → HR
+Manager stages: `PENDING_DEPT_HEAD`/`PENDING_HR_MANAGER` and the
+`deptHeadDecision*`/`hrManagerDecision*` columns were removed (migration
+`20260924080000_offboarding_hr_admin_only`; old rows, if any, fold into
+`PENDING_CLEARANCE`). Manager-reported resignations are gone too.
+Visibility: HR Admin (all cases, cancel, execute clearance), the leaving
+employee (own case only, fills the Exit Clearance form), and GA Admin via the
+separate asset-clearance page. Contract non-renewal handoff is unchanged.
+
+### Employee login by email: invite, create password, reset (2026-09-24)
+Per direct user answers: the login name is the employee's **Email Pribadi**;
+Admin SDM creates the account with a per-person or "undang semua" button
+(never self-signup); the employee chooses their own password from an emailed
+one-time link (invitation valid 7 days, reset 1 day; only a SHA-256 of the
+token is stored — `AccountToken`). Password rule: 8+ characters with a letter
+and a digit. A locked account (5 wrong attempts) is opened by a successful
+reset. "Lupa kata sandi" always answers the same neutral message and has a
+60-second per-account cooldown. An employee without an Email Pribadi cannot be
+invited (no Admin-SDM-set temporary passwords). Mail goes out over Gmail SMTP
+(`SMTP_*` env vars). The three seeded admin accounts keep their current
+passwords for now (decided to leave for later). Code: `lib/account-access.ts`,
+`lib/account-tokens.ts`, `lib/mailer.ts`, `/forgot-password`, `/set-password`,
+`/change-password`, and the "Akun Masuk" panel on the employee page.

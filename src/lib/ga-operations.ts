@@ -114,12 +114,6 @@ export function canExecuteMaintenanceWorkOrder(status: MaintenanceStatus): boole
   return status === "OPEN";
 }
 
-// "Operational: update condition and next due" / "Beyond repair:
-// disposal" — outcome BEYOND_REPAIR always drafts a DisposalCase.
-export function shouldDraftDisposalCaseForMaintenanceOutcome(outcome: MaintenanceOutcome): boolean {
-  return outcome === "BEYOND_REPAIR";
-}
-
 // ---------- DisposalCase ----------
 
 export function canSubmitDisposalCaseForApproval(status: DisposalStatus): boolean {

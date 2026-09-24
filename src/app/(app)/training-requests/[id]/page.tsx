@@ -22,6 +22,7 @@ import { DeptHeadDecisionForm } from "./dept-head-decision-form";
 import { ValidateForm } from "./validate-form";
 import { ScheduleForm } from "./schedule-form";
 import { CancelForm } from "./cancel-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function TrainingRequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -70,6 +71,7 @@ export default async function TrainingRequestDetailPage({ params }: { params: Pr
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Permintaan Pelatihan", href: "/training-requests" }, { label: "Detail Permintaan" }]} />
       <h1 className="text-lg font-medium text-slate-900">
         {request.requestNumber} — {request.employee.fullLegalName}
       </h1>

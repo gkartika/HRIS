@@ -1,25 +1,22 @@
 import Link from "next/link";
+import { formatDateMedium } from "@/lib/format";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isOverdue } from "@/lib/work-calendar";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { EmptyState } from "@/components/empty-state";
 import type { Prisma, OffboardingCaseStatus, OffboardingReason } from "@/generated/prisma/client";
 
 const REASONS: OffboardingReason[] = ["RESIGNATION", "CONTRACT_NON_RENEWAL"];
 const STATUSES: OffboardingCaseStatus[] = [
-  "PENDING_DEPT_HEAD",
-  "PENDING_HR_MANAGER",
   "PENDING_CLEARANCE",
   "COMPLETED",
   "CANCELLED",
 ];
-
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(new Date(date));
-}
 
 // LIF-06/DSH-14: HR Admin and the active HR Manager see every case
 // (operational/oversight surfaces); everyone else sees only cases about
@@ -29,10 +26,10 @@ function formatDate(date: Date | null | undefined): string {
 export default async function OffboardingListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reason?: string; status?: string; orgUnitId?: string; reportedByAccountId?: string }>;
+  searchParams: Promise<{ page?: string; reason?: string; status?: string; orgUnitId?: string; reportedByAccountId?: string }>;
 }) {
   const session = await requireSession();
-  const { reason, status, orgUnitId, reportedByAccountId } = await searchParams;
+  const { reason, status, orgUnitId, reportedByAccountId, page: pageRaw } = await searchParams;
 
   const isHrAdminUser = isHrAdmin(session);
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
@@ -50,8 +47,12 @@ export default async function OffboardingListPage({
   if (reportedByAccountId) conditions.push({ reportedByAccountId });
   const where: Prisma.OffboardingCaseWhereInput = conditions.length > 0 ? { AND: conditions } : {};
 
+  const { page, skip, take } = pageParams(pageRaw);
+  const total = await prisma.offboardingCase.count({ where });
   const [cases, orgUnits, reporters] = await Promise.all([
     prisma.offboardingCase.findMany({
+      skip,
+      take,
       where,
       include: {
         employee: { include: { currentPosition: { include: { orgUnit: true } } } },
@@ -79,9 +80,11 @@ export default async function OffboardingListPage({
           <h1 className="text-lg font-medium text-slate-900">{t("offboarding.listTitle")}</h1>
           <p className="mt-1 text-sm text-slate-500">{t("offboarding.listSubtitle")}</p>
         </div>
-        <Link href="/offboarding/new" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-          {t("offboarding.reportButton")}
-        </Link>
+        {isHrAdminUser && (
+          <Link href="/offboarding/new" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+            {t("offboarding.reportButton")}
+          </Link>
+        )}
       </div>
 
       <form className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -146,7 +149,7 @@ export default async function OffboardingListPage({
       </form>
 
       {cases.length === 0 ? (
-        <p className="text-sm text-slate-400">{hasFilters ? t("common.noFilteredResults") : t("offboarding.emptyState")}</p>
+        <EmptyState filtered={hasFilters} message={t("offboarding.emptyState")} resetHref="/offboarding" action={isHrAdminUser ? { href: "/offboarding/new", label: t("offboarding.reportButton") } : undefined} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -178,10 +181,10 @@ export default async function OffboardingListPage({
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{t(`offboardingReason.${c.reason}`)}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(c.lastWorkingDay)}</td>
+                    <td className="px-4 py-3 text-slate-600">{formatDateMedium(c.lastWorkingDay)}</td>
                     <td className="px-4 py-3">
                       <span className={overdue ? "font-medium text-rose-600" : "text-slate-600"}>
-                        {formatDate(c.clearanceDueDate)}
+                        {formatDateMedium(c.clearanceDueDate)}
                         {overdue && ` (${t("offboarding.overdueBadge")})`}
                       </span>
                     </td>
@@ -198,6 +201,7 @@ export default async function OffboardingListPage({
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/offboarding" params={{ reason, status, orgUnitId, reportedByAccountId }} />
     </div>
   );
 }

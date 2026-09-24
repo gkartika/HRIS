@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { companyToday, companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -16,11 +18,10 @@ import { logAudit } from "@/lib/audit";
 import { createRenewalDraftContract, getActivePrimaryAssignment } from "@/lib/contract-mutations";
 import { formatMovementRequestNumber, validateProposedPosition, validateJobLevelDirection } from "@/lib/movement";
 import { isEvaluationComplete } from "@/lib/evaluation";
-import { createDraftEvaluation } from "@/app/(app)/evaluations/actions";
-import { createOffboardingCaseInternal } from "@/app/(app)/offboarding/actions";
+import { createDraftEvaluation } from "@/lib/evaluation-create";
+import { createOffboardingCaseInternal } from "@/lib/offboarding-create";
 import {
   formatRenewalCaseNumber,
-  isRenewalDue,
   canSubmitDeptHeadRecommendation,
   canDecideRenewalCase,
   requiresLinkedMovement,
@@ -30,80 +31,9 @@ import {
 } from "@/lib/contract-renewal";
 import type { RenewalRecommendation } from "@/generated/prisma/enums";
 
-// LIF-08: idempotent D-30 scan — called at the top of the /contracts list
-// page (server component). Contract and its D-30 renewal case are ONE
-// module/workflow (never a separate "Perpanjangan Kontrak" nav item/route),
-// same "derive/act on read" pattern as computeExpiryUrgency, since this app
-// has no cron/scheduler. The unique constraint on ContractRenewalCase.
-// currentContractId is the actual idempotency guarantee; the "no existing
-// case" filter just avoids the wasted round trip on every subsequent page
-// load. Creates the case AND its linked Evaluation Draft together
-// (LIF-08/DM-27) — draft creation alone does not notify evaluators or start
-// their deadline (that only happens when HR Admin releases it, via the
-// shared evaluations/actions.ts).
-export async function triggerDueRenewalCases(): Promise<void> {
-  const candidates = await prisma.contract.findMany({
-    where: {
-      status: "ACTIVE",
-      endDate: { not: null },
-      renewalCaseAsCurrentContract: { is: null },
-    },
-    include: { employee: true },
-  });
-
-  for (const contract of candidates) {
-    if (!contract.endDate || !isRenewalDue(contract.endDate)) continue;
-    const employee = contract.employee;
-    if (!employee.currentPositionId) continue;
-
-    const primaryAssignment = await prisma.assignment.findFirst({
-      where: { employeeId: employee.id, assignmentType: "PRIMARY", status: "ACTIVE" },
-    });
-    if (!primaryAssignment) continue;
-
-    const year = new Date().getFullYear();
-    const countThisYear = await prisma.contractRenewalCase.count({
-      where: { caseNumber: { startsWith: `REN-${year}-` } },
-    });
-    const caseNumber = formatRenewalCaseNumber(countThisYear + 1, year);
-
-    try {
-      const evaluation = await createDraftEvaluation({
-        employeeId: employee.id,
-        purpose: "CONTRACT_RENEWAL",
-        primaryAssignmentId: primaryAssignment.id,
-        snapshotPositionId: employee.currentPositionId,
-        createdByAccountId: null,
-      });
-
-      const created = await prisma.contractRenewalCase.create({
-        data: {
-          caseNumber,
-          currentContractId: contract.id,
-          employeeId: employee.id,
-          primaryAssignmentId: primaryAssignment.id,
-          snapshotPositionId: employee.currentPositionId,
-          status: "TRIGGERED",
-          evaluationId: evaluation.id,
-        },
-      });
-      await logAudit({
-        actorAccountId: null,
-        action: "CREATE",
-        datasetName: "ContractRenewalCase",
-        recordId: created.id,
-        reason: `Auto-triggered at D-30 for contract ${contract.contractNumber}, linked to ${evaluation.evaluationNumber}`,
-      });
-    } catch {
-      // Unique constraint on currentContractId — another concurrent load
-      // already created it; safe to ignore (LIF-08 idempotency).
-    }
-  }
-}
-
 // Version after UAT: manual per-contract trigger for HR Admin, from the
 // dashboard's expiring-contracts widget — same body as one iteration of
-// triggerDueRenewalCases above, minus the isRenewalDue gate, since HR Admin
+// runDueRenewalScan (lib/renewal-scan.ts), minus the isRenewalDue gate, since HR Admin
 // is explicitly choosing to start the renewal process early rather than
 // waiting for the automatic D-30 trigger. The unique constraint on
 // ContractRenewalCase.currentContractId still guards against ever creating
@@ -132,11 +62,9 @@ export async function triggerRenewalCaseNow(contractId: string): Promise<string 
   });
   if (!primaryAssignment) return "Penempatan Utama aktif karyawan ini tidak ditemukan.";
 
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.contractRenewalCase.count({
-    where: { caseNumber: { startsWith: `REN-${year}-` } },
-  });
-  const caseNumber = formatRenewalCaseNumber(countThisYear + 1, year);
+  const year = companyYear();
+  const seq = await nextSequence(`REN-${year}`);
+  const caseNumber = formatRenewalCaseNumber(seq, year);
 
   const evaluation = await createDraftEvaluation({
     employeeId: employee.id,
@@ -246,13 +174,13 @@ export async function submitDeptHeadRecommendation(
       });
       if (!currentAssignment) return { error: "Assignment Utama aktif karyawan ini tidak ditemukan." };
 
-      const year = new Date().getFullYear();
-      const countThisYear = await tx.movementRequest.count({ where: { requestNumber: { startsWith: `MOV-${year}-` } } });
-      const requestNumber = formatMovementRequestNumber(countThisYear + 1, year);
+      const year = companyYear();
+      const seq = await nextSequence(`MOV-${year}`, tx);
+      const requestNumber = formatMovementRequestNumber(seq, year);
 
       const proposedEffectiveDate = renewalCase.currentContract.endDate
         ? new Date(renewalCase.currentContract.endDate.getTime() + 24 * 60 * 60 * 1000)
-        : new Date();
+        : companyToday();
 
       const movement = await tx.movementRequest.create({
         data: {
@@ -409,9 +337,9 @@ export async function decideRenewalCase(
         });
         if (!currentAssignment) return { error: "Assignment Utama aktif karyawan ini tidak ditemukan." };
 
-        const year = new Date().getFullYear();
-        const countThisYear = await tx.movementRequest.count({ where: { requestNumber: { startsWith: `MOV-${year}-` } } });
-        const requestNumber = formatMovementRequestNumber(countThisYear + 1, year);
+        const year = companyYear();
+        const seq = await nextSequence(`MOV-${year}`, tx);
+        const requestNumber = formatMovementRequestNumber(seq, year);
         const proposedEffectiveDate = renewalCase.currentContract.endDate
           ? new Date(renewalCase.currentContract.endDate.getTime() + 24 * 60 * 60 * 1000)
           : new Date();
@@ -492,7 +420,7 @@ export async function decideRenewalCase(
           ? new Date(renewalCase.currentContract.endDate.getTime() + 24 * 60 * 60 * 1000)
           : new Date();
         const endDate = new Date(startDate);
-        endDate.setMonth(endDate.getMonth() + durationMonths);
+        endDate.setUTCMonth(endDate.getUTCMonth() + durationMonths);
 
         const primaryAssignment = await getActivePrimaryAssignment(renewalCase.employeeId);
         if (!primaryAssignment) return { error: "Penempatan Utama aktif karyawan ini tidak ditemukan." };

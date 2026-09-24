@@ -1,3 +1,4 @@
+import { companyDateParts } from "@/lib/company-time";
 // WF-18: "P1 and P2 each have five working days... using the configured
 // company work calendar." No Holiday/WorkingCalendar admin table exists
 // anywhere in this app yet (see CTL tab — only EducationLevel/PtkpStatus are
@@ -7,7 +8,7 @@
 // when that becomes a priority.
 
 function isWeekend(date: Date): boolean {
-  const day = date.getDay();
+  const day = companyDateParts(date).weekday;
   return day === 0 || day === 6;
 }
 
@@ -19,7 +20,7 @@ export function addWorkingDays(date: Date, n: number): Date {
   const result = new Date(date);
   let remaining = n;
   while (remaining > 0) {
-    result.setDate(result.getDate() + 1);
+    result.setTime(result.getTime() + 24 * 60 * 60 * 1000);
     if (!isWeekend(result)) {
       remaining -= 1;
     }

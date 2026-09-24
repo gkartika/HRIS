@@ -1,4 +1,5 @@
 import type { Session } from "next-auth";
+import { EFFECTIVENESS_DUE_WHERE } from "@/lib/training";
 import { prisma } from "@/lib/db";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
@@ -114,9 +115,7 @@ export async function getPendingApprovals(session: Session) {
     pendingDeptHeadRequests,
     pendingDeptHeadMovements,
     pendingDeptHeadRenewals,
-    pendingDeptHeadOffboarding,
     pendingHrManagerRenewals,
-    pendingHrManagerOffboarding,
     pendingDeptHeadTrainingRequests,
     absencePositionHolders,
     pendingEffectivenessTasks,
@@ -170,32 +169,11 @@ export async function getPendingApprovals(session: Session) {
           orderBy: { createdAt: "asc" },
         })
       : Promise.resolve([]),
-    isDeptHead
-      ? prisma.offboardingCase.findMany({
-          where: {
-            status: "PENDING_DEPT_HEAD",
-            employee: {
-              currentPosition: {
-                orgUnit: { OR: [{ id: { in: deptHeadDepartmentIds } }, { parentUnitId: { in: deptHeadDepartmentIds } }] },
-              },
-            },
-          },
-          include: { employee: true },
-          orderBy: { reportedAt: "asc" },
-        })
-      : Promise.resolve([]),
     isHrManager
       ? prisma.contractRenewalCase.findMany({
           where: { status: "PENDING_HR_MANAGER" },
           include: { employee: true },
           orderBy: { deptHeadRecommendedAt: "asc" },
-        })
-      : Promise.resolve([]),
-    isHrManager
-      ? prisma.offboardingCase.findMany({
-          where: { status: "PENDING_HR_MANAGER" },
-          include: { employee: true },
-          orderBy: { reportedAt: "asc" },
         })
       : Promise.resolve([]),
     isDeptHead
@@ -220,9 +198,7 @@ export async function getPendingApprovals(session: Session) {
       ? prisma.learningAssignment.findMany({
           where: {
             employeeId: { in: directReportIds },
-            status: "COMPLETED",
-            effectivenessRequiredSnapshot: true,
-            effectivenessCompletedAt: null,
+            ...EFFECTIVENESS_DUE_WHERE,
           },
           include: { employee: true, course: { select: { title: true } } },
           orderBy: { effectivenessDueDate: "asc" },
@@ -289,9 +265,7 @@ export async function getPendingApprovals(session: Session) {
     pendingDeptHeadRequests,
     pendingDeptHeadMovements,
     pendingDeptHeadRenewals,
-    pendingDeptHeadOffboarding,
     pendingHrManagerRenewals,
-    pendingHrManagerOffboarding,
     pendingDeptHeadTrainingRequests,
     pendingAbsenceHrAdmin,
     pendingAbsenceFirstApprover,
@@ -315,9 +289,7 @@ export function countPendingApprovals(p: PendingApprovals): number {
     p.pendingDeptHeadRequests.length +
     p.pendingDeptHeadMovements.length +
     p.pendingDeptHeadRenewals.length +
-    p.pendingDeptHeadOffboarding.length +
     p.pendingHrManagerRenewals.length +
-    p.pendingHrManagerOffboarding.length +
     p.pendingDeptHeadTrainingRequests.length +
     p.pendingAbsenceHrAdmin.length +
     p.pendingAbsenceFirstApprover.length +

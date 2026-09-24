@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getExtension } from "@/lib/validation/employee-fields";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -23,25 +26,21 @@ import {
 } from "@/lib/absence";
 import { resolveAbsenceApprovalChain } from "@/lib/absence-routing";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
+import { formFail, type FormState } from "@/lib/form-state";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 import type { AbsenceStatus } from "@/generated/prisma/enums";
 
-function getExtension(fileName: string): string {
-  const idx = fileName.lastIndexOf(".");
-  return idx === -1 ? "" : fileName.slice(idx).toLowerCase();
-}
-
 export async function submitAbsenceRequest(
-  _prevState: string | undefined,
+  _prevState: FormState,
   formData: FormData
-): Promise<string | undefined> {
+): Promise<FormState> {
   const session = await requireSession();
 
   const employeeId = (formData.get("employeeId") as string) || session.user.employeeId;
-  if (!employeeId) return "Karyawan wajib dipilih.";
-  if (!canSubmitAbsenceRequest(session, employeeId)) return "Anda tidak memiliki akses.";
+  if (!employeeId) return formFail(formData, "Karyawan wajib dipilih.", "employeeId");
+  if (!canSubmitAbsenceRequest(session, employeeId)) return formFail(formData, "Anda tidak memiliki akses.");
 
   const absenceTypeCode = formData.get("absenceType") as string;
   const startDateRaw = formData.get("startDate") as string;
@@ -51,26 +50,26 @@ export async function submitAbsenceRequest(
   const typeConfig = absenceTypeCode
     ? await prisma.absenceTypeConfig.findUnique({ where: { code: absenceTypeCode } })
     : null;
-  if (!typeConfig || !typeConfig.activeFlag) return "Jenis absensi wajib dipilih.";
-  if (!startDateRaw || !endDateRaw) return "Tanggal mulai dan selesai wajib diisi.";
-  if (!reason) return "Alasan wajib diisi.";
+  if (!typeConfig || !typeConfig.activeFlag) return formFail(formData, "Jenis absensi wajib dipilih.", "absenceType");
+  if (!startDateRaw || !endDateRaw) return formFail(formData, "Tanggal mulai dan selesai wajib diisi.", !startDateRaw ? "startDate" : "endDate");
+  if (!reason) return formFail(formData, "Alasan wajib diisi.", "reason");
 
   const startDate = new Date(startDateRaw);
   const endDate = new Date(endDateRaw);
-  if (startDate > endDate) return "Tanggal mulai tidak boleh setelah tanggal selesai.";
+  if (startDate > endDate) return formFail(formData, "Tanggal mulai tidak boleh setelah tanggal selesai.", "startDate");
 
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
     select: { currentPositionId: true },
   });
-  if (!employee) return "Karyawan tidak ditemukan.";
+  if (!employee) return formFail(formData, "Karyawan tidak ditemukan.");
 
   const overlapping = await prisma.absenceRequest.findMany({
     where: { employeeId, status: { in: ["SUBMITTED", "PENDING_SECOND_APPROVER", "PENDING_HR_ADMIN", "APPROVED"] } },
     select: { startDate: true, endDate: true, requestNumber: true },
   });
   const overlap = overlapping.find((o) => doDateRangesOverlap(startDate, endDate, o.startDate, o.endDate));
-  if (overlap) return `Rentang tanggal ini tumpang tindih dengan pengajuan ${overlap.requestNumber} yang masih berjalan.`;
+  if (overlap) return formFail(formData, `Rentang tanggal ini tumpang tindih dengan pengajuan ${overlap.requestNumber} yang masih berjalan.`);
 
   // Types that skip the first-approval stage (e.g. Sakit) go straight to
   // the mandatory HR Admin stage — no approver chain to resolve at all,
@@ -84,7 +83,7 @@ export async function submitAbsenceRequest(
   let attachmentFileId: string | undefined;
   if (file && file.size > 0) {
     const validationError = validateDocumentFile({ name: file.name, type: file.type, size: file.size });
-    if (validationError) return validationError;
+    if (validationError) return formFail(formData, validationError, "attachment");
     const storageKey = randomStorageKey("absence-attachment", getExtension(file.name));
     const bytes = Buffer.from(await file.arrayBuffer());
     await savePrivateFile(storageKey, bytes);
@@ -104,11 +103,9 @@ export async function submitAbsenceRequest(
     attachmentFileId = fileObject.id;
   }
 
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.absenceRequest.count({
-    where: { requestNumber: { startsWith: `ABS-${year}-` } },
-  });
-  const requestNumber = formatAbsenceRequestNumber(countThisYear + 1, year);
+  const year = companyYear();
+  const seq = await nextSequence(`ABS-${year}`);
+  const requestNumber = formatAbsenceRequestNumber(seq, year);
 
   const created = await prisma.absenceRequest.create({
     data: {

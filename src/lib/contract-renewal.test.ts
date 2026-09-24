@@ -7,7 +7,6 @@ import {
   requiresLinkedMovement,
   recommendationToMovementType,
   recommendationDurationMonths,
-  isRenewalRecommendation,
   requiresChangeReason,
 } from "./contract-renewal";
 
@@ -69,11 +68,6 @@ describe("recommendation helpers", () => {
     expect(recommendationDurationMonths("MUTASI")).toBe(null);
   });
 
-  it("isRenewalRecommendation true only for Perpanjang variants", () => {
-    expect(isRenewalRecommendation("PERPANJANG_3")).toBe(true);
-    expect(isRenewalRecommendation("MUTASI")).toBe(false);
-    expect(isRenewalRecommendation("TIDAK_DIPERPANJANG")).toBe(false);
-  });
 });
 
 describe("requiresChangeReason (WF-12)", () => {

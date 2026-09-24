@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateLong } from "@/lib/format";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { canViewOnboarding, canMarkOnboardingContract, canMarkOnboardingTraining, canManageAssets } from "@/lib/permissions";
@@ -9,6 +10,7 @@ import { t } from "@/lib/i18n/id";
 import { computeOnboardingStatus, isOnboardingTrainingComplete, isOnboardingAssetsComplete } from "@/lib/onboarding";
 import { ContractToggle, DueDateForm } from "./toggle-buttons";
 import { AssignAssetDuringOnboardingForm } from "./assign-asset-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const LEARNING_STATUS_LABELS: Record<string, string> = {
   ASSIGNED: "Berjalan",
@@ -17,10 +19,6 @@ const LEARNING_STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Dibatalkan",
 };
 
-function formatDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
-}
 function toDateInputValue(date: Date | null): string {
   return date ? new Date(date).toISOString().slice(0, 10) : "";
 }
@@ -90,6 +88,7 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Onboarding", href: "/onboarding" }, { label: "Detail Kasus" }]} />
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -119,12 +118,12 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-slate-500">{t("onboarding.plannedStartDate")}</p>
-            <p className="text-sm text-slate-900">{formatDate(onboardingCase.plannedStartDate)}</p>
+            <p className="text-sm text-slate-900">{formatDateLong(onboardingCase.plannedStartDate)}</p>
           </div>
           {onboardingCase.completedAt && (
             <div>
               <p className="text-xs text-slate-500">{t("onboarding.completedAt")}</p>
-              <p className="text-sm text-slate-900">{formatDate(onboardingCase.completedAt)}</p>
+              <p className="text-sm text-slate-900">{formatDateLong(onboardingCase.completedAt)}</p>
             </div>
           )}
         </div>
@@ -140,7 +139,7 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
           />
           {onboardingCase.contractCompletedByAccount && (
             <p className="pl-1 text-xs text-slate-400">
-              {onboardingCase.contractCompletedByAccount.usernameOrEmail} ({formatDate(onboardingCase.contractCompletedAt)})
+              {onboardingCase.contractCompletedByAccount.usernameOrEmail} ({formatDateLong(onboardingCase.contractCompletedAt)})
             </p>
           )}
 

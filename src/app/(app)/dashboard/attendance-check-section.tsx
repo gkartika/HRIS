@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/db";
+import { startOfCompanyDay } from "@/lib/company-time";
 import { t } from "@/lib/i18n/id";
 import { DEFAULT_START_TIME, DEFAULT_GRACE_MINUTES, defaultEndTimeLabel } from "@/lib/attendance";
 import { MobileCheckForm } from "../attendance/mobile-check-form";
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" });
 }
 
 function CheckIcon() {
@@ -72,7 +73,7 @@ export async function AttendanceCheckSection({ employeeId }: { employeeId: strin
   if (!assignment) return null;
 
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const start = startOfCompanyDay(now);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
 
   const [checkInEvent, checkOutEvent] =
@@ -96,7 +97,7 @@ export async function AttendanceCheckSection({ employeeId }: { employeeId: strin
       <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
         <p>
           {t("attendance.todayTitle")} —{" "}
-          {now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })} · Jadwal:{" "}
+          {now.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", weekday: "long", day: "numeric", month: "long" })} · Jadwal:{" "}
           {DEFAULT_START_TIME}–{defaultEndTimeLabel(now)} (toleransi {DEFAULT_GRACE_MINUTES} menit)
         </p>
         <div className="mx-auto max-w-xs">

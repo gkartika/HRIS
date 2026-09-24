@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -18,6 +19,7 @@ import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { VerifyForm, ApproverDecisionButtons, ProcessForm, LossReviewButtons, CancelRequestForm } from "./decision-forms";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const TYPE_LABEL: Record<string, string> = {
   NEW_ASSET_NEED: "Kebutuhan Aset Baru",
@@ -37,11 +39,6 @@ const STATUS_LABEL: Record<string, string> = {
   LOSS_NOT_CONFIRMED: "Kehilangan Tidak Dikonfirmasi",
   CANCELLED: "Dibatalkan",
 };
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(date);
-}
 
 export default async function GaRequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -129,6 +126,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Permintaan GA", href: "/ga-requests" }, { label: "Detail Permintaan" }]} />
       <div>
         <h1 className="text-lg font-medium text-slate-900">{request.requestNumber}</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -182,7 +180,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
         <p className="text-sm font-medium text-slate-900">Verifikasi GA Admin</p>
         {request.verifiedAt && (
           <p className="mt-2 text-xs text-slate-500">
-            {formatDate(request.verifiedAt)} — {request.verifiedByAccount?.usernameOrEmail ?? "—"}
+            {formatDateLong(request.verifiedAt)} — {request.verifiedByAccount?.usernameOrEmail ?? "—"}
             {request.verificationNote && `: ${request.verificationNote}`}
           </p>
         )}
@@ -197,7 +195,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
           )}
           {request.decisionAt && (
             <p className="mt-2 text-xs text-slate-500">
-              {formatDate(request.decisionAt)} — {request.decisionByAccount?.usernameOrEmail ?? "—"}
+              {formatDateLong(request.decisionAt)} — {request.decisionByAccount?.usernameOrEmail ?? "—"}
               {request.decisionPosition && ` (${request.decisionPosition.jobLevel} ${request.decisionPosition.job.jobTitle})`}
               {request.decisionNote && `: ${request.decisionNote}`}
             </p>
@@ -209,7 +207,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
               <p className="text-sm font-medium text-slate-900">Pemrosesan</p>
               {request.processedAt ? (
                 <p className="mt-2 text-xs text-slate-500">
-                  {formatDate(request.processedAt)} — {request.processedByAccount?.usernameOrEmail ?? "—"}
+                  {formatDateLong(request.processedAt)} — {request.processedByAccount?.usernameOrEmail ?? "—"}
                   {request.procurementReference && ` — Referensi: ${request.procurementReference}`}
                   {request.resultingCustodyId && ` — Custody: ${request.resultingCustodyId}`}
                 </p>
@@ -249,7 +247,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
           <p className="text-sm font-medium text-slate-900">Peninjauan Kehilangan</p>
           {request.lossReviewedAt && (
             <p className="mt-2 text-xs text-slate-500">
-              {formatDate(request.lossReviewedAt)} — {request.lossReviewedByAccount?.usernameOrEmail ?? "—"}
+              {formatDateLong(request.lossReviewedAt)} — {request.lossReviewedByAccount?.usernameOrEmail ?? "—"}
               {request.lossReviewedPosition && ` (${request.lossReviewedPosition.jobLevel} ${request.lossReviewedPosition.job.jobTitle})`}
               {request.lossReviewNote && `: ${request.lossReviewNote}`}
             </p>
@@ -270,7 +268,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
       {request.cancelledAt && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-6">
           <p className="text-sm font-medium text-rose-800">
-            Dibatalkan {formatDate(request.cancelledAt)} — {request.cancelledByAccount?.usernameOrEmail ?? "—"}
+            Dibatalkan {formatDateLong(request.cancelledAt)} — {request.cancelledByAccount?.usernameOrEmail ?? "—"}
           </p>
           {request.cancellationReason && <p className="mt-1 text-xs text-rose-700">{request.cancellationReason}</p>}
         </div>

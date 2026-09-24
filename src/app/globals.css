@@ -33,3 +33,30 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Data tables: every card that wraps a table scrolls inside itself — sideways
+   on narrow screens and vertically past ~75% of the viewport — with the
+   header row staying visible. Unlayered on purpose so it beats the
+   overflow-hidden utility those cards already carry. */
+main .overflow-hidden:has(> table),
+main .overflow-hidden:has(> .overflow-x-auto > table) {
+  overflow: auto;
+  max-height: 75vh;
+}
+main .overflow-hidden:has(> table) thead th,
+main .overflow-hidden:has(> table) thead td {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+}
+@media (max-width: 767px) {
+  main table {
+    min-width: 34rem;
+  }
+}
+
+/* Live filters (components/filter-enhancer.tsx): the apply button is redundant once JS is running. */
+form[data-autofilter] button[type="submit"] {
+  display: none;
+}

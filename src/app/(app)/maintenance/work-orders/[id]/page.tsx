@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
@@ -6,11 +7,7 @@ import { canExecuteMaintenanceWorkOrder } from "@/lib/ga-operations";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { ExecuteMaintenanceForm } from "./execute-form";
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(date);
-}
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function MaintenanceWorkOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -34,6 +31,7 @@ export default async function MaintenanceWorkOrderDetailPage({ params }: { param
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Work Order", href: "/maintenance/work-orders" }, { label: "Detail Work Order" }]} />
       <div>
         <h1 className="text-lg font-medium text-slate-900">{workOrder.workOrderNumber}</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -73,7 +71,7 @@ export default async function MaintenanceWorkOrderDetailPage({ params }: { param
           <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-xs text-slate-500">Tanggal Servis</p>
-              <p className="mt-1 text-slate-900">{formatDate(workOrder.serviceDate)}</p>
+              <p className="mt-1 text-slate-900">{formatDateLong(workOrder.serviceDate)}</p>
             </div>
             <div>
               <p className="text-xs text-slate-500">KM</p>
@@ -106,11 +104,11 @@ export default async function MaintenanceWorkOrderDetailPage({ params }: { param
             {workOrder.nextDueDate && (
               <div>
                 <p className="text-xs text-slate-500">Jatuh Tempo Berikutnya</p>
-                <p className="mt-1 text-slate-900">{formatDate(workOrder.nextDueDate)}</p>
+                <p className="mt-1 text-slate-900">{formatDateLong(workOrder.nextDueDate)}</p>
               </div>
             )}
             <div className="col-span-2 text-xs text-slate-500">
-              Diselesaikan {formatDate(workOrder.completedAt)} — {workOrder.completedByAccount?.usernameOrEmail}
+              Diselesaikan {formatDateLong(workOrder.completedAt)} — {workOrder.completedByAccount?.usernameOrEmail}
             </div>
           </div>
           {workOrder.outcome === "BEYOND_REPAIR" && (

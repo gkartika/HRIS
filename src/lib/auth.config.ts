@@ -59,8 +59,9 @@ export const authConfig = {
     },
     authorized: ({ auth, request }) => {
       const isLoggedIn = !!auth?.user;
-      const isLoginPage = request.nextUrl.pathname.startsWith("/login");
-      if (isLoginPage) return true;
+      // Pages an employee must reach before they have a session.
+      const { pathname } = request.nextUrl;
+      if (["/login", "/forgot-password", "/set-password"].some((p) => pathname.startsWith(p))) return true;
       return isLoggedIn;
     },
   },

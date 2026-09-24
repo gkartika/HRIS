@@ -1,19 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { authorizeDeptHeadDecision, authorizeHrManagerDecision } from "@/lib/approval-authority";
+import { companyYear } from "@/lib/company-time";
+import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import {
   canSubmitMovementRequest,
-  canApproveMovementRequest,
-  canApproveMovementRequestAsDeptHead,
   canExecuteMovementRequest,
   canCancelMovementRequest,
   isHrManager,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
-import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { isLevel3ForEmployeeDepartment, resolveDepartmentId } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
@@ -28,7 +28,7 @@ import {
   validateJobLevelDirection,
 } from "@/lib/movement";
 import { requiresEvaluationForMovementType, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
-import { createDraftEvaluation } from "@/app/(app)/evaluations/actions";
+import { createDraftEvaluation } from "@/lib/evaluation-create";
 import type { MovementType, EmploymentStatus } from "@/generated/prisma/enums";
 
 export async function submitMovementRequest(
@@ -127,11 +127,9 @@ export async function submitMovementRequest(
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
   if (!requester) return "Karyawan pengaju tidak ditemukan.";
 
-  const year = new Date().getFullYear();
-  const countThisYear = await prisma.movementRequest.count({
-    where: { requestNumber: { startsWith: `MOV-${year}-` } },
-  });
-  const requestNumber = formatMovementRequestNumber(countThisYear + 1, year);
+  const year = companyYear();
+  const seq = await nextSequence(`MOV-${year}`);
+  const requestNumber = formatMovementRequestNumber(seq, year);
 
   // DM-27/WF-17/LIF-14: every Promosi, Mutasi or Demotasi auto-creates one
   // linked Evaluation Draft on submission — never a requester trigger
@@ -213,15 +211,9 @@ export async function decideMovementRequestAsDeptHead(
   const departmentId = await resolveDepartmentId(request.currentPosition.orgUnitId);
   if (!departmentId) return "Department tidak dapat ditentukan dari Posisi karyawan ini.";
 
-  const deptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, departmentId);
-  if (!canApproveMovementRequestAsDeptHead(deptHeadPositions.map((p) => p.positionId))) {
-    return "Anda tidak memiliki akses. Hanya Kepala Departemen/Manajer (Level 3B) di department ini yang dapat memutuskan permintaan ini.";
-  }
-
-  const decisionPositionId = formData.get("decisionPositionId") as string;
-  if (!deptHeadPositions.some((p) => p.positionId === decisionPositionId)) {
-    return "Posisi Kepala Departemen/Manajer yang dipilih tidak valid atau tidak lagi aktif.";
-  }
+  const authority = await authorizeDeptHeadDecision({ employeeId: session.user.employeeId, departmentId, formData });
+  if (!authority.ok) return authority.error;
+  const { decisionPositionId } = authority;
 
   const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
   if ((decision === "REJECTED" || decision === "RETURNED") && !decisionNote) {
@@ -261,15 +253,9 @@ export async function decideMovementRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
-  if (!canApproveMovementRequest(hrManagerPositions.map((p) => p.positionId))) {
-    return "Anda tidak memiliki akses. Hanya HR Manager aktif yang dapat memutuskan permintaan ini.";
-  }
-
-  const decisionPositionId = formData.get("decisionPositionId") as string;
-  if (!hrManagerPositions.some((p) => p.positionId === decisionPositionId)) {
-    return "Posisi HR Manager yang dipilih tidak valid atau tidak lagi aktif.";
-  }
+  const authority = await authorizeHrManagerDecision({ employeeId: session.user.employeeId, formData });
+  if (!authority.ok) return authority.error;
+  const { decisionPositionId } = authority;
 
   const request = await prisma.movementRequest.findUnique({ where: { id: requestId }, include: { evaluation: true } });
   if (!request) return "Permintaan tidak ditemukan.";

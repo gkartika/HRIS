@@ -6,7 +6,6 @@ import {
   isValidCompanyValueScore,
   computeCompanyValueItemScore,
   computeCompanyValuesScore,
-  isCompetencyAssessmentComplete,
 } from "./competency";
 
 describe("formatCycleCode", () => {
@@ -93,12 +92,5 @@ describe("computeCompanyValuesScore (P1-only, P2 dropped per direct request)", (
       { p1Score: null, weightSnapshot: 20 },
     ];
     expect(computeCompanyValuesScore(items)).toBeNull();
-  });
-});
-
-describe("isCompetencyAssessmentComplete (P1-only, P2 dropped per direct request)", () => {
-  it("requires only the P1 submission timestamp", () => {
-    expect(isCompetencyAssessmentComplete(new Date())).toBe(true);
-    expect(isCompetencyAssessmentComplete(null)).toBe(false);
   });
 });

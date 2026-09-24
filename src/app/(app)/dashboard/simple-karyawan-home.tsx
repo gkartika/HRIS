@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { startOfCompanyDay } from "@/lib/company-time";
 import { prisma } from "@/lib/db";
 import { AttendanceCheckSection } from "./attendance-check-section";
 
@@ -29,7 +30,7 @@ function ProfileIcon() {
 // reimplemented — just given more prominent big-tile framing here.
 export async function SimpleKaryawanHome({ employeeId, userName }: { employeeId: string; userName: string }) {
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const start = startOfCompanyDay(now);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const [checkInEvent, checkOutEvent] = await Promise.all([
     prisma.attendanceEvent.findFirst({ where: { employeeId, eventType: "CHECK_IN", eventAt: { gte: start, lt: end } } }),
@@ -45,7 +46,7 @@ export async function SimpleKaryawanHome({ employeeId, userName }: { employeeId:
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Selamat Datang, {userName}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          {now.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          {now.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </p>
       </div>
 

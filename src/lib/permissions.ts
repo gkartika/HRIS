@@ -158,6 +158,12 @@ export function canManageAccountHold(session: Session, activeHrManagerPositionId
   return isHrAdmin(session) || isHrManager(activeHrManagerPositionIds);
 }
 
+// Creating a login for an employee and emailing the invitation / password
+// reset link — Admin SDM only (HR Manager can hold/reactivate, not issue logins).
+export function canManageAccountAccess(session: Session): boolean {
+  return isHrAdmin(session);
+}
+
 // Same DM-25-style exception as Recruitment cancellation: the original
 // Requester (the submitting manager), an active HR Manager, or HR Admin may
 // cancel an eligible Movement Request.
@@ -372,27 +378,10 @@ export function canViewEvaluation(
 
 // ---------- Offboarding (LIF-06/07/12, WF-10, GA-05, DSH-08/09/14) ----------
 
-// LIF-06: "manager input when required" — the employee's own direct
-// manager (resolved live via manager-scope.ts, same pattern as
-// canSubmitContractRecommendation) reports a resignation, or HR Admin does
-// on their behalf with the same administrative latitude used elsewhere.
-export function canReportResignation(session: Session, isEmployeesManager: boolean): boolean {
-  return isHrAdmin(session) || isEmployeesManager;
-}
-
-// Per direct user request: a RESIGNATION case now needs a Dept Head (3B,
-// scoped to the employee's own department) approval stage ahead of the HR
-// Manager, same shape as Recruitment/Movement's own Dept Head gate — never
-// reached by a CONTRACT_NON_RENEWAL handoff (LIF-12, see
-// initialOffboardingCaseStatus).
-export function canDecideOffboardingCaseAsDeptHead(activeDeptHeadPositionIds: string[]): boolean {
-  return isDeptHeadApprover(activeDeptHeadPositionIds);
-}
-
-// LIF-06: "HR Manager decision/oversight" — same Position-derived-only
-// authority as every other HR Manager decision in this app.
-export function canDecideOffboardingCase(activeHrManagerPositionIds: string[]): boolean {
-  return isHrManager(activeHrManagerPositionIds);
+// HR Admin alone opens an offboarding case (per direct user request) — no
+// manager report, no Dept Head / HR Manager approval.
+export function canStartOffboarding(session: Session): boolean {
+  return isHrAdmin(session);
 }
 
 // LIF-06: "HR Admin exit-clearance execution > Account Disable" — Primary
@@ -401,39 +390,15 @@ export function canExecuteExitClearance(session: Session): boolean {
   return isHrAdmin(session);
 }
 
-// Same DM-25-style exception as Recruitment/Movement/Contract cancellation:
-// whoever reported the case, an active HR Manager, or HR Admin may cancel
-// an eligible (not yet Completed/Cancelled) Offboarding Case.
-export function canCancelOffboardingCase(
-  session: Session,
-  reportedByAccountId: string | null,
-  activeHrManagerPositionIds: string[]
-): boolean {
-  const isReporter = !!reportedByAccountId && session.user.id === reportedByAccountId;
-  return isReporter || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
+export function canCancelOffboardingCase(session: Session): boolean {
+  return isHrAdmin(session);
 }
 
-// Visibility for the case detail/list: HR Admin, an active HR Manager, an
-// active Dept Head for the employee's own department (added alongside the
-// new PENDING_DEPT_HEAD stage — same reason canViewContractDetail needed
-// widening: whoever must act on a stage needs to be able to reach the page
-// at all, not just be granted the inner decision predicate), the subject
-// employee themself, or their direct manager (isEmployeesManager, same
-// resolver as canReportResignation).
-export function canViewOffboardingCase(
-  session: Session,
-  employeeId: string,
-  activeHrManagerPositionIds: string[],
-  isEmployeesManager: boolean,
-  activeDeptHeadPositionIds: string[] = []
-): boolean {
-  return (
-    isHrAdmin(session) ||
-    session.user.employeeId === employeeId ||
-    isHrManager(activeHrManagerPositionIds) ||
-    isEmployeesManager ||
-    isDeptHeadApprover(activeDeptHeadPositionIds)
-  );
+// Visibility for the case detail/list: HR Admin and the leaving employee
+// themself — nobody else. GA Admin has its own asset-clearance page
+// (offboarding/asset-clearance) and never opens the full case.
+export function canViewOffboardingCase(session: Session, employeeId: string): boolean {
+  return isHrAdmin(session) || session.user.employeeId === employeeId;
 }
 
 // Version after UAT: employee-facing Exit Clearance form — self-service
@@ -465,16 +430,6 @@ export function canConfirmGaAssetClearance(session: Session): boolean {
 // HR Admin's usual administrative latitude to submit/override directly.
 export function canSubmitShiftAssignment(session: Session, isLevel3InDepartment: boolean): boolean {
   return isHrAdmin(session) || isLevel3InDepartment;
-}
-
-// Visibility: HR Admin, the employee's own Level-3 (same department), or
-// the employee themself (self-view, same as Contract).
-export function canViewShiftAssignments(
-  session: Session,
-  employeeId: string,
-  isLevel3InDepartment: boolean
-): boolean {
-  return isHrAdmin(session) || session.user.employeeId === employeeId || isLevel3InDepartment;
 }
 
 // ---------- Phase 2 Extension: Attendance & Absence ----------
@@ -926,12 +881,6 @@ export function canImportAssetMaster(session: Session): boolean {
   return isGaAdmin(session);
 }
 
-// Employee sees only their own assets (never another employee's, never a
-// Department/Location custody record).
-export function canViewOwnAssetCustody(session: Session, custodyEmployeeId: string | null): boolean {
-  return !!session.user.employeeId && session.user.employeeId === custodyEmployeeId;
-}
-
 // ---------- Phase 4B: GA Operations ----------
 // Same explicit deviation as Phase 4A above, restated because it's easy to
 // get wrong here specifically: GA Admin owns every mutation (verify/route/
@@ -983,10 +932,6 @@ export function canDecideAsConfiguredGaApprover(
   approverPositionHolderEmployeeIds: string[]
 ): boolean {
   return !!actingEmployeeId && approverPositionHolderEmployeeIds.includes(actingEmployeeId);
-}
-
-export function canExportGaOperationsData(session: Session): boolean {
-  return isGaAdmin(session);
 }
 
 // Same DM-25-style exception as every other cancellation in this app: the

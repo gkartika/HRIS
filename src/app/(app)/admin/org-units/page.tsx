@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { SettingsTabs } from "../settings-tabs";
 import { CreateOrgUnitForm } from "./create-form";
 
 export default async function OrgUnitsPage() {
@@ -18,6 +19,7 @@ export default async function OrgUnitsPage() {
 
   return (
     <div>
+      <SettingsTabs groupId="org" current="/admin/org-units" />
       <h1 className="text-lg font-medium text-slate-900">Unit Organisasi</h1>
       <p className="mt-1 text-sm text-slate-500">Departemen, Seksi, Grup, dan Tim.</p>
 

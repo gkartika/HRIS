@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { SettingsTabs } from "../settings-tabs";
 import { CreateJobForm } from "./create-form";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -36,6 +37,7 @@ export default async function JobsPage({
 
   return (
     <div>
+      <SettingsTabs groupId="org" current="/admin/jobs" />
       <h1 className="text-lg font-medium text-slate-900">Jabatan Standar</h1>
       <p className="mt-1 text-sm text-slate-500">
         Definisi jabatan yang dapat dipakai ulang, independen dari orang atau kursi tertentu.

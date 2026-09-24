@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { submitRecruitmentRequest } from "../actions";
 import { t } from "@/lib/i18n/id";
 import type { OrgUnit, Job, Employee } from "@/generated/prisma/client";
+type EmployeeOption = Pick<Employee, "id" | "fullLegalName" | "employeeNumber">;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -18,7 +19,7 @@ export function CreateRequestForm({
 }: {
   departments: OrgUnit[];
   jobs: Job[];
-  employees: Employee[];
+  employees: EmployeeOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
 }) {
@@ -94,8 +95,9 @@ export function CreateRequestForm({
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.shiftCode")}</label>
           <select name="shiftCode" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">— Pilih —</option>
-            <option value="SHIFT">{t("shiftCode.SHIFT")}</option>
-            <option value="NON_SHIFT">{t("shiftCode.NON_SHIFT")}</option>
+            <option value="SHIFT_1">{t("shiftCode.SHIFT_1")}</option>
+            <option value="SHIFT_2">{t("shiftCode.SHIFT_2")}</option>
+            <option value="SHIFT_3">{t("shiftCode.SHIFT_3")}</option>
           </select>
         </div>
         <div>

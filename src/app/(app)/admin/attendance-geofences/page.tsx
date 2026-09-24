@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageAttendanceMasterData } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { SettingsTabs } from "../settings-tabs";
 import { CreateGeofenceForm } from "./create-form";
 import { ToggleActiveForm } from "./toggle-form";
 
@@ -15,7 +16,8 @@ export default async function AttendanceGeofencesPage() {
 
   return (
     <div>
-      <h1 className="text-lg font-medium text-slate-900">Lokasi Absensi (Geofence)</h1>
+      <SettingsTabs groupId="absensi" current="/admin/attendance-geofences" />
+      <h1 className="text-lg font-medium text-slate-900">Lokasi Absensi</h1>
       <p className="mt-1 text-sm text-slate-500">
         Titik lokasi dan radius yang dipakai untuk pengecekan Check-in/Check-out Mobile karyawan.
       </p>

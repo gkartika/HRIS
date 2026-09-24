@@ -11,8 +11,6 @@ export function formatTrainingRequestNumber(sequence: number, year: number): str
 // Department Head Approval > Training Admin Validation/Scheduling >
 // Assignment > Attendance/Completion > Effectiveness when required."
 const CANCELLABLE_TRAINING_REQUEST_STATUSES: TrainingRequestStatus[] = ["SUBMITTED", "DEPT_HEAD_APPROVED", "VALIDATED"];
-const TERMINAL_TRAINING_REQUEST_STATUSES: TrainingRequestStatus[] = ["REJECTED", "SCHEDULED", "CANCELLED"];
-
 export function canDeptHeadDecideTrainingRequest(status: TrainingRequestStatus): boolean {
   return status === "SUBMITTED";
 }
@@ -33,17 +31,13 @@ export function canCancelTrainingRequest(status: TrainingRequestStatus): boolean
   return CANCELLABLE_TRAINING_REQUEST_STATUSES.includes(status);
 }
 
-export function isTerminalTrainingRequestStatus(status: TrainingRequestStatus): boolean {
-  return TERMINAL_TRAINING_REQUEST_STATUSES.includes(status);
-}
-
 // TRN-04: "Each course has effectiveness_required Yes/No. When Yes, default
 // follow-up is D+30 and the interval remains configurable."
 export const DEFAULT_EFFECTIVENESS_FOLLOWUP_DAYS = 30;
 
 export function computeEffectivenessDueDate(completedAt: Date, followupDays: number): Date {
   const due = new Date(completedAt);
-  due.setDate(due.getDate() + followupDays);
+  due.setUTCDate(due.getUTCDate() + followupDays);
   return due;
 }
 
@@ -58,6 +52,7 @@ export function canCompleteLearningAssignment(status: LearningAssignmentStatus):
 export function canCancelLearningAssignment(status: LearningAssignmentStatus): boolean {
   return status === "ASSIGNED" || status === "ATTENDED";
 }
+
 
 export interface EffectivenessDueCheck {
   status: LearningAssignmentStatus;
@@ -75,3 +70,12 @@ export function isEffectivenessDue(assignment: EffectivenessDueCheck): boolean {
     assignment.effectivenessCompletedAt === null
   );
 }
+
+// The same rule as isEffectivenessDue, as a database filter — the one place
+// the two effectiveness-task queries (Beranda inbox, task list page) get it
+// from, so the tested rule and the queries can't drift apart.
+export const EFFECTIVENESS_DUE_WHERE = {
+  status: "COMPLETED",
+  effectivenessRequiredSnapshot: true,
+  effectivenessCompletedAt: null,
+} as const;

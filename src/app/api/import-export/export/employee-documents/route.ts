@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { buildEmployeeDocumentsZip } from "@/lib/import-export/employee-documents-zip";
@@ -8,7 +8,7 @@ import { buildEmployeeDocumentsZip } from "@/lib/import-export/employee-document
 // HR Admin only — these are the same highly-restricted employee documents
 // (KTP/KK/contracts/etc.) gated everywhere else in the app.
 export async function GET() {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isHrAdmin(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

@@ -4,7 +4,8 @@ import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure, canManageCompetencyFramework } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { EditJobForm } from "./edit-form";
+import { EditJobForm } from "./edit-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,6 +22,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Pengaturan", href: "/admin" }, { label: "Jabatan Standar", href: "/admin/jobs" }, { label: "Detail Jabatan" }]} />
       <h1 className="text-lg font-medium text-slate-900">Ubah Jabatan Standar</h1>
       <p className="mt-1 font-mono text-xs text-slate-400">{job.jobCode}</p>
       <div className="mt-4 max-w-lg">

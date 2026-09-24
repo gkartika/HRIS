@@ -4,7 +4,6 @@ import { UserPlus } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageAccountAccess, canListEmployees, canCreateEmployee, isHrAdmin, projectEmployee } from "@/lib/permissions";
-import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import { isEmployeeProfileIncomplete } from "@/lib/employee-completeness";
@@ -77,14 +76,6 @@ export default async function EmployeesPage({
     prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
     prisma.position.findMany({ distinct: ["jobLevel"], select: { jobLevel: true }, orderBy: { jobLevel: "asc" } }),
     prisma.employee.count(),
-    // Doesn't depend on the reads above and they don't depend on it —
-    // run it alongside them instead of as an extra sequential round trip.
-    logAudit({
-      actorAccountId: session.user.id,
-      action: "VIEW",
-      datasetName: "Employee",
-      reason: "Viewed employee list",
-    }),
   ]);
 
   const rows = employees.map((e) => projectEmployee(e, session));

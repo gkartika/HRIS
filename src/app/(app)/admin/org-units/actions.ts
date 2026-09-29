@@ -51,17 +51,21 @@ export async function updateOrgUnit(
   const session = await requireSession();
   if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
 
+  const unitCode = (formData.get("unitCode") as string)?.trim();
   const unitName = (formData.get("unitName") as string)?.trim();
   const unitType = formData.get("unitType") as UnitType;
   const parentUnitId = (formData.get("parentUnitId") as string) || null;
   const activeFlag = formData.get("activeFlag") === "on";
 
-  if (!unitName || !unitType) return "Nama dan jenis unit wajib diisi.";
+  if (!unitCode || !unitName || !unitType) return "Kode, nama, dan jenis unit wajib diisi.";
   if (parentUnitId === unitId) return "Unit tidak dapat menjadi induk dirinya sendiri.";
+
+  const codeTaken = await prisma.orgUnit.findFirst({ where: { unitCode, NOT: { id: unitId } } });
+  if (codeTaken) return `Kode unit ${unitCode} sudah digunakan.`;
 
   await prisma.orgUnit.update({
     where: { id: unitId },
-    data: { unitName, unitType, parentUnitId: parentUnitId || null, activeFlag },
+    data: { unitCode, unitName, unitType, parentUnitId: parentUnitId || null, activeFlag },
   });
 
   await logAudit({

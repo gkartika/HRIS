@@ -13,6 +13,15 @@ export function EditOrgUnitForm({ unit, units }: { unit: OrgUnit; units: OrgUnit
   return (
     <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
       <div>
+        <label className="mb-1 block text-xs text-slate-500">Kode Unit</label>
+        <input
+          name="unitCode"
+          required
+          defaultValue={unit.unitCode}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
+        />
+      </div>
+      <div>
         <label className="mb-1 block text-xs text-slate-500">Nama Unit</label>
         <input
           name="unitName"

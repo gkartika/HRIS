@@ -141,6 +141,14 @@ export async function updateEmployee(
   if (isHrAdmin(session)) {
     data.fullLegalName = fullLegalName;
 
+    const employeeNumber = (formData.get("employeeNumber") as string)?.trim();
+    if (!employeeNumber) return "Nomor karyawan wajib diisi.";
+    const employeeNumberTaken = await prisma.employee.findFirst({
+      where: { employeeNumber, NOT: { id: employeeId } },
+    });
+    if (employeeNumberTaken) return `Nomor karyawan ${employeeNumber} sudah digunakan.`;
+    data.employeeNumber = employeeNumber;
+
     const nationalIdNumber = (formData.get("nationalIdNumber") as string)?.trim() || null;
     const noKk = (formData.get("noKk") as string)?.trim() || null;
     const namaIbuKandung = (formData.get("namaIbuKandung") as string)?.trim() || null;

@@ -5,9 +5,8 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { SettingsTabs } from "../settings-tabs";
 import { CreatePositionForm } from "./create-form";
+import { POSITION_STATUSES } from "@/lib/position-type";
 import type { Prisma, PositionStatus } from "@/generated/prisma/client";
-
-const POSITION_STATUSES: PositionStatus[] = ["PLANNED", "VACANT", "FILLED", "FROZEN", "CLOSED"];
 
 export default async function PositionsPage({
   searchParams,

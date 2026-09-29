@@ -3,14 +3,8 @@
 import { useActionState } from "react";
 import { updateJob } from "../actions";
 import { POSITION_TYPES } from "@/lib/position-type";
+import { JOB_APPROVAL_STATUSES } from "@/lib/job";
 import type { Job, OrgUnit } from "@/generated/prisma/client";
-
-// "Active" is the value every real imported Job actually carries (61/61 in
-// production data) — missing from this list, any save would silently fall
-// back to the first option ("Draft") and corrupt real data. Kept alongside
-// "Approved" rather than merged/renamed since that's a data-meaning call
-// that isn't this fix's to make.
-const APPROVAL_STATUSES = ["Active", "Draft", "Under Review", "Approved", "Retired"];
 
 export function EditJobForm({ job, orgUnits }: { job: Job; orgUnits: OrgUnit[] }) {
   const updateWithId = updateJob.bind(null, job.id);
@@ -43,7 +37,7 @@ export function EditJobForm({ job, orgUnits }: { job: Job; orgUnits: OrgUnit[] }
           defaultValue={job.approvalStatus}
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
         >
-          {APPROVAL_STATUSES.map((s) => (
+          {JOB_APPROVAL_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>

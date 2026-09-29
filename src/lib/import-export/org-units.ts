@@ -3,12 +3,13 @@ import type { UnitType } from "@/generated/prisma/enums";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
 
 export const label = "Unit Organisasi";
-export const templateHeaders = ["unitCode", "unitName", "unitType", "parentUnitCode"];
+export const templateHeaders = ["unitCode", "unitName", "unitType", "parentUnitCode", "activeFlag"];
 export const templateExampleRow = {
   unitCode: "DEPT-CONTOH",
   unitName: "Departemen Contoh",
   unitType: "DEPARTMENT",
   parentUnitCode: "",
+  activeFlag: "Ya",
 };
 
 const VALID_UNIT_TYPES = ["DEPARTMENT", "SECTION", "GROUP", "TEAM"];
@@ -24,6 +25,7 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const unitName = raw.unitName?.trim();
     const unitType = raw.unitType?.trim().toUpperCase();
     const parentUnitCode = raw.parentUnitCode?.trim();
+    const activeFlag = raw.activeFlag?.trim().toUpperCase();
 
     const reasons: string[] = [];
     if (!unitCode) reasons.push("Kode unit (unitCode) wajib diisi");
@@ -37,6 +39,9 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     }
     if (parentUnitCode && parentUnitCode === unitCode) {
       reasons.push("Unit tidak dapat menjadi induk dirinya sendiri");
+    }
+    if (activeFlag && !["YA", "TIDAK", "TRUE", "FALSE"].includes(activeFlag)) {
+      reasons.push('Status Aktif (activeFlag) harus "Ya" atau "Tidak"');
     }
 
     if (unitCode) seenInFile.add(unitCode);
@@ -57,22 +62,27 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
   const unitCode = raw.unitCode.trim();
   const unitType = raw.unitType.trim().toUpperCase() as UnitType;
   const parentUnitCode = raw.parentUnitCode?.trim() || null;
+  const activeFlagRaw = raw.activeFlag?.trim().toUpperCase();
   const [existing, parentUnit] = await Promise.all([
     prisma.orgUnit.findUnique({ where: { unitCode } }),
     parentUnitCode ? prisma.orgUnit.findUnique({ where: { unitCode: parentUnitCode } }) : null,
   ]);
 
+  const data = {
+    unitName: raw.unitName.trim(),
+    unitType,
+    parentUnitId: parentUnit?.id ?? null,
+    // Blank leaves activeFlag unchanged on UPDATE; a brand-new unit still
+    // gets the schema default (true/Aktif) on CREATE below.
+    ...(activeFlagRaw ? { activeFlag: ["YA", "TRUE"].includes(activeFlagRaw) } : {}),
+  };
+
   if (existing) {
-    await prisma.orgUnit.update({
-      where: { id: existing.id },
-      data: { unitName: raw.unitName.trim(), unitType, parentUnitId: parentUnit?.id ?? null },
-    });
+    await prisma.orgUnit.update({ where: { id: existing.id }, data });
     return { id: existing.id, action: "UPDATE" };
   }
 
-  const created = await prisma.orgUnit.create({
-    data: { unitCode, unitName: raw.unitName.trim(), unitType, parentUnitId: parentUnit?.id ?? null },
-  });
+  const created = await prisma.orgUnit.create({ data: { unitCode, ...data } });
   return { id: created.id, action: "CREATE" };
 }
 
@@ -88,6 +98,7 @@ export async function exportData(): Promise<ExportResult> {
       unitName: u.unitName,
       unitType: u.unitType,
       parentUnitCode: u.parentUnit?.unitCode ?? "",
+      activeFlag: u.activeFlag ? "Ya" : "Tidak",
     })),
   };
 }

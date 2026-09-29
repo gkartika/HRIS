@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import type { PositionType } from "@/generated/prisma/enums";
+import { POSITION_TYPES, POSITION_STATUSES } from "@/lib/position-type";
+import type { PositionType, PositionStatus } from "@/generated/prisma/enums";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
 
 export const label = "Posisi Organisasi";
@@ -11,6 +12,8 @@ export const templateHeaders = [
   "positionType",
   "approvedFte",
   "reportsToPositionCode",
+  "positionStatus",
+  "grantsHrManagerAccess",
 ];
 export const templateExampleRow = {
   positionCode: "POS-CONTOH-01",
@@ -20,9 +23,11 @@ export const templateExampleRow = {
   positionType: "STAFF",
   approvedFte: "1",
   reportsToPositionCode: "",
+  // Blank keeps the current value on update, or VACANT on a brand-new
+  // Position (admin/positions/actions.ts's own create default).
+  positionStatus: "",
+  grantsHrManagerAccess: "",
 };
-
-const VALID_POSITION_TYPES = ["STAFF", "TEAM_LEAD", "SECTION_HEAD", "DEPARTMENT_HEAD", "DIRECTOR"];
 
 export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[]> {
   const [existingPositions, jobs, orgUnits] = await Promise.all([
@@ -44,6 +49,8 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const positionType = raw.positionType?.trim().toUpperCase();
     const approvedFte = raw.approvedFte?.trim();
     const reportsToPositionCode = raw.reportsToPositionCode?.trim();
+    const positionStatus = raw.positionStatus?.trim().toUpperCase();
+    const grantsHrManagerAccess = raw.grantsHrManagerAccess?.trim().toUpperCase();
 
     const reasons: string[] = [];
     if (!positionCode) reasons.push("Kode posisi (positionCode) wajib diisi");
@@ -53,8 +60,8 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     if (!orgUnitCode || !orgUnitByCode.has(orgUnitCode)) {
       reasons.push(`Unit organisasi (orgUnitCode) "${orgUnitCode}" tidak ditemukan`);
     }
-    if (!positionType || !VALID_POSITION_TYPES.includes(positionType)) {
-      reasons.push(`Jenis posisi (positionType) harus salah satu dari: ${VALID_POSITION_TYPES.join(", ")}`);
+    if (!positionType || !POSITION_TYPES.includes(positionType as PositionType)) {
+      reasons.push(`Jenis posisi (positionType) harus salah satu dari: ${POSITION_TYPES.join(", ")}`);
     }
     if (approvedFte && (Number.isNaN(Number(approvedFte)) || Number(approvedFte) <= 0)) {
       reasons.push("FTE Disetujui (approvedFte) harus berupa angka lebih dari 0");
@@ -65,6 +72,12 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
       } else if (!positionByCode.has(reportsToPositionCode) && !seenInFile.has(reportsToPositionCode)) {
         reasons.push(`Melapor ke (reportsToPositionCode) "${reportsToPositionCode}" tidak ditemukan`);
       }
+    }
+    if (positionStatus && !POSITION_STATUSES.includes(positionStatus as PositionStatus)) {
+      reasons.push(`Status Posisi (positionStatus) harus salah satu dari: ${POSITION_STATUSES.join(", ")}`);
+    }
+    if (grantsHrManagerAccess && !["YA", "TIDAK", "TRUE", "FALSE"].includes(grantsHrManagerAccess)) {
+      reasons.push('Akses HR Manager (grantsHrManagerAccess) harus "Ya" atau "Tidak"');
     }
 
     if (positionCode) seenInFile.add(positionCode);
@@ -91,6 +104,8 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     reportsToCode ? prisma.position.findUnique({ where: { positionCode: reportsToCode } }) : null,
   ]);
   const approvedFte = raw.approvedFte?.trim() ? Number(raw.approvedFte.trim()) : 1;
+  const positionStatus = raw.positionStatus?.trim().toUpperCase() || undefined;
+  const grantsHrManagerAccessRaw = raw.grantsHrManagerAccess?.trim().toUpperCase();
 
   const data = {
     jobId: job.id,
@@ -99,6 +114,10 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     positionType: raw.positionType.trim().toUpperCase() as PositionType,
     approvedFte,
     reportsToPositionId: reportsTo?.id ?? null,
+    // Blank leaves positionStatus/grantsHrManagerAccess unchanged on UPDATE
+    // (create still gets its own defaults below — VACANT, and false).
+    ...(positionStatus ? { positionStatus: positionStatus as PositionStatus } : {}),
+    ...(grantsHrManagerAccessRaw ? { grantsHrManagerAccess: ["YA", "TRUE"].includes(grantsHrManagerAccessRaw) } : {}),
   };
 
   if (existing) {
@@ -107,7 +126,7 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
   }
 
   const created = await prisma.position.create({
-    data: { positionCode, positionStatus: "VACANT", ...data },
+    data: { positionCode, positionStatus: "VACANT", grantsHrManagerAccess: false, ...data },
   });
   return { id: created.id, action: "CREATE" };
 }
@@ -127,6 +146,8 @@ export async function exportData(): Promise<ExportResult> {
       positionType: p.positionType,
       approvedFte: String(p.approvedFte),
       reportsToPositionCode: p.reportsToPosition?.positionCode ?? "",
+      positionStatus: p.positionStatus,
+      grantsHrManagerAccess: p.grantsHrManagerAccess ? "Ya" : "Tidak",
     })),
   };
 }

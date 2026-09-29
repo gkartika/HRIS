@@ -121,7 +121,6 @@ export function EditEmployeeForm({
               <label className="mb-1 block text-xs text-slate-500">Pendidikan Terakhir</label>
               <select
                 name="educationLevelId"
-                required
                 defaultValue={employee.educationLevelId ?? ""}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               >
@@ -137,7 +136,6 @@ export function EditEmployeeForm({
               <label className="mb-1 block text-xs text-slate-500">PTKP Pajak</label>
               <select
                 name="ptkpStatusCode"
-                required
                 defaultValue={employee.ptkpStatusCode ?? ""}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               >

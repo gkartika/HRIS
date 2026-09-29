@@ -35,8 +35,9 @@ export async function createEmployee(
   if (!employeeNumber || !fullLegalName || !hireDate || !employmentStatus) {
     return "Nomor karyawan, nama lengkap, tanggal bergabung, dan status kepegawaian wajib diisi.";
   }
-  if (!educationLevelId) return "Pendidikan Terakhir wajib dipilih.";
-  if (!ptkpStatusCode) return "PTKP Pajak wajib dipilih.";
+  // Everything else (identitas, pendidikan, PTKP) is filled in later from the
+  // employee's own detail page — see lib/employee-completeness.ts for the
+  // non-blocking "profil belum lengkap" flag shown until then.
   if (nationalIdNumber) {
     const nationalIdError = validateNationalIdNumber(nationalIdNumber);
     if (nationalIdError) return nationalIdError;
@@ -146,8 +147,7 @@ export async function updateEmployee(
     const educationLevelId = (formData.get("educationLevelId") as string) || null;
     const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
 
-    if (!educationLevelId) return "Pendidikan Terakhir wajib dipilih.";
-    if (!ptkpStatusCode) return "PTKP Pajak wajib dipilih.";
+    // Optional, same as at creation — can be left blank and completed later.
     if (nationalIdNumber) {
       const nationalIdError = validateNationalIdNumber(nationalIdNumber);
       if (nationalIdError) return nationalIdError;

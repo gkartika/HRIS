@@ -359,8 +359,8 @@ export async function createEmployeeFromRecruitmentRequest(
   if (!employeeNumber || !fullLegalName || !hireDate || !employmentStatus || !positionId) {
     return "Nomor karyawan, nama lengkap, tanggal bergabung, status kepegawaian, dan posisi wajib diisi.";
   }
-  if (!educationLevelId) return "Pendidikan Terakhir wajib dipilih.";
-  if (!ptkpStatusCode) return "PTKP Pajak wajib dipilih.";
+  // Identitas/Pendidikan/PTKP are optional here too — completed later from
+  // the employee's own detail page.
   if (noKk) {
     const noKkError = validateNoKk(noKk);
     if (noKkError) return noKkError;

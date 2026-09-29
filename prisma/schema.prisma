@@ -928,7 +928,6 @@ model Employee {
   birthDate                DateTime?
   gender                   Gender?
   personalEmail            String?
-  workEmail                String?          @unique
   mobileNumber             String?
   currentAddress           String?
   emergencyContactName     String?

@@ -2361,3 +2361,15 @@ invited (no Admin-SDM-set temporary passwords). Mail goes out over Gmail SMTP
 passwords for now (decided to leave for later). Code: `lib/account-access.ts`,
 `lib/account-tokens.ts`, `lib/mailer.ts`, `/forgot-password`, `/set-password`,
 `/change-password`, and the "Akun Masuk" panel on the employee page.
+
+### Dropped Employee.workEmail; Pendidikan/PTKP lists gained rename+reorder (2026-09-29)
+Per direct user request. "Email Kantor" was never used for login (that's
+`personalEmail` — see the entry above) and wasn't required anywhere; the field,
+its column, and every reference (create forms, profile view, import/export,
+`projectEmployee` masking) are removed (migration `20260929080000_drop_work_email`).
+Separately, Pengaturan > Pengaturan Data Karyawan's two dropdown lists
+(Pendidikan Terakhir, PTKP Pajak) only supported add + activate/deactivate —
+brought up to the same rename/reorder/toggle pattern already used for Alasan
+Keluar and Pertanyaan Klirens Keluar (`level-manager.tsx`, `status-manager.tsx`).
+PTKP's code itself stays fixed once created (Employee.ptkpStatusCode points at
+it directly) — only its label is editable.

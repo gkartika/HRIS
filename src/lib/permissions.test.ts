@@ -94,7 +94,6 @@ function mockEmployee(overrides: Partial<Employee> = {}): Employee {
     birthDate: null,
     gender: null,
     personalEmail: null,
-    workEmail: null,
     mobileNumber: null,
     currentAddress: null,
     emergencyContactName: null,

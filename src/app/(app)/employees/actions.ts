@@ -23,7 +23,6 @@ export async function createEmployee(
   const employeeNumber = (formData.get("employeeNumber") as string)?.trim();
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
   const gender = (formData.get("gender") as string) || null;
-  const workEmail = (formData.get("workEmail") as string)?.trim() || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
   const hireDate = formData.get("hireDate") as string;
   const employmentStatus = formData.get("employmentStatus") as EmploymentStatus;
@@ -61,7 +60,6 @@ export async function createEmployee(
         employeeNumber,
         fullLegalName,
         gender: gender ? (gender as Gender) : null,
-        workEmail,
         mobileNumber,
         hireDate: hireDateObj,
         employmentStatus,

@@ -86,7 +86,6 @@ export function EmployeeProfileView({
           />
           <Field label={t("employee.birthPlace")} value={employee.birthPlace} />
           <Field label={t("employee.birthDate")} value={formatDate(employee.birthDate)} />
-          <Field label={t("employee.workEmail")} value={employee.workEmail} />
           <Field label={t("employee.personalEmail")} value={employee.personalEmail} />
           <Field label={t("employee.mobileNumber")} value={employee.mobileNumber} />
           <Field label={t("employee.currentAddress")} value={employee.currentAddress} />

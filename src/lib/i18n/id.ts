@@ -89,7 +89,6 @@ export const strings = {
     gender: "Jenis Kelamin",
     birthDate: "Tanggal Lahir",
     birthPlace: "Tempat Lahir",
-    workEmail: "Email Kantor",
     personalEmail: "Email Pribadi",
     mobileNumber: "Nomor HP",
     currentAddress: "Alamat Saat Ini",

@@ -41,10 +41,6 @@ export function CreateEmployeeForm({
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">{t("employee.workEmail")}</label>
-        <input name="workEmail" type="email" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-      </div>
-      <div>
         <label className="mb-1 block text-xs text-slate-500">{t("employee.mobileNumber")}</label>
         <input name="mobileNumber" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>

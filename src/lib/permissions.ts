@@ -847,7 +847,6 @@ export function projectEmployee(
     for (const field of RESTRICTED_CONTACT_FIELDS) delete result[field];
     delete result.personalEmail;
     delete result.mobileNumber;
-    delete result.workEmail;
     return result;
   }
 

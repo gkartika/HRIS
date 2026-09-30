@@ -797,7 +797,19 @@ const RESTRICTED_CONTACT_FIELDS = [
   "birthPlace",
   "birthDate",
   "personalEmail",
-  "currentAddress",
+  "currentAddressLine",
+  "currentAddressRtRw",
+  "currentAddressCity",
+  "currentAddressDistrict",
+  "currentAddressVillage",
+  "currentAddressPostalCode",
+  "idCardAddressSameAsCurrent",
+  "idCardAddressLine",
+  "idCardAddressRtRw",
+  "idCardAddressCity",
+  "idCardAddressDistrict",
+  "idCardAddressVillage",
+  "idCardAddressPostalCode",
   "emergencyContactName",
   "emergencyContactRelation",
   "emergencyContactPhone",
@@ -832,7 +844,6 @@ export function projectEmployee(
       if (field !== "personalEmail") delete result[field];
     }
     delete result.personalEmail;
-    delete result.currentAddress;
     delete result.emergencyContactName;
     delete result.emergencyContactRelation;
     delete result.emergencyContactPhone;

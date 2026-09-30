@@ -27,6 +27,21 @@ function formatDate(date: Date | null | undefined): string {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "long" }).format(new Date(date));
 }
 
+function formatAddress(parts: {
+  line?: string | null;
+  rtRw?: string | null;
+  village?: string | null;
+  district?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+}): string | null {
+  const rtRw = parts.rtRw ? `RT/RW ${parts.rtRw}` : null;
+  const segments = [parts.line, rtRw, parts.village, parts.district, parts.city, parts.postalCode].filter(
+    (segment): segment is string => Boolean(segment)
+  );
+  return segments.length > 0 ? segments.join(", ") : null;
+}
+
 const ASSIGNMENT_BADGE_TONE: Record<string, string> = {
   PRIMARY: "bg-indigo-50 text-indigo-700",
   ADDITIONAL: "bg-emerald-50 text-emerald-700",
@@ -88,7 +103,36 @@ export function EmployeeProfileView({
           <Field label={t("employee.birthDate")} value={formatDate(employee.birthDate)} />
           <Field label={t("employee.personalEmail")} value={employee.personalEmail} />
           <Field label={t("employee.mobileNumber")} value={employee.mobileNumber} />
-          <Field label={t("employee.currentAddress")} value={employee.currentAddress} />
+          {employee.currentAddressLine !== undefined && (
+            <Field
+              label={t("employee.currentAddressTitle")}
+              value={formatAddress({
+                line: employee.currentAddressLine,
+                rtRw: employee.currentAddressRtRw,
+                village: employee.currentAddressVillage,
+                district: employee.currentAddressDistrict,
+                city: employee.currentAddressCity,
+                postalCode: employee.currentAddressPostalCode,
+              })}
+            />
+          )}
+          {employee.idCardAddressSameAsCurrent !== undefined && (
+            <Field
+              label={t("employee.idCardAddressTitle")}
+              value={
+                employee.idCardAddressSameAsCurrent
+                  ? t("employee.idCardAddressSameAsCurrent")
+                  : formatAddress({
+                      line: employee.idCardAddressLine,
+                      rtRw: employee.idCardAddressRtRw,
+                      village: employee.idCardAddressVillage,
+                      district: employee.idCardAddressDistrict,
+                      city: employee.idCardAddressCity,
+                      postalCode: employee.idCardAddressPostalCode,
+                    })
+              }
+            />
+          )}
           <Field label={t("employee.hireDate")} value={formatDate(employee.hireDate)} />
           {educationLevelLabel !== undefined && (
             <Field label="Pendidikan Terakhir" value={educationLevelLabel} />

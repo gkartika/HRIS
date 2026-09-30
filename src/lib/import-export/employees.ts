@@ -14,7 +14,19 @@ export const templateHeaders = [
   "birthDate",
   "mobileNumber",
   "personalEmail",
-  "currentAddress",
+  "currentAddressLine",
+  "currentAddressRtRw",
+  "currentAddressCity",
+  "currentAddressDistrict",
+  "currentAddressVillage",
+  "currentAddressPostalCode",
+  "idCardAddressSameAsCurrent",
+  "idCardAddressLine",
+  "idCardAddressRtRw",
+  "idCardAddressCity",
+  "idCardAddressDistrict",
+  "idCardAddressVillage",
+  "idCardAddressPostalCode",
   "hireDate",
   "employmentStatus",
   "activeFlag",
@@ -36,7 +48,19 @@ export const templateExampleRow = {
   birthDate: "1995-05-17",
   mobileNumber: "0812-0000-0000",
   personalEmail: "",
-  currentAddress: "",
+  currentAddressLine: "Jl. Kenanga No. 12",
+  currentAddressRtRw: "003/005",
+  currentAddressCity: "Kota Bekasi",
+  currentAddressDistrict: "Bekasi Timur",
+  currentAddressVillage: "Margahayu",
+  currentAddressPostalCode: "17113",
+  idCardAddressSameAsCurrent: "Ya",
+  idCardAddressLine: "",
+  idCardAddressRtRw: "",
+  idCardAddressCity: "",
+  idCardAddressDistrict: "",
+  idCardAddressVillage: "",
+  idCardAddressPostalCode: "",
   hireDate: "2026-01-01",
   employmentStatus: "PKWTT",
   activeFlag: "Ya",
@@ -77,6 +101,7 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const hireDate = raw.hireDate?.trim();
     const employmentStatus = raw.employmentStatus?.trim().toUpperCase();
     const activeFlag = raw.activeFlag?.trim().toUpperCase();
+    const idCardAddressSameAsCurrent = raw.idCardAddressSameAsCurrent?.trim().toUpperCase();
     const nationalIdNumber = raw.nationalIdNumber?.trim();
     const noKk = raw.noKk?.trim();
     const educationLevelLabel = raw.educationLevelLabel?.trim();
@@ -100,6 +125,12 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     }
     if (activeFlag && !["YA", "TIDAK", "TRUE", "FALSE"].includes(activeFlag)) {
       reasons.push('Status Aktif (activeFlag) harus "Ya" atau "Tidak"');
+    }
+    if (
+      idCardAddressSameAsCurrent &&
+      !["YA", "TIDAK", "TRUE", "FALSE"].includes(idCardAddressSameAsCurrent)
+    ) {
+      reasons.push('Alamat KTP sama dengan domisili (idCardAddressSameAsCurrent) harus "Ya" atau "Tidak"');
     }
     if (nationalIdNumber) {
       const nationalIdError = validateNationalIdNumber(nationalIdNumber);
@@ -138,6 +169,7 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     ? await prisma.educationLevel.findUnique({ where: { label: educationLevelLabel } })
     : null;
   const activeFlagRaw = raw.activeFlag?.trim().toUpperCase();
+  const idCardSameRaw = raw.idCardAddressSameAsCurrent?.trim().toUpperCase();
   const birthDate = raw.birthDate?.trim();
 
   const data = {
@@ -146,7 +178,7 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     employmentStatus: raw.employmentStatus.trim().toUpperCase() as EmploymentStatus,
     // Blank leaves each optional field unchanged on UPDATE (matching the
     // org-units/jobs/positions importers) instead of nulling out real data
-    // (e.g. personalEmail/currentAddress/nationalIdNumber already entered
+    // (e.g. personalEmail/currentAddressLine/nationalIdNumber already entered
     // via the edit form) just because a re-exported CSV left a cell blank.
     // A brand-new employee still gets null/the schema default on CREATE.
     ...(genderRaw ? { gender: genderRaw as Gender } : {}),
@@ -154,7 +186,31 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     ...(birthDate ? { birthDate: new Date(birthDate) } : {}),
     ...(raw.mobileNumber?.trim() ? { mobileNumber: raw.mobileNumber.trim() } : {}),
     ...(raw.personalEmail?.trim() ? { personalEmail: raw.personalEmail.trim() } : {}),
-    ...(raw.currentAddress?.trim() ? { currentAddress: raw.currentAddress.trim() } : {}),
+    ...(raw.currentAddressLine?.trim() ? { currentAddressLine: raw.currentAddressLine.trim() } : {}),
+    ...(raw.currentAddressRtRw?.trim() ? { currentAddressRtRw: raw.currentAddressRtRw.trim() } : {}),
+    ...(raw.currentAddressCity?.trim() ? { currentAddressCity: raw.currentAddressCity.trim() } : {}),
+    ...(raw.currentAddressDistrict?.trim()
+      ? { currentAddressDistrict: raw.currentAddressDistrict.trim() }
+      : {}),
+    ...(raw.currentAddressVillage?.trim()
+      ? { currentAddressVillage: raw.currentAddressVillage.trim() }
+      : {}),
+    ...(raw.currentAddressPostalCode?.trim()
+      ? { currentAddressPostalCode: raw.currentAddressPostalCode.trim() }
+      : {}),
+    ...(idCardSameRaw ? { idCardAddressSameAsCurrent: ["YA", "TRUE"].includes(idCardSameRaw) } : {}),
+    ...(raw.idCardAddressLine?.trim() ? { idCardAddressLine: raw.idCardAddressLine.trim() } : {}),
+    ...(raw.idCardAddressRtRw?.trim() ? { idCardAddressRtRw: raw.idCardAddressRtRw.trim() } : {}),
+    ...(raw.idCardAddressCity?.trim() ? { idCardAddressCity: raw.idCardAddressCity.trim() } : {}),
+    ...(raw.idCardAddressDistrict?.trim()
+      ? { idCardAddressDistrict: raw.idCardAddressDistrict.trim() }
+      : {}),
+    ...(raw.idCardAddressVillage?.trim()
+      ? { idCardAddressVillage: raw.idCardAddressVillage.trim() }
+      : {}),
+    ...(raw.idCardAddressPostalCode?.trim()
+      ? { idCardAddressPostalCode: raw.idCardAddressPostalCode.trim() }
+      : {}),
     ...(activeFlagRaw ? { activeFlag: ["YA", "TRUE"].includes(activeFlagRaw) } : {}),
     ...(raw.nationalIdNumber?.trim() ? { nationalIdNumber: raw.nationalIdNumber.trim() } : {}),
     ...(raw.noKk?.trim() ? { noKk: raw.noKk.trim() } : {}),
@@ -196,7 +252,24 @@ export async function exportData(session: Session): Promise<ExportResult> {
       birthDate: projected.birthDate ? new Date(projected.birthDate).toISOString().slice(0, 10) : "",
       mobileNumber: projected.mobileNumber ?? "",
       personalEmail: projected.personalEmail ?? "",
-      currentAddress: projected.currentAddress ?? "",
+      currentAddressLine: projected.currentAddressLine ?? "",
+      currentAddressRtRw: projected.currentAddressRtRw ?? "",
+      currentAddressCity: projected.currentAddressCity ?? "",
+      currentAddressDistrict: projected.currentAddressDistrict ?? "",
+      currentAddressVillage: projected.currentAddressVillage ?? "",
+      currentAddressPostalCode: projected.currentAddressPostalCode ?? "",
+      idCardAddressSameAsCurrent:
+        projected.idCardAddressSameAsCurrent === undefined
+          ? ""
+          : projected.idCardAddressSameAsCurrent
+            ? "Ya"
+            : "Tidak",
+      idCardAddressLine: projected.idCardAddressLine ?? "",
+      idCardAddressRtRw: projected.idCardAddressRtRw ?? "",
+      idCardAddressCity: projected.idCardAddressCity ?? "",
+      idCardAddressDistrict: projected.idCardAddressDistrict ?? "",
+      idCardAddressVillage: projected.idCardAddressVillage ?? "",
+      idCardAddressPostalCode: projected.idCardAddressPostalCode ?? "",
       hireDate: projected.hireDate ? new Date(projected.hireDate).toISOString().slice(0, 10) : "",
       employmentStatus: projected.employmentStatus ?? "",
       activeFlag: projected.activeFlag ? "Ya" : "Tidak",

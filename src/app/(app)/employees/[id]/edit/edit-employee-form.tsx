@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateEmployee } from "../../actions";
 import { t } from "@/lib/i18n/id";
 import type { Employee, EducationLevel, PtkpStatus } from "@/generated/prisma/client";
@@ -18,6 +18,7 @@ export function EditEmployeeForm({
 }) {
   const action = updateEmployee.bind(null, employee.id);
   const [error, formAction, isPending] = useActionState(action, undefined);
+  const [sameAsCurrent, setSameAsCurrent] = useState(employee.idCardAddressSameAsCurrent ?? true);
 
   return (
     <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
@@ -58,14 +59,133 @@ export function EditEmployeeForm({
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
         />
       </div>
-      <div>
-        <label className="mb-1 block text-xs text-slate-500">{t("employee.currentAddress")}</label>
-        <textarea
-          name="currentAddress"
-          rows={2}
-          defaultValue={employee.currentAddress ?? ""}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        />
+      <div className="border-t border-slate-100 pt-4">
+        <p className="mb-3 text-xs font-medium text-slate-500">{t("employee.currentAddressTitle")}</p>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">{t("employee.currentAddressLine")}</label>
+            <textarea
+              name="currentAddressLine"
+              rows={2}
+              defaultValue={employee.currentAddressLine ?? ""}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">{t("employee.currentAddressRtRw")}</label>
+              <input
+                name="currentAddressRtRw"
+                defaultValue={employee.currentAddressRtRw ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">{t("employee.currentAddressCity")}</label>
+              <input
+                name="currentAddressCity"
+                defaultValue={employee.currentAddressCity ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">{t("employee.currentAddressDistrict")}</label>
+              <input
+                name="currentAddressDistrict"
+                defaultValue={employee.currentAddressDistrict ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">{t("employee.currentAddressVillage")}</label>
+              <input
+                name="currentAddressVillage"
+                defaultValue={employee.currentAddressVillage ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">{t("employee.currentAddressPostalCode")}</label>
+              <input
+                name="currentAddressPostalCode"
+                defaultValue={employee.currentAddressPostalCode ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+        <label className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <input
+            type="checkbox"
+            name="idCardAddressSameAsCurrent"
+            checked={sameAsCurrent}
+            onChange={(e) => setSameAsCurrent(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="text-sm text-slate-600">{t("employee.idCardAddressSameAsCurrent")}</span>
+        </label>
+
+        {!sameAsCurrent && (
+          <div className="mt-4 space-y-3 border-t border-dashed border-slate-200 pt-4">
+            <p className="text-xs font-medium text-slate-500">{t("employee.idCardAddressTitle")}</p>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">{t("employee.idCardAddressLine")}</label>
+              <textarea
+                name="idCardAddressLine"
+                rows={2}
+                defaultValue={employee.idCardAddressLine ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">{t("employee.idCardAddressRtRw")}</label>
+                <input
+                  name="idCardAddressRtRw"
+                  defaultValue={employee.idCardAddressRtRw ?? ""}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">{t("employee.idCardAddressCity")}</label>
+                <input
+                  name="idCardAddressCity"
+                  defaultValue={employee.idCardAddressCity ?? ""}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">{t("employee.idCardAddressDistrict")}</label>
+                <input
+                  name="idCardAddressDistrict"
+                  defaultValue={employee.idCardAddressDistrict ?? ""}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">{t("employee.idCardAddressVillage")}</label>
+                <input
+                  name="idCardAddressVillage"
+                  defaultValue={employee.idCardAddressVillage ?? ""}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">{t("employee.idCardAddressPostalCode")}</label>
+                <input
+                  name="idCardAddressPostalCode"
+                  defaultValue={employee.idCardAddressPostalCode ?? ""}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div>

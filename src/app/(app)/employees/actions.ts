@@ -118,7 +118,34 @@ export async function updateEmployee(
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
   const personalEmail = (formData.get("personalEmail") as string)?.trim() || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
-  const currentAddress = (formData.get("currentAddress") as string)?.trim() || null;
+  const currentAddressLine = (formData.get("currentAddressLine") as string)?.trim() || null;
+  const currentAddressRtRw = (formData.get("currentAddressRtRw") as string)?.trim() || null;
+  const currentAddressCity = (formData.get("currentAddressCity") as string)?.trim() || null;
+  const currentAddressDistrict = (formData.get("currentAddressDistrict") as string)?.trim() || null;
+  const currentAddressVillage = (formData.get("currentAddressVillage") as string)?.trim() || null;
+  const currentAddressPostalCode =
+    (formData.get("currentAddressPostalCode") as string)?.trim() || null;
+  // "Sama dengan domisili" clears any previously-entered KTP address instead
+  // of leaving stale values sitting unused behind the flag.
+  const idCardAddressSameAsCurrent = formData.get("idCardAddressSameAsCurrent") === "on";
+  const idCardAddressLine = idCardAddressSameAsCurrent
+    ? null
+    : (formData.get("idCardAddressLine") as string)?.trim() || null;
+  const idCardAddressRtRw = idCardAddressSameAsCurrent
+    ? null
+    : (formData.get("idCardAddressRtRw") as string)?.trim() || null;
+  const idCardAddressCity = idCardAddressSameAsCurrent
+    ? null
+    : (formData.get("idCardAddressCity") as string)?.trim() || null;
+  const idCardAddressDistrict = idCardAddressSameAsCurrent
+    ? null
+    : (formData.get("idCardAddressDistrict") as string)?.trim() || null;
+  const idCardAddressVillage = idCardAddressSameAsCurrent
+    ? null
+    : (formData.get("idCardAddressVillage") as string)?.trim() || null;
+  const idCardAddressPostalCode = idCardAddressSameAsCurrent
+    ? null
+    : (formData.get("idCardAddressPostalCode") as string)?.trim() || null;
   const emergencyContactName = (formData.get("emergencyContactName") as string)?.trim() || null;
   const emergencyContactRelation =
     (formData.get("emergencyContactRelation") as string)?.trim() || null;
@@ -132,7 +159,19 @@ export async function updateEmployee(
   const data: Record<string, unknown> = {
     personalEmail,
     mobileNumber,
-    currentAddress,
+    currentAddressLine,
+    currentAddressRtRw,
+    currentAddressCity,
+    currentAddressDistrict,
+    currentAddressVillage,
+    currentAddressPostalCode,
+    idCardAddressSameAsCurrent,
+    idCardAddressLine,
+    idCardAddressRtRw,
+    idCardAddressCity,
+    idCardAddressDistrict,
+    idCardAddressVillage,
+    idCardAddressPostalCode,
     emergencyContactName,
     emergencyContactRelation,
     emergencyContactPhone,

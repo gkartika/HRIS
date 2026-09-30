@@ -929,7 +929,25 @@ model Employee {
   gender                   Gender?
   personalEmail            String?
   mobileNumber             String?
-  currentAddress           String?
+  // Domisili = where the employee actually lives today; split into DM-blueprint
+  // administrative components (RT/RW through postal code) instead of one free-
+  // text blob, so it can be printed/matched against government forms cleanly.
+  currentAddressLine       String?
+  currentAddressRtRw       String?
+  currentAddressCity       String?
+  currentAddressDistrict   String?
+  currentAddressVillage    String?
+  currentAddressPostalCode String?
+  // KTP address defaults to "same as domisili" (the common case) — only
+  // filled in separately when the employee's ID card lists a different
+  // address than where they currently live.
+  idCardAddressSameAsCurrent Boolean @default(true)
+  idCardAddressLine        String?
+  idCardAddressRtRw        String?
+  idCardAddressCity        String?
+  idCardAddressDistrict    String?
+  idCardAddressVillage     String?
+  idCardAddressPostalCode  String?
   emergencyContactName     String?
   emergencyContactRelation String?
   emergencyContactPhone    String?

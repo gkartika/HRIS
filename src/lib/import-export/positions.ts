@@ -10,7 +10,6 @@ export const templateHeaders = [
   "jobLevel",
   "orgUnitCode",
   "positionType",
-  "approvedFte",
   "reportsToPositionCode",
   "positionStatus",
   "grantsHrManagerAccess",
@@ -21,7 +20,6 @@ export const templateExampleRow = {
   jobLevel: "2A",
   orgUnitCode: "DEPT-CONTOH",
   positionType: "STAFF",
-  approvedFte: "1",
   reportsToPositionCode: "",
   // Blank keeps the current value on update, or VACANT on a brand-new
   // Position (admin/positions/actions.ts's own create default).
@@ -47,7 +45,6 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const jobLevel = raw.jobLevel?.trim();
     const orgUnitCode = raw.orgUnitCode?.trim();
     const positionType = raw.positionType?.trim().toUpperCase();
-    const approvedFte = raw.approvedFte?.trim();
     const reportsToPositionCode = raw.reportsToPositionCode?.trim();
     const positionStatus = raw.positionStatus?.trim().toUpperCase();
     const grantsHrManagerAccess = raw.grantsHrManagerAccess?.trim().toUpperCase();
@@ -62,9 +59,6 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     }
     if (!positionType || !POSITION_TYPES.includes(positionType as PositionType)) {
       reasons.push(`Jenis posisi (positionType) harus salah satu dari: ${POSITION_TYPES.join(", ")}`);
-    }
-    if (approvedFte && (Number.isNaN(Number(approvedFte)) || Number(approvedFte) <= 0)) {
-      reasons.push("FTE Disetujui (approvedFte) harus berupa angka lebih dari 0");
     }
     if (reportsToPositionCode) {
       if (reportsToPositionCode === positionCode) {
@@ -103,7 +97,6 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     prisma.position.findUnique({ where: { positionCode } }),
     reportsToCode ? prisma.position.findUnique({ where: { positionCode: reportsToCode } }) : null,
   ]);
-  const approvedFte = raw.approvedFte?.trim() ? Number(raw.approvedFte.trim()) : 1;
   const positionStatus = raw.positionStatus?.trim().toUpperCase() || undefined;
   const grantsHrManagerAccessRaw = raw.grantsHrManagerAccess?.trim().toUpperCase();
 
@@ -112,7 +105,6 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     jobLevel: raw.jobLevel.trim(),
     orgUnitId: orgUnit.id,
     positionType: raw.positionType.trim().toUpperCase() as PositionType,
-    approvedFte,
     reportsToPositionId: reportsTo?.id ?? null,
     // Blank leaves positionStatus/grantsHrManagerAccess unchanged on UPDATE
     // (create still gets its own defaults below — VACANT, and false).
@@ -144,7 +136,6 @@ export async function exportData(): Promise<ExportResult> {
       jobLevel: p.jobLevel,
       orgUnitCode: p.orgUnit.unitCode,
       positionType: p.positionType,
-      approvedFte: String(p.approvedFte),
       reportsToPositionCode: p.reportsToPosition?.positionCode ?? "",
       positionStatus: p.positionStatus,
       grantsHrManagerAccess: p.grantsHrManagerAccess ? "Ya" : "Tidak",

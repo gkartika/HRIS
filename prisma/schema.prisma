@@ -1132,7 +1132,6 @@ model Position {
   orgUnitId             String
   orgUnit               OrgUnit        @relation(fields: [orgUnitId], references: [id])
   positionType          PositionType
-  approvedFte           Float          @default(1)
   positionStatus        PositionStatus @default(VACANT)
   // ACC-14/DEC-015: functional flag, independent of positionType's hierarchy
   // tier. An Employee holding an ACTIVE Assignment (any type) to a Position

@@ -106,17 +106,6 @@ export function EditPositionForm({
         </p>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">FTE Disetujui</label>
-        <input
-          name="approvedFte"
-          type="number"
-          step="0.1"
-          min="0.1"
-          defaultValue={position.approvedFte}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" name="grantsHrManagerAccess" defaultChecked={position.grantsHrManagerAccess} />
           Memberikan Akses HR Manager

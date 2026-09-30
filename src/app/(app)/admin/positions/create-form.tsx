@@ -113,17 +113,6 @@ export function CreatePositionForm({
           ))}
         </select>
       </div>
-      <div>
-        <label className="mb-1 block text-xs text-slate-500">FTE Disetujui</label>
-        <input
-          name="approvedFte"
-          type="number"
-          step="0.1"
-          min="0.1"
-          defaultValue="1"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        />
-      </div>
       <div className="flex items-end pb-2">
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" name="grantsHrManagerAccess" />

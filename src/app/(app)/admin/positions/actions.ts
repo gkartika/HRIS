@@ -21,7 +21,6 @@ export async function createPosition(
   const orgUnitId = formData.get("orgUnitId") as string;
   const positionType = formData.get("positionType") as PositionType;
   const reportsToPositionId = (formData.get("reportsToPositionId") as string) || null;
-  const approvedFte = Number(formData.get("approvedFte") ?? 1);
   const grantsHrManagerAccess = formData.get("grantsHrManagerAccess") === "on";
 
   if (!positionCode || !jobId || !jobLevel || !orgUnitId || !positionType) {
@@ -38,7 +37,6 @@ export async function createPosition(
       jobLevel,
       orgUnitId,
       positionType,
-      approvedFte: Number.isFinite(approvedFte) && approvedFte > 0 ? approvedFte : 1,
       reportsToPositionId: reportsToPositionId || null,
       positionStatus: "VACANT",
       grantsHrManagerAccess,
@@ -72,7 +70,6 @@ export async function updatePosition(
   const positionType = formData.get("positionType") as PositionType;
   const positionStatus = formData.get("positionStatus") as PositionStatus;
   const reportsToPositionId = (formData.get("reportsToPositionId") as string) || null;
-  const approvedFte = Number(formData.get("approvedFte") ?? 1);
   const grantsHrManagerAccess = formData.get("grantsHrManagerAccess") === "on";
 
   if (!jobId || !jobLevel || !orgUnitId || !positionType || !positionStatus) {
@@ -91,7 +88,6 @@ export async function updatePosition(
       positionType,
       positionStatus,
       reportsToPositionId: reportsToPositionId || null,
-      approvedFte: Number.isFinite(approvedFte) && approvedFte > 0 ? approvedFte : 1,
       grantsHrManagerAccess,
     },
   });

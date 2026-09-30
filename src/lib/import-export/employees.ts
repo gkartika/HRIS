@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { validateNoKk } from "@/lib/validation/employee-fields";
+import { validateNoKk, validateNationalIdNumber } from "@/lib/validation/employee-fields";
 import { projectEmployee } from "@/lib/permissions";
 import type { Session } from "next-auth";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";
@@ -10,11 +10,21 @@ export const templateHeaders = [
   "employeeNumber",
   "fullLegalName",
   "gender",
+  "birthPlace",
+  "birthDate",
   "mobileNumber",
+  "personalEmail",
+  "currentAddress",
   "hireDate",
   "employmentStatus",
+  "activeFlag",
+  "nationalIdNumber",
   "noKk",
   "namaIbuKandung",
+  "bankAccountName",
+  "bankAccountNumber",
+  "bpjsEmploymentNumber",
+  "bpjsHealthNumber",
   "educationLevelLabel",
   "ptkpStatusCode",
 ];
@@ -22,11 +32,21 @@ export const templateExampleRow = {
   employeeNumber: "CBP-0099",
   fullLegalName: "Nama Contoh",
   gender: "MALE",
+  birthPlace: "Jakarta",
+  birthDate: "1995-05-17",
   mobileNumber: "0812-0000-0000",
+  personalEmail: "",
+  currentAddress: "",
   hireDate: "2026-01-01",
   employmentStatus: "PKWTT",
+  activeFlag: "Ya",
+  nationalIdNumber: "",
   noKk: "",
   namaIbuKandung: "",
+  bankAccountName: "",
+  bankAccountNumber: "",
+  bpjsEmploymentNumber: "",
+  bpjsHealthNumber: "",
   educationLevelLabel: "S1",
   ptkpStatusCode: "TK/0",
 };
@@ -53,8 +73,11 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const employeeNumber = raw.employeeNumber?.trim();
     const fullLegalName = raw.fullLegalName?.trim();
     const gender = raw.gender?.trim().toUpperCase();
+    const birthDate = raw.birthDate?.trim();
     const hireDate = raw.hireDate?.trim();
     const employmentStatus = raw.employmentStatus?.trim().toUpperCase();
+    const activeFlag = raw.activeFlag?.trim().toUpperCase();
+    const nationalIdNumber = raw.nationalIdNumber?.trim();
     const noKk = raw.noKk?.trim();
     const educationLevelLabel = raw.educationLevelLabel?.trim();
     const ptkpStatusCode = raw.ptkpStatusCode?.trim();
@@ -71,6 +94,16 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     }
     if (gender && !VALID_GENDERS.includes(gender)) {
       reasons.push(`Jenis kelamin (gender) harus salah satu dari: ${VALID_GENDERS.join(", ")}`);
+    }
+    if (birthDate && Number.isNaN(Date.parse(birthDate))) {
+      reasons.push("Tanggal lahir (birthDate) harus format tanggal yang valid");
+    }
+    if (activeFlag && !["YA", "TIDAK", "TRUE", "FALSE"].includes(activeFlag)) {
+      reasons.push('Status Aktif (activeFlag) harus "Ya" atau "Tidak"');
+    }
+    if (nationalIdNumber) {
+      const nationalIdError = validateNationalIdNumber(nationalIdNumber);
+      if (nationalIdError) reasons.push(nationalIdError);
     }
     if (noKk) {
       const noKkError = validateNoKk(noKk);
@@ -104,18 +137,34 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
   const educationLevel = educationLevelLabel
     ? await prisma.educationLevel.findUnique({ where: { label: educationLevelLabel } })
     : null;
-  const ptkpStatusCode = raw.ptkpStatusCode?.trim() || null;
+  const activeFlagRaw = raw.activeFlag?.trim().toUpperCase();
+  const birthDate = raw.birthDate?.trim();
 
   const data = {
     fullLegalName: raw.fullLegalName.trim(),
-    gender: genderRaw ? (genderRaw as Gender) : null,
-    mobileNumber: raw.mobileNumber?.trim() || null,
     hireDate: new Date(raw.hireDate.trim()),
     employmentStatus: raw.employmentStatus.trim().toUpperCase() as EmploymentStatus,
-    noKk: raw.noKk?.trim() || null,
-    namaIbuKandung: raw.namaIbuKandung?.trim() || null,
-    educationLevelId: educationLevel?.id ?? null,
-    ptkpStatusCode,
+    // Blank leaves each optional field unchanged on UPDATE (matching the
+    // org-units/jobs/positions importers) instead of nulling out real data
+    // (e.g. personalEmail/currentAddress/nationalIdNumber already entered
+    // via the edit form) just because a re-exported CSV left a cell blank.
+    // A brand-new employee still gets null/the schema default on CREATE.
+    ...(genderRaw ? { gender: genderRaw as Gender } : {}),
+    ...(raw.birthPlace?.trim() ? { birthPlace: raw.birthPlace.trim() } : {}),
+    ...(birthDate ? { birthDate: new Date(birthDate) } : {}),
+    ...(raw.mobileNumber?.trim() ? { mobileNumber: raw.mobileNumber.trim() } : {}),
+    ...(raw.personalEmail?.trim() ? { personalEmail: raw.personalEmail.trim() } : {}),
+    ...(raw.currentAddress?.trim() ? { currentAddress: raw.currentAddress.trim() } : {}),
+    ...(activeFlagRaw ? { activeFlag: ["YA", "TRUE"].includes(activeFlagRaw) } : {}),
+    ...(raw.nationalIdNumber?.trim() ? { nationalIdNumber: raw.nationalIdNumber.trim() } : {}),
+    ...(raw.noKk?.trim() ? { noKk: raw.noKk.trim() } : {}),
+    ...(raw.namaIbuKandung?.trim() ? { namaIbuKandung: raw.namaIbuKandung.trim() } : {}),
+    ...(raw.bankAccountName?.trim() ? { bankAccountName: raw.bankAccountName.trim() } : {}),
+    ...(raw.bankAccountNumber?.trim() ? { bankAccountNumber: raw.bankAccountNumber.trim() } : {}),
+    ...(raw.bpjsEmploymentNumber?.trim() ? { bpjsEmploymentNumber: raw.bpjsEmploymentNumber.trim() } : {}),
+    ...(raw.bpjsHealthNumber?.trim() ? { bpjsHealthNumber: raw.bpjsHealthNumber.trim() } : {}),
+    ...(educationLevelLabel ? { educationLevelId: educationLevel?.id ?? null } : {}),
+    ...(raw.ptkpStatusCode?.trim() ? { ptkpStatusCode: raw.ptkpStatusCode.trim() } : {}),
   };
 
   const existing = await prisma.employee.findUnique({ where: { employeeNumber } });
@@ -143,11 +192,21 @@ export async function exportData(session: Session): Promise<ExportResult> {
       employeeNumber: projected.employeeNumber ?? "",
       fullLegalName: projected.fullLegalName ?? "",
       gender: projected.gender ?? "",
+      birthPlace: projected.birthPlace ?? "",
+      birthDate: projected.birthDate ? new Date(projected.birthDate).toISOString().slice(0, 10) : "",
       mobileNumber: projected.mobileNumber ?? "",
+      personalEmail: projected.personalEmail ?? "",
+      currentAddress: projected.currentAddress ?? "",
       hireDate: projected.hireDate ? new Date(projected.hireDate).toISOString().slice(0, 10) : "",
       employmentStatus: projected.employmentStatus ?? "",
+      activeFlag: projected.activeFlag ? "Ya" : "Tidak",
+      nationalIdNumber: projected.nationalIdNumber ?? "",
       noKk: projected.noKk ?? "",
       namaIbuKandung: projected.namaIbuKandung ?? "",
+      bankAccountName: projected.bankAccountName ?? "",
+      bankAccountNumber: projected.bankAccountNumber ?? "",
+      bpjsEmploymentNumber: projected.bpjsEmploymentNumber ?? "",
+      bpjsHealthNumber: projected.bpjsHealthNumber ?? "",
       // educationLevelId is visible to more roles than the highly-restricted
       // fields above (see permissions.ts) — only show the label if the
       // scalar id itself wasn't stripped for this viewer.

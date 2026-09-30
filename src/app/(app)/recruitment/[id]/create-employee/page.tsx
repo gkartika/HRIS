@@ -40,7 +40,7 @@ export default async function CreateEmployeeFromRequestPage({
 
   const [candidatePositions, educationLevels, ptkpStatuses] = await Promise.all([
     prisma.position.findMany({
-      where: { jobId: request.jobId, orgUnitId: request.departmentId },
+      where: { jobId: request.jobId, orgUnitId: request.departmentId, archived: false },
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),

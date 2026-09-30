@@ -11,14 +11,15 @@ import type { Prisma, PositionStatus } from "@/generated/prisma/client";
 export default async function PositionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; orgUnitId?: string; jobLevel?: string; positionStatus?: string }>;
+  searchParams: Promise<{ q?: string; orgUnitId?: string; jobLevel?: string; positionStatus?: string; archived?: string }>;
 }) {
   const session = await requireSession();
   if (!canManageOrgStructure(session)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
-  const { q, orgUnitId, jobLevel, positionStatus } = await searchParams;
+  const { q, orgUnitId, jobLevel, positionStatus, archived } = await searchParams;
+  const showArchived = archived === "1";
 
   const where: Prisma.PositionWhereInput = {};
   if (q?.trim()) {
@@ -31,6 +32,9 @@ export default async function PositionsPage({
   if (orgUnitId) where.orgUnitId = orgUnitId;
   if (jobLevel) where.jobLevel = jobLevel;
   if (positionStatus) where.positionStatus = positionStatus as PositionStatus;
+  // Archived positions are hidden by default — they're kept only so old
+  // workflow records still resolve, not for browsing day to day.
+  if (!showArchived) where.archived = false;
 
   const [positions, allPositions, jobs, orgUnits, jobLevels, totalCount] = await Promise.all([
     prisma.position.findMany({
@@ -39,16 +43,16 @@ export default async function PositionsPage({
       orderBy: { positionCode: "asc" },
     }),
     // The create-form's own "Melapor Ke" picker always offers every
-    // Position regardless of the browsing filters above — those two lists
-    // serve different purposes and must not be conflated.
-    prisma.position.findMany({ orderBy: { positionCode: "asc" } }),
+    // non-archived Position regardless of the browsing filters above — those
+    // two lists serve different purposes and must not be conflated.
+    prisma.position.findMany({ where: { archived: false }, orderBy: { positionCode: "asc" } }),
     prisma.job.findMany({ orderBy: { jobTitle: "asc" } }),
     prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
     prisma.position.findMany({ distinct: ["jobLevel"], select: { jobLevel: true }, orderBy: { jobLevel: "asc" } }),
     prisma.position.count(),
   ]);
 
-  const hasFilters = !!(q || orgUnitId || jobLevel || positionStatus);
+  const hasFilters = !!(q || orgUnitId || jobLevel || positionStatus || showArchived);
 
   return (
     <div>
@@ -122,6 +126,12 @@ export default async function PositionsPage({
             ))}
           </select>
         </div>
+        <div className="flex items-end pb-2">
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" name="archived" value="1" defaultChecked={showArchived} />
+            Tampilkan yang diarsipkan
+          </label>
+        </div>
         <div className="flex gap-2">
           <button
             type="submit"
@@ -167,7 +177,14 @@ export default async function PositionsPage({
                   <td className="px-4 py-3 text-slate-600">
                     {p.reportsToPosition ? p.reportsToPosition.job.jobTitle : "—"}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{t(`positionStatus.${p.positionStatus}`)}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {t(`positionStatus.${p.positionStatus}`)}
+                    {p.archived && (
+                      <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                        Diarsipkan
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/admin/positions/${p.id}`} className="text-xs text-indigo-600 hover:underline">
                       {t("common.edit")}

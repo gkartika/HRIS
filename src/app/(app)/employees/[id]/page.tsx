@@ -36,7 +36,7 @@ import { AttendanceAssignmentPanel } from "./attendance-panel";
 import { AbsenceQuotaPanel } from "./absence-quota-panel";
 import { TaskForcePanel } from "./task-force-panel";
 import { usedDaysThisYearByType } from "@/lib/absence-quota";
-import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
+import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EmployeeDetailPage({
@@ -199,6 +199,7 @@ export default async function EmployeeDetailPage({
 
   const positions = canManage
     ? await prisma.position.findMany({
+        where: { archived: false },
         include: { job: true, orgUnit: true },
         orderBy: { positionCode: "asc" },
       })

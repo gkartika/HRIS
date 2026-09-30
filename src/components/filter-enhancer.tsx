@@ -83,6 +83,13 @@ export function FilterEnhancer() {
       const chips: { text: string; el: HTMLInputElement | HTMLSelectElement }[] = [];
       form.querySelectorAll<HTMLInputElement | HTMLSelectElement>("select[name], input[name]").forEach((el) => {
         if (el instanceof HTMLInputElement && (el.type === "hidden" || el.type === "submit")) return;
+        // A checkbox's .value is its static value attribute regardless of
+        // whether it's ticked — .checked is what actually reflects state.
+        if (el instanceof HTMLInputElement && el.type === "checkbox") {
+          if (!el.checked) return;
+          chips.push({ text: controlLabel(el) || el.value, el });
+          return;
+        }
         if (!el.value) return;
         const shown = el instanceof HTMLSelectElement ? el.selectedOptions[0]?.textContent?.trim() : el.value;
         const label = controlLabel(el);
@@ -95,7 +102,11 @@ export function FilterEnhancer() {
       wrap.className = "mb-4 flex flex-wrap items-center gap-2";
       const clearAndApply = (els: (HTMLInputElement | HTMLSelectElement)[]) => {
         els.forEach((el) => {
-          el.value = "";
+          if (el instanceof HTMLInputElement && el.type === "checkbox") {
+            el.checked = false;
+          } else {
+            el.value = "";
+          }
         });
         (form as HTMLFormElement).requestSubmit();
       };

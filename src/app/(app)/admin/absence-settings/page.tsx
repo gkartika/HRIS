@@ -104,6 +104,7 @@ export default async function AbsenceSettingsPage({ searchParams }: { searchPara
     // given employee). Rendered as a tree below, indented by depth.
     prisma.orgUnit.findMany({ orderBy: { unitName: "asc" } }),
     prisma.position.findMany({
+      where: { archived: false },
       select: { id: true, jobLevel: true, job: { select: { jobTitle: true } }, orgUnit: { select: { unitName: true } } },
       orderBy: { positionCode: "asc" },
     }),

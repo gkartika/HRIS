@@ -164,7 +164,11 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       !renewalCase.offboardingCase;
 
     if (canSubmitDeptHead || canDecideCombined) {
-      renewalPositions = await prisma.position.findMany({ include: { job: true, orgUnit: true }, orderBy: { positionCode: "asc" } });
+      renewalPositions = await prisma.position.findMany({
+        where: { archived: false },
+        include: { job: true, orgUnit: true },
+        orderBy: { positionCode: "asc" },
+      });
     }
   }
 

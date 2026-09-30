@@ -30,7 +30,11 @@ export default async function GaApprovalsPage() {
   }
 
   const [positions, configs] = await Promise.all([
-    prisma.position.findMany({ include: { job: true, orgUnit: true }, orderBy: { positionCode: "asc" } }),
+    prisma.position.findMany({
+      where: { archived: false },
+      include: { job: true, orgUnit: true },
+      orderBy: { positionCode: "asc" },
+    }),
     prisma.gaApprovalConfig.findMany(),
   ]);
 

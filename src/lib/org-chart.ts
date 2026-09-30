@@ -91,6 +91,7 @@ export function computeStructureWarnings(positions: OrgChartPosition[]): string[
 export async function getOrgChartData(asOfDate: Date): Promise<OrgChartData> {
   const [positions, assignments] = await Promise.all([
     prisma.position.findMany({
+      where: { archived: false },
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),

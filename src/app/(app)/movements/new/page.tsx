@@ -45,6 +45,7 @@ export default async function NewMovementRequestPage({
       orderBy: { fullLegalName: "asc" },
     }),
     prisma.position.findMany({
+      where: { archived: false },
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),

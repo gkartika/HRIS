@@ -127,7 +127,11 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
   const needsJobs = pending.pendingRequests.length > 0;
   const [renewalPositions, jobs] = await Promise.all([
     needsRenewalPositions
-      ? prisma.position.findMany({ include: { job: true, orgUnit: true }, orderBy: { positionCode: "asc" } })
+      ? prisma.position.findMany({
+          where: { archived: false },
+          include: { job: true, orgUnit: true },
+          orderBy: { positionCode: "asc" },
+        })
       : Promise.resolve([]),
     needsJobs ? prisma.job.findMany({ orderBy: { jobTitle: "asc" } }) : Promise.resolve([]),
   ]);

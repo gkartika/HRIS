@@ -1133,6 +1133,13 @@ model Position {
   orgUnit               OrgUnit        @relation(fields: [orgUnitId], references: [id])
   positionType          PositionType
   positionStatus        PositionStatus @default(VACANT)
+  // Hides a defunct Position from every "pick a Position" dropdown going
+  // forward (reportsTo, new Assignment, Movement, Recruitment fulfillment,
+  // Contract renewal, org chart) without deleting the row — every workflow
+  // table above holds a hard FK into Position with no cascade, so historical
+  // references must survive. Only settable once positionStatus is CLOSED
+  // (see archivePosition in admin/positions/actions.ts).
+  archived              Boolean        @default(false)
   // ACC-14/DEC-015: functional flag, independent of positionType's hierarchy
   // tier. An Employee holding an ACTIVE Assignment (any type) to a Position
   // with this flag set derives HR Manager authority live — never a stored

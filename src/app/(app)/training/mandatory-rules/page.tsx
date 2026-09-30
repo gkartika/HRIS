@@ -45,7 +45,11 @@ export default async function MandatoryTrainingRulesPage({
     prisma.employee.findMany({ where: { activeFlag: true }, orderBy: { fullLegalName: "asc" }, select: { id: true, employeeNumber: true, fullLegalName: true } }),
     prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" }, select: { id: true, unitName: true } }),
     prisma.job.findMany({ orderBy: { jobTitle: "asc" }, select: { id: true, jobTitle: true } }),
-    prisma.position.findMany({ orderBy: { positionCode: "asc" }, select: { id: true, positionCode: true, job: { select: { jobTitle: true } } } }),
+    prisma.position.findMany({
+      where: { archived: false },
+      orderBy: { positionCode: "asc" },
+      select: { id: true, positionCode: true, job: { select: { jobTitle: true } } },
+    }),
   ]);
 
   return (

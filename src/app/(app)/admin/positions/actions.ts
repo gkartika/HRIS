@@ -56,6 +56,77 @@ export async function createPosition(
   redirect("/admin/positions");
 }
 
+// Archiving hides a defunct Position from every "pick a Position" dropdown
+// (reportsTo, new Assignment, Movement, Recruitment fulfillment, Contract
+// renewal, org chart) without deleting the row, since the many workflow
+// tables above hold a non-cascading FK into it. Gated on Status Posisi
+// already being Ditutup (CLOSED) — same "deactivate, then archive" two-step
+// as Jenis Absensi — plus no active holder, so nothing currently relying on
+// this seat gets hidden out from under it.
+export async function archivePosition(
+  positionId: string,
+  _prevState: string | undefined,
+  _formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+
+  const position = await prisma.position.findUnique({ where: { id: positionId } });
+  if (!position) return "Posisi tidak ditemukan.";
+  if (position.positionStatus !== "CLOSED") {
+    return "Ubah Status Posisi menjadi Ditutup terlebih dahulu sebelum mengarsipkan.";
+  }
+
+  const [activeAssignment, subordinateCount] = await Promise.all([
+    prisma.assignment.findFirst({ where: { positionId, status: "ACTIVE" } }),
+    prisma.position.count({ where: { reportsToPositionId: positionId } }),
+  ]);
+  if (activeAssignment) return "Posisi ini masih memiliki penempatan aktif — akhiri dahulu.";
+  if (subordinateCount > 0) {
+    return "Posisi lain masih melapor ke posisi ini — ubah dahulu sebelum mengarsipkan.";
+  }
+
+  await prisma.position.update({ where: { id: positionId }, data: { archived: true } });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "Position",
+    recordId: positionId,
+    reason: `Archived position ${position.positionCode}`,
+  });
+
+  revalidatePath("/admin/positions");
+  revalidatePath(`/admin/positions/${positionId}`);
+  revalidatePath("/organization");
+}
+
+export async function unarchivePosition(
+  positionId: string,
+  _prevState: string | undefined,
+  _formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+
+  const position = await prisma.position.findUnique({ where: { id: positionId } });
+  if (!position) return "Posisi tidak ditemukan.";
+
+  await prisma.position.update({ where: { id: positionId }, data: { archived: false } });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "Position",
+    recordId: positionId,
+    reason: `Unarchived position ${position.positionCode}`,
+  });
+
+  revalidatePath("/admin/positions");
+  revalidatePath(`/admin/positions/${positionId}`);
+  revalidatePath("/organization");
+}
+
 export async function updatePosition(
   positionId: string,
   _prevState: string | undefined,

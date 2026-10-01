@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 :root {
+  /* This app has no real dark-mode support — every card, input and select
+     is hardcoded for a light background. Pinning color-scheme stops mobile
+     browsers (iOS Safari, Android Chrome) from applying their own dark-mode
+     UA styling to native form controls (text inputs, <select> dropdowns,
+     autofill) when the phone's OS is in Dark Mode, which otherwise renders
+     light grey/white text on these white fields — unreadable but invisible
+     on desktop since fewer browsers there reflect system dark mode this
+     aggressively onto form controls. */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -19,13 +28,6 @@
   --color-brand-soft: #f4eef5;
   --color-brand-accent: #fdef0a;
   --color-brand-accent-soft: #fefaad;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

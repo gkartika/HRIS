@@ -37,7 +37,7 @@ export function AccountAccessPanel({
           : "";
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-medium text-slate-900">Akun Masuk</h2>

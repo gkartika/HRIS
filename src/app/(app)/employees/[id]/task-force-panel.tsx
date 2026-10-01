@@ -86,7 +86,7 @@ export function TaskForcePanel({
   existingNames: string[];
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div>
       <h2 className="text-sm font-medium text-slate-900">Satgas / Task Force</h2>
       {active.length === 0 && ended.length === 0 && (
         <p className="mt-2 text-sm text-slate-400">Belum tercatat dalam satgas/task force apapun.</p>

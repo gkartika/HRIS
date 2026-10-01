@@ -82,7 +82,7 @@ export function AccountHoldPanel({
   usernameOrEmail: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-medium text-slate-900">Status Akun</h2>

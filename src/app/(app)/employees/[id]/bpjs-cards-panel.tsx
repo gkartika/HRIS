@@ -66,7 +66,7 @@ export function BpjsCardsPanel({
   canUpload: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div>
       <h2 className="text-sm font-medium text-slate-900">Kartu BPJS</h2>
       <p className="mt-1 text-xs text-slate-500">
         Dapat diunduh oleh karyawan yang bersangkutan, Admin SDM, Admin GA, dan Admin Pelatihan.

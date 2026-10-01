@@ -191,20 +191,24 @@ export function AssignmentManagementPanel({
   currentReportsToPositionId: string | null;
 }) {
   return (
-    <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-6">
-      <div>
-        <h2 className="text-sm font-medium text-slate-900">Tambah Penempatan Tambahan</h2>
+    <div className="space-y-4">
+      <details className="group rounded-lg border border-slate-100 p-4">
+        <summary className="cursor-pointer list-none text-sm font-medium text-slate-900">
+          + Tambah Penempatan Tambahan
+        </summary>
         <p className="mt-1 text-xs text-slate-500">
           Untuk Penempatan Tambahan atau Sementara di departemen yang sama — tidak menutup Penempatan Utama.
         </p>
         <div className="mt-3">
           <AddAssignmentForm employeeId={employeeId} positions={extraAssignmentPositions} />
         </div>
-      </div>
+      </details>
 
       {hasCurrentPosition && (
-        <div className="border-t border-slate-100 pt-4">
-          <h2 className="text-sm font-medium text-slate-900">Ubah Melapor Kepada</h2>
+        <details className="group rounded-lg border border-slate-100 p-4">
+          <summary className="cursor-pointer list-none text-sm font-medium text-slate-900">
+            + Ubah Melapor Kepada
+          </summary>
           <p className="mt-1 text-xs text-slate-500">Mengubah jalur pelaporan Posisi Utama karyawan ini secara langsung.</p>
           <div className="mt-3">
             <ReportsToForm
@@ -213,11 +217,11 @@ export function AssignmentManagementPanel({
               currentReportsToPositionId={currentReportsToPositionId}
             />
           </div>
-        </div>
+        </details>
       )}
 
       {activeNonPrimaryAssignments.length > 0 && (
-        <div className="border-t border-slate-100 pt-4">
+        <div className="rounded-lg border border-slate-100 p-4">
           <h3 className="text-xs font-medium text-slate-500">Akhiri Penempatan Non-Utama</h3>
           <div className="mt-2 space-y-2">
             {activeNonPrimaryAssignments.map((a) => (
@@ -235,13 +239,15 @@ export function AssignmentManagementPanel({
         </div>
       )}
 
-      <div className="border-t border-slate-100 pt-4">
-        <h2 className="text-sm font-medium text-slate-900">Pindahkan ke Posisi Baru (Ubah Utama)</h2>
+      <details className="group rounded-lg border border-slate-100 p-4">
+        <summary className="cursor-pointer list-none text-sm font-medium text-slate-900">
+          + Pindahkan ke Posisi Baru (Ubah Utama)
+        </summary>
         <p className="mt-1 text-xs text-slate-500">Untuk promosi, rotasi, atau mutasi.</p>
         <div className="mt-3">
           <MoveForm employeeId={employeeId} positions={positions} />
         </div>
-      </div>
+      </details>
     </div>
   );
 }

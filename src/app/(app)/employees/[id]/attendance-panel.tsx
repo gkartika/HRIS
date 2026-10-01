@@ -97,7 +97,7 @@ export function AttendanceAssignmentPanel({
   geofences: { id: string; siteName: string }[];
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6">
+    <div>
       <h2 className="text-sm font-medium text-slate-900">Penugasan Absensi</h2>
       {current ? (
         <div className="mt-2 text-sm text-slate-600">

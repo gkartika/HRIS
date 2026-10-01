@@ -42,6 +42,37 @@ export function EditEmployeeForm({
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400"
         />
       </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("employee.gender")}</label>
+          <select
+            name="gender"
+            defaultValue={employee.gender ?? ""}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">— Pilih —</option>
+            <option value="MALE">{t("gender.MALE")}</option>
+            <option value="FEMALE">{t("gender.FEMALE")}</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("employee.birthPlace")}</label>
+          <input
+            name="birthPlace"
+            defaultValue={employee.birthPlace ?? ""}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("employee.birthDate")}</label>
+          <input
+            name="birthDate"
+            type="date"
+            defaultValue={employee.birthDate ? new Date(employee.birthDate).toISOString().slice(0, 10) : ""}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          />
+        </div>
+      </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("employee.personalEmail")}</label>
         <input
@@ -276,6 +307,62 @@ export function EditEmployeeForm({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Tanggal Bergabung</label>
+              <input
+                name="hireDate"
+                type="date"
+                defaultValue={new Date(employee.hireDate).toISOString().slice(0, 10)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {canEditLegalName && (
+        <div className="border-t border-slate-100 pt-4">
+          <p className="mb-3 text-xs font-medium text-slate-500">Data Bank, Pajak &amp; BPJS</p>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Nama Pemilik Rekening</label>
+              <input
+                name="bankAccountName"
+                defaultValue={employee.bankAccountName ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Nomor Rekening Bank</label>
+              <input
+                name="bankAccountNumber"
+                defaultValue={employee.bankAccountNumber ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">NPWP</label>
+              <input
+                name="taxId"
+                defaultValue={employee.taxId ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">No. BPJS Ketenagakerjaan</label>
+              <input
+                name="bpjsEmploymentNumber"
+                defaultValue={employee.bpjsEmploymentNumber ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">No. BPJS Kesehatan</label>
+              <input
+                name="bpjsHealthNumber"
+                defaultValue={employee.bpjsHealthNumber ?? ""}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
             </div>
           </div>
         </div>

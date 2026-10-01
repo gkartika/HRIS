@@ -145,10 +145,19 @@ export function EmployeeProfileView({
             <Field label="Nama Ibu Kandung" value={employee.namaIbuKandung} />
           )}
           {ptkpLabel !== undefined && <Field label="PTKP Pajak" value={ptkpLabel} />}
+          {employee.bankAccountName !== undefined && (
+            <Field label="Nama Pemilik Rekening" value={employee.bankAccountName} />
+          )}
           {employee.bankAccountNumber !== undefined && (
             <Field label="No. Rekening Bank" value={employee.bankAccountNumber} />
           )}
           {employee.taxId !== undefined && <Field label="NPWP" value={employee.taxId} />}
+          {employee.bpjsEmploymentNumber !== undefined && (
+            <Field label="No. BPJS Ketenagakerjaan" value={employee.bpjsEmploymentNumber} />
+          )}
+          {employee.bpjsHealthNumber !== undefined && (
+            <Field label="No. BPJS Kesehatan" value={employee.bpjsHealthNumber} />
+          )}
         </div>
       </div>
 

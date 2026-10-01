@@ -116,6 +116,9 @@ export async function updateEmployee(
   if (!isSelf && !isHrAdmin(session)) return "Anda tidak memiliki akses.";
 
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
+  const genderRaw = (formData.get("gender") as string)?.trim().toUpperCase();
+  const birthPlace = (formData.get("birthPlace") as string)?.trim() || null;
+  const birthDateRaw = (formData.get("birthDate") as string)?.trim();
   const personalEmail = (formData.get("personalEmail") as string)?.trim() || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
   const currentAddressLine = (formData.get("currentAddressLine") as string)?.trim() || null;
@@ -157,6 +160,9 @@ export async function updateEmployee(
   // edit the legal name and the DM-17/DM-19/DM-20 identity/compliance fields
   // (ACC-10: field-level scope even when editing, not just when viewing).
   const data: Record<string, unknown> = {
+    gender: genderRaw ? (genderRaw as Gender) : null,
+    birthPlace,
+    birthDate: birthDateRaw ? new Date(birthDateRaw) : null,
     personalEmail,
     mobileNumber,
     currentAddressLine,
@@ -209,6 +215,21 @@ export async function updateEmployee(
     data.namaIbuKandung = namaIbuKandung;
     data.educationLevelId = educationLevelId;
     data.ptkpStatusCode = ptkpStatusCode;
+
+    data.bankAccountName = (formData.get("bankAccountName") as string)?.trim() || null;
+    data.bankAccountNumber = (formData.get("bankAccountNumber") as string)?.trim() || null;
+    data.taxId = (formData.get("taxId") as string)?.trim() || null;
+    data.bpjsEmploymentNumber = (formData.get("bpjsEmploymentNumber") as string)?.trim() || null;
+    data.bpjsHealthNumber = (formData.get("bpjsHealthNumber") as string)?.trim() || null;
+
+    // hireDate is otherwise set once at creation — this is only a correction
+    // path. employmentStatus/activeFlag are deliberately NOT editable here:
+    // they're derived/driven by the Contract and Movement workflows
+    // (contracts/actions.ts, movements/actions.ts) and Offboarding
+    // (offboarding/actions.ts) respectively, so editing them directly here
+    // would let an admin silently bypass those processes.
+    const hireDateRaw = (formData.get("hireDate") as string)?.trim();
+    if (hireDateRaw) data.hireDate = new Date(hireDateRaw);
   }
 
   await prisma.employee.update({ where: { id: employeeId }, data });

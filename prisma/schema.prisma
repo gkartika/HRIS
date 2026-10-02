@@ -1692,7 +1692,10 @@ model AttendanceAssignment {
   geofenceId              String?
   geofence                AttendanceGeofence? @relation(fields: [geofenceId], references: [id])
   // External device/badge identifier used to match a Fingerprint import row
-  // to this employee — only relevant when method = FINGERPRINT.
+  // to this employee — only relevant when method = FINGERPRINT. For a
+  // machine whose export has no numeric ID column (just a display name),
+  // this holds that exact name string instead — fingerprint-attendance.ts
+  // auto-detects which export shape it's reading.
   fingerprintDeviceUserId String?
   effectiveFrom           DateTime
   effectiveTo             DateTime?

@@ -32,6 +32,13 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
           </a>
         </div>
       </div>
+      {dataset === "fingerprint-attendance" && (
+        <p className="mb-2 text-xs text-slate-400">
+          Mendukung format ekspor CSV standar (fingerprintDeviceUserId/eventType/eventAt) maupun ekspor mentah
+          mesin fingerprint (Name/Date-Time/Status) — formatnya terdeteksi otomatis. Untuk ekspor mentah, isi ID
+          Perangkat Fingerprint karyawan di Penugasan Absensi dengan nama persis seperti yang tampil di mesin.
+        </p>
+      )}
       <form action={formAction} className="flex items-center gap-3">
         <input
           type="file"

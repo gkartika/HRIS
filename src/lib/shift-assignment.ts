@@ -3,6 +3,7 @@
 // by level 3"). No Prisma/Next imports — unit testable with plain values,
 // same pattern as offboarding.ts/movement.ts.
 import type { ShiftAssignmentType } from "@/generated/prisma/enums";
+import { isWorkingDay } from "@/lib/attendance";
 
 // Per direct user request: adding every employee explicitly every week was
 // the friction — most weeks, most people are simply Shift 1. A missing
@@ -45,4 +46,25 @@ export function buildAssignedShiftLookup(
 ): (employeeId: string, weekStart: Date) => ShiftAssignmentType {
   const byKey = new Map(rows.map((r) => [`${r.employeeId}:${r.weekStartDate.getTime()}`, r.shiftType]));
   return (employeeId, weekStart) => byKey.get(`${employeeId}:${weekStart.getTime()}`) ?? DEFAULT_SHIFT_TYPE;
+}
+
+// "Is this employee actually scheduled to work this day" — the same rule
+// reconcileDueDailyAttendance (attendance-reconciliation.ts) already used
+// inline, now shared so the Fingerprint import can reject a punch that
+// doesn't match any scheduled day instead of re-deriving this independently.
+// No schedule configured yet falls back to the old Mon-Fri rule, same as
+// before, so a fresh setup still behaves sensibly.
+export function buildIsScheduledToWorkLookup(
+  holidays: { date: Date }[],
+  scheduleRows: { shiftType: ShiftAssignmentType; dayOfWeek: number; minutes: number }[],
+  shiftAssignments: { employeeId: string; weekStartDate: Date; shiftType: ShiftAssignmentType }[]
+): (employeeId: string, day: Date) => boolean {
+  const holidayTimes = new Set(holidays.map((h) => h.date.getTime()));
+  const scheduledMinutes = buildScheduleMinutesLookup(scheduleRows);
+  const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
+  return (employeeId, day) => {
+    if (holidayTimes.has(day.getTime())) return false;
+    if (scheduleRows.length === 0) return isWorkingDay(day);
+    return scheduledMinutes(assignedShiftFor(employeeId, normalizeWeekStart(day)), day.getUTCDay()) > 0;
+  };
 }

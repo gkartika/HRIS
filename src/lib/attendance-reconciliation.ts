@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { companyToday } from "@/lib/company-time";
-import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
-import { isWorkingDay } from "@/lib/attendance";
+import { normalizeWeekStart, buildIsScheduledToWorkLookup } from "@/lib/shift-assignment";
 
 const LOOKBACK_DAYS = 14;
 
@@ -79,17 +78,7 @@ export async function reconcileDueDailyAttendance(): Promise<void> {
   const existingKeys = new Set(existingRecords.map((r) => keyOf(r.employeeId, r.attendanceDate)));
   const checkInByKey = new Map(checkInEvents.map((e) => [keyOf(e.employeeId, startOfDay(e.eventAt)), e.id]));
   const checkOutByKey = new Map(checkOutEvents.map((e) => [keyOf(e.employeeId, startOfDay(e.eventAt)), e.id]));
-  const holidayTimes = new Set(holidays.map((h) => h.date.getTime()));
-  const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
-  const scheduledMinutes = buildScheduleMinutesLookup(scheduleRows);
-
-  // Is this employee due to work this day? No schedule table filled in yet
-  // falls back to the old Mon-Fri rule so a fresh setup still sweeps.
-  const isScheduled = (employeeId: string, day: Date): boolean => {
-    if (holidayTimes.has(day.getTime())) return false;
-    if (scheduleRows.length === 0) return isWorkingDay(day);
-    return scheduledMinutes(assignedShiftFor(employeeId, normalizeWeekStart(day)), day.getUTCDay()) > 0;
-  };
+  const isScheduled = buildIsScheduledToWorkLookup(holidays, scheduleRows, shiftAssignments);
 
   const toCreate: { employeeId: string; attendanceDate: Date; checkInEventId?: string; checkOutEventId?: string }[] = [];
   for (const assignment of assignments) {

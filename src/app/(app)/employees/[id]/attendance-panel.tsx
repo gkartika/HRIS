@@ -57,7 +57,7 @@ function AssignmentForm({
             <input
               name="fingerprintDeviceUserId"
               required
-              placeholder="ID pada mesin fingerprint"
+              placeholder="ID pada mesin, atau nama persis jika mesin hanya ekspor nama"
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>

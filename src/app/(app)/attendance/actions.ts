@@ -90,6 +90,8 @@ export async function recordAttendanceEvent(
       longitude,
       geofenceId: assignment!.geofenceId,
       reason,
+      late,
+      withinGeofence,
     },
   });
 

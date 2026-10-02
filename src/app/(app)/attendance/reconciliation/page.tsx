@@ -4,7 +4,7 @@ import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { resolveCutoffPeriod, previousCutoffPeriod, nextCutoffPeriod, formatCutoffParam, parseCutoffParam } from "@/lib/absence-cutoff";
-import { getUnresolvedDays } from "@/lib/attendance-reconciliation-queue";
+import { getUnresolvedDays, getAttendanceNotices } from "@/lib/attendance-reconciliation-queue";
 import { ClassifyRowForm } from "./classify-row-form";
 
 function formatDayLabel(date: Date): string {
@@ -34,7 +34,7 @@ export default async function AttendanceReconciliationPage({
   const prevPeriod = previousCutoffPeriod(period);
   const nextPeriod = nextCutoffPeriod(period);
 
-  const [unresolvedDays, absenceTypes, totalRecordsInPeriod] = await Promise.all([
+  const [unresolvedDays, absenceTypes, totalRecordsInPeriod, attendanceNotices] = await Promise.all([
     getUnresolvedDays(period),
     // LAINNYA is excluded here — in this classify context it's replaced by
     // the "Masuk (Lupa Absen)" pseudo-option (present-override.ts): a day
@@ -45,6 +45,7 @@ export default async function AttendanceReconciliationPage({
       select: { code: true, label: true },
     }),
     prisma.dailyAttendanceRecord.count({ where: { attendanceDate: { gte: period.start, lte: period.end } } }),
+    getAttendanceNotices(period),
   ]);
 
   const resolvedCount = totalRecordsInPeriod - unresolvedDays.length;
@@ -102,6 +103,18 @@ export default async function AttendanceReconciliationPage({
             <p className="text-xs text-rose-700">hari perlu keputusan Anda</p>
           </div>
         </div>
+        <div className="flex flex-1 min-w-[240px] items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xl font-bold text-amber-800">{attendanceNotices.length}</p>
+            <p className="text-xs text-amber-700">catatan terlambat / di luar lokasi — tidak perlu tindakan</p>
+          </div>
+        </div>
       </div>
 
       <div className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
@@ -123,6 +136,51 @@ export default async function AttendanceReconciliationPage({
                   assignedShiftType={row.assignedShiftType}
                   absenceTypes={absenceTypes}
                 />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-900">Catatan Terlambat &amp; Di Luar Lokasi</p>
+          <p className="text-xs text-slate-400">Informasi saja — sudah lengkap check-in/check-out, tidak perlu diklasifikasikan</p>
+        </div>
+        {attendanceNotices.length === 0 ? (
+          <p className="text-sm text-slate-400">Tidak ada catatan untuk periode ini.</p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {attendanceNotices.map((n) => (
+              <div key={`${n.employeeId}:${n.date.toISOString()}`} className="flex flex-wrap items-start gap-4 py-3.5 first:pt-0 last:pb-0">
+                <div className="w-48 shrink-0">
+                  <p className="text-sm font-semibold text-slate-900">{n.employeeName}</p>
+                  <p className="text-xs text-slate-400">{n.departmentName}</p>
+                </div>
+                <div className="w-40 shrink-0 text-sm text-slate-700">{formatDayLabel(n.date)}</div>
+                <div className="flex min-w-[160px] flex-col gap-1 text-xs text-slate-600">
+                  <span>
+                    Check-in <b className="text-slate-900">{n.checkInTime ?? "—"}</b> &middot; Check-out{" "}
+                    <b className="text-slate-900">{n.checkOutTime ?? "—"}</b>
+                  </span>
+                  {n.locationNote && <span className="text-slate-400">{n.locationNote}</span>}
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-1.5">
+                  {n.late && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                      ● Terlambat
+                    </span>
+                  )}
+                  {n.outsideGeofence && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold text-rose-700">
+                      ● Di Luar Lokasi
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-[200px] flex-grow rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+                  <span className="text-slate-400">Alasan: </span>
+                  {n.reason}
+                </div>
               </div>
             ))}
           </div>

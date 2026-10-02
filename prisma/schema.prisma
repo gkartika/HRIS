@@ -1725,6 +1725,14 @@ model AttendanceEvent {
   // whenever the check-in is late or outside every active geofence — see
   // recordAttendanceEvent — otherwise freely optional.
   reason                 String?
+  // Result of isLateCheckIn/isEventWithinAnyGeofence at the moment this
+  // event was recorded, persisted so HR can review it later (previously
+  // computed only to force the `reason` field above, then discarded) — see
+  // the "Catatan Terlambat & Di Luar Lokasi" list on Rekonsiliasi Absensi.
+  // Only ever set for eventSource MOBILE; a FINGERPRINT_IMPORT event has no
+  // coordinates to evaluate and is backfilled with no reason to show anyway.
+  late                   Boolean               @default(false)
+  withinGeofence         Boolean?
   createdAt              DateTime              @default(now())
 
   dailyRecordsAsCheckIn  DailyAttendanceRecord[] @relation("DailyRecordCheckInEvent")

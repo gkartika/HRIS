@@ -154,8 +154,6 @@ export async function updateEmployee(
     (formData.get("emergencyContactRelation") as string)?.trim() || null;
   const emergencyContactPhone = (formData.get("emergencyContactPhone") as string)?.trim() || null;
 
-  if (!fullLegalName) return "Nama lengkap wajib diisi.";
-
   // Self-service edits are limited to contact info — HR Admin can additionally
   // edit the legal name and the DM-17/DM-19/DM-20 identity/compliance fields
   // (ACC-10: field-level scope even when editing, not just when viewing).
@@ -184,6 +182,7 @@ export async function updateEmployee(
   };
 
   if (isHrAdmin(session)) {
+    if (!fullLegalName) return "Nama lengkap wajib diisi.";
     data.fullLegalName = fullLegalName;
 
     const employeeNumber = (formData.get("employeeNumber") as string)?.trim();

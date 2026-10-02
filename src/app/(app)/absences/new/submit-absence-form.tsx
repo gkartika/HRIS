@@ -22,6 +22,14 @@ export interface AbsenceTypeQuota {
   usedDays: number;
 }
 
+// Badge tone for the remaining-quota hint below the Jenis Absensi dropdown —
+// same thresholds whether 0 was always the entitlement or it was used up.
+function quotaToneClass(remainingDays: number, quota: number): string {
+  if (remainingDays <= 0) return "border-rose-200 bg-rose-50 text-rose-700";
+  if (remainingDays / quota <= 0.25) return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
 export function SubmitAbsenceForm({
   employeeId,
   employees,
@@ -36,7 +44,6 @@ export function SubmitAbsenceForm({
   const [state, formAction, isPending] = useActionState(submitAbsenceRequest, undefined);
   const [selectedType, setSelectedType] = useState(absenceTypes[0]?.code ?? "");
   const selectedQuota = quotaByType.find((q) => q.code === selectedType);
-  const selectedLabel = absenceTypes.find((tp) => tp.code === selectedType)?.label ?? "";
 
   return (
     <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
@@ -79,13 +86,19 @@ export function SubmitAbsenceForm({
             ))}
           </select>
           {selectedQuota?.quota != null && (
-            <p className="mt-1 text-xs text-slate-500">
-              {t("absence.remainingEntitlement", {
-                type: selectedLabel,
-                days: remainingEntitlementDays(selectedQuota.quota, selectedQuota.usedDays),
-                quota: selectedQuota.quota,
-              })}
-            </p>
+            <div className="mt-2">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${quotaToneClass(
+                  remainingEntitlementDays(selectedQuota.quota, selectedQuota.usedDays),
+                  selectedQuota.quota
+                )}`}
+              >
+                {t("absence.remainingEntitlement", {
+                  days: remainingEntitlementDays(selectedQuota.quota, selectedQuota.usedDays),
+                  quota: selectedQuota.quota,
+                })}
+              </span>
+            </div>
           )}
         </div>
         <div>

@@ -642,7 +642,7 @@ export const strings = {
     endDateLabel: "Tanggal Selesai",
     reasonLabel: "Alasan",
     attachmentLabel: "Lampiran (opsional)",
-    remainingEntitlement: "Sisa jatah {type} tahun ini: {days} dari {quota} hari",
+    remainingEntitlement: "Sisa kuota: {days} dari {quota} hari tahun ini",
     overQuotaWarning:
       "Pengajuan ini melebihi jatah tahunan {type}: sudah {used} hari + pengajuan ini {thisRequest} hari = {total} hari, dari jatah {quota} hari.",
     firstApproverDecisionTitle: "Keputusan Penyetuju Pertama",

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -27,20 +28,25 @@ import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
-import { EmployeeProfileFields, EmployeeAssignmentHistory } from "@/components/employee-profile-view";
+import { EmployeeProfileFields } from "@/components/employee-profile-view";
 import { EmployeeHeader } from "./employee-header";
 import { EmployeeTabs } from "./employee-tabs";
-import { AssignmentManagementPanel } from "./assignment-panel";
 import { BpjsCardsPanel } from "./bpjs-cards-panel";
 import { AccountHoldPanel } from "./account-panel";
-import { AccountAccessPanel } from "./account-access-panel";
-import { AttendanceAssignmentPanel } from "./attendance-panel";
-import { AbsenceQuotaPanel } from "./absence-quota-panel";
-import { TaskForcePanel } from "./task-force-panel";
-import { usedDaysThisYearByType } from "@/lib/absence-quota";
+import { PenempatanTabContent } from "./penempatan-tab";
+import { AkunTabContent } from "./akun-tab";
 import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import Link from "next/link";
+
+function TabSkeleton() {
+  return (
+    <div className="animate-pulse space-y-3" aria-busy="true">
+      <div className="h-4 w-1/3 rounded bg-slate-100" />
+      <div className="h-16 rounded-lg bg-slate-50" />
+      <div className="h-16 rounded-lg bg-slate-50" />
+    </div>
+  );
+}
 
 const LIFECYCLE_BADGE_TONE: Record<string, string> = {
   AKAN_MASUK: "bg-amber-50 text-amber-700",
@@ -89,10 +95,6 @@ export default async function EmployeeDetailPage({
           },
         },
       },
-      assignments: {
-        include: { position: { include: { job: true, orgUnit: true } } },
-        orderBy: { effectiveFrom: "desc" },
-      },
       files: true,
       educationLevel: true,
       ptkpStatus: true,
@@ -135,74 +137,9 @@ export default async function EmployeeDetailPage({
   const canSetShift = !!employee.currentPositionId && canSubmitShiftAssignment(session, isLevel3InDepartment);
   const canManageAttendance = canManageAttendanceAssignment(session);
   const canSeeAttendance = canViewAttendance(session, employee.id, isLevel3InDepartment);
-  const [geofences, currentAttendanceAssignment] = canSeeAttendance
-    ? await Promise.all([
-        canManageAttendance
-          ? prisma.attendanceGeofence.findMany({ where: { activeFlag: true }, orderBy: { siteName: "asc" } })
-          : Promise.resolve([]),
-        prisma.attendanceAssignment.findFirst({
-          where: { employeeId: employee.id, effectiveTo: null },
-          include: { geofence: true },
-          orderBy: { effectiveFrom: "desc" },
-        }),
-      ])
-    : [[], null];
-
   const canManageAbsenceQuota = canManageAttendanceMasterData(session);
-  const absenceQuotaRows = canManageAbsenceQuota
-    ? await (async () => {
-        // 4 queries total regardless of how many Absence types exist — was
-        // previously 3 + 2 per type (usedDaysThisYear looped per type).
-        const [types, entitlements, overrides, usedByType] = await Promise.all([
-          prisma.absenceTypeConfig.findMany({ where: { activeFlag: true }, orderBy: { sortOrder: "asc" } }),
-          prisma.absenceEntitlementConfig.findMany(),
-          prisma.absenceQuotaOverride.findMany({ where: { employeeId: employee.id } }),
-          usedDaysThisYearByType(employee.id),
-        ]);
-        const defaultByCode = new Map(entitlements.map((e) => [e.absenceTypeCode, e.annualDays]));
-        const overrideByCode = new Map(overrides.map((o) => [o.absenceTypeCode, o.annualDays]));
-        return types.map((tp) => ({
-          code: tp.code,
-          label: tp.label,
-          defaultAnnualDays: defaultByCode.has(tp.code) ? defaultByCode.get(tp.code)! : null,
-          overrideAnnualDays: overrideByCode.get(tp.code) ?? null,
-          usedDaysThisYear: usedByType.get(tp.code) ?? 0,
-        }));
-      })()
-    : [];
-
   const canManageTaskForce = canManageTaskForceMembership(session);
   const canSeeTaskForce = isSelf || isHrAdmin(session);
-  const [taskForceMemberships, taskForceNameRows] = canSeeTaskForce
-    ? await Promise.all([
-        prisma.taskForceMembership.findMany({
-          where: { employeeId: employee.id },
-          orderBy: { startDate: "desc" },
-        }),
-        canManageTaskForce
-          ? prisma.taskForceMembership.findMany({ distinct: ["name"], select: { name: true }, orderBy: { name: "asc" } })
-          : Promise.resolve([]),
-      ])
-    : [[], []];
-  const activeTaskForceMemberships = taskForceMemberships
-    .filter((m) => !m.endDate)
-    .map((m) => ({
-      id: m.id,
-      name: m.name,
-      roleLabel: m.roleLabel,
-      startDate: m.startDate.toISOString().slice(0, 10),
-      endDate: null,
-    }));
-  const endedTaskForceMemberships = taskForceMemberships
-    .filter((m) => !!m.endDate)
-    .map((m) => ({
-      id: m.id,
-      name: m.name,
-      roleLabel: m.roleLabel,
-      startDate: m.startDate.toISOString().slice(0, 10),
-      endDate: m.endDate!.toISOString().slice(0, 10),
-    }));
-  const taskForceNames = taskForceNameRows.map((r) => r.name);
 
   // noKk/namaIbuKandung/ptkpStatusCode are already stripped by projectEmployee
   // for roles that shouldn't see them. educationLevel isn't in that restricted
@@ -219,19 +156,6 @@ export default async function EmployeeDetailPage({
   const incomplete = isEmployeeProfileIncomplete(employee);
   const missing = incomplete ? missingFieldLabels(employee) : [];
 
-  const positions = canManage
-    ? await prisma.position.findMany({
-        where: { archived: false },
-        include: { job: true, orgUnit: true },
-        orderBy: { positionCode: "asc" },
-      })
-    : [];
-  // Extra (Additional/Temporary) assignments must stay within the employee's
-  // own department — cross-department "extra" seats belong to a real Mutasi
-  // via "Pindahkan ke Posisi Baru" instead, per direct user request.
-  const extraAssignmentPositions = employee.currentPosition
-    ? positions.filter((p) => p.orgUnitId === employee.currentPosition!.orgUnitId)
-    : [];
   const reportsToHolder = employee.currentPosition?.reportsToPosition?.currentHolders[0];
   const reportsTo = employee.currentPosition?.reportsToPosition
     ? {
@@ -239,19 +163,9 @@ export default async function EmployeeDetailPage({
         holderName: reportsToHolder ? reportsToHolder.fullLegalName : null,
       }
     : null;
-  const activeNonPrimaryAssignments = employee.assignments
-    .filter((a) => a.status === "ACTIVE" && a.assignmentType !== "PRIMARY")
-    .map((a) => ({
-      id: a.id,
-      positionCode: a.position.positionCode,
-      assignmentType: a.assignmentType,
-    }));
 
   const canViewContracts = canViewContract(session, employee.id);
   const canCreateContract = canManageContracts(session);
-  const contracts = canViewContracts
-    ? await prisma.contract.findMany({ where: { employeeId: employee.id }, orderBy: { createdAt: "desc" } })
-    : [];
 
   const lifecycleStatus =
     employee.activeFlag !== undefined && employee.hireDate
@@ -366,88 +280,33 @@ export default async function EmployeeDetailPage({
           </div>
         }
         penempatan={
-          <div className={SECTION_DIVIDERS}>
-            <EmployeeAssignmentHistory assignments={employee.assignments} reportsTo={reportsTo} />
-            {canManage && (
-              <AssignmentManagementPanel
-                employeeId={employee.id}
-                positions={positions}
-                extraAssignmentPositions={extraAssignmentPositions}
-                activeNonPrimaryAssignments={activeNonPrimaryAssignments}
-                hasCurrentPosition={!!employee.currentPositionId}
-                currentReportsToPositionId={employee.currentPosition?.reportsToPositionId ?? null}
-              />
-            )}
-            {canSeeTaskForce && (
-              <TaskForcePanel
-                employeeId={employee.id}
-                canManage={canManageTaskForce}
-                active={activeTaskForceMemberships}
-                ended={endedTaskForceMemberships}
-                existingNames={taskForceNames}
-              />
-            )}
-            {canViewContracts && (
-              <div>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-medium text-slate-900">{t("contract.listTitle")}</h2>
-                  {canCreateContract && (
-                    <Link
-                      href={`/contracts/new?employeeId=${employee.id}`}
-                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700"
-                    >
-                      {t("contract.newContract")}
-                    </Link>
-                  )}
-                </div>
-                {contracts.length === 0 ? (
-                  <p className="mt-2 text-sm text-slate-400">{t("contract.emptyState")}</p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {contracts.map((c) => (
-                      <Link
-                        key={c.id}
-                        href={`/contracts/${c.id}`}
-                        className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-2 text-sm hover:bg-slate-50"
-                      >
-                        <span className="font-mono text-xs text-indigo-600">{c.contractNumber}</span>
-                        <span className="text-xs text-slate-500">{t(`contractStatus.${c.status}`)}</span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <Suspense fallback={<TabSkeleton />}>
+            <PenempatanTabContent
+              employeeId={employee.id}
+              currentOrgUnitId={employee.currentPosition?.orgUnitId ?? null}
+              currentPositionId={employee.currentPositionId}
+              currentReportsToPositionId={employee.currentPosition?.reportsToPositionId ?? null}
+              reportsTo={reportsTo}
+              canManage={canManage}
+              canSeeTaskForce={canSeeTaskForce}
+              canManageTaskForce={canManageTaskForce}
+              canViewContracts={canViewContracts}
+              canCreateContract={canCreateContract}
+            />
+          </Suspense>
         }
         akun={
-          <div className={SECTION_DIVIDERS}>
-            {canManageAccountAccess(session) && (
-              <AccountAccessPanel
-                employeeId={employee.id}
-                accountStatus={employee.account?.accountStatus ?? null}
-                personalEmail={employee.personalEmail}
-              />
-            )}
-            {canSeeAttendance && (
-              <AttendanceAssignmentPanel
-                employeeId={employee.id}
-                canManage={canManageAttendance}
-                current={
-                  currentAttendanceAssignment
-                    ? {
-                        method: currentAttendanceAssignment.method,
-                        geofenceName: currentAttendanceAssignment.geofence?.siteName ?? null,
-                        fingerprintDeviceUserId: currentAttendanceAssignment.fingerprintDeviceUserId,
-                        effectiveFrom: currentAttendanceAssignment.effectiveFrom.toISOString().slice(0, 10),
-                      }
-                    : null
-                }
-                geofences={geofences}
-              />
-            )}
-            {canManageAbsenceQuota && <AbsenceQuotaPanel employeeId={employee.id} rows={absenceQuotaRows} />}
-          </div>
+          <Suspense fallback={<TabSkeleton />}>
+            <AkunTabContent
+              employeeId={employee.id}
+              accountStatus={employee.account?.accountStatus ?? null}
+              personalEmail={employee.personalEmail}
+              canManageAccountAccess={canManageAccountAccess(session)}
+              canSeeAttendance={canSeeAttendance}
+              canManageAttendance={canManageAttendance}
+              canManageAbsenceQuota={canManageAbsenceQuota}
+            />
+          </Suspense>
         }
       />
     </div>

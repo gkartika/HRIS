@@ -130,6 +130,9 @@ export default async function OffboardingAssetClearancePage() {
                             </li>
                           ))}
                         </ul>
+                        <p className="mt-2 text-xs text-slate-400">
+                          Pilih kondisi tiap aset di bawah sebelum konfirmasi — tidak lagi otomatis dianggap Baik.
+                        </p>
                       </div>
                     )}
                     {requests.length > 0 && (
@@ -147,7 +150,14 @@ export default async function OffboardingAssetClearancePage() {
                         </ul>
                       </div>
                     )}
-                    <ConfirmGaAssetClearanceForm caseId={c.id} />
+                    <ConfirmGaAssetClearanceForm
+                      caseId={c.id}
+                      custodies={custodies.map((custody) => ({
+                        id: custody.id,
+                        assetName: custody.asset.assetName,
+                        assetCode: custody.asset.assetCode,
+                      }))}
+                    />
                   </div>
                 )}
               </div>

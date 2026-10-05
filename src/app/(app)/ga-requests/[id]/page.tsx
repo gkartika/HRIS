@@ -2,12 +2,7 @@ import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
-import {
-  canViewGaRequest,
-  canManageGaOperations,
-  canDecideAsConfiguredGaApprover,
-  canCancelGaRequest,
-} from "@/lib/permissions";
+import { canViewGaRequest, canManageGaOperations, canCancelGaRequest } from "@/lib/permissions";
 import {
   canVerifyGaRequest,
   canDecideGaRequest,
@@ -15,7 +10,6 @@ import {
   canReviewGaRequestLoss,
   canCancelGaRequestStatus,
 } from "@/lib/ga-operations";
-import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { VerifyForm, ApproverDecisionButtons, ProcessForm, LossReviewButtons, CancelRequestForm } from "./decision-forms";
@@ -52,43 +46,23 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
       location: { select: { locationName: true } },
       verifiedByAccount: { select: { usernameOrEmail: true } },
       decisionByAccount: { select: { usernameOrEmail: true } },
-      decisionPosition: { include: { job: true } },
       processedByAccount: { select: { usernameOrEmail: true } },
       lossReviewedByAccount: { select: { usernameOrEmail: true } },
-      lossReviewedPosition: { include: { job: true } },
       cancelledByAccount: { select: { usernameOrEmail: true } },
       evidenceFile: true,
     },
   });
   if (!request) notFound();
 
-  const [newAssetNeedConfig, lossReviewConfig] = await Promise.all([
-    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "NEW_ASSET_NEED" } }),
-    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "LOSS_REVIEW" } }),
-  ]);
-  const [approverHolderIds, lossReviewHolderIds] = await Promise.all([
-    getCurrentHolderEmployeeIds(newAssetNeedConfig?.approverPositionId ?? null),
-    getCurrentHolderEmployeeIds(lossReviewConfig?.approverPositionId ?? null),
-  ]);
-  // Keyed off requestType, not the current status — an approver who just
-  // decided must still be able to view the outcome (status has already
-  // moved past PENDING_APPROVAL/PENDING_LOSS_REVIEW by the time the page
-  // re-renders after their own action). Each request type maps to exactly
-  // one approval config for its entire lifecycle.
-  const relevantHolderIds =
-    request.requestType === "NEW_ASSET_NEED" ? approverHolderIds : request.requestType === "LOSS" ? lossReviewHolderIds : [];
-
-  if (!canViewGaRequest(session, request.requesterEmployeeId, relevantHolderIds)) {
+  if (!canViewGaRequest(session, request.requesterEmployeeId)) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
   const isGaAdminUser = canManageGaOperations(session);
   const canVerify = isGaAdminUser && canVerifyGaRequest(request.status);
-  const canDecideApprover =
-    canDecideAsConfiguredGaApprover(session.user.employeeId, approverHolderIds) && canDecideGaRequest(request.status);
+  const canDecideApprover = isGaAdminUser && canDecideGaRequest(request.status);
   const canProcess = isGaAdminUser && canProcessGaRequest(request.status);
-  const canReviewLoss =
-    canDecideAsConfiguredGaApprover(session.user.employeeId, lossReviewHolderIds) && canReviewGaRequestLoss(request.status);
+  const canReviewLoss = isGaAdminUser && canReviewGaRequestLoss(request.status);
   const canCancel = canCancelGaRequest(session, request.requesterEmployeeId) && canCancelGaRequestStatus(request.status);
 
   let processFormData: {
@@ -196,7 +170,6 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
           {request.decisionAt && (
             <p className="mt-2 text-xs text-slate-500">
               {formatDateLong(request.decisionAt)} — {request.decisionByAccount?.usernameOrEmail ?? "—"}
-              {request.decisionPosition && ` (${request.decisionPosition.jobLevel} ${request.decisionPosition.job.jobTitle})`}
               {request.decisionNote && `: ${request.decisionNote}`}
             </p>
           )}
@@ -248,7 +221,6 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
           {request.lossReviewedAt && (
             <p className="mt-2 text-xs text-slate-500">
               {formatDateLong(request.lossReviewedAt)} — {request.lossReviewedByAccount?.usernameOrEmail ?? "—"}
-              {request.lossReviewedPosition && ` (${request.lossReviewedPosition.jobLevel} ${request.lossReviewedPosition.job.jobTitle})`}
               {request.lossReviewNote && `: ${request.lossReviewNote}`}
             </p>
           )}

@@ -2,9 +2,8 @@ import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
-import { canManageGaOperations, canDecideAsConfiguredGaApprover } from "@/lib/permissions";
+import { canManageGaOperations } from "@/lib/permissions";
 import { canSubmitDisposalCaseForApproval, canDecideDisposalCase, canExecuteDisposalCase } from "@/lib/ga-operations";
-import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { SubmitForApprovalForm, DisposalDecisionButtons, ExecuteDisposalForm } from "./decision-forms";
@@ -35,24 +34,20 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
       proposalEvidenceFile: true,
       executionEvidenceFile: true,
       decisionByAccount: { select: { usernameOrEmail: true } },
-      decisionPosition: { include: { job: true } },
       executedByAccount: { select: { usernameOrEmail: true } },
       createdByAccount: { select: { usernameOrEmail: true } },
     },
   });
   if (!disposalCase) notFound();
 
-  const config = await prisma.gaApprovalConfig.findUnique({ where: { approvalType: "DISPOSAL" } });
-  const holderIds = await getCurrentHolderEmployeeIds(config?.approverPositionId ?? null);
-  const isApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, holderIds);
   const isGaAdminUser = canManageGaOperations(session);
 
-  if (!isGaAdminUser && !isApprover) {
+  if (!isGaAdminUser) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 
   const canSubmit = isGaAdminUser && canSubmitDisposalCaseForApproval(disposalCase.status);
-  const canDecide = isApprover && canDecideDisposalCase(disposalCase.status);
+  const canDecide = isGaAdminUser && canDecideDisposalCase(disposalCase.status);
   const canExecute = isGaAdminUser && canExecuteDisposalCase(disposalCase.status);
 
   return (
@@ -102,7 +97,6 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
           {disposalCase.decisionAt && (
             <p className="mt-2 text-xs text-slate-500">
               {formatDateLong(disposalCase.decisionAt)} — {disposalCase.decisionByAccount?.usernameOrEmail ?? "—"}
-              {disposalCase.decisionPosition && ` (${disposalCase.decisionPosition.jobLevel} ${disposalCase.decisionPosition.job.jobTitle})`}
               {disposalCase.decisionNote && `: ${disposalCase.decisionNote}`}
             </p>
           )}

@@ -256,7 +256,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     buckets.asetGa.push({ href: "/maintenance/plans", label: t("maintenance.plansNavLabel"), icon: "Wrench" });
     buckets.asetGa.push({ href: "/maintenance/work-orders", label: t("maintenance.workOrdersNavLabel"), icon: "Wrench" });
     buckets.asetGa.push({ href: "/disposal-cases", label: t("disposalCase.navLabel"), icon: "Trash2" });
-    buckets.asetGa.push({ href: "/admin/ga-approvals", label: t("gaApprovals.navLabel"), icon: "Settings" });
   }
 
   const groups: SidebarNavGroup[] = [

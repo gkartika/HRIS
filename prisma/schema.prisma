@@ -905,7 +905,6 @@ model Account {
   disposalCasesCreatedBy       DisposalCase[]         @relation("DisposalCaseCreatedBy")
   disposalCasesDecidedBy       DisposalCase[]         @relation("DisposalCaseDecidedBy")
   disposalCasesExecutedBy      DisposalCase[]         @relation("DisposalCaseExecutedBy")
-  gaApprovalConfigsUpdatedBy   GaApprovalConfig[]     @relation("GaApprovalConfigUpdatedBy")
 }
 
 model AccountRole {
@@ -1178,11 +1177,6 @@ model Position {
   absenceApproverConfigOf                     AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
   absenceRequestsAsFirstApproverPosition      AbsenceRequest[]        @relation("AbsenceFirstApproverPosition")
   absenceRequestsAsSecondApproverPosition     AbsenceRequest[]        @relation("AbsenceSecondApproverPosition")
-
-  gaApprovalConfigsOf             GaApprovalConfig[] @relation("GaApprovalConfigPosition")
-  gaRequestsDecisionPositionOf    GaRequest[]        @relation("GaRequestDecisionPosition")
-  gaRequestsLossReviewPositionOf  GaRequest[]        @relation("GaRequestLossReviewPosition")
-  disposalCasesDecisionPositionOf DisposalCase[]     @relation("DisposalCaseDecisionPosition")
 
   competencyAssessmentsAsSnapshotPosition    CompetencyAssessment[]  @relation("CompetencyAssessmentPosition")
   competencyAssessmentsAsP1Position          CompetencyAssessment[]  @relation("CompetencyAssessmentP1Position")
@@ -2839,14 +2833,14 @@ model GaRequest {
   verificationNote    String?
 
   // ---- NEW_ASSET_NEED path ----
-  // Snapshot of whether a GaApprovalConfig row existed for NEW_ASSET_NEED
-  // at verification time — "Approval required?" in the PDF.
+  // Always true now that GA Admin decides every New Asset Need request
+  // directly (no configurable approver Position) — kept nullable so
+  // historical requests from when an unconfigured Position meant "no
+  // approval needed" still render correctly.
   approvalRequired     Boolean?
   decisionAt           DateTime?
   decisionByAccountId  String?
   decisionByAccount    Account?  @relation("GaRequestDecidedBy", fields: [decisionByAccountId], references: [id])
-  decisionPositionId   String?
-  decisionPosition     Position? @relation("GaRequestDecisionPosition", fields: [decisionPositionId], references: [id])
   decisionNote         String?
   // Exactly one of these two is set once PROCESSED — "Allocate available
   // asset or record procurement reference" (PDF). Plain informational
@@ -2862,8 +2856,6 @@ model GaRequest {
   lossReviewedAt          DateTime?
   lossReviewedByAccountId String?
   lossReviewedByAccount   Account?  @relation("GaRequestLossReviewedBy", fields: [lossReviewedByAccountId], references: [id])
-  lossReviewedPositionId  String?
-  lossReviewedPosition    Position? @relation("GaRequestLossReviewPosition", fields: [lossReviewedPositionId], references: [id])
   lossReviewNote          String?
 
   evidenceFileId String?     @unique
@@ -2878,30 +2870,6 @@ model GaRequest {
 
   @@index([requesterEmployeeId])
   @@index([status])
-}
-
-enum GaApprovalType {
-  NEW_ASSET_NEED
-  LOSS_REVIEW
-  DISPOSAL
-}
-
-// GA-Admin-configured Position per approval point — "Configurable
-// Position-based approvals; do not hard-code employees." NEW_ASSET_NEED is
-// the only optional one in practice (its absence means "Approval required?
-// No" in the PDF, request auto-progresses); LOSS_REVIEW and DISPOSAL are
-// expected to always be configured. If unconfigured, decisions have no
-// eligible approver and sit pending — same convention as every other
-// unconfigured-Position gap already in this app (e.g. a department with no
-// Level-3B holder).
-model GaApprovalConfig {
-  id                 String         @id @default(cuid())
-  approvalType       GaApprovalType @unique
-  approverPositionId String
-  approverPosition   Position       @relation("GaApprovalConfigPosition", fields: [approverPositionId], references: [id])
-  updatedByAccountId String
-  updatedByAccount   Account        @relation("GaApprovalConfigUpdatedBy", fields: [updatedByAccountId], references: [id])
-  updatedAt          DateTime       @updatedAt
 }
 
 // GA-Admin-created preventive schedule for an asset. "Due" detection is
@@ -3033,8 +3001,6 @@ model DisposalCase {
   decisionAt          DateTime?
   decisionByAccountId String?
   decisionByAccount   Account?  @relation("DisposalCaseDecidedBy", fields: [decisionByAccountId], references: [id])
-  decisionPositionId  String?
-  decisionPosition    Position? @relation("DisposalCaseDecisionPosition", fields: [decisionPositionId], references: [id])
   decisionNote        String?
 
   executionMethod         DisposalMethod?

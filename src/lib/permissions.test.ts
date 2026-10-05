@@ -60,10 +60,8 @@ import {
   canViewAssetMaster,
   canImportAssetMaster,
   canManageGaOperations,
-  canManageGaApprovalConfig,
   canSubmitGaRequest,
   canViewGaRequest,
-  canDecideAsConfiguredGaApprover,
   canCancelGaRequest,
   projectEmployee,
 } from "./permissions";
@@ -648,12 +646,10 @@ describe("Phase 4A asset permissions — GA Admin only, never HR Admin", () => {
 });
 
 describe("Phase 4B GA Operations permissions — GA Admin only, never HR Admin", () => {
-  it("canManageGaOperations/canManageGaApprovalConfig are GA Admin only", () => {
-    for (const fn of [canManageGaOperations, canManageGaApprovalConfig]) {
-      expect(fn(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
-      expect(fn(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
-      expect(fn(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
-    }
+  it("canManageGaOperations is GA Admin only", () => {
+    expect(canManageGaOperations(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
+    expect(canManageGaOperations(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
+    expect(canManageGaOperations(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
   });
 
   it("canSubmitGaRequest: any employee-linked account, no HR-Admin-on-behalf-of exception", () => {
@@ -661,19 +657,11 @@ describe("Phase 4B GA Operations permissions — GA Admin only, never HR Admin",
     expect(canSubmitGaRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
   });
 
-  it("canViewGaRequest: GA Admin, the exact requester, or the configured approver holder, never HR Admin", () => {
+  it("canViewGaRequest: GA Admin or the exact requester, never HR Admin", () => {
     expect(canViewGaRequest(mockSession({ roles: ["GA_ADMIN"] }), "emp-1")).toBe(true);
     expect(canViewGaRequest(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
     expect(canViewGaRequest(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
     expect(canViewGaRequest(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(false);
-    expect(canViewGaRequest(mockSession({ employeeId: "emp-9" }), "emp-1", ["emp-9"])).toBe(true);
-  });
-
-  it("canDecideAsConfiguredGaApprover: only a current holder of the configured Position", () => {
-    expect(canDecideAsConfiguredGaApprover("emp-1", ["emp-1", "emp-2"])).toBe(true);
-    expect(canDecideAsConfiguredGaApprover("emp-3", ["emp-1", "emp-2"])).toBe(false);
-    expect(canDecideAsConfiguredGaApprover(null, ["emp-1"])).toBe(false);
-    expect(canDecideAsConfiguredGaApprover(undefined, [])).toBe(false);
   });
 
   it("canCancelGaRequest: the original requester or GA Admin", () => {

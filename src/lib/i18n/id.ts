@@ -840,9 +840,6 @@ export const strings = {
   disposalCase: {
     navLabel: "Kasus Disposal",
   },
-  gaApprovals: {
-    navLabel: "Konfigurasi Persetujuan GA",
-  },
   assetTrackingType: {
     INDIVIDUAL: "Individual",
     QUANTITY_TRACKED: "Kuantitas",

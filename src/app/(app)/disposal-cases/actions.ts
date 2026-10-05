@@ -5,7 +5,7 @@ import { getExtension } from "@/lib/validation/employee-fields";
 import { createDisposalCaseInternal } from "@/lib/disposal-create";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { canManageGaOperations, canDecideAsConfiguredGaApprover } from "@/lib/permissions";
+import { canManageGaOperations } from "@/lib/permissions";
 import {
   canSubmitDisposalCaseForApproval,
   canDecideDisposalCase,
@@ -13,7 +13,6 @@ import {
   canExecuteDisposalCase,
   computeAssetStatusAfterDisposalExecution,
 } from "@/lib/ga-operations";
-import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
@@ -121,9 +120,10 @@ export async function submitDisposalCaseForApproval(
   return undefined;
 }
 
-// PDF: "Configured final Position approves." A rejection returns the case
-// to DRAFT ("No: repair, storage or review") rather than closing it out —
-// GA Admin can revise and resubmit; immutable history, never deleted.
+// GA Admin gives final approval directly (no separate configurable
+// Position). A rejection returns the case to DRAFT ("No: repair, storage or
+// review") rather than closing it out — GA Admin can revise and resubmit;
+// immutable history, never deleted.
 export async function decideDisposalCase(
   caseId: string,
   decision: "APPROVE" | "REJECT",
@@ -131,18 +131,12 @@ export async function decideDisposalCase(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
+  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
 
   const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
   if (!disposalCase) return "Kasus tidak ditemukan.";
   if (!canDecideDisposalCase(disposalCase.status)) {
     return "Kasus ini belum diajukan untuk persetujuan atau sudah diputuskan.";
-  }
-
-  const config = await prisma.gaApprovalConfig.findUnique({ where: { approvalType: "DISPOSAL" } });
-  if (!config) return "Posisi penyetuju akhir untuk Disposal belum dikonfigurasi.";
-  const holderIds = await getCurrentHolderEmployeeIds(config.approverPositionId);
-  if (!canDecideAsConfiguredGaApprover(session.user.employeeId, holderIds)) {
-    return "Anda tidak memiliki akses. Hanya pemegang Posisi penyetuju akhir yang dikonfigurasi yang dapat memutuskan.";
   }
 
   const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
@@ -154,7 +148,6 @@ export async function decideDisposalCase(
       status: decideDisposalCaseStatus(decision === "APPROVE"),
       decisionAt: new Date(),
       decisionByAccountId: session.user.id,
-      decisionPositionId: config.approverPositionId,
       decisionNote,
     },
   });
@@ -217,6 +210,15 @@ export async function executeDisposalCase(
     return "Bukti pelaksanaan wajib diunggah.";
   }
 
+  // Executing disposal retires the asset for good — any still-open custody
+  // (the asset reaching DisposalCase at all almost always means it isn't
+  // actually in anyone's hands anymore, but a stale record shouldn't be left
+  // behind) is closed out here too, same as reviewGaRequestLoss already does
+  // for a confirmed loss, so it can never keep blocking an offboarding.
+  const openCustody = await prisma.assetCustody.findFirst({
+    where: { assetId: disposalCase.assetId, status: { not: "RETURNED" } },
+  });
+
   await prisma.$transaction([
     prisma.disposalCase.update({
       where: { id: caseId },
@@ -234,6 +236,20 @@ export async function executeDisposalCase(
       where: { id: disposalCase.assetId },
       data: { status: computeAssetStatusAfterDisposalExecution() },
     }),
+    ...(openCustody
+      ? [
+          prisma.assetCustody.update({
+            where: { id: openCustody.id },
+            data: {
+              status: "RETURNED",
+              returnedAt: new Date(),
+              returnedByAccountId: session.user.id,
+              returnConditionNote: "Ditutup otomatis — kasus disposal dilaksanakan.",
+              inspectionResult: disposalCase.reason === "OBSOLETE" ? null : "LOST_OR_BEYOND_REPAIR",
+            },
+          }),
+        ]
+      : []),
   ]);
 
   await logAudit({

@@ -7,7 +7,7 @@ import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { canManageGaOperations, canSubmitGaRequest, canDecideAsConfiguredGaApprover, canCancelGaRequest } from "@/lib/permissions";
+import { canManageGaOperations, canSubmitGaRequest, canCancelGaRequest } from "@/lib/permissions";
 import {
   formatGaRequestNumber,
   canVerifyGaRequest,
@@ -21,7 +21,6 @@ import {
   computeAssetStatusAfterGaRequestVerification,
   computeAssetStatusAfterLossReview,
 } from "@/lib/ga-operations";
-import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
@@ -125,11 +124,11 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
 
   const verificationNote = (formData.get("verificationNote") as string)?.trim() || null;
 
-  let approvalRequired: boolean | null = null;
-  if (request.requestType === "NEW_ASSET_NEED") {
-    const config = await prisma.gaApprovalConfig.findUnique({ where: { approvalType: "NEW_ASSET_NEED" } });
-    approvalRequired = !!config;
-  }
+  // GA Admin decides every New Asset Need request directly now — no
+  // configurable approver Position to possibly leave unset, so approval is
+  // always required (was previously conditional on whether a Position was
+  // configured).
+  const approvalRequired: boolean | null = request.requestType === "NEW_ASSET_NEED" ? true : null;
 
   const newStatus = routeGaRequestAfterVerification(request.requestType, approvalRequired ?? false);
   const assetStatus = computeAssetStatusAfterGaRequestVerification(request.requestType);
@@ -194,10 +193,8 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
   return undefined;
 }
 
-// Position-based approval for NEW_ASSET_NEED — resolves the *current*
-// GaApprovalConfig holder set live (not a snapshot taken at verification
-// time), same "resolved live by the caller" contract as
-// canDecideAbsenceRequestAsFirstApprover.
+// GA Admin decides New Asset Need requests directly — no separate
+// configurable approver Position.
 export async function decideGaRequestAsApprover(
   requestId: string,
   decision: "APPROVE" | "REJECT",
@@ -205,17 +202,11 @@ export async function decideGaRequestAsApprover(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
+  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
 
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
   if (!canDecideGaRequest(request.status)) return "Permintaan ini belum siap untuk diputuskan atau sudah diproses.";
-
-  const config = await prisma.gaApprovalConfig.findUnique({ where: { approvalType: "NEW_ASSET_NEED" } });
-  if (!config) return "Posisi penyetuju untuk kebutuhan aset baru belum dikonfigurasi.";
-  const holderIds = await getCurrentHolderEmployeeIds(config.approverPositionId);
-  if (!canDecideAsConfiguredGaApprover(session.user.employeeId, holderIds)) {
-    return "Anda tidak memiliki akses. Hanya pemegang Posisi penyetuju yang dikonfigurasi yang dapat memutuskan.";
-  }
 
   const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
   if (decision === "REJECT" && !decisionNote) return "Alasan penolakan wajib diisi.";
@@ -226,7 +217,6 @@ export async function decideGaRequestAsApprover(
       status: decideGaRequestStatus(decision === "APPROVE"),
       decisionAt: new Date(),
       decisionByAccountId: session.user.id,
-      decisionPositionId: config.approverPositionId,
       decisionNote,
     },
   });
@@ -342,10 +332,14 @@ export async function processGaRequest(requestId: string, _prevState: string | u
   return undefined;
 }
 
-// PDF: "Configured Position reviews loss" -> "Confirmed: disposal" or a
-// negative outcome that returns the asset to circulation. A confirmed loss
-// auto-drafts a DisposalCase (reason CONFIRMED_LOSS) via the shared creator
-// in disposal-cases/actions.ts.
+// GA Admin reviews the loss directly (no separate configurable Position) ->
+// "Confirmed: disposal" or a negative outcome that returns the asset to
+// circulation. A confirmed loss auto-drafts a DisposalCase (reason
+// CONFIRMED_LOSS) via the shared creator in disposal-cases/actions.ts, and
+// also closes out the employee's open custody record for this asset — a
+// confirmed loss means the item is gone, so leaving custody ACTIVE would
+// keep blocking that employee's offboarding indefinitely with nothing left
+// to resolve it.
 export async function reviewGaRequestLoss(
   requestId: string,
   decision: "CONFIRM" | "NOT_CONFIRM",
@@ -353,18 +347,12 @@ export async function reviewGaRequestLoss(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
+  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
 
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
   if (!canReviewGaRequestLoss(request.status)) return "Permintaan ini belum siap untuk ditinjau atau sudah diputuskan.";
   if (!request.assetId) return "Permintaan kehilangan ini tidak memiliki aset terkait.";
-
-  const config = await prisma.gaApprovalConfig.findUnique({ where: { approvalType: "LOSS_REVIEW" } });
-  if (!config) return "Posisi peninjau kehilangan belum dikonfigurasi.";
-  const holderIds = await getCurrentHolderEmployeeIds(config.approverPositionId);
-  if (!canDecideAsConfiguredGaApprover(session.user.employeeId, holderIds)) {
-    return "Anda tidak memiliki akses. Hanya pemegang Posisi peninjau yang dikonfigurasi yang dapat memutuskan.";
-  }
 
   const lossReviewNote = (formData.get("lossReviewNote") as string)?.trim() || null;
   const confirmed = decision === "CONFIRM";
@@ -379,11 +367,24 @@ export async function reviewGaRequestLoss(
         status: decideGaRequestLossStatus(confirmed),
         lossReviewedAt: new Date(),
         lossReviewedByAccountId: session.user.id,
-        lossReviewedPositionId: config.approverPositionId,
         lossReviewNote,
       },
     }),
     prisma.fixedAsset.update({ where: { id: request.assetId }, data: { status: newAssetStatus } }),
+    ...(confirmed && openCustody
+      ? [
+          prisma.assetCustody.update({
+            where: { id: openCustody.id },
+            data: {
+              status: "RETURNED",
+              returnedAt: new Date(),
+              returnedByAccountId: session.user.id,
+              returnConditionNote: "Ditutup otomatis — kehilangan aset dikonfirmasi.",
+              inspectionResult: "LOST_OR_BEYOND_REPAIR",
+            },
+          }),
+        ]
+      : []),
   ]);
 
   if (confirmed) {
@@ -411,6 +412,12 @@ export async function reviewGaRequestLoss(
   return undefined;
 }
 
+// Cancelling a LOSS request that already moved the asset to
+// LOST_PENDING_REVIEW (status PENDING_LOSS_REVIEW) must also revert the
+// asset — otherwise it stays stuck at that status forever with no review
+// left to resolve it (verifyGaRequest already moved it out of normal
+// circulation; cancelling the request that caused that is the review
+// ending, same as an explicit NOT_CONFIRM outcome would).
 export async function cancelGaRequest(requestId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
@@ -421,10 +428,25 @@ export async function cancelGaRequest(requestId: string, _prevState: string | un
   const cancellationReason = (formData.get("cancellationReason") as string)?.trim();
   if (!cancellationReason) return "Alasan pembatalan wajib diisi.";
 
-  await prisma.gaRequest.update({
-    where: { id: requestId },
-    data: { status: "CANCELLED", cancelledAt: new Date(), cancelledByAccountId: session.user.id, cancellationReason },
-  });
+  const needsAssetRevert = request.requestType === "LOSS" && request.status === "PENDING_LOSS_REVIEW" && !!request.assetId;
+  const openCustody = needsAssetRevert
+    ? await prisma.assetCustody.findFirst({ where: { assetId: request.assetId!, status: { not: "RETURNED" } } })
+    : null;
+
+  await prisma.$transaction([
+    prisma.gaRequest.update({
+      where: { id: requestId },
+      data: { status: "CANCELLED", cancelledAt: new Date(), cancelledByAccountId: session.user.id, cancellationReason },
+    }),
+    ...(needsAssetRevert
+      ? [
+          prisma.fixedAsset.update({
+            where: { id: request.assetId! },
+            data: { status: computeAssetStatusAfterLossReview(false, !!openCustody) },
+          }),
+        ]
+      : []),
+  ]);
 
   await logAudit({
     actorAccountId: session.user.id,

@@ -1,4 +1,4 @@
-import { Building2, User, Clock, LogOut, Award, Package, type LucideIcon } from "lucide-react";
+import { Building2, User, Clock, LogOut, Award, type LucideIcon } from "lucide-react";
 
 export interface SettingsPage {
   href: string;
@@ -67,12 +67,5 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     desc: "Matrik Kompetensi dan Tata Nilai Perusahaan.",
     icon: Award,
     pages: [{ href: "/admin/competency", label: "Buka" }],
-  },
-  {
-    id: "ga",
-    title: "Persetujuan GA",
-    desc: "Penyetuju untuk kebutuhan aset, kehilangan, dan pelepasan.",
-    icon: Package,
-    pages: [{ href: "/admin/ga-approvals", label: "Buka" }],
   },
 ];

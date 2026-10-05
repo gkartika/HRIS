@@ -902,10 +902,6 @@ export function canManageGaOperations(session: Session): boolean {
   return isGaAdmin(session);
 }
 
-export function canManageGaApprovalConfig(session: Session): boolean {
-  return isGaAdmin(session);
-}
-
 // Submission is self-service only — any employee-linked account may report
 // a need, damage or loss for themselves. No HR-Admin-on-behalf-of exception
 // here (unlike Absence): the PDF's requester lane is the employee/GA-user
@@ -915,33 +911,12 @@ export function canSubmitGaRequest(session: Session): boolean {
 }
 
 // "Requester sees only own requests" — GA Admin (full operational access),
-// the original requester, or whoever currently holds the Position
-// configured to decide this specific request (so an approver can actually
-// open the request they're meant to act on) — same widening reason as
-// canViewAbsenceRequest's firstApproverPositionId holder exception.
-// Deliberately no HR Admin/manager exception.
-export function canViewGaRequest(
-  session: Session,
-  requesterEmployeeId: string,
-  approverPositionHolderEmployeeIds: string[] = []
-): boolean {
-  return (
-    isGaAdmin(session) ||
-    (!!session.user.employeeId && session.user.employeeId === requesterEmployeeId) ||
-    canDecideAsConfiguredGaApprover(session.user.employeeId, approverPositionHolderEmployeeIds)
-  );
-}
-
-// Position-based approval, resolved live by the caller (GaApprovalConfig ->
-// getCurrentHolderEmployeeIds), same shape as
-// canDecideAbsenceRequestAsFirstApprover. Reused identically for all three
-// GA Operations approval points (New Asset Need, Loss review, Disposal) —
-// the caller passes the holder set for whichever GaApprovalType applies.
-export function canDecideAsConfiguredGaApprover(
-  actingEmployeeId: string | null | undefined,
-  approverPositionHolderEmployeeIds: string[]
-): boolean {
-  return !!actingEmployeeId && approverPositionHolderEmployeeIds.includes(actingEmployeeId);
+// the original requester, or GA Admin — approval decisions have no separate
+// configured-Position holder anymore (GA Admin decides all three stages
+// directly), so viewing follows the same two-way rule as every action on
+// this request.
+export function canViewGaRequest(session: Session, requesterEmployeeId: string): boolean {
+  return isGaAdmin(session) || (!!session.user.employeeId && session.user.employeeId === requesterEmployeeId);
 }
 
 // Same DM-25-style exception as every other cancellation in this app: the

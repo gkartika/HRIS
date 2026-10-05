@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
-import { canManageGaOperations, canDecideAsConfiguredGaApprover } from "@/lib/permissions";
-import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
+import { canManageGaOperations } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 
@@ -31,11 +30,7 @@ export default async function DisposalCasesPage() {
   const session = await requireSession();
   const isGaAdminUser = canManageGaOperations(session);
 
-  const config = await prisma.gaApprovalConfig.findUnique({ where: { approvalType: "DISPOSAL" } });
-  const holderIds = await getCurrentHolderEmployeeIds(config?.approverPositionId ?? null);
-  const isApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, holderIds);
-
-  if (!isGaAdminUser && !isApprover) {
+  if (!isGaAdminUser) {
     return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
   }
 

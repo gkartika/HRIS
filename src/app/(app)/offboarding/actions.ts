@@ -21,6 +21,9 @@ import {
 } from "@/lib/offboarding";
 import { blocksOffboarding, computeAssetStatusAfterReturn, computeAvailableQuantityAfterReturn } from "@/lib/assets";
 import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
+import type { AssetInspectionResult } from "@/generated/prisma/enums";
+
+const VALID_INSPECTION_RESULTS = ["GOOD", "NEEDS_REPAIR", "LOST_OR_BEYOND_REPAIR"];
 
 
 // HR Admin alone opens a resignation case — no approval stage follows.
@@ -288,9 +291,10 @@ export async function submitExitClearanceForm(
 //
 // Per direct follow-up request: one click here also bulk-returns every
 // outstanding AssetCustody for the employee (same effect as processing each
-// one individually via returnAssetCustody in the Assets module, generic
-// "GOOD" inspection result since there's no per-item detail entry in this
-// flow) — GA Admin no longer has to visit each asset's own page first.
+// one individually via returnAssetCustody in the Assets module) — GA Admin
+// no longer has to visit each asset's own page first. Each asset's actual
+// condition is picked here (not assumed Good — see the confirm form), same
+// three options and side effects as the single-asset return flow.
 // Open GaRequests (damage/loss/disposal-type investigations) are NOT
 // auto-resolved this way — those need an actual decision, not a bulk
 // rubber-stamp — so if any remain after the bulk return, the checklist
@@ -312,9 +316,19 @@ export async function confirmGaAssetClearance(
   });
   const blockingCustodies = openCustodies.filter((c) => blocksOffboarding("EMPLOYEE", c.status));
 
+  const inspectionResultByCustodyId = new Map<string, AssetInspectionResult>();
+  for (const custody of blockingCustodies) {
+    const raw = formData.get(`inspectionResult-${custody.id}`) as string;
+    if (!VALID_INSPECTION_RESULTS.includes(raw)) {
+      return `Pilih kondisi pengembalian untuk ${custody.asset.assetName} (${custody.asset.assetCode}).`;
+    }
+    inspectionResultByCustodyId.set(custody.id, raw as AssetInspectionResult);
+  }
+
   if (blockingCustodies.length > 0) {
     await prisma.$transaction(async (tx) => {
       for (const custody of blockingCustodies) {
+        const inspectionResult = inspectionResultByCustodyId.get(custody.id)!;
         await tx.assetCustody.update({
           where: { id: custody.id },
           data: {
@@ -322,13 +336,13 @@ export async function confirmGaAssetClearance(
             returnedAt: new Date(),
             returnedByAccountId: session.user.id,
             returnConditionNote: "Dikembalikan melalui konfirmasi massal di Klirens Aset Offboarding.",
-            inspectionResult: "GOOD",
+            inspectionResult,
           },
         });
         if (custody.asset.trackingType === "INDIVIDUAL") {
           await tx.fixedAsset.update({
             where: { id: custody.assetId },
-            data: { status: computeAssetStatusAfterReturn("GOOD") },
+            data: { status: computeAssetStatusAfterReturn(inspectionResult) },
           });
         } else {
           await tx.fixedAsset.update({
@@ -337,7 +351,7 @@ export async function confirmGaAssetClearance(
               availableQuantity: computeAvailableQuantityAfterReturn(
                 custody.asset.availableQuantity ?? 0,
                 custody.quantity,
-                "GOOD"
+                inspectionResult
               ),
             },
           });

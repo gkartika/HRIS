@@ -3,9 +3,8 @@ import { EFFECTIVENESS_DUE_WHERE } from "@/lib/training";
 import { prisma } from "@/lib/db";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
-import { canDecideAsConfiguredGaApprover, isHrAdmin } from "@/lib/permissions";
+import { isHrAdmin, isGaAdmin } from "@/lib/permissions";
 import { canDecideAbsenceRequestAsFirstApprover, canDecideAbsenceRequestAsSecondApprover } from "@/lib/permissions";
-import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { getDirectReportEmployeeIds } from "@/lib/manager-scope";
 
 // Shared by the Dashboard's merged "Perlu Persetujuan Anda" section (this
@@ -30,9 +29,6 @@ export async function getPendingApprovals(session: Session) {
     hrManagerPositions,
     deptHeadDepartmentIds,
     pendingOwnEvaluations,
-    newAssetNeedConfig,
-    lossReviewConfig,
-    disposalConfig,
     pendingAbsenceHrAdmin,
     submittedAbsenceRequests,
     pendingSecondApproverAbsenceRequests,
@@ -52,9 +48,6 @@ export async function getPendingApprovals(session: Session) {
       include: { employee: true },
       orderBy: { releasedAt: "asc" },
     }),
-    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "NEW_ASSET_NEED" } }),
-    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "LOSS_REVIEW" } }),
-    prisma.gaApprovalConfig.findUnique({ where: { approvalType: "DISPOSAL" } }),
     // Absence: never listed on the old /approvals page — the configured
     // first approver for a SUBMITTED request isn't one global authority
     // (unlike HR Manager/Dept Head), so pending requests are fetched once
@@ -104,12 +97,8 @@ export async function getPendingApprovals(session: Session) {
   ];
 
   // Stage 2 — depends on Stage 1's results (isHrManager/isDeptHead/
-  // deptHeadDepartmentIds, the 3 GA configs, absencePositionIds,
-  // directReportIds).
+  // deptHeadDepartmentIds, absencePositionIds, directReportIds).
   const [
-    newAssetNeedHolderIds,
-    lossReviewHolderIds,
-    disposalHolderIds,
     pendingRequests,
     pendingMovements,
     pendingDeptHeadRequests,
@@ -120,9 +109,6 @@ export async function getPendingApprovals(session: Session) {
     absencePositionHolders,
     pendingEffectivenessTasks,
   ] = await Promise.all([
-    getCurrentHolderEmployeeIds(newAssetNeedConfig?.approverPositionId ?? null),
-    getCurrentHolderEmployeeIds(lossReviewConfig?.approverPositionId ?? null),
-    getCurrentHolderEmployeeIds(disposalConfig?.approverPositionId ?? null),
     isHrManager
       ? prisma.recruitmentRequest.findMany({
           where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
@@ -206,9 +192,9 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
   ]);
 
-  const isNewAssetNeedApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, newAssetNeedHolderIds);
-  const isLossReviewApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, lossReviewHolderIds);
-  const isDisposalApprover = canDecideAsConfiguredGaApprover(session.user.employeeId, disposalHolderIds);
+  // GA Admin decides all three GA Operations approval points directly now —
+  // no separate configurable approver Position to resolve holders for.
+  const isGaAdminUser = isGaAdmin(session);
 
   const absenceHolderIdsByPosition = new Map<string, string[]>();
   for (const h of absencePositionHolders) {
@@ -223,23 +209,23 @@ export async function getPendingApprovals(session: Session) {
     canDecideAbsenceRequestAsSecondApprover(session.user.employeeId, absenceHolderIdsByPosition.get(r.secondApproverPositionId!) ?? [])
   );
 
-  // Stage 3 — depends on Stage 2's approver flags.
+  // Stage 3 — depends on Stage 2's approver flag.
   const [pendingGaNewAssetNeeds, pendingGaLossReviews, pendingGaDisposals] = await Promise.all([
-    isNewAssetNeedApprover
+    isGaAdminUser
       ? prisma.gaRequest.findMany({
           where: { status: "PENDING_APPROVAL" },
           include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
           orderBy: { verifiedAt: "asc" },
         })
       : Promise.resolve([]),
-    isLossReviewApprover
+    isGaAdminUser
       ? prisma.gaRequest.findMany({
           where: { status: "PENDING_LOSS_REVIEW" },
           include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
           orderBy: { verifiedAt: "asc" },
         })
       : Promise.resolve([]),
-    isDisposalApprover
+    isGaAdminUser
       ? prisma.disposalCase.findMany({
           where: { status: "PENDING_APPROVAL" },
           include: { asset: { select: { assetCode: true, assetName: true } } },
@@ -253,9 +239,6 @@ export async function getPendingApprovals(session: Session) {
     deptHeadDepartmentIds,
     isHrManager,
     isDeptHead,
-    isNewAssetNeedApprover,
-    isLossReviewApprover,
-    isDisposalApprover,
     pendingOwnEvaluations,
     pendingGaNewAssetNeeds,
     pendingGaLossReviews,

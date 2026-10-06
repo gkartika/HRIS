@@ -18,3 +18,8 @@ export function canExecuteExitClearanceStatus(status: OffboardingCaseStatus): bo
 export function canCancelOffboardingCaseStatus(status: OffboardingCaseStatus): boolean {
   return status === "PENDING_CLEARANCE";
 }
+
+// Company form number printed on the Exit Clearance form (employee questions
+// and the HR closing step are one document). Shown with the same wording the
+// other forms use, e.g. "Evaluasi Kinerja (FR-HC-01-07)".
+export const EXIT_CLEARANCE_FORM_NUMBER = "FR-HC-01-11";

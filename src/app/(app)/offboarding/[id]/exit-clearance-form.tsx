@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { submitExitClearanceForm } from "../actions";
+import { FormNumberBadge } from "../form-number";
 
 export interface ExitClearanceQuestionOption {
   id: string;
@@ -20,11 +21,14 @@ export function ExitClearanceEmployeeForm({
 
   return (
     <form action={formAction} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
-      <div>
-        <p className="text-sm font-medium text-slate-900">Formulir Klirens Keluar</p>
-        <p className="mt-1 text-xs text-slate-500">
-          Mohon isi formulir ini sebelum hari kerja terakhir Anda. Formulir hanya dapat diisi satu kali.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-slate-900">Formulir Klirens Keluar</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Mohon isi formulir ini sebelum hari kerja terakhir Anda. Formulir hanya dapat diisi satu kali.
+          </p>
+        </div>
+        <FormNumberBadge />
       </div>
       {questions.length === 0 ? (
         <p className="text-sm text-slate-400">Belum ada pertanyaan yang aktif.</p>

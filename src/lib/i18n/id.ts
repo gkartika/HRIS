@@ -531,7 +531,7 @@ export const strings = {
   offboarding: {
     navLabel: "Offboarding",
     listTitle: "Offboarding",
-    listSubtitle: "Resignation atau kasus akhir kontrak — dibuat oleh Admin SDM, hingga exit clearance.",
+    listSubtitle: "Resignation atau kasus akhir kontrak — dibuat oleh Admin SDM, hingga exit clearance (FR-HC-01-11).",
     emptyState: "Belum ada kasus Offboarding.",
     reportButton: "Mulai Offboarding",
     reportTitle: "Mulai Offboarding",

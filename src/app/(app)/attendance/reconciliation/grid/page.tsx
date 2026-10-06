@@ -8,6 +8,8 @@ import { resolveCutoffPeriod, previousCutoffPeriod, nextCutoffPeriod, formatCuto
 import { getReconciliationGrid } from "@/lib/attendance-reconciliation-queue";
 import { formatMinutesAsHours } from "@/lib/attendance-hours";
 import { formatDayCode } from "@/lib/attendance-reconciliation-export";
+import { companyToday } from "@/lib/company-time";
+import { formatRangeLabel, rangeShortcuts, resolveVisibleRange, sameRange } from "@/lib/grid-date-range";
 import { GridEditForm } from "../grid-edit-form";
 
 const SHIFT_TONE: Record<string, string> = {
@@ -35,6 +37,8 @@ export default async function AttendanceReconciliationGridPage({
 }: {
   searchParams: Promise<{
     cutoff?: string;
+    from?: string;
+    to?: string;
     orgUnitId?: string;
     q?: string;
     sortBy?: string;
@@ -49,7 +53,7 @@ export default async function AttendanceReconciliationGridPage({
   }
 
 
-  const { cutoff, orgUnitId, q, sortBy: sortByParam, sortDir: sortDirParam, editEmployeeId, editDate } = await searchParams;
+  const { cutoff, from: fromParam, to: toParam, orgUnitId, q, sortBy: sortByParam, sortDir: sortDirParam, editEmployeeId, editDate } = await searchParams;
   const search = q?.trim() ?? "";
   const sortBy: SortKey = sortByParam === "points" ? "points" : "name";
   const sortDir: "asc" | "desc" = sortDirParam === "desc" ? "desc" : "asc";
@@ -57,6 +61,13 @@ export default async function AttendanceReconciliationGridPage({
   const period = resolveCutoffPeriod(referenceDate);
   const prevPeriod = previousCutoffPeriod(period);
   const nextPeriod = nextCutoffPeriod(period);
+  // Date filter: only narrows the visible day columns. Poin / Jam Kerja and
+  // the Excel export always cover the whole period.
+  const { range, error: rangeError } = resolveVisibleRange(period, fromParam, toParam);
+  const shortcuts = rangeShortcuts(period, companyToday());
+  const todayParam = formatCutoffParam(companyToday());
+  const periodStartParam = formatCutoffParam(period.start);
+  const periodEndParam = formatCutoffParam(period.end);
 
   const [employeeIds, orgUnits, absenceTypes] = await Promise.all([
     prisma.employee
@@ -106,9 +117,13 @@ export default async function AttendanceReconciliationGridPage({
 
   // Every link below (period nav, cell edit, sort) carries the same
   // filter/search state forward so navigating never silently drops it.
-  const carryParams = (extra: Record<string, string>) => {
+  const carryParams = (extra: Record<string, string>, withRange = true) => {
     const params = new URLSearchParams();
     params.set("cutoff", formatCutoffParam(period.start));
+    if (withRange && !range.isFull) {
+      params.set("from", formatCutoffParam(range.from));
+      params.set("to", formatCutoffParam(range.to));
+    }
     if (orgUnitId) params.set("orgUnitId", orgUnitId);
     if (search) params.set("q", search);
     if (sortBy !== "name") params.set("sortBy", sortBy);
@@ -129,11 +144,28 @@ export default async function AttendanceReconciliationGridPage({
   };
 
   const periodNavHref = (start: Date) => {
-    const params = carryParams({ cutoff: formatCutoffParam(start) });
+    const params = carryParams({ cutoff: formatCutoffParam(start) }, false);
     params.delete("editEmployeeId");
     params.delete("editDate");
     return `/attendance/reconciliation/grid?${params.toString()}`;
   };
+
+  const rangeHref = (from: Date, to: Date, isAll: boolean) => {
+    const params = carryParams({}, false);
+    if (!isAll) {
+      params.set("from", formatCutoffParam(from));
+      params.set("to", formatCutoffParam(to));
+    }
+    return `/attendance/reconciliation/grid?${params.toString()}`;
+  };
+
+  // Only the day columns inside the chosen range are drawn; every row still
+  // carries the whole period, which the summary columns use.
+  const inRange = (date: Date) => date >= range.from && date <= range.to;
+  const headerDays = (rows[0]?.days ?? []).filter((d) => inRange(d.date));
+  // The grid itself only runs up to today, so the counts below speak of the
+  // days it actually has, not of the whole 30-day period.
+  const availableDays = rows[0]?.days.length ?? 0;
 
   return (
     <div>
@@ -156,7 +188,7 @@ export default async function AttendanceReconciliationGridPage({
             Antrian Pengecualian
           </Link>
           <a
-            href={`/api/attendance/reconciliation-export?${carryParams({}).toString()}`}
+            href={`/api/attendance/reconciliation-export?${carryParams({}, false).toString()}`}
             className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
           >
             Export Excel
@@ -164,7 +196,8 @@ export default async function AttendanceReconciliationGridPage({
         </div>
       </div>
 
-      <form className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+      <form className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="cutoff" value={formatCutoffParam(period.start)} />
         {sortBy !== "name" && <input type="hidden" name="sortBy" value={sortBy} />}
         {sortDir !== "asc" && <input type="hidden" name="sortDir" value={sortDir} />}
@@ -189,15 +222,74 @@ export default async function AttendanceReconciliationGridPage({
             ))}
           </select>
         </div>
+        <div className="flex items-end gap-2 rounded-lg border border-brand/20 bg-brand-soft/60 p-2">
+          <div>
+            <label htmlFor="grid-from" className="mb-1 block text-xs text-slate-600">Dari tanggal</label>
+            <input
+              id="grid-from"
+              type="date"
+              name="from"
+              min={periodStartParam}
+              max={periodEndParam}
+              defaultValue={formatCutoffParam(range.from)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="grid-to" className="mb-1 block text-xs text-slate-600">Sampai tanggal</label>
+            <input
+              id="grid-to"
+              type="date"
+              name="to"
+              min={periodStartParam}
+              max={periodEndParam}
+              defaultValue={formatCutoffParam(range.to)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
         <button type="submit" className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">
           {t("common.applyFilter")}
         </button>
-        {(search || orgUnitId) && (
+        {(search || orgUnitId || !range.isFull) && (
           <Link href={`/attendance/reconciliation/grid?cutoff=${formatCutoffParam(period.start)}`} className="px-2 py-2 text-sm text-slate-500 hover:text-slate-700">
             {t("common.resetFilter")}
           </Link>
         )}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-500">Pintasan:</span>
+        {shortcuts.map((s) => {
+          const active = sameRange(s, range);
+          return (
+            <Link
+              key={s.key}
+              href={rangeHref(s.from, s.to, s.key === "all")}
+              className={`rounded-full border px-3 py-1 ${active ? "border-brand bg-brand text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+            >
+              {s.label}
+            </Link>
+          );
+        })}
+      </div>
+      {rangeError && <p className="mt-2 text-xs text-rose-600">{rangeError}</p>}
       </form>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+        <p>
+          {range.isFull ? (
+            <>
+              Menampilkan <b>seluruh periode</b> · {headerDays.length} hari
+            </>
+          ) : (
+            <>
+              Menampilkan <b>{formatRangeLabel(range.from, range.to)}</b> · {headerDays.length} dari {availableDays} hari
+              {headerDays.length === 0 && availableDays > 0 && <span className="text-amber-700"> — belum ada data di rentang ini (grid hanya sampai hari ini)</span>}
+            </>
+          )}
+        </p>
+        <p className="text-slate-400">Poin dan Jam Kerja selalu dihitung untuk seluruh periode. Export Excel juga memuat seluruh periode.</p>
+      </div>
 
       {editPanel && (
         <div className="mt-4">
@@ -227,26 +319,40 @@ export default async function AttendanceReconciliationGridPage({
                 <Link href={sortLink("points")} className="hover:underline">
                   Poin {sortBy === "points" && (sortDir === "asc" ? "↑" : "↓")}
                 </Link>
+                <span className="block text-[9px] font-normal text-slate-400">periode</span>
               </th>
               <th rowSpan={2} className="sticky left-[254px] z-10 w-[76px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
                 Jam Kerja Gaji
+                <span className="block text-[9px] font-normal text-slate-400">periode</span>
               </th>
               <th rowSpan={2} className="sticky left-[330px] z-10 w-[76px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
                 Jam Kerja Aktual
+                <span className="block text-[9px] font-normal text-slate-400">periode</span>
               </th>
-              {rows[0]?.days.map((d) => {
+              {headerDays.map((d) => {
                 const { top, bottom } = formatDayHeader(d.date);
+                const isToday = formatCutoffParam(d.date) === todayParam;
                 return (
-                  <th key={d.date.toISOString()} colSpan={2} className="border-b border-l border-slate-200 px-1 py-2 text-center text-[10px] font-semibold text-slate-500">
+                  <th
+                    key={d.date.toISOString()}
+                    colSpan={2}
+                    className={`border-b border-l border-slate-200 px-1 py-2 text-center text-[10px] font-semibold ${isToday ? "bg-brand-accent-soft text-brand-dark" : "text-slate-500"}`}
+                  >
                     {top}
                     <br />
                     {bottom}
+                    {isToday && (
+                      <>
+                        <br />
+                        hari ini
+                      </>
+                    )}
                   </th>
                 );
               })}
             </tr>
             <tr className="bg-slate-50">
-              {rows[0]?.days.map((d) => (
+              {headerDays.map((d) => (
                 <Fragment key={d.date.toISOString()}>
                   <th className="w-[40px] border-b border-l border-slate-200 px-1 py-1 text-center text-[9px] font-medium text-slate-400">
                     Kode
@@ -278,7 +384,7 @@ export default async function AttendanceReconciliationGridPage({
                 <td className="sticky left-[330px] z-10 border-l border-slate-100 bg-white px-2 py-2 text-center text-xs font-medium text-slate-700">
                   {formatMinutesAsHours(row.totalActualMinutes)}
                 </td>
-                {row.days.map((d) => {
+                {row.days.filter((d) => inRange(d.date)).map((d) => {
                   const dateParam = formatCutoffParam(d.date);
                   const isSelected = editEmployeeId === row.employeeId && editDate === dateParam;
                   const label = formatDayCode(d);

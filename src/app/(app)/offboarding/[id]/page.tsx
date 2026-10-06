@@ -20,6 +20,7 @@ import {
   CancelOffboardingCaseForm,
 } from "./decision-forms";
 import { ExitClearanceEmployeeForm } from "./exit-clearance-form";
+import { FormNumberBadge, FormNumberStrip } from "../form-number";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function OffboardingCaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -89,6 +90,7 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: "Offboarding", href: "/offboarding" }, { label: "Detail Kasus" }]} />
       <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <FormNumberStrip />
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-mono text-lg font-medium text-slate-900">{offboardingCase.caseNumber}</h1>
@@ -197,7 +199,10 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
 
       {exitClearanceSubmission && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <p className="text-sm font-medium text-slate-900">Formulir Klirens Keluar (Diisi Karyawan)</p>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm font-medium text-slate-900">Formulir Klirens Keluar (Diisi Karyawan)</p>
+            <FormNumberBadge />
+          </div>
           <p className="mt-1 text-xs text-slate-400">
             Dikirim pada {formatDateLong(exitClearanceSubmission.submittedAt)}
           </p>

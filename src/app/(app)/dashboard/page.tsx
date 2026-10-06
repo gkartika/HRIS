@@ -32,6 +32,8 @@ import {
   LossReviewButtons as GaLossReviewButtons,
 } from "../ga-requests/[id]/decision-forms";
 import { DisposalDecisionButtons } from "../disposal-cases/[id]/decision-forms";
+import { GaHome } from "./ga-home";
+import type { TodoKind } from "@/lib/ga-home";
 
 interface ExpiringContractRow {
   id: string;
@@ -303,11 +305,12 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ orgUnitId?: string; urgency?: string; sortBy?: string; sortDir?: string }>;
+  searchParams: Promise<{ orgUnitId?: string; urgency?: string; sortBy?: string; sortDir?: string; ga?: string }>;
 }) {
   const session = await requireSession();
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
-  const { orgUnitId, urgency, sortBy: sortByParam, sortDir: sortDirParam } = await searchParams;
+  const { orgUnitId, urgency, sortBy: sortByParam, sortDir: sortDirParam, ga: gaParam } = await searchParams;
+  const gaFilter: TodoKind | "all" = (["ga", "wo", "dp", "of", "st"] as const).find((k) => k === gaParam) ?? "all";
   const sortBy: SortKey = sortByParam === "employeeName" || sortByParam === "urgency" ? sortByParam : "endDate";
   const sortDir: "asc" | "desc" = sortDirParam === "desc" ? "desc" : "asc";
 
@@ -346,7 +349,7 @@ export default async function DashboardPage({
   // of them back-to-back. Fired together in one Promise.all instead; total
   // wait is now bounded by the single slowest query, not the sum of all of
   // them. Card-push order below still matches the original section order.
-  const [employeeCount, hrAdminData, filledPositions, gaAssetCounts, gaOpenCounts, employee] = await Promise.all([
+  const [employeeCount, hrAdminData, filledPositions, employee] = await Promise.all([
     canListEmployees(session) ? prisma.employee.count({ where: { activeFlag: true } }) : Promise.resolve(null),
     isHrAdminUser
       ? Promise.all([
@@ -371,21 +374,6 @@ export default async function DashboardPage({
         ])
       : Promise.resolve(null),
     isTrainingAdminUser || isGaAdminUser ? prisma.position.count({ where: { positionStatus: "FILLED" } }) : Promise.resolve(null),
-    isGaAdminUser
-      ? Promise.all([
-          prisma.fixedAsset.count({ where: { activeFlag: true } }),
-          prisma.fixedAsset.count({ where: { activeFlag: true, status: "IN_USE" } }),
-          prisma.assetCustody.count({ where: { status: "ACTIVE" } }),
-          prisma.fixedAsset.count({ where: { activeFlag: true, status: "UNDER_REPAIR" } }),
-        ])
-      : Promise.resolve(null),
-    isGaAdminUser
-      ? Promise.all([
-          prisma.gaRequest.count({ where: { status: { in: ["SUBMITTED", "PENDING_APPROVAL", "PENDING_LOSS_REVIEW"] } } }),
-          prisma.maintenanceWorkOrder.count({ where: { status: "OPEN" } }),
-          prisma.disposalCase.count({ where: { status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } } }),
-        ])
-      : Promise.resolve(null),
     session.user.employeeId
       ? prisma.employee.findUnique({
           where: { id: session.user.employeeId },
@@ -437,19 +425,11 @@ export default async function DashboardPage({
   if (filledPositions !== null) {
     cards.push({ label: "Posisi Terisi", value: filledPositions });
   }
-  if (gaAssetCounts) {
-    const [totalAssets, inUseAssets, activeCustodies, underRepair] = gaAssetCounts;
-    cards.push({ label: "Total Aset Aktif", value: totalAssets });
-    cards.push({ label: "Sedang Digunakan", value: inUseAssets });
-    cards.push({ label: "Total Penguasaan Aktif", value: activeCustodies });
-    cards.push({ label: "Dalam Perbaikan", value: underRepair });
-  }
-  if (gaOpenCounts) {
-    const [openGaRequests, openWorkOrders, openDisposalCases] = gaOpenCounts;
-    cards.push({ label: "Permintaan GA Terbuka", value: openGaRequests });
-    cards.push({ label: "Work Order Terbuka", value: openWorkOrders });
-    cards.push({ label: "Kasus Disposal Aktif", value: openDisposalCases });
-  }
+  // Admin GA has its own status board below (GaHome); the generic HR number
+  // cards (employees, filled positions) mean nothing for a GA-only account.
+  // An account that is also HR/Training Admin keeps its own cards.
+  const gaOnly = isGaAdminUser && !isHrAdminUser && !isTrainingAdminUser;
+  if (gaOnly) cards.length = 0;
   return (
     <div className="space-y-6">
       <div>
@@ -470,14 +450,18 @@ export default async function DashboardPage({
 
       <ApprovalsSection session={session} pending={pending} />
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-        {cards.map((c) => (
-          <StatCard key={c.label} label={c.label} value={c.value} />
-        ))}
-        {cards.length === 0 && (
-          <p className="col-span-full text-sm text-slate-400">Tidak ada data ringkasan untuk peran ini.</p>
-        )}
-      </div>
+      {isGaAdminUser && <GaHome filter={gaFilter} />}
+
+      {(cards.length > 0 || !isGaAdminUser) && (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          {cards.map((c) => (
+            <StatCard key={c.label} label={c.label} value={c.value} />
+          ))}
+          {cards.length === 0 && (
+            <p className="col-span-full text-sm text-slate-400">Tidak ada data ringkasan untuk peran ini.</p>
+          )}
+        </div>
+      )}
 
       {isHrAdminUser && (
         <div className="rounded-xl border border-slate-200 bg-white p-5">

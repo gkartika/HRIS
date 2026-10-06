@@ -25,12 +25,12 @@ export function EditEmployeeForm({
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("employee.employeeNumber")}</label>
         <input
-          name="employeeNumber"
-          required
-          defaultValue={employee.employeeNumber}
-          disabled={!canEditLegalName}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400"
+          value={employee.employeeNumber}
+          disabled
+          readOnly
+          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-400"
         />
+        <p className="mt-1 text-[11px] text-slate-400">Dibuat otomatis dan tidak bisa diubah.</p>
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("employee.fullLegalName")}</label>

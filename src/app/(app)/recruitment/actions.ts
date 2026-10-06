@@ -27,6 +27,7 @@ import {
   initialRecruitmentStatus,
 } from "@/lib/recruitment";
 import { formatOnboardingCaseNumber } from "@/lib/onboarding";
+import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import { validateNoKk } from "@/lib/validation/employee-fields";
 import type {
@@ -344,7 +345,6 @@ export async function createEmployeeFromRecruitmentRequest(
   const counts = computeFulfillmentCounts(request.requestedHeadcount, request.fulfillments.length);
   if (counts.isFull) return "Permintaan ini sudah terisi penuh.";
 
-  const employeeNumber = (formData.get("employeeNumber") as string)?.trim();
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
   const gender = (formData.get("gender") as string) || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
@@ -356,8 +356,8 @@ export async function createEmployeeFromRecruitmentRequest(
   const educationLevelId = (formData.get("educationLevelId") as string) || null;
   const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
 
-  if (!employeeNumber || !fullLegalName || !hireDate || !employmentStatus || !positionId) {
-    return "Nomor karyawan, nama lengkap, tanggal bergabung, status kepegawaian, dan posisi wajib diisi.";
+  if (!fullLegalName || !hireDate || !employmentStatus || !positionId) {
+    return "Nama lengkap, tanggal bergabung, status kepegawaian, dan posisi wajib diisi.";
   }
   // Identitas/Pendidikan/PTKP are optional here too — completed later from
   // the employee's own detail page.
@@ -367,8 +367,6 @@ export async function createEmployeeFromRecruitmentRequest(
   }
 
   // Prevent duplicate Employees (DEC-013/WF-14 acceptance criteria).
-  const existingEmployee = await prisma.employee.findUnique({ where: { employeeNumber } });
-  if (existingEmployee) return `Nomor karyawan ${employeeNumber} sudah digunakan.`;
 
   if (!request.jobId) {
     return "Jabatan pada permintaan ini belum ditentukan oleh HR Manager saat persetujuan.";
@@ -388,6 +386,7 @@ export async function createEmployeeFromRecruitmentRequest(
   // WF-14: "create Employee, initial Primary Position Assignment and
   // RecruitmentRequestFulfillment in one transaction."
   const result = await prisma.$transaction(async (tx) => {
+    const employeeNumber = await allocateEmployeeNumber(tx);
     const employee = await tx.employee.create({
       data: {
         employeeNumber,
@@ -460,7 +459,7 @@ export async function createEmployeeFromRecruitmentRequest(
     action: "CREATE",
     datasetName: "RecruitmentRequestFulfillment",
     recordId: result.fulfillment.id,
-    reason: `Linked employee ${employeeNumber} and assignment ${result.assignment.id} to request ${request.requestNumber}`,
+    reason: `Linked employee ${result.employee.employeeNumber} and assignment ${result.assignment.id} to request ${request.requestNumber}`,
   });
 
   // Onboarding-compulsory course auto-assign — unlike the direct-entry path,

@@ -1,3 +1,4 @@
+import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { prisma } from "@/lib/db";
 import { validateNoKk, validateNationalIdNumber } from "@/lib/validation/employee-fields";
 import { projectEmployee } from "@/lib/permissions";
@@ -41,7 +42,7 @@ export const templateHeaders = [
   "ptkpStatusCode",
 ];
 export const templateExampleRow = {
-  employeeNumber: "CBP-0099",
+  employeeNumber: "",
   fullLegalName: "Nama Contoh",
   gender: "MALE",
   birthPlace: "Jakarta",
@@ -108,8 +109,8 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     const ptkpStatusCode = raw.ptkpStatusCode?.trim();
 
     const reasons: string[] = [];
-    if (!employeeNumber) reasons.push("Nomor karyawan (employeeNumber) wajib diisi");
-    else if (seenInFile.has(employeeNumber)) reasons.push(`Nomor karyawan ${employeeNumber} duplikat dalam berkas`);
+    // Blank = a new employee; the system assigns the next CBP-xxxx number.
+    if (employeeNumber && seenInFile.has(employeeNumber)) reasons.push(`Nomor karyawan ${employeeNumber} duplikat dalam berkas`);
     if (!fullLegalName) reasons.push("Nama lengkap (fullLegalName) wajib diisi");
     if (!hireDate || Number.isNaN(Date.parse(hireDate))) {
       reasons.push("Tanggal bergabung (hireDate) wajib diisi dengan format tanggal yang valid");
@@ -162,7 +163,7 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
 }
 
 export async function commitRow(raw: Record<string, string>): Promise<CommitResult> {
-  const employeeNumber = raw.employeeNumber.trim();
+  const employeeNumber = raw.employeeNumber?.trim() ?? "";
   const genderRaw = raw.gender?.trim().toUpperCase();
   const educationLevelLabel = raw.educationLevelLabel?.trim();
   const educationLevel = educationLevelLabel
@@ -223,13 +224,17 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     ...(raw.ptkpStatusCode?.trim() ? { ptkpStatusCode: raw.ptkpStatusCode.trim() } : {}),
   };
 
-  const existing = await prisma.employee.findUnique({ where: { employeeNumber } });
+  const existing = employeeNumber ? await prisma.employee.findUnique({ where: { employeeNumber } }) : null;
   if (existing) {
     await prisma.employee.update({ where: { id: existing.id }, data });
     return { id: existing.id, action: "UPDATE" };
   }
 
-  const created = await prisma.employee.create({ data: { employeeNumber, ...data } });
+  // No number in the file: assign the next one (CBP-0001, CBP-0002 ...).
+  const created = await prisma.$transaction(async (tx) => {
+    const number = employeeNumber || (await allocateEmployeeNumber(tx));
+    return tx.employee.create({ data: { employeeNumber: number, ...data } });
+  });
   return { id: created.id, action: "CREATE" };
 }
 

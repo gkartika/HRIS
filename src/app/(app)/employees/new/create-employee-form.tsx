@@ -9,9 +9,11 @@ import type { EducationLevel, PtkpStatus } from "@/generated/prisma/client";
 export function CreateEmployeeForm({
   educationLevels,
   ptkpStatuses,
+  nextEmployeeNumber,
 }: {
   educationLevels: EducationLevel[];
   ptkpStatuses: PtkpStatus[];
+  nextEmployeeNumber: string;
 }) {
   const [error, formAction, isPending] = useActionState(createEmployee, undefined);
 
@@ -24,12 +26,10 @@ export function CreateEmployeeForm({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("employee.employeeNumber")}</label>
-          <input
-            name="employeeNumber"
-            required
-            placeholder="CBP-0003"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          />
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <span className="font-mono">{nextEmployeeNumber}</span>
+            <span className="ml-2 text-xs text-slate-400">dibuat otomatis saat disimpan</span>
+          </div>
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("employee.fullLegalName")}</label>

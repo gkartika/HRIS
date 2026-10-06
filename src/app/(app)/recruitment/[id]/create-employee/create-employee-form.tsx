@@ -13,11 +13,13 @@ export function CreateEmployeeFromRequestForm({
   candidatePositions,
   educationLevels,
   ptkpStatuses,
+  nextEmployeeNumber,
 }: {
   requestId: string;
   candidatePositions: PositionOption[];
   educationLevels: EducationLevel[];
   ptkpStatuses: PtkpStatus[];
+  nextEmployeeNumber: string;
 }) {
   const action = createEmployeeFromRecruitmentRequest.bind(null, requestId);
   const [error, formAction, isPending] = useActionState(action, undefined);
@@ -43,7 +45,10 @@ export function CreateEmployeeFromRequestForm({
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("employee.employeeNumber")}</label>
-          <input name="employeeNumber" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <span className="font-mono">{nextEmployeeNumber}</span>
+            <span className="ml-2 text-xs text-slate-400">dibuat otomatis saat disimpan</span>
+          </div>
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("employee.fullLegalName")}</label>

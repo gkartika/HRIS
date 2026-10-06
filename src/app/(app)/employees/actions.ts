@@ -10,6 +10,7 @@ import { canCreateEmployee, isHrAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { validateNoKk, validateNationalIdNumber } from "@/lib/validation/employee-fields";
 import { formatOnboardingCaseNumber } from "@/lib/onboarding";
+import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";
 
@@ -20,7 +21,6 @@ export async function createEmployee(
   const session = await requireSession();
   if (!canCreateEmployee(session)) return "Anda tidak memiliki akses.";
 
-  const employeeNumber = (formData.get("employeeNumber") as string)?.trim();
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
   const gender = (formData.get("gender") as string) || null;
   const mobileNumber = (formData.get("mobileNumber") as string)?.trim() || null;
@@ -32,8 +32,8 @@ export async function createEmployee(
   const educationLevelId = (formData.get("educationLevelId") as string) || null;
   const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
 
-  if (!employeeNumber || !fullLegalName || !hireDate || !employmentStatus) {
-    return "Nomor karyawan, nama lengkap, tanggal bergabung, dan status kepegawaian wajib diisi.";
+  if (!fullLegalName || !hireDate || !employmentStatus) {
+    return "Nama lengkap, tanggal bergabung, dan status kepegawaian wajib diisi.";
   }
   // Everything else (identitas, pendidikan, PTKP) is filled in later from the
   // employee's own detail page — see lib/employee-completeness.ts for the
@@ -47,15 +47,15 @@ export async function createEmployee(
     if (noKkError) return noKkError;
   }
 
-  const existing = await prisma.employee.findUnique({ where: { employeeNumber } });
-  if (existing) return `Nomor karyawan ${employeeNumber} sudah digunakan.`;
-
   const hireDateObj = new Date(hireDate);
 
   // LIF-03: "After Employee creation..." — an Onboarding Case is created
   // automatically alongside every new Employee, reusing hireDate as the
   // planned start date rather than asking for it again.
   const employee = await prisma.$transaction(async (tx) => {
+    // Nomor Karyawan is assigned here (CBP-0001, CBP-0002 ...), inside the same
+    // transaction, so a failed save gives the number back.
+    const employeeNumber = await allocateEmployeeNumber(tx);
     const created = await tx.employee.create({
       data: {
         employeeNumber,
@@ -90,7 +90,7 @@ export async function createEmployee(
     action: "CREATE",
     datasetName: "Employee",
     recordId: employee.id,
-    reason: `Created employee ${fullLegalName} (${employeeNumber})`,
+    reason: `Created employee ${fullLegalName} (${employee.employeeNumber})`,
   });
 
   // Onboarding-compulsory course auto-assign (outside the transaction above,
@@ -184,14 +184,6 @@ export async function updateEmployee(
   if (isHrAdmin(session)) {
     if (!fullLegalName) return "Nama lengkap wajib diisi.";
     data.fullLegalName = fullLegalName;
-
-    const employeeNumber = (formData.get("employeeNumber") as string)?.trim();
-    if (!employeeNumber) return "Nomor karyawan wajib diisi.";
-    const employeeNumberTaken = await prisma.employee.findFirst({
-      where: { employeeNumber, NOT: { id: employeeId } },
-    });
-    if (employeeNumberTaken) return `Nomor karyawan ${employeeNumber} sudah digunakan.`;
-    data.employeeNumber = employeeNumber;
 
     const nationalIdNumber = (formData.get("nationalIdNumber") as string)?.trim() || null;
     const noKk = (formData.get("noKk") as string)?.trim() || null;

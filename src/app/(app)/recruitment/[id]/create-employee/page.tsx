@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { computeFulfillmentCounts, canRequestAcceptFulfillment } from "@/lib/recruitment";
 import { CreateEmployeeFromRequestForm } from "./create-employee-form";
+import { peekNextEmployeeNumber } from "@/lib/employee-number-allocate";
 
 export default async function CreateEmployeeFromRequestPage({
   params,
@@ -38,7 +39,7 @@ export default async function CreateEmployeeFromRequestPage({
     return <p className="text-sm text-rose-600">{t("recruitment.jobNotSetOnApproval")}</p>;
   }
 
-  const [candidatePositions, educationLevels, ptkpStatuses] = await Promise.all([
+  const [candidatePositions, educationLevels, ptkpStatuses, nextEmployeeNumber] = await Promise.all([
     prisma.position.findMany({
       where: { jobId: request.jobId, orgUnitId: request.departmentId, archived: false },
       include: { job: true, orgUnit: true },
@@ -52,6 +53,7 @@ export default async function CreateEmployeeFromRequestPage({
       where: { activeFlag: true },
       orderBy: [{ displayOrder: "asc" }, { code: "asc" }],
     }),
+    peekNextEmployeeNumber(),
   ]);
 
   return (
@@ -67,6 +69,7 @@ export default async function CreateEmployeeFromRequestPage({
           candidatePositions={candidatePositions}
           educationLevels={educationLevels}
           ptkpStatuses={ptkpStatuses}
+          nextEmployeeNumber={nextEmployeeNumber}
         />
       </div>
     </div>

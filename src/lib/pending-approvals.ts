@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { isHrAdmin, isGaAdmin } from "@/lib/permissions";
-import { canDecideAbsenceRequestAsFirstApprover, canDecideAbsenceRequestAsSecondApprover } from "@/lib/permissions";
 import { getDirectReportEmployeeIds } from "@/lib/manager-scope";
+import { getEmployeePositionInfo } from "@/lib/current-position";
 
 // Shared by the Dashboard's merged "Perlu Persetujuan Anda" section (this
 // used to also back a standalone /approvals page, now removed — see
@@ -24,14 +24,28 @@ import { getDirectReportEmployeeIds } from "@/lib/manager-scope";
 export async function getPendingApprovals(session: Session) {
   const employeeId = session.user.employeeId ?? "__none__";
 
+  // The seat I hold right now. A first/second approver is "whoever currently
+  // holds the configured Position", so the pending absence requests are asked
+  // for by that seat directly instead of loading every company-wide request
+  // and matching holders in memory.
+  const me = session.user.employeeId ? await getEmployeePositionInfo(session.user.employeeId) : null;
+  const myPositionId = me?.activeFlag ? me.currentPositionId : null;
+  const absenceRow = {
+    id: true,
+    startDate: true,
+    endDate: true,
+    employee: { select: { fullLegalName: true } },
+    absenceType: { select: { label: true } },
+  } as const;
+
   // Stage 1 — needs only employeeId/session, nothing computed below.
   const [
     hrManagerPositions,
     deptHeadDepartmentIds,
     pendingOwnEvaluations,
     pendingAbsenceHrAdmin,
-    submittedAbsenceRequests,
-    pendingSecondApproverAbsenceRequests,
+    pendingAbsenceFirstApprover,
+    pendingAbsenceSecondApprover,
     pendingCompetencyAssessments,
     directReportIds,
   ] = await Promise.all([
@@ -56,21 +70,21 @@ export async function getPendingApprovals(session: Session) {
     isHrAdmin(session)
       ? prisma.absenceRequest.findMany({
           where: { status: "PENDING_HR_ADMIN" },
-          include: { employee: true, absenceType: true },
+          select: absenceRow,
           orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
-    session.user.employeeId
+    myPositionId
       ? prisma.absenceRequest.findMany({
-          where: { status: "SUBMITTED", firstApproverPositionId: { not: null } },
-          include: { employee: true, absenceType: true },
+          where: { status: "SUBMITTED", firstApproverPositionId: myPositionId },
+          select: absenceRow,
           orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
-    session.user.employeeId
+    myPositionId
       ? prisma.absenceRequest.findMany({
-          where: { status: "PENDING_SECOND_APPROVER", secondApproverPositionId: { not: null } },
-          include: { employee: true, absenceType: true },
+          where: { status: "PENDING_SECOND_APPROVER", secondApproverPositionId: myPositionId },
+          select: absenceRow,
           orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
@@ -89,15 +103,9 @@ export async function getPendingApprovals(session: Session) {
 
   const isHrManager = hrManagerPositions.length > 0;
   const isDeptHead = deptHeadDepartmentIds.length > 0;
-  const absencePositionIds = [
-    ...new Set([
-      ...submittedAbsenceRequests.map((r) => r.firstApproverPositionId!),
-      ...pendingSecondApproverAbsenceRequests.map((r) => r.secondApproverPositionId!),
-    ]),
-  ];
 
   // Stage 2 — depends on Stage 1's results (isHrManager/isDeptHead/
-  // deptHeadDepartmentIds, absencePositionIds, directReportIds).
+  // deptHeadDepartmentIds, directReportIds).
   const [
     pendingRequests,
     pendingMovements,
@@ -106,7 +114,6 @@ export async function getPendingApprovals(session: Session) {
     pendingDeptHeadRenewals,
     pendingHrManagerRenewals,
     pendingDeptHeadTrainingRequests,
-    absencePositionHolders,
     pendingEffectivenessTasks,
   ] = await Promise.all([
     isHrManager
@@ -169,12 +176,6 @@ export async function getPendingApprovals(session: Session) {
           orderBy: { createdAt: "asc" },
         })
       : Promise.resolve([]),
-    absencePositionIds.length
-      ? prisma.employee.findMany({
-          where: { currentPositionId: { in: absencePositionIds }, activeFlag: true },
-          select: { id: true, currentPositionId: true },
-        })
-      : Promise.resolve([]),
     // Training effectiveness (D+30) tasks — "the Primary Position
     // supervisor completes it" (TRN-04/TRN-07) — scoped to this employee's
     // own direct reports (one query) rather than N one-off
@@ -195,19 +196,6 @@ export async function getPendingApprovals(session: Session) {
   // GA Admin decides all three GA Operations approval points directly now —
   // no separate configurable approver Position to resolve holders for.
   const isGaAdminUser = isGaAdmin(session);
-
-  const absenceHolderIdsByPosition = new Map<string, string[]>();
-  for (const h of absencePositionHolders) {
-    const list = absenceHolderIdsByPosition.get(h.currentPositionId!) ?? [];
-    list.push(h.id);
-    absenceHolderIdsByPosition.set(h.currentPositionId!, list);
-  }
-  const pendingAbsenceFirstApprover = submittedAbsenceRequests.filter((r) =>
-    canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, absenceHolderIdsByPosition.get(r.firstApproverPositionId!) ?? [])
-  );
-  const pendingAbsenceSecondApprover = pendingSecondApproverAbsenceRequests.filter((r) =>
-    canDecideAbsenceRequestAsSecondApprover(session.user.employeeId, absenceHolderIdsByPosition.get(r.secondApproverPositionId!) ?? [])
-  );
 
   // Stage 3 — depends on Stage 2's approver flag.
   const [pendingGaNewAssetNeeds, pendingGaLossReviews, pendingGaDisposals] = await Promise.all([

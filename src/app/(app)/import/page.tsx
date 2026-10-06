@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -45,7 +46,7 @@ const CONSUMABLE_DATASETS: DatasetKey[] = ["consumable-items", "consumable-stock
 export default async function ImportPage() {
   const session = await requireSession();
   if (!canAccessImport(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const visibleDatasets = DATASET_ORDER.filter((key) => {

@@ -114,7 +114,3 @@ export function formatRangeLabel(from: Date, to: Date): string {
   if (from.getUTCMonth() === to.getUTCMonth()) return `${from.getUTCDate()} – ${dayMonth(to)}`;
   return `${dayMonth(from)} – ${dayMonth(to)}`;
 }
-
-export function rangeParams(range: { from: Date; to: Date }): { from: string; to: string } {
-  return { from: formatCutoffParam(range.from), to: formatCutoffParam(range.to) };
-}

@@ -32,6 +32,7 @@ import {
   LossReviewButtons as GaLossReviewButtons,
 } from "../ga-requests/[id]/decision-forms";
 import { DisposalDecisionButtons } from "../disposal-cases/[id]/decision-forms";
+import { Suspense } from "react";
 import { GaHome } from "./ga-home";
 import type { TodoKind } from "@/lib/ga-home";
 
@@ -302,6 +303,263 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
   );
 }
 
+// Each part of the Beranda loads on its own, so the page shows up at once and
+// the slow parts fill in as their data arrives (they also query in parallel,
+// instead of one after the other as before).
+function SectionSkeleton({ rows = 2 }: { rows?: number }) {
+  return (
+    <div className="animate-pulse rounded-xl border border-slate-200 bg-white p-6" aria-busy="true">
+      <div className="h-4 w-1/4 rounded bg-slate-200" />
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="h-10 rounded-lg bg-slate-100" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+async function PositionCards({ employeeId }: { employeeId: string }) {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { currentPosition: { select: { job: { select: { jobTitle: true } }, orgUnit: { select: { unitName: true } } } } },
+  });
+  if (!employee?.currentPosition) return null;
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+      <StatCard label="Jabatan Saat Ini" value={employee.currentPosition.job.jobTitle} />
+      <StatCard label="Unit Organisasi" value={employee.currentPosition.orgUnit.unitName} />
+    </div>
+  );
+}
+
+async function ApprovalsLoader({ session }: { session: Awaited<ReturnType<typeof requireSession>> }) {
+  const pending = await getPendingApprovals(session);
+  return <ApprovalsSection session={session} pending={pending} />;
+}
+
+async function StatCards({ session }: { session: Awaited<ReturnType<typeof requireSession>> }) {
+  const isHrAdminUser = isHrAdmin(session);
+  const isTrainingAdminUser = isTrainingAdmin(session);
+  const isGaAdminUser = isGaAdmin(session);
+  // Admin GA has its own status board (GaHome); the generic HR number cards
+  // (employees, filled positions) mean nothing for a GA-only account. An
+  // account that is also HR/Training Admin keeps its own cards.
+  if (isGaAdminUser && !isHrAdminUser && !isTrainingAdminUser) return null;
+
+  const [employeeCount, hrCounts, filledPositions] = await Promise.all([
+    canListEmployees(session) ? prisma.employee.count({ where: { activeFlag: true } }) : Promise.resolve(null),
+    isHrAdminUser
+      ? Promise.all([
+          prisma.position.count({ where: { positionStatus: "VACANT" } }),
+          prisma.importBatch.count(),
+          prisma.auditLog.count(),
+        ])
+      : Promise.resolve(null),
+    isTrainingAdminUser || isGaAdminUser ? prisma.position.count({ where: { positionStatus: "FILLED" } }) : Promise.resolve(null),
+  ]);
+
+  const cards: { label: string; value: string | number }[] = [];
+  if (employeeCount !== null) cards.push({ label: "Total Karyawan Aktif", value: employeeCount });
+  if (hrCounts) {
+    cards.push({ label: "Posisi Kosong", value: hrCounts[0] });
+    cards.push({ label: "Riwayat Impor", value: hrCounts[1] });
+    cards.push({ label: "Total Peristiwa Audit", value: hrCounts[2] });
+  }
+  if (filledPositions !== null) cards.push({ label: "Posisi Terisi", value: filledPositions });
+
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+      {cards.map((c) => (
+        <StatCard key={c.label} label={c.label} value={c.value} />
+      ))}
+      {cards.length === 0 && <p className="col-span-full text-sm text-slate-400">Tidak ada data ringkasan untuk peran ini.</p>}
+    </div>
+  );
+}
+
+async function ExpiringContracts({
+  orgUnitId,
+  urgency,
+  sortBy,
+  sortDir,
+}: {
+  orgUnitId: string | undefined;
+  urgency: string | undefined;
+  sortBy: SortKey;
+  sortDir: "asc" | "desc";
+}) {
+  // computeExpiryUrgency only ever flags a contract up to 90 days out (or
+  // already expired), so anything further away is not even read.
+  const horizon = new Date(new Date().getTime() + 91 * 24 * 60 * 60 * 1000);
+  const [orgUnits, contracts] = await Promise.all([
+    // DEPARTMENT-only — feeds the "Departemen" filter below, which must not
+    // list Section/Group/Team-tier units (ORG-01 depth work).
+    prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" }, select: { id: true, unitName: true } }),
+    prisma.contract.findMany({
+      where: {
+        status: "ACTIVE",
+        endDate: { not: null, lte: horizon },
+        ...(orgUnitId ? { employee: { currentPosition: { orgUnitId } } } : {}),
+      },
+      select: {
+        id: true,
+        contractNumber: true,
+        status: true,
+        endDate: true,
+        employee: {
+          select: { fullLegalName: true, currentPosition: { select: { orgUnitId: true, orgUnit: { select: { unitName: true } } } } },
+        },
+        renewalCaseAsCurrentContract: { select: { id: true } },
+      },
+    }),
+  ]);
+
+  const expiringContracts: ExpiringContractRow[] = contracts
+    .map((c) => ({
+      id: c.id,
+      contractNumber: c.contractNumber,
+      employeeName: c.employee.fullLegalName,
+      orgUnitId: c.employee.currentPosition?.orgUnitId ?? null,
+      orgUnitName: c.employee.currentPosition?.orgUnit.unitName ?? "—",
+      endDate: c.endDate!,
+      urgency: computeExpiryUrgency(c.status, c.endDate),
+      hasRenewalCase: !!c.renewalCaseAsCurrentContract,
+    }))
+    .filter((row) => row.urgency !== "NONE")
+    .filter((row) => {
+      if (!urgency) return true;
+      if (urgency === "DUE_30") return row.urgency === "DUE_30" || row.urgency === "DUE_7" || row.urgency === "EXPIRED";
+      if (urgency === "DUE_60") return URGENCY_RANK[row.urgency] <= URGENCY_RANK.DUE_60;
+      if (urgency === "DUE_90") return URGENCY_RANK[row.urgency] <= URGENCY_RANK.DUE_90;
+      return true;
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "employeeName") cmp = a.employeeName.localeCompare(b.employeeName);
+      else if (sortBy === "urgency") cmp = URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency];
+      else cmp = a.endDate.getTime() - b.endDate.getTime();
+      return sortDir === "desc" ? -cmp : cmp;
+    });
+
+  return (
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <p className="text-sm font-medium text-slate-900">{t("dashboard.expiringContractsTitle")}</p>
+
+        <form className="mt-3 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">{t("employee.department")}</label>
+            <select
+              name="orgUnitId"
+              defaultValue={orgUnitId ?? ""}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="">{t("common.allOption")}</option>
+              {orgUnits.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.unitName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">{t("dashboard.urgencyFilterLabel")}</label>
+            <select
+              name="urgency"
+              defaultValue={urgency ?? ""}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="">{t("dashboard.urgencyFilterAny")}</option>
+              <option value="DUE_30">{t("dashboard.urgencyFilterThisMonth")}</option>
+              <option value="DUE_60">{t("dashboard.urgencyFilterDue60")}</option>
+              <option value="DUE_90">{t("dashboard.urgencyFilterDue90")}</option>
+            </select>
+          </div>
+          <input type="hidden" name="sortBy" value={sortBy} />
+          <input type="hidden" name="sortDir" value={sortDir} />
+          <button
+            type="submit"
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark"
+          >
+            {t("common.applyFilter")}
+          </button>
+          {(orgUnitId || urgency) && (
+            <Link href="/dashboard" className="px-2 py-2 text-sm text-slate-500 hover:text-slate-700">
+              {t("common.resetFilter")}
+            </Link>
+          )}
+        </form>
+
+        {expiringContracts.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-400">{t("dashboard.expiringContractsEmpty")}</p>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">
+                    <Link href={sortLink({ orgUnitId, urgency }, "employeeName", sortBy, sortDir)} className="hover:underline">
+                      {t("dashboard.sortEmployeeName")} {sortBy === "employeeName" && (sortDir === "asc" ? "↑" : "↓")}
+                    </Link>
+                  </th>
+                  <th className="px-4 py-3 font-medium">{t("employee.department")}</th>
+                  <th className="px-4 py-3 font-medium">{t("contract.contractNumber")}</th>
+                  <th className="px-4 py-3 font-medium">
+                    <Link href={sortLink({ orgUnitId, urgency }, "endDate", sortBy, sortDir)} className="hover:underline">
+                      {t("dashboard.sortEndDate")} {sortBy === "endDate" && (sortDir === "asc" ? "↑" : "↓")}
+                    </Link>
+                  </th>
+                  <th className="px-4 py-3 font-medium">
+                    <Link href={sortLink({ orgUnitId, urgency }, "urgency", sortBy, sortDir)} className="hover:underline">
+                      {t("dashboard.sortUrgency")} {sortBy === "urgency" && (sortDir === "asc" ? "↑" : "↓")}
+                    </Link>
+                  </th>
+                  <th className="px-4 py-3 font-medium">{t("dashboard.evaluationColumn")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expiringContracts.map((row) => (
+                  <tr key={row.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3 text-slate-600">{row.employeeName}</td>
+                    <td className="px-4 py-3 text-slate-600">{row.orgUnitName}</td>
+                    <td className="px-4 py-3">
+                      <Link href={`/contracts/${row.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                        {row.contractNumber}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium" }).format(row.endDate)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-md px-2 py-1 text-xs font-medium ${
+                          row.urgency === "EXPIRED" || row.urgency === "DUE_7"
+                            ? "bg-rose-50 text-rose-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {t(`expiryUrgency.${row.urgency}`)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.hasRenewalCase ? (
+                        <Link href={`/contracts/${row.id}`} className="text-xs text-indigo-600 hover:underline">
+                          {t("dashboard.viewRenewalCase")}
+                        </Link>
+                      ) : (
+                        <TriggerEvaluationButton contractId={row.id} />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+  );
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -314,12 +572,8 @@ export default async function DashboardPage({
   const sortBy: SortKey = sortByParam === "employeeName" || sortByParam === "urgency" ? sortByParam : "endDate";
   const sortDir: "asc" | "desc" = sortDirParam === "desc" ? "desc" : "asc";
 
-  // Simple Karyawan home: decided from cheap, already-necessary checks only.
-  // Performance: this used to call the FULL getPendingApprovals (~20 DB
-  // queries) just to read 2 booleans off it, then throw the rest away — and
-  // then call it AGAIN below for the real data. Now it only runs the 2
-  // cheap lookups those booleans actually depend on, and getPendingApprovals
-  // itself is called at most once per request.
+  // Simple Karyawan home: decided from cheap, already-necessary checks only
+  // (everything else loads inside its own Suspense section below).
   const isManagerNow = await isManagerOfAnyPosition(session.user.employeeId);
   const isHrAdminUser = isHrAdmin(session);
   const isTrainingAdminUser = isTrainingAdmin(session);
@@ -338,98 +592,6 @@ export default async function DashboardPage({
     }
   }
 
-  const pending = await getPendingApprovals(session);
-
-  const cards: { label: string; value: string | number }[] = [];
-
-  // Performance note: every section below used to be a separate `await`,
-  // run one after another even though none of them depend on each other's
-  // results — on a serverless+pooled-Postgres deploy each round trip adds
-  // real latency, so a page with 6+ independent query groups paid for all
-  // of them back-to-back. Fired together in one Promise.all instead; total
-  // wait is now bounded by the single slowest query, not the sum of all of
-  // them. Card-push order below still matches the original section order.
-  const [employeeCount, hrAdminData, filledPositions, employee] = await Promise.all([
-    canListEmployees(session) ? prisma.employee.count({ where: { activeFlag: true } }) : Promise.resolve(null),
-    isHrAdminUser
-      ? Promise.all([
-          prisma.position.count({ where: { positionStatus: "VACANT" } }),
-          prisma.importBatch.count(),
-          prisma.auditLog.count(),
-          // DEPARTMENT-only — feeds the "Departemen" filter on the
-          // expiring-contracts table below, which must not list Section/
-          // Group/Team-tier units (ORG-01 depth work).
-          prisma.orgUnit.findMany({ where: { unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
-          prisma.contract.findMany({
-            where: {
-              status: "ACTIVE",
-              endDate: { not: null },
-              ...(orgUnitId ? { employee: { currentPosition: { orgUnitId } } } : {}),
-            },
-            include: {
-              employee: { include: { currentPosition: { include: { orgUnit: true } } } },
-              renewalCaseAsCurrentContract: { select: { id: true } },
-            },
-          }),
-        ])
-      : Promise.resolve(null),
-    isTrainingAdminUser || isGaAdminUser ? prisma.position.count({ where: { positionStatus: "FILLED" } }) : Promise.resolve(null),
-    session.user.employeeId
-      ? prisma.employee.findUnique({
-          where: { id: session.user.employeeId },
-          include: { currentPosition: { include: { job: true, orgUnit: true } } },
-        })
-      : Promise.resolve(null),
-  ]);
-
-  if (employeeCount !== null) {
-    cards.push({ label: "Total Karyawan Aktif", value: employeeCount });
-  }
-  let expiringContracts: ExpiringContractRow[] = [];
-  let orgUnits: { id: string; unitName: string }[] = [];
-  if (hrAdminData) {
-    const [vacantPositions, importBatches, auditEvents, orgUnitsResult, contracts] = hrAdminData;
-    cards.push({ label: "Posisi Kosong", value: vacantPositions });
-    cards.push({ label: "Riwayat Impor", value: importBatches });
-    cards.push({ label: "Total Peristiwa Audit", value: auditEvents });
-
-    orgUnits = orgUnitsResult;
-
-    expiringContracts = contracts
-      .map((c) => ({
-        id: c.id,
-        contractNumber: c.contractNumber,
-        employeeName: c.employee.fullLegalName,
-        orgUnitId: c.employee.currentPosition?.orgUnitId ?? null,
-        orgUnitName: c.employee.currentPosition?.orgUnit.unitName ?? "—",
-        endDate: c.endDate!,
-        urgency: computeExpiryUrgency(c.status, c.endDate),
-        hasRenewalCase: !!c.renewalCaseAsCurrentContract,
-      }))
-      .filter((row) => row.urgency !== "NONE")
-      .filter((row) => {
-        if (!urgency) return true;
-        if (urgency === "DUE_30") return row.urgency === "DUE_30" || row.urgency === "DUE_7" || row.urgency === "EXPIRED";
-        if (urgency === "DUE_60") return URGENCY_RANK[row.urgency] <= URGENCY_RANK.DUE_60;
-        if (urgency === "DUE_90") return URGENCY_RANK[row.urgency] <= URGENCY_RANK.DUE_90;
-        return true;
-      })
-      .sort((a, b) => {
-        let cmp = 0;
-        if (sortBy === "employeeName") cmp = a.employeeName.localeCompare(b.employeeName);
-        else if (sortBy === "urgency") cmp = URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency];
-        else cmp = a.endDate.getTime() - b.endDate.getTime();
-        return sortDir === "desc" ? -cmp : cmp;
-      });
-  }
-  if (filledPositions !== null) {
-    cards.push({ label: "Posisi Terisi", value: filledPositions });
-  }
-  // Admin GA has its own status board below (GaHome); the generic HR number
-  // cards (employees, filled positions) mean nothing for a GA-only account.
-  // An account that is also HR/Training Admin keeps its own cards.
-  const gaOnly = isGaAdminUser && !isHrAdminUser && !isTrainingAdminUser;
-  if (gaOnly) cards.length = 0;
   return (
     <div className="space-y-6">
       <div>
@@ -439,145 +601,36 @@ export default async function DashboardPage({
         <p className="mt-1 text-sm text-slate-500">Peran: {roleLabels}</p>
       </div>
 
-      {employee?.currentPosition && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <StatCard label="Jabatan Saat Ini" value={employee.currentPosition.job.jobTitle} />
-          <StatCard label="Unit Organisasi" value={employee.currentPosition.orgUnit.unitName} />
-        </div>
+      {session.user.employeeId && (
+        <Suspense fallback={null}>
+          <PositionCards employeeId={session.user.employeeId} />
+        </Suspense>
       )}
 
-      {session.user.employeeId && <AttendanceCheckSection employeeId={session.user.employeeId} />}
-
-      <ApprovalsSection session={session} pending={pending} />
-
-      {isGaAdminUser && <GaHome filter={gaFilter} />}
-
-      {(cards.length > 0 || !isGaAdminUser) && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          {cards.map((c) => (
-            <StatCard key={c.label} label={c.label} value={c.value} />
-          ))}
-          {cards.length === 0 && (
-            <p className="col-span-full text-sm text-slate-400">Tidak ada data ringkasan untuk peran ini.</p>
-          )}
-        </div>
+      {session.user.employeeId && (
+        <Suspense fallback={<SectionSkeleton rows={1} />}>
+          <AttendanceCheckSection employeeId={session.user.employeeId} />
+        </Suspense>
       )}
+
+      <Suspense fallback={<SectionSkeleton />}>
+        <ApprovalsLoader session={session} />
+      </Suspense>
+
+      {isGaAdminUser && (
+        <Suspense fallback={<SectionSkeleton rows={4} />}>
+          <GaHome filter={gaFilter} />
+        </Suspense>
+      )}
+
+      <Suspense fallback={<SectionSkeleton rows={1} />}>
+        <StatCards session={session} />
+      </Suspense>
 
       {isHrAdminUser && (
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <p className="text-sm font-medium text-slate-900">{t("dashboard.expiringContractsTitle")}</p>
-
-          <form className="mt-3 flex flex-wrap items-end gap-3">
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">{t("employee.department")}</label>
-              <select
-                name="orgUnitId"
-                defaultValue={orgUnitId ?? ""}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              >
-                <option value="">{t("common.allOption")}</option>
-                {orgUnits.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.unitName}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">{t("dashboard.urgencyFilterLabel")}</label>
-              <select
-                name="urgency"
-                defaultValue={urgency ?? ""}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              >
-                <option value="">{t("dashboard.urgencyFilterAny")}</option>
-                <option value="DUE_30">{t("dashboard.urgencyFilterThisMonth")}</option>
-                <option value="DUE_60">{t("dashboard.urgencyFilterDue60")}</option>
-                <option value="DUE_90">{t("dashboard.urgencyFilterDue90")}</option>
-              </select>
-            </div>
-            <input type="hidden" name="sortBy" value={sortBy} />
-            <input type="hidden" name="sortDir" value={sortDir} />
-            <button
-              type="submit"
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark"
-            >
-              {t("common.applyFilter")}
-            </button>
-            {(orgUnitId || urgency) && (
-              <Link href="/dashboard" className="px-2 py-2 text-sm text-slate-500 hover:text-slate-700">
-                {t("common.resetFilter")}
-              </Link>
-            )}
-          </form>
-
-          {expiringContracts.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">{t("dashboard.expiringContractsEmpty")}</p>
-          ) : (
-            <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">
-                      <Link href={sortLink({ orgUnitId, urgency }, "employeeName", sortBy, sortDir)} className="hover:underline">
-                        {t("dashboard.sortEmployeeName")} {sortBy === "employeeName" && (sortDir === "asc" ? "↑" : "↓")}
-                      </Link>
-                    </th>
-                    <th className="px-4 py-3 font-medium">{t("employee.department")}</th>
-                    <th className="px-4 py-3 font-medium">{t("contract.contractNumber")}</th>
-                    <th className="px-4 py-3 font-medium">
-                      <Link href={sortLink({ orgUnitId, urgency }, "endDate", sortBy, sortDir)} className="hover:underline">
-                        {t("dashboard.sortEndDate")} {sortBy === "endDate" && (sortDir === "asc" ? "↑" : "↓")}
-                      </Link>
-                    </th>
-                    <th className="px-4 py-3 font-medium">
-                      <Link href={sortLink({ orgUnitId, urgency }, "urgency", sortBy, sortDir)} className="hover:underline">
-                        {t("dashboard.sortUrgency")} {sortBy === "urgency" && (sortDir === "asc" ? "↑" : "↓")}
-                      </Link>
-                    </th>
-                    <th className="px-4 py-3 font-medium">{t("dashboard.evaluationColumn")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expiringContracts.map((row) => (
-                    <tr key={row.id} className="border-t border-slate-100">
-                      <td className="px-4 py-3 text-slate-600">{row.employeeName}</td>
-                      <td className="px-4 py-3 text-slate-600">{row.orgUnitName}</td>
-                      <td className="px-4 py-3">
-                        <Link href={`/contracts/${row.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
-                          {row.contractNumber}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium" }).format(row.endDate)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-md px-2 py-1 text-xs font-medium ${
-                            row.urgency === "EXPIRED" || row.urgency === "DUE_7"
-                              ? "bg-rose-50 text-rose-700"
-                              : "bg-amber-50 text-amber-700"
-                          }`}
-                        >
-                          {t(`expiryUrgency.${row.urgency}`)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {row.hasRenewalCase ? (
-                          <Link href={`/contracts/${row.id}`} className="text-xs text-indigo-600 hover:underline">
-                            {t("dashboard.viewRenewalCase")}
-                          </Link>
-                        ) : (
-                          <TriggerEvaluationButton contractId={row.id} />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <Suspense fallback={<SectionSkeleton rows={3} />}>
+          <ExpiringContracts orgUnitId={orgUnitId} urgency={urgency} sortBy={sortBy} sortDir={sortDir} />
+        </Suspense>
       )}
     </div>
   );

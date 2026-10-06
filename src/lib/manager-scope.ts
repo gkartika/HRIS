@@ -1,4 +1,6 @@
+import { activeAssignmentWhere } from "@/lib/active-assignments";
 import { prisma } from "@/lib/db";
+import { getEmployeePositionInfo } from "@/lib/current-position";
 
 // LIF-04: "An authorized manager submits or recommends" a Movement Request
 // for their own direct report — not just anyone with an EMPLOYEE_LOGIN
@@ -11,10 +13,7 @@ export async function isDirectManagerOfEmployee(
   if (!managerEmployeeId) return false;
   if (managerEmployeeId === targetEmployeeId) return false;
 
-  const manager = await prisma.employee.findUnique({
-    where: { id: managerEmployeeId },
-    select: { currentPositionId: true },
-  });
+  const manager = await getEmployeePositionInfo(managerEmployeeId);
   if (!manager?.currentPositionId) return false;
 
   const target = await prisma.employee.findUnique({
@@ -36,10 +35,7 @@ export async function isDirectManagerOfEmployee(
 export async function getDirectReportEmployeeIds(managerEmployeeId: string | null | undefined): Promise<string[]> {
   if (!managerEmployeeId) return [];
 
-  const manager = await prisma.employee.findUnique({
-    where: { id: managerEmployeeId },
-    select: { currentPositionId: true },
-  });
+  const manager = await getEmployeePositionInfo(managerEmployeeId);
   if (!manager?.currentPositionId) return [];
 
   const reports = await prisma.employee.findMany({
@@ -58,10 +54,7 @@ export async function getDirectReportEmployeeIds(managerEmployeeId: string | nul
 // whose report just resigned shouldn't instantly lose "Tim Saya" visibility.
 export async function isManagerOfAnyPosition(employeeId: string | null | undefined): Promise<boolean> {
   if (!employeeId) return false;
-  const employee = await prisma.employee.findUnique({
-    where: { id: employeeId },
-    select: { currentPositionId: true },
-  });
+  const employee = await getEmployeePositionInfo(employeeId);
   if (!employee?.currentPositionId) return false;
   const directReport = await prisma.position.findFirst({
     where: { reportsToPositionId: employee.currentPositionId },
@@ -93,9 +86,7 @@ export async function getSupervisorCandidatesForPosition(
 
   return prisma.assignment.findMany({
     where: {
-      status: "ACTIVE",
-      effectiveFrom: { lte: asOf },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+      ...activeAssignmentWhere(asOf),
       positionId: position.reportsToPositionId,
     },
     select: { employeeId: true, positionId: true, assignmentType: true },

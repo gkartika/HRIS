@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/require-session";
 import { canManageConsumables } from "@/lib/permissions";
-import { t } from "@/lib/i18n/id";
+import { AccessDenied } from "@/components/access-denied";
 
 // Next renders a page in parallel with its layout and ships the page's data in
 // the response even when the layout shows "access denied" instead of the
@@ -13,5 +13,5 @@ import { t } from "@/lib/i18n/id";
 export async function consumablesAccessDenied(): Promise<React.ReactElement | null> {
   const session = await requireSession();
   if (canManageConsumables(session)) return null;
-  return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+  return <AccessDenied />;
 }

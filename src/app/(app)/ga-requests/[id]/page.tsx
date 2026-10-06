@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
@@ -11,7 +12,6 @@ import {
   canCancelGaRequestStatus,
 } from "@/lib/ga-operations";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { VerifyForm, ApproverDecisionButtons, ProcessForm, LossReviewButtons, CancelRequestForm } from "./decision-forms";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -55,7 +55,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
   if (!request) notFound();
 
   if (!canViewGaRequest(session, request.requesterEmployeeId)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const isGaAdminUser = canManageGaOperations(session);

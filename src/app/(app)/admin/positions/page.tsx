@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
@@ -15,7 +16,7 @@ export default async function PositionsPage({
 }) {
   const session = await requireSession();
   if (!canManageOrgStructure(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { q, orgUnitId, jobLevel, positionStatus, archived } = await searchParams;

@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { formatDateMedium } from "@/lib/format";
 import { pageParams } from "@/lib/pagination";
@@ -21,7 +22,7 @@ export default async function EvaluationListPage({
 }) {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
   const { status, purpose, page: pageRaw } = await searchParams;
 
@@ -30,14 +31,15 @@ export default async function EvaluationListPage({
   if (purpose) where.purpose = purpose as EvaluationPurpose;
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.evaluation.count({ where });
-  const evaluations = await prisma.evaluation.findMany({
+  const [total, evaluations] = await Promise.all([
+    prisma.evaluation.count({ where }),
+    prisma.evaluation.findMany({
       skip,
       take,
     where,
     include: { employee: true, p1Employee: true, p2Employee: true },
     orderBy: { createdAt: "desc" },
-  });
+  })]);
 
   const hasFilters = !!(status || purpose);
 

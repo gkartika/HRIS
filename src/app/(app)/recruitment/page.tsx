@@ -40,8 +40,8 @@ export default async function RecruitmentListPage({
   if (departmentId) where.departmentId = departmentId;
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.recruitmentRequest.count({ where });
-  const [requests, departments] = await Promise.all([
+  const [total, requests, departments] = await Promise.all([
+    prisma.recruitmentRequest.count({ where }),
     prisma.recruitmentRequest.findMany({
       skip,
       take,

@@ -7,19 +7,6 @@ export type ConsumableStatusValue = "AMAN" | "MENIPIS" | "HABIS";
 export type ConsumableCategoryValue = "APD" | "ATK";
 export type ConsumableTxTypeValue = "ISSUE" | "RECEIPT" | "ADJUSTMENT";
 
-export interface LedgerRow {
-  quantityDelta: number;
-  cancelledAt: Date | null;
-}
-
-export function computeStock(openingStock: number, ledger: LedgerRow[]): number {
-  let stock = openingStock;
-  for (const row of ledger) {
-    if (row.cancelledAt === null) stock += row.quantityDelta;
-  }
-  return stock;
-}
-
 // Habis at zero or below (an allowed over-take can push stock negative),
 // Menipis at or under the minimum, otherwise Aman.
 export function stockStatus(stock: number, minStock: number): ConsumableStatusValue {

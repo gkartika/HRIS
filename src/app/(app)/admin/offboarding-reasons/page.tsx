@@ -1,14 +1,14 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canManageExitClearanceQuestions } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { SettingsTabs } from "../settings-tabs";
 import { ReasonManager } from "./reason-manager";
 
 export default async function OffboardingReasonsPage() {
   const session = await requireSession();
   if (!canManageExitClearanceQuestions(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const reasons = await prisma.offboardingReasonOption.findMany({

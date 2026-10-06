@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { bucketMonthlyIssued, buildMonthlyReport, buildMonthlyReportSheet, monthKey, monthRange } from "./consumables-report";
+import {
+  bucketFromAggregates,
+  bucketMonthlyIssued,
+  buildMonthlyReport,
+  buildMonthlyReportFromSums,
+  buildMonthlyReportSheet,
+  monthKey,
+  monthRange,
+  type ReportLedgerRow,
+  type WithinSum,
+} from "./consumables-report";
 
 const wib = (y: number, m: number, d: number, hour = 12) => new Date(Date.UTC(y, m - 1, d, hour - 7));
 
@@ -63,6 +73,63 @@ describe("buildMonthlyReport", () => {
     const sheet = buildMonthlyReportSheet(buildMonthlyReport([item("a", 7)], [], range));
     expect(sheet[0][0]).toBe("No");
     expect(sheet[1]).toEqual([1, "A", "Item a", "APD", "pcs", 7, 0, 0, 0, 7]);
+  });
+});
+
+// The database-aggregated builders must give exactly the figures of the
+// row-by-row builders they replaced.
+describe("aggregate builders match the row builders", () => {
+  const range = monthRange("2026-10")!;
+  const ledger: ReportLedgerRow[] = [
+    { itemId: "a", type: "RECEIPT", quantityDelta: 100, occurredAt: wib(2026, 9, 5) },
+    { itemId: "a", type: "ISSUE", quantityDelta: -30, occurredAt: wib(2026, 9, 20) },
+    { itemId: "a", type: "ISSUE", quantityDelta: -4, occurredAt: wib(2026, 10, 2) },
+    { itemId: "a", type: "ISSUE", quantityDelta: -6, occurredAt: wib(2026, 10, 9) },
+    { itemId: "a", type: "RECEIPT", quantityDelta: 20, occurredAt: wib(2026, 10, 10) },
+    { itemId: "a", type: "ADJUSTMENT", quantityDelta: -5, occurredAt: wib(2026, 10, 28) },
+    { itemId: "a", type: "ISSUE", quantityDelta: -9, occurredAt: wib(2026, 11, 3) },
+    { itemId: "b", type: "ISSUE", quantityDelta: -2, occurredAt: wib(2026, 10, 1, 0) },
+    { itemId: "c", type: "RECEIPT", quantityDelta: 5, occurredAt: wib(2026, 8, 1) },
+  ];
+  const items = [item("a", 10), item("b", 4), item("c", 0), item("d", 0)];
+
+  function sums(rows: ReportLedgerRow[]) {
+    const before = new Map<string, number>();
+    const within = new Map<string, WithinSum>();
+    for (const r of rows) {
+      if (r.occurredAt < range.start) before.set(r.itemId, (before.get(r.itemId) ?? 0) + r.quantityDelta);
+      else if (r.occurredAt < range.end) {
+        const key = r.itemId + r.type;
+        const w = within.get(key) ?? { itemId: r.itemId, type: r.type, sum: 0 };
+        w.sum += r.quantityDelta;
+        within.set(key, w);
+      }
+    }
+    return { before, within: [...within.values()] };
+  }
+
+  it("monthly report", () => {
+    const { before, within } = sums(ledger);
+    expect(buildMonthlyReportFromSums(items, before, within)).toEqual(buildMonthlyReport(items, ledger, range));
+  });
+
+  it("monthly issued buckets", () => {
+    const now = wib(2026, 10, 15);
+    const rows = [
+      { occurredAt: wib(2026, 10, 2), quantityDelta: -4, category: "APD" },
+      { occurredAt: wib(2026, 10, 31, 23), quantityDelta: -6, category: "ATK" },
+      { occurredAt: wib(2026, 9, 30, 23), quantityDelta: -3, category: "APD" },
+      { occurredAt: wib(2026, 5, 1), quantityDelta: -9, category: "ATK" },
+    ];
+    const agg = new Map<string, { key: string; category: string; units: number }>();
+    for (const r of rows) {
+      const key = monthKey(r.occurredAt);
+      const id = key + r.category;
+      const a = agg.get(id) ?? { key, category: r.category, units: 0 };
+      a.units += -r.quantityDelta;
+      agg.set(id, a);
+    }
+    expect(bucketFromAggregates([...agg.values()], 6, now)).toEqual(bucketMonthlyIssued(rows, 6, now));
   });
 });
 

@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
@@ -20,7 +21,7 @@ export default async function OnboardingListPage({
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   if (!canViewOnboarding(session, hrManagerPositions.map((p) => p.positionId))) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { status, orgUnitId, page: pageRaw } = await searchParams;
@@ -31,8 +32,8 @@ export default async function OnboardingListPage({
   }
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.onboardingCase.count({ where });
-  const [cases, orgUnits] = await Promise.all([
+  const [total, cases, orgUnits] = await Promise.all([
+    prisma.onboardingCase.count({ where }),
     prisma.onboardingCase.findMany({
       skip,
       take,

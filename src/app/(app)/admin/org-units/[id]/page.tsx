@@ -1,8 +1,8 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { EditOrgUnitForm } from "./edit-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -10,7 +10,7 @@ export default async function EditOrgUnitPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const session = await requireSession();
   if (!canManageOrgStructure(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [unit, allUnits] = await Promise.all([

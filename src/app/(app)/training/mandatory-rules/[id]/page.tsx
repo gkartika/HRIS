@@ -1,10 +1,10 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { canManageMandatoryTrainingRule } from "@/lib/permissions";
 import { resolveMandatoryTrainingAudience } from "@/lib/mandatory-training";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { ApplyRuleButton } from "../apply-rule-button";
 
 const TARGET_LABEL: Record<string, string> = {
@@ -24,7 +24,7 @@ export default async function MandatoryTrainingRulePreviewPage({ params }: { par
   const { id } = await params;
   const session = await requireSession();
   if (!canManageMandatoryTrainingRule(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const rule = await prisma.mandatoryTrainingRule.findUnique({

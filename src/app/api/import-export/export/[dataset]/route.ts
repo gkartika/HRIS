@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { getActiveSession } from "@/lib/require-session";
@@ -51,11 +52,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dat
     reason: `Exported ${rows.length} row(s)`,
   });
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="export-${dataset}-${new Date().toISOString().slice(0, 10)}.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, `export-${dataset}-${new Date().toISOString().slice(0, 10)}.csv`);
 }

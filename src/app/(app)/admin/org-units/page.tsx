@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
@@ -9,7 +10,7 @@ import { CreateOrgUnitForm } from "./create-form";
 export default async function OrgUnitsPage() {
   const session = await requireSession();
   if (!canManageOrgStructure(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const units = await prisma.orgUnit.findMany({

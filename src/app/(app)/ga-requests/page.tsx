@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
@@ -63,7 +64,7 @@ export default async function GaRequestsPage({
   const isGaAdminUser = canManageGaOperations(session);
 
   if (!isGaAdminUser && !canSubmitGaRequest(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { requestType, status, page: pageRaw } = await searchParams;
@@ -76,8 +77,9 @@ export default async function GaRequestsPage({
   if (status) where.status = status as GaRequestStatus;
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.gaRequest.count({ where });
-  const requests = await prisma.gaRequest.findMany({
+  const [total, requests] = await Promise.all([
+    prisma.gaRequest.count({ where }),
+    prisma.gaRequest.findMany({
       skip,
       take,
     where,
@@ -86,7 +88,7 @@ export default async function GaRequestsPage({
       asset: { select: { assetName: true, assetCode: true } },
     },
     orderBy: { submittedAt: "desc" },
-  });
+  })]);
 
   const hasFilters = !!(requestType || status);
 

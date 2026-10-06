@@ -121,12 +121,19 @@ export async function openCompetencyCycle(
   });
 
   let createdCount = 0;
+  // Employees sharing a Position share the same P1, so resolve each distinct
+  // Position once instead of once per employee (same asOf for the whole run).
+  const evaluatorsByPosition = new Map<string, Awaited<ReturnType<typeof resolveCompetencyEvaluators>>>();
   for (const employee of employees) {
     const primaryAssignment = employee.assignments[0];
     if (!primaryAssignment) continue;
     const position = primaryAssignment.position;
 
-    const evaluators = await resolveCompetencyEvaluators(position.id, cutoffDate);
+    let evaluators = evaluatorsByPosition.get(position.id);
+    if (!evaluators) {
+      evaluators = await resolveCompetencyEvaluators(position.id, cutoffDate);
+      evaluatorsByPosition.set(position.id, evaluators);
+    }
     const jobRequirements = requirementsByJobId.get(position.jobId) ?? [];
 
     await prisma.competencyAssessment.create({

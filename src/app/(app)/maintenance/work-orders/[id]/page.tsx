@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
@@ -5,7 +6,6 @@ import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
 import { canExecuteMaintenanceWorkOrder } from "@/lib/ga-operations";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { ExecuteMaintenanceForm } from "./execute-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -13,7 +13,7 @@ export default async function MaintenanceWorkOrderDetailPage({ params }: { param
   const { id } = await params;
   const session = await requireSession();
   if (!canManageGaOperations(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const workOrder = await prisma.maintenanceWorkOrder.findUnique({

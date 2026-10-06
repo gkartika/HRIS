@@ -35,10 +35,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   //   same as Perubahan Posisi.
   // - COM-10/COM-15: Director gap-report/P1 authority, resolved live from
   //   the org root Position's active Assignment.
-  const [hrManagerPositions, level3DepartmentIds, myAssignments] = await Promise.all([
+  const [hrManagerPositions, level3DepartmentIds, myAssignments, ownOffboardingCase] = await Promise.all([
     getActiveHrManagerPositions(session.user.employeeId),
     getLevel3DepartmentIds(session.user.employeeId),
     getActiveAssignmentsOf(session.user.employeeId),
+    // A leaving employee only gets the Offboarding entry once HR opened a case
+    // for them — read in parallel with the rest instead of after them.
+    session.user.employeeId && !isHrAdmin(session)
+      ? prisma.offboardingCase.findFirst({
+          where: { employeeId: session.user.employeeId, status: { not: "CANCELLED" } },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
   ]);
   const isHrManagerNow = hrManagerPositions.length > 0;
   const isLevel3Anywhere = level3DepartmentIds.length > 0;
@@ -109,14 +117,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // entry once HR has opened a case for them.
   if (isHrAdmin(session)) {
     buckets.rekrutmenMutasi.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: "UserMinus" });
-  } else if (session.user.employeeId) {
-    const ownCase = await prisma.offboardingCase.findFirst({
-      where: { employeeId: session.user.employeeId, status: { not: "CANCELLED" } },
-      select: { id: true },
-    });
-    if (ownCase) {
-      buckets.rekrutmenMutasi.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: "UserMinus" });
-    }
+  } else if (ownOffboardingCase) {
+    buckets.rekrutmenMutasi.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: "UserMinus" });
   }
   // New Shift Assignment module, per direct user request — HR Admin or any
   // active Level-3 (3A/3B) holder (same eligibility as Perubahan Posisi

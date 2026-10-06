@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
@@ -70,7 +71,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
   const isHrAdminUser = isHrAdmin(session);
 
   if (!isHrAdminUser && !isHrManagerNow && !isDeptHeadNow && !isOwnRequest) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   // Confidentiality (Perubahan Posisi refactor): HR attendance data,

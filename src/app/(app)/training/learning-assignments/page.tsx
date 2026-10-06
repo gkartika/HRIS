@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import type { Prisma } from "@/generated/prisma/client";
 import { pageParams } from "@/lib/pagination";
@@ -35,7 +36,7 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
   const directReportIds = canManage || isCompanyWideReporting ? [] : await getDirectReportEmployeeIds(session.user.employeeId);
 
   if (!canManage && !isCompanyWideReporting && directReportIds.length === 0) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
   const { status, q, page: pageRaw } = await searchParams;
 
@@ -53,8 +54,9 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
         }
       : {}),
   };
-  const total = await prisma.learningAssignment.count({ where });
-  const assignments = await prisma.learningAssignment.findMany({
+  const [total, assignments] = await Promise.all([
+    prisma.learningAssignment.count({ where }),
+    prisma.learningAssignment.findMany({
     skip,
     take,
     where,
@@ -74,7 +76,7 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
       quizAttempts: { select: { passed: true } },
     },
     orderBy: { assignedAt: "desc" },
-  });
+  })]);
 
   return (
     <div>

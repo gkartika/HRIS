@@ -1,9 +1,9 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { isTrainingAdmin, canOpenCompetencyCycle } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { CloseCycleButton } from "./close-cycle-button";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -11,7 +11,7 @@ export default async function CompetencyCycleDetailPage({ params }: { params: Pr
   const { id } = await params;
   const session = await requireSession();
   if (!isTrainingAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const cycle = await prisma.competencyAssessmentCycle.findUnique({ where: { id } });

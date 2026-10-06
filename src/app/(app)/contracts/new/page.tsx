@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { canManageContracts } from "@/lib/permissions";
@@ -13,7 +14,7 @@ export default async function NewContractPage({
   const { employeeId } = await searchParams;
   const session = await requireSession();
   if (!canManageContracts(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   if (employeeId) {

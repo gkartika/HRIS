@@ -48,8 +48,8 @@ export default async function OffboardingListPage({
   const where: Prisma.OffboardingCaseWhereInput = conditions.length > 0 ? { AND: conditions } : {};
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.offboardingCase.count({ where });
-  const [cases, orgUnits, reporters] = await Promise.all([
+  const [total, cases, orgUnits, reporters] = await Promise.all([
+    prisma.offboardingCase.count({ where }),
     prisma.offboardingCase.findMany({
       skip,
       take,

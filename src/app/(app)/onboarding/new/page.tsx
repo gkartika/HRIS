@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canCreateOnboardingCase } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -7,7 +8,7 @@ import { CreateOnboardingForm } from "./create-onboarding-form";
 export default async function NewOnboardingCasePage() {
   const session = await requireSession();
   if (!canCreateOnboardingCase(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   // Only employees without one yet — OnboardingCase.employeeId is @unique,

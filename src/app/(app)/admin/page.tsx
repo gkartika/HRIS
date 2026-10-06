@@ -1,13 +1,13 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
-import { t } from "@/lib/i18n/id";
 import { SETTINGS_GROUPS } from "./settings-groups";
 
 export default async function AdminHomePage() {
   const session = await requireSession();
   if (!canManageOrgStructure(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   return (

@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -10,7 +11,7 @@ export default async function EditEmployeePage({ params }: { params: Promise<{ i
   const session = await requireSession();
   const isSelf = session.user.employeeId === id;
   if (!isSelf && !isHrAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const isHr = isHrAdmin(session);

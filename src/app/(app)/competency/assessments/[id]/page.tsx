@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { computeCompetencyGap } from "@/lib/competency";
 import { requireSession } from "@/lib/require-session";
@@ -54,7 +55,7 @@ export default async function CompetencyAssessmentDetailPage({ params }: { param
     myDirectorPositionIds
   );
   if (!canView) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const isP1 = canScoreAsCompetencyP1(session.user.employeeId, assessment.p1EmployeeId);

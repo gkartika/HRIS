@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageAssets, canViewAssetMaster } from "@/lib/permissions";
@@ -9,7 +10,7 @@ import { ToggleAssetLocationForm } from "./toggle-form";
 export default async function AssetLocationsPage() {
   const session = await requireSession();
   if (!canViewAssetMaster(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const locations = await prisma.assetLocation.findMany({ orderBy: { locationName: "asc" } });

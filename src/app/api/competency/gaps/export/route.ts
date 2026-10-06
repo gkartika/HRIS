@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin } from "@/lib/permissions";
@@ -80,11 +81,5 @@ export async function GET(request: Request) {
     reason: `Exported ${rows.length} competency gap row(s) for cycle ${cycleId}`,
   });
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="competency-gaps-${cycleId}.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, `competency-gaps-${cycleId}.csv`);
 }

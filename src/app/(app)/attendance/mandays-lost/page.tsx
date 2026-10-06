@@ -1,7 +1,7 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
-import { t } from "@/lib/i18n/id";
 import { formatCutoffParam, parseCutoffParam } from "@/lib/absence-cutoff";
 import { resolvePeriod, previousPeriod, nextPeriod, parseReportView, type ReportViewType } from "@/lib/report-period";
 import { getMandaysLostReport, type BucketGranularity } from "@/lib/mandays-lost";
@@ -29,7 +29,7 @@ export default async function MandaysLostReportPage({
 }) {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { view: viewParam, ref } = await searchParams;

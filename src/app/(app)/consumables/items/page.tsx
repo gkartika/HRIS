@@ -12,7 +12,7 @@ export default async function ConsumableItemsPage() {
 
   // Which items already have ledger rows — their opening stock is then locked.
   const withTransactions = new Set(
-    (await prisma.consumableTransaction.groupBy({ by: ["itemId"] })).map((g) => g.itemId)
+    (await prisma.consumableItem.findMany({ where: { transactions: { some: {} } }, select: { id: true } })).map((i) => i.id)
   );
 
   return (

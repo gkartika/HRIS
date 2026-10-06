@@ -1,13 +1,13 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canSubmitGaRequest } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { NewGaRequestForm } from "./new-request-form";
 
 export default async function NewGaRequestPage() {
   const session = await requireSession();
   if (!canSubmitGaRequest(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [assets, locations] = await Promise.all([

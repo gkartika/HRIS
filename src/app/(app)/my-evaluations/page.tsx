@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { formatDateMedium } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
@@ -12,7 +13,7 @@ export default async function MyEvaluationsPage() {
   const session = await requireSession();
   const employeeId = session.user.employeeId;
   if (!employeeId) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const evaluations = await prisma.evaluation.findMany({

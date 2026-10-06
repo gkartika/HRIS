@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canCreateEmployee } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -8,7 +9,7 @@ import { peekNextEmployeeNumber } from "@/lib/employee-number-allocate";
 export default async function NewEmployeePage() {
   const session = await requireSession();
   if (!canCreateEmployee(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [educationLevels, ptkpStatuses, nextEmployeeNumber] = await Promise.all([

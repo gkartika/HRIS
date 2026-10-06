@@ -107,18 +107,26 @@ export async function getLevel3DepartmentIds(
  */
 export async function isLevel3ForEmployeeDepartment(
   requesterEmployeeId: string | null | undefined,
-  targetEmployeeId: string
+  targetEmployeeId: string,
+  // A caller that already loaded the target's Position passes its OrgUnit
+  // (null = no Position) so the employee is not read a second time.
+  knownTargetOrgUnitId?: string | null
 ): Promise<boolean> {
   const level3Positions = await getActiveLevel3Positions(requesterEmployeeId);
   if (level3Positions.length === 0) return false;
 
-  const target = await prisma.employee.findUnique({
-    where: { id: targetEmployeeId },
-    select: { currentPosition: { select: { orgUnitId: true } } },
-  });
-  if (!target?.currentPosition) return false;
-  const targetPosition = target.currentPosition;
-  const targetDepartmentId = await resolveDepartmentId(targetPosition.orgUnitId);
+  let targetOrgUnitId: string | null;
+  if (knownTargetOrgUnitId !== undefined) {
+    targetOrgUnitId = knownTargetOrgUnitId;
+  } else {
+    const target = await prisma.employee.findUnique({
+      where: { id: targetEmployeeId },
+      select: { currentPosition: { select: { orgUnitId: true } } },
+    });
+    targetOrgUnitId = target?.currentPosition?.orgUnitId ?? null;
+  }
+  if (!targetOrgUnitId) return false;
+  const targetDepartmentId = await resolveDepartmentId(targetOrgUnitId);
   if (!targetDepartmentId) return false;
 
   const ownDepartmentIds = await Promise.all(level3Positions.map((pos) => resolveDepartmentId(pos.orgUnitId)));

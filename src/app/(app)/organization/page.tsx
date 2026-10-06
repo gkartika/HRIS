@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -10,7 +11,7 @@ import { OrgChartClient } from "./org-chart-client";
 export default async function OrganizationPage() {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [initialData, orgUnits] = await Promise.all([

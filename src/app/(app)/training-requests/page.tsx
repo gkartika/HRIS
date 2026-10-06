@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
@@ -26,7 +27,7 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
 
   if (!session.user.employeeId && !isAdmin) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const where: Prisma.TrainingRequestWhereInput = {};
@@ -57,14 +58,15 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
   if (visibilityFilter.length > 0 || searchFilter.length > 0) where.AND = [...visibilityFilter, ...searchFilter];
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.trainingRequest.count({ where });
-  const requests = await prisma.trainingRequest.findMany({
+  const [total, requests] = await Promise.all([
+    prisma.trainingRequest.count({ where }),
+    prisma.trainingRequest.findMany({
       skip,
       take,
     where,
     include: { employee: { select: { fullLegalName: true, employeeNumber: true } }, course: { select: { title: true } } },
     orderBy: { createdAt: "desc" },
-  });
+  })]);
 
   return (
     <div>

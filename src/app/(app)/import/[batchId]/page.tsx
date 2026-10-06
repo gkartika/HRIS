@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { canAccessImport, canManageConsumables } from "@/lib/permissions";
@@ -14,7 +15,7 @@ export default async function ImportBatchPage({
   const { batchId } = await params;
   const session = await requireSession();
   if (!canAccessImport(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const batch = await prisma.importBatch.findUnique({
@@ -25,7 +26,7 @@ export default async function ImportBatchPage({
   // A consumables batch holds employee names and what each took — GA Admin
   // only, even for the other admins who may open the import hub.
   if (batch.importType.startsWith("consumable-") && !canManageConsumables(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const mod = isDatasetKey(batch.importType) ? DATASET_REGISTRY[batch.importType] : null;

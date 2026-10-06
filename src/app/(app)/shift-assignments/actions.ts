@@ -79,28 +79,20 @@ export async function saveShiftScheduleWeek(weekStartDateRaw: string, changes: S
   const toDefault = authorized.filter((c) => c.shiftType === null).map((c) => c.employeeId);
   const toSet = authorized.filter((c): c is { employeeId: string; shiftType: ShiftAssignmentType } => c.shiftType !== null);
 
+  // Replace the week's rows for every authorized employee in two statements
+  // (delete, then bulk insert) instead of one upsert per employee.
   await prisma.$transaction([
-    prisma.shiftAssignment.deleteMany({ where: { weekStartDate, employeeId: { in: toDefault } } }),
-    ...toSet.map((c) =>
-      prisma.shiftAssignment.upsert({
-        where: { employeeId_weekStartDate: { employeeId: c.employeeId, weekStartDate } },
-        create: {
-          employeeId: c.employeeId,
-          weekStartDate,
-          shiftType: c.shiftType,
-          isHrOverride,
-          submittedByAccountId: session.user.id,
-          submittedByPositionId,
-        },
-        update: {
-          shiftType: c.shiftType,
-          isHrOverride,
-          submittedAt: new Date(),
-          submittedByAccountId: session.user.id,
-          submittedByPositionId,
-        },
-      })
-    ),
+    prisma.shiftAssignment.deleteMany({ where: { weekStartDate, employeeId: { in: authorized.map((c) => c.employeeId) } } }),
+    prisma.shiftAssignment.createMany({
+      data: toSet.map((c) => ({
+        employeeId: c.employeeId,
+        weekStartDate,
+        shiftType: c.shiftType,
+        isHrOverride,
+        submittedByAccountId: session.user.id,
+        submittedByPositionId,
+      })),
+    }),
   ]);
 
   const tally = (type: ShiftAssignmentType) => toSet.filter((c) => c.shiftType === type).length;

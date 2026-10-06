@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -38,7 +39,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const session = await requireSession();
   if (!canViewAssetMaster(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const asset = await prisma.fixedAsset.findUnique({

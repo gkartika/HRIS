@@ -1,8 +1,8 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { resolveCutoffPeriod, previousCutoffPeriod, nextCutoffPeriod, formatCutoffParam, parseCutoffParam } from "@/lib/absence-cutoff";
 import { getUnresolvedDays, getAttendanceNotices } from "@/lib/attendance-reconciliation-queue";
 import { ClassifyRowForm } from "./classify-row-form";
@@ -24,7 +24,7 @@ export default async function AttendanceReconciliationPage({
 }) {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
 

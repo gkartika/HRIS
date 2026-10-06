@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canCreateManualEvaluation } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -10,7 +11,7 @@ import { CreateManualEvaluationForm } from "../decision-forms";
 export default async function NewManualEvaluationPage() {
   const session = await requireSession();
   if (!canCreateManualEvaluation(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const employees = await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } });

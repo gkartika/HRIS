@@ -1,10 +1,12 @@
 // Prisma-backed reads for the consumables ledger. Stock is always derived
 // here from openingStock + non-cancelled ledger rows; nothing is stored.
+import { activeAssignmentWhere } from "@/lib/active-assignments";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ConsumableCategory, ConsumableTxType } from "@/generated/prisma/enums";
 import { stockStatus, type ConsumableStatusValue } from "@/lib/consumables";
 import { resolveOrgUnitAncestorChain } from "@/lib/level3-scope";
+import { buildMonthlyReportFromSums, bucketFromAggregates, type MonthlyIssueBucket, type MonthlyReportRow } from "@/lib/consumables-report";
 
 type Db = Pick<typeof prisma, "consumableTransaction"> | Prisma.TransactionClient;
 
@@ -115,9 +117,7 @@ export async function getEmployeeOrgInfo(employeeIds: string[]): Promise<Map<str
   const assignments = await prisma.assignment.findMany({
     where: {
       employeeId: { in: employeeIds },
-      status: "ACTIVE",
-      effectiveFrom: { lte: now },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+      ...activeAssignmentWhere(now),
     },
     include: { position: { include: { job: true } } },
     orderBy: [{ primaryAssignmentFlag: "desc" }, { effectiveFrom: "asc" }],
@@ -129,6 +129,45 @@ export async function getEmployeeOrgInfo(employeeIds: string[]): Promise<Map<str
     map.set(a.employeeId, { departmentName: department?.unitName ?? null, positionTitle: a.position.job.jobTitle });
   }
   return map;
+}
+
+// Monthly report straight from the database: per-item sums before the month
+// and inside it, instead of reading every ledger row up to the month's end.
+export async function getMonthlyReportRows(range: { start: Date; end: Date }): Promise<MonthlyReportRow[]> {
+  const [items, beforeGroups, withinGroups] = await Promise.all([
+    prisma.consumableItem.findMany({
+      orderBy: [{ category: "asc" }, { itemCode: "asc" }],
+      select: { id: true, itemCode: true, itemName: true, category: true, unit: true, openingStock: true, minStock: true },
+    }),
+    prisma.consumableTransaction.groupBy({
+      by: ["itemId"],
+      where: { cancelledAt: null, occurredAt: { lt: range.start } },
+      _sum: { quantityDelta: true },
+    }),
+    prisma.consumableTransaction.groupBy({
+      by: ["itemId", "type"],
+      where: { cancelledAt: null, occurredAt: { gte: range.start, lt: range.end } },
+      _sum: { quantityDelta: true },
+    }),
+  ]);
+  return buildMonthlyReportFromSums(
+    items,
+    new Map(beforeGroups.map((g) => [g.itemId, g._sum.quantityDelta ?? 0])),
+    withinGroups.map((g) => ({ itemId: g.itemId, type: g.type, sum: g._sum.quantityDelta ?? 0 }))
+  );
+}
+
+// Units issued per WIB month and category since `windowStart`, grouped in SQL.
+export async function getMonthlyIssued(windowStart: Date, months: number, now: Date = new Date()): Promise<MonthlyIssueBucket[]> {
+  const rows = await prisma.$queryRaw<{ key: string; category: string; units: number }[]>`
+    SELECT to_char(date_trunc('month', (t."occurredAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta'), 'YYYY-MM') AS key,
+           i."category"::text AS category,
+           (-SUM(t."quantityDelta"))::int AS units
+    FROM "ConsumableTransaction" t
+    JOIN "ConsumableItem" i ON i."id" = t."itemId"
+    WHERE t."type" = 'ISSUE' AND t."cancelledAt" IS NULL AND t."occurredAt" >= ${windowStart}
+    GROUP BY 1, 2`;
+  return bucketFromAggregates(rows.map((r) => ({ key: r.key, category: r.category, units: Number(r.units) })), months, now);
 }
 
 // Live stock of a single item, read inside a transaction when the caller is

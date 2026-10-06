@@ -9,7 +9,11 @@ import {
   searchConsumableEmployees,
   type EmployeeSearchResult,
 } from "./take-actions";
-import { QrScanner } from "./qr-scanner";
+import dynamic from "next/dynamic";
+
+// The camera scanner (and its QR decoder) is only needed when someone taps
+// "Scan QR", so it is not part of the everyday take screen's first load.
+const QrScanner = dynamic(() => import("./qr-scanner").then((m) => m.QrScanner), { ssr: false });
 
 export interface TakeItem {
   id: string;

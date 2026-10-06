@@ -7,7 +7,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageConsumables } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { evaluateIssueWarnings, isPositiveInteger, issueDelta, parseCompanyDateInput } from "@/lib/consumables";
-import { getEmployeeOrgInfo, getItemStock, getLastIssueDates } from "@/lib/consumables-queries";
+import { getEmployeeOrgInfo, getLastIssueDates, getMovementTotals, stockFromTotals } from "@/lib/consumables-queries";
 
 export interface EmployeeSearchResult {
   id: string;
@@ -130,12 +130,15 @@ export async function recordConsumableIssue(input: IssueInput): Promise<IssueRes
     if (archived) return { error: `Barang ${archived.itemName} sudah diarsipkan.` } as const;
 
     // A department take is exempt from the replacement-period rule.
-    const lastIssues = recipient.employeeId ? await getLastIssueDates(db, recipient.employeeId, itemIds) : new Map<string, Date>();
+    const [lastIssues, totals] = await Promise.all([
+      recipient.employeeId ? getLastIssueDates(db, recipient.employeeId, itemIds) : Promise.resolve(new Map<string, Date>()),
+      getMovementTotals(db, itemIds),
+    ]);
 
     const evaluated = [];
     for (const item of items) {
       const quantity = merged.get(item.id)!;
-      const stock = await getItemStock(db, item.id, item.openingStock);
+      const stock = stockFromTotals(item.openingStock, totals.get(item.id));
       const warnings = evaluateIssueWarnings({
         stock,
         quantity,
@@ -151,28 +154,26 @@ export async function recordConsumableIssue(input: IssueInput): Promise<IssueRes
       return { error: "Ada peringatan stok atau periode ganti. Isi alasan untuk melanjutkan." } as const;
     }
 
-    for (const e of evaluated) {
-      await db.consumableTransaction.create({
-        data: {
-          itemId: e.item.id,
-          type: "ISSUE",
-          quantityDelta: issueDelta(e.quantity),
-          occurredAt,
-          recipientType: input.recipientType,
-          employeeId: recipient.employeeId,
-          orgUnitId: recipient.orgUnitId,
-          recipientNameSnapshot: recipient.nameSnapshot,
-          departmentNameSnapshot: recipient.departmentSnapshot,
-          purpose,
-          beforePeriod: e.warnings.beforePeriod,
-          exceededStock: e.warnings.exceedsStock,
-          warningReason: e.warnings.hasWarning ? warningReason : null,
-          batchId,
-          recordedByAccountId: session.user.id,
-          recordedByLabel,
-        },
-      });
-    }
+    await db.consumableTransaction.createMany({
+      data: evaluated.map((e) => ({
+        itemId: e.item.id,
+        type: "ISSUE" as const,
+        quantityDelta: issueDelta(e.quantity),
+        occurredAt,
+        recipientType: input.recipientType,
+        employeeId: recipient.employeeId,
+        orgUnitId: recipient.orgUnitId,
+        recipientNameSnapshot: recipient.nameSnapshot,
+        departmentNameSnapshot: recipient.departmentSnapshot,
+        purpose,
+        beforePeriod: e.warnings.beforePeriod,
+        exceededStock: e.warnings.exceedsStock,
+        warningReason: e.warnings.hasWarning ? warningReason : null,
+        batchId,
+        recordedByAccountId: session.user.id,
+        recordedByLabel,
+      })),
+    });
     return { count: evaluated.length } as const;
   });
 

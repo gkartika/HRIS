@@ -3,7 +3,6 @@ import {
   addMonthsCompany,
   adjustmentDelta,
   cancelWouldGoNegative,
-  computeStock,
   evaluateIssueWarnings,
   issueDelta,
   nextEligibleDate,
@@ -14,22 +13,6 @@ import {
 
 // 00:00 WIB of a company-local day, as an instant.
 const wib = (y: number, m: number, d: number, hour = 0) => new Date(Date.UTC(y, m - 1, d, hour - 7));
-
-describe("computeStock", () => {
-  it("sums opening stock and non-cancelled rows only", () => {
-    const stock = computeStock(10, [
-      { quantityDelta: 100, cancelledAt: null },
-      { quantityDelta: -30, cancelledAt: null },
-      { quantityDelta: -50, cancelledAt: new Date() },
-      { quantityDelta: -5, cancelledAt: null },
-    ]);
-    expect(stock).toBe(75);
-  });
-
-  it("can go negative after an allowed over-take", () => {
-    expect(computeStock(0, [{ quantityDelta: -4, cancelledAt: null }])).toBe(-4);
-  });
-});
 
 describe("stockStatus", () => {
   it("is HABIS at zero or below", () => {

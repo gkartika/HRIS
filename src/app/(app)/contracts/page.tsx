@@ -36,8 +36,8 @@ export default async function ContractListPage({
   if (orgUnitId) where.employee = { currentPosition: { orgUnitId } };
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.contract.count({ where });
-  const [contracts, orgUnits] = await Promise.all([
+  const [total, contracts, orgUnits] = await Promise.all([
+    prisma.contract.count({ where }),
     prisma.contract.findMany({
       skip,
       take,

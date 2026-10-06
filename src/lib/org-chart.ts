@@ -1,3 +1,4 @@
+import { activeAssignmentWhere } from "@/lib/active-assignments";
 import { prisma } from "@/lib/db";
 
 export interface OrgChartAssignment {
@@ -167,9 +168,7 @@ export async function getActiveDirectorCandidates(asOf: Date = new Date()): Prom
 
   return prisma.assignment.findMany({
     where: {
-      status: "ACTIVE",
-      effectiveFrom: { lte: asOf },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+      ...activeAssignmentWhere(asOf),
       positionId: { in: directorPositions.map((p) => p.id) },
     },
     select: { employeeId: true, positionId: true, assignmentType: true },

@@ -117,8 +117,8 @@ export default async function MovementListPage({
   const where: Prisma.MovementRequestWhereInput = conditions.length > 0 ? { AND: conditions } : {};
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.movementRequest.count({ where });
-  const [requests, departments, positions, employees, approverAccounts] = await Promise.all([
+  const [total, requests, departments, positions, employees, approverAccounts] = await Promise.all([
+    prisma.movementRequest.count({ where }),
     prisma.movementRequest.findMany({
       skip,
       take,

@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canAccessAuditLog } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -31,7 +32,7 @@ export default async function AuditLogPage({
 }) {
   const session = await requireSession();
   if (!canAccessAuditLog(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { action, datasetName, actor, from, to } = await searchParams;

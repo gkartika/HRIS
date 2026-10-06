@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/require-session";
 import { canViewAssetMaster } from "@/lib/permissions";
@@ -66,11 +67,5 @@ export async function GET(request: Request) {
     reason: `Exported ${custodies.length} asset custody record(s)`,
   });
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="asset-custodies.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, "asset-custodies.csv");
 }

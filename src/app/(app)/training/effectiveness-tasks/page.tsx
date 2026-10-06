@@ -1,9 +1,9 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { EFFECTIVENESS_DUE_WHERE } from "@/lib/training";
 import { canManageLearningAssignment, canRecordLearningEffectiveness } from "@/lib/permissions";
-import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
+import { getEmployeePositionInfo } from "@/lib/current-position";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { EffectivenessForm } from "./effectiveness-form";
 
 // TRN-04/TRN-07/TRN-15: "the Primary Position supervisor completes it" — a
@@ -18,7 +18,7 @@ export default async function EffectivenessTasksPage() {
   const canView = canManageLearningAssignment(session);
 
   if (!canView && !session.user.employeeId) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const candidates = await prisma.learningAssignment.findMany({
@@ -30,12 +30,28 @@ export default async function EffectivenessTasksPage() {
     orderBy: { effectivenessDueDate: "asc" },
   });
 
-  const tasksWithAuthority = await Promise.all(
-    candidates.map(async (c) => {
-      const isSupervisor = await isDirectManagerOfEmployee(session.user.employeeId, c.employeeId);
-      return { task: c, canSubmit: canRecordLearningEffectiveness(session, isSupervisor), isSupervisor };
-    })
+  // One query for everyone whose position reports to mine, instead of one
+  // supervisor check per task. Same rule as isDirectManagerOfEmployee: not
+  // myself, and the learner's position reports to my current position.
+  const myEmployeeId = session.user.employeeId;
+  const myPosition = myEmployeeId ? await getEmployeePositionInfo(myEmployeeId) : null;
+  const reportIds = new Set<string>(
+    myPosition?.currentPositionId
+      ? (
+          await prisma.employee.findMany({
+            where: {
+              id: { in: [...new Set(candidates.map((c) => c.employeeId))] },
+              currentPosition: { reportsToPositionId: myPosition.currentPositionId },
+            },
+            select: { id: true },
+          })
+        ).map((e) => e.id)
+      : []
   );
+  const tasksWithAuthority = candidates.map((c) => {
+    const isSupervisor = c.employeeId !== myEmployeeId && reportIds.has(c.employeeId);
+    return { task: c, canSubmit: canRecordLearningEffectiveness(session, isSupervisor), isSupervisor };
+  });
   const tasks = canView ? tasksWithAuthority : tasksWithAuthority.filter((t) => t.isSupervisor);
 
   return (

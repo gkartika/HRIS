@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
@@ -39,11 +40,5 @@ export async function GET() {
     reason: `Exported ${workOrders.length} maintenance work order(s)`,
   });
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="maintenance-work-orders.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, "maintenance-work-orders.csv");
 }

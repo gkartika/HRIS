@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
@@ -43,7 +44,7 @@ export default async function ShiftAssignmentsPage({ searchParams }: { searchPar
   const level3DepartmentIds = await getLevel3DepartmentIds(session.user.employeeId);
 
   if (!isHrAdminUser && level3DepartmentIds.length === 0) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { week } = await searchParams;

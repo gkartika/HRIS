@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
@@ -111,7 +112,7 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
       secondApproverPositionHolderEmployeeIds
     )
   ) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const thisRequestDays = absenceDayCount(request.startDate, request.endDate);

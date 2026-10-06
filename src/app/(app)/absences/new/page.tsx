@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
 import { resolveAnnualQuotaByType, usedDaysThisYearByType } from "@/lib/absence-quota";
@@ -10,7 +11,7 @@ export default async function NewAbsenceRequestPage() {
   const isHrAdminUser = isHrAdmin(session);
 
   if (!isHrAdminUser && !session.user.employeeId) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [employees, absenceTypes] = await Promise.all([

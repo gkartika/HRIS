@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
@@ -52,7 +53,7 @@ export default async function TrainingRequestDetailPage({ params }: { params: Pr
     deptHeadPositions.map((p) => p.positionId)
   );
   if (!canView) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const isAdmin = isTrainingAdmin(session);

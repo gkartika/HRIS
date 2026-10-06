@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { getActiveSession } from "@/lib/require-session";
@@ -37,11 +38,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dat
   const mod = DATASET_REGISTRY[dataset];
   const csv = templateCsv(mod.templateHeaders, mod.templateExampleRow);
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="template-${dataset}.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, `template-${dataset}.csv`);
 }

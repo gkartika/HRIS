@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin } from "@/lib/permissions";
@@ -63,11 +64,5 @@ export async function GET(request: Request) {
     reason: `Exported ${requests.length} training request(s)`,
   });
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="training-requests.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, "training-requests.csv");
 }

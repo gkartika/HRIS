@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { Fragment } from "react";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
@@ -49,7 +50,7 @@ export default async function AttendanceReconciliationGridPage({
 }) {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
 

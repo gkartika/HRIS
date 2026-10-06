@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
@@ -6,7 +7,7 @@ import { t } from "@/lib/i18n/id";
 export default async function TeamPage() {
   const session = await requireSession();
   if (!session.user.employeeId) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const me = await prisma.employee.findUnique({

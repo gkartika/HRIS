@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { InviteAllButton } from "./invite-all-button";
 import { UserPlus } from "lucide-react";
@@ -33,7 +34,7 @@ export default async function EmployeesPage({
 }) {
   const session = await requireSession();
   if (!canListEmployees(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { q, orgUnitId, jobLevel, employmentStatus, activeFlag, page: pageRaw } = await searchParams;

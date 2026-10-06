@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { formatDateLong } from "@/lib/format";
 import { notFound } from "next/navigation";
@@ -41,7 +42,7 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
   if (!offboardingCase) notFound();
 
   if (!canViewOffboardingCase(session, offboardingCase.employeeId)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const canExecute = canExecuteExitClearance(session) && canExecuteExitClearanceStatus(offboardingCase.status);

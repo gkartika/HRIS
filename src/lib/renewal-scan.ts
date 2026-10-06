@@ -18,10 +18,17 @@ export async function runDueRenewalScan(): Promise<{ created: number }> {
   const candidates = await prisma.contract.findMany({
     where: {
       status: "ACTIVE",
-      endDate: { not: null },
+      // Superset of the D-30 window; isRenewalDue below is the exact check.
+      endDate: { not: null, lte: new Date(Date.now() + 31 * 24 * 60 * 60 * 1000) },
       renewalCaseAsCurrentContract: { is: null },
     },
-    include: { employee: true },
+    select: {
+      id: true,
+      employeeId: true,
+      endDate: true,
+      contractNumber: true,
+      employee: { select: { id: true, currentPositionId: true } },
+    },
   });
   const due = candidates.filter((c) => c.endDate && isRenewalDue(c.endDate) && c.employee.currentPositionId);
   if (due.length === 0) return { created: 0 };

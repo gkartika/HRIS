@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
@@ -15,7 +16,7 @@ const MODE_LABELS: Record<string, string> = { ONLINE: "Daring", IN_PERSON: "Tata
 export default async function MyLearningPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const session = await requireSession();
   if (!session.user.employeeId) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
   const { status } = await searchParams;
 

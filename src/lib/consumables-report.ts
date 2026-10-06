@@ -103,6 +103,39 @@ export function buildMonthlyReport(
   return out;
 }
 
+// Same result as buildMonthlyReport, but from aggregates the database already
+// summed: `before` = per-item sum of every movement before the month,
+// `within` = per-item, per-type sums inside it. No ledger rows are read.
+export interface WithinSum {
+  itemId: string;
+  type: "ISSUE" | "RECEIPT" | "ADJUSTMENT";
+  sum: number;
+}
+export function buildMonthlyReportFromSums(
+  items: ReportItem[],
+  before: Map<string, number>,
+  within: WithinSum[]
+): MonthlyReportRow[] {
+  const byItem = new Map<string, WithinSum[]>();
+  for (const w of within) byItem.set(w.itemId, [...(byItem.get(w.itemId) ?? []), w]);
+  const out: MonthlyReportRow[] = [];
+  for (const item of items) {
+    const opening = item.openingStock + (before.get(item.id) ?? 0);
+    let received = 0;
+    let issued = 0;
+    let adjusted = 0;
+    for (const w of byItem.get(item.id) ?? []) {
+      if (w.type === "RECEIPT") received += w.sum;
+      else if (w.type === "ISSUE") issued += -w.sum;
+      else adjusted += w.sum;
+    }
+    const closing = opening + received - issued + adjusted;
+    if (opening === 0 && received === 0 && issued === 0 && adjusted === 0 && closing === 0) continue;
+    out.push({ itemCode: item.itemCode, itemName: item.itemName, category: item.category, unit: item.unit, opening, received, issued, adjusted, closing });
+  }
+  return out;
+}
+
 export const MONTHLY_REPORT_HEADERS = ["No", "Kode", "Barang", "Kategori", "Satuan", "Stok Awal", "Masuk", "Keluar", "Penyesuaian", "Stok Akhir"];
 
 export function buildMonthlyReportSheet(rows: MonthlyReportRow[]): (string | number)[][] {
@@ -195,6 +228,25 @@ export function buildHistorySheet(type: "ISSUE" | "RECEIPT" | "ADJUSTMENT", rows
       status(r),
     ]),
   ];
+}
+
+// Same buckets as bucketMonthlyIssued, from rows the database already grouped
+// by (WIB month key, category).
+export interface MonthlyIssueAggregate {
+  key: string;
+  category: string;
+  units: number;
+}
+export function bucketFromAggregates(rows: MonthlyIssueAggregate[], months: number, now: Date = new Date()): MonthlyIssueBucket[] {
+  const buckets = bucketMonthlyIssued([], months, now);
+  const byKey = new Map(buckets.map((b) => [b.key, b]));
+  for (const r of rows) {
+    const bucket = byKey.get(r.key);
+    if (!bucket) continue;
+    if (r.category === "APD") bucket.APD += r.units;
+    else if (r.category === "ATK") bucket.ATK += r.units;
+  }
+  return buckets;
 }
 
 export interface MonthlyIssueBucket {

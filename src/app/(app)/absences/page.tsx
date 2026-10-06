@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
@@ -31,7 +32,7 @@ export default async function AbsencesPage({
 }) {
   const session = await requireSession();
   if (!isHrAdmin(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
   const { status, absenceType, page: pageRaw } = await searchParams;
 
@@ -40,8 +41,8 @@ export default async function AbsencesPage({
   if (absenceType) where.absenceTypeCode = absenceType;
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.absenceRequest.count({ where });
-  const [requests, absenceTypes] = await Promise.all([
+  const [total, requests, absenceTypes] = await Promise.all([
+    prisma.absenceRequest.count({ where }),
     prisma.absenceRequest.findMany({
       skip,
       take,

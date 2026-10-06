@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
@@ -44,7 +45,7 @@ export default async function EvaluationDetailPage({ params }: { params: Promise
       hrManagerPositions.map((p) => p.positionId)
     )
   ) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   return (

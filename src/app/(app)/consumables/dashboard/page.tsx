@@ -1,14 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
-import { listItemsWithStock } from "@/lib/consumables-queries";
+import { getMonthlyIssued, getMonthlyReportRows, listItemsWithStock } from "@/lib/consumables-queries";
 import { t } from "@/lib/i18n/id";
-import {
-  bucketMonthlyIssued,
-  buildMonthlyReport,
-  monthKey,
-  monthLabel,
-  monthRange,
-} from "@/lib/consumables-report";
+import { bucketMonthlyIssued, monthKey, monthLabel, monthRange } from "@/lib/consumables-report";
 import type { ConsumableStatusValue } from "@/lib/consumables";
 import { consumablesAccessDenied } from "../access";
 
@@ -31,16 +24,10 @@ export default async function ConsumableDashboardPage({ searchParams }: { search
   const buckets = bucketMonthlyIssued([], MONTHS_SHOWN, now); // just for the window keys
   const windowStart = monthRange(buckets[0].key)!.start;
 
-  const [items, issued, ledger] = await Promise.all([
+  const [items, monthly, report] = await Promise.all([
     listItemsWithStock({ includeArchived: true }),
-    prisma.consumableTransaction.findMany({
-      where: { type: "ISSUE", cancelledAt: null, occurredAt: { gte: windowStart } },
-      select: { occurredAt: true, quantityDelta: true, item: { select: { category: true } } },
-    }),
-    prisma.consumableTransaction.findMany({
-      where: { cancelledAt: null, occurredAt: { lt: range.end } },
-      select: { itemId: true, type: true, quantityDelta: true, occurredAt: true },
-    }),
+    getMonthlyIssued(windowStart, MONTHS_SHOWN, now),
+    getMonthlyReportRows(range),
   ]);
 
   const active = items.filter((i) => !i.archived);
@@ -48,14 +35,7 @@ export default async function ConsumableDashboardPage({ searchParams }: { search
   for (const i of active) counts[i.status] += 1;
   const restock = active.filter((i) => i.status !== "AMAN").sort((a, b) => a.stock - b.stock);
 
-  const monthly = bucketMonthlyIssued(
-    issued.map((r) => ({ occurredAt: r.occurredAt, quantityDelta: r.quantityDelta, category: r.item.category })),
-    MONTHS_SHOWN,
-    now
-  );
   const maxUnits = Math.max(1, ...monthly.flatMap((b) => [b.APD, b.ATK]));
-
-  const report = buildMonthlyReport(items, ledger, range);
 
   return (
     <div className="space-y-4">

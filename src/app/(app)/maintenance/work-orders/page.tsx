@@ -1,8 +1,10 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
+import { pageParams } from "@/lib/pagination";
+import { Pager } from "@/components/pager";
 import { CorrectiveSourceForm } from "./corrective-source-form";
 
 const STATUS_TONE: Record<string, string> = {
@@ -10,17 +12,22 @@ const STATUS_TONE: Record<string, string> = {
   COMPLETED: "bg-emerald-50 text-emerald-700",
 };
 
-export default async function MaintenanceWorkOrdersPage() {
+export default async function MaintenanceWorkOrdersPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const session = await requireSession();
   if (!canManageGaOperations(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
-  const [workOrders, pendingCorrectiveRequests, existingSourceRequestIds] = await Promise.all([
+  const { page: pageRaw } = await searchParams;
+  const { page, skip, take } = pageParams(pageRaw);
+  const [workOrders, total, pendingCorrectiveRequests, existingSourceRequestIds] = await Promise.all([
     prisma.maintenanceWorkOrder.findMany({
+      skip,
+      take,
       include: { asset: { select: { assetCode: true, assetName: true } } },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     }),
+    prisma.maintenanceWorkOrder.count(),
     prisma.gaRequest.findMany({
       where: { requestType: "DAMAGE_OR_ABNORMAL_CONDITION", status: "WORK_ORDER_CREATED" },
       include: { asset: { select: { assetCode: true, assetName: true } } },
@@ -104,6 +111,7 @@ export default async function MaintenanceWorkOrdersPage() {
           </table>
         </div>
       )}
+      <Pager page={page} total={total} basePath="/maintenance/work-orders" params={{}} />
     </div>
   );
 }

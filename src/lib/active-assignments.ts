@@ -11,9 +11,7 @@ function loadActiveAssignments(employeeId: string, asOf: Date) {
   return prisma.assignment.findMany({
     where: {
       employeeId,
-      status: "ACTIVE",
-      effectiveFrom: { lte: asOf },
-      OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+      ...activeAssignmentWhere(asOf),
     },
     include: { position: { include: { job: true, orgUnit: true } } },
   });
@@ -37,3 +35,13 @@ export const getOrgUnitMap = cache(async () => {
   const units = await prisma.orgUnit.findMany();
   return new Map(units.map((u) => [u.id, u]));
 });
+
+// Prisma `where` fragment for "assignment in force at asOf" — one definition
+// for the half-open interval effectiveFrom <= asOf < effectiveTo.
+export function activeAssignmentWhere(asOf: Date) {
+  return {
+    status: "ACTIVE" as const,
+    effectiveFrom: { lte: asOf },
+    OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+  };
+}

@@ -1,10 +1,10 @@
+import { AccessDenied } from "@/components/access-denied";
 import { SettingsTabs } from "../settings-tabs";
 import { formatDateMedium } from "@/lib/format";
 import { Fragment } from "react";
 import { requireSession } from "@/lib/require-session";
 import { canManageAttendanceMasterData } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { TypeQuotaRowForm } from "./type-quota-row-form";
 import { NewTypeForm } from "./new-type-form";
 import { ApproverRowForm, type PositionOption } from "./approver-row-form";
@@ -89,7 +89,7 @@ export default async function AbsenceSettingsPage({ searchParams }: { searchPara
   const tab: Tab = TABS.find((x) => x === tabParam) ?? "jenis";
   const session = await requireSession();
   if (!canManageAttendanceMasterData(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   // One query for every type (active + archived), split in memory below —

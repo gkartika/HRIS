@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { HolidayType } from "@/generated/prisma/enums";
+import type { HolidayType, ShiftAssignmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageAttendanceMasterData } from "@/lib/permissions";
@@ -65,12 +65,18 @@ export async function addCompanyHolidays(
     where: { employeeId: { in: employees.map((e) => e.id) }, attendanceDate: { in: dates } },
     select: { employeeId: true, attendanceDate: true, absenceTypeCode: true, shiftType: true, presentOverride: true },
   });
+  const existingKeys = new Set(existing.map((r) => `${r.employeeId}:${r.attendanceDate.getTime()}`));
   const blockedKeys = new Set(
     existing.filter((r) => r.absenceTypeCode || r.shiftType || r.presentOverride).map((r) => `${r.employeeId}:${r.attendanceDate.getTime()}`)
   );
 
   const now = new Date();
-  const writes: (() => Promise<unknown>)[] = [];
+  type HolidayData = { shiftType: ShiftAssignmentType | null; absenceTypeCode: string | null };
+  // Employee-days to fill, grouped by (date, label, data) so each group is
+  // one createMany (new rows) and one updateMany (rows that exist but carry
+  // no classification yet) instead of one upsert per employee-day.
+  const groups = new Map<string, { date: Date; label: string; data: HolidayData; create: string[]; update: string[] }>();
+  let filled = 0;
   for (const v of valid) {
     const holidayData =
       holidayType === "TANGGAL_MERAH"
@@ -79,39 +85,49 @@ export async function addCompanyHolidays(
     for (const employee of employees) {
       const key = `${employee.id}:${v.date!.getTime()}`;
       if (blockedKeys.has(key)) continue;
-      const data = holidayData ?? { absenceTypeCode: "CTB", shiftType: assignedShiftFor(employee.id, normalizeWeekStart(v.date!)) };
-      writes.push(() =>
-        prisma.dailyAttendanceRecord.upsert({
-          where: { employeeId_attendanceDate: { employeeId: employee.id, attendanceDate: v.date! } },
-          create: {
-            employeeId: employee.id,
-            attendanceDate: v.date!,
-            ...data,
-            classificationNote: v.label,
-            classifiedAt: now,
-            classifiedByAccountId: session.user.id,
-          },
-          update: { ...data, classificationNote: v.label, classifiedAt: now, classifiedByAccountId: session.user.id },
-        })
-      );
+      const data: HolidayData = holidayData ?? { absenceTypeCode: "CTB", shiftType: assignedShiftFor(employee.id, normalizeWeekStart(v.date!)) };
+      const groupKey = `${v.date!.getTime()}|${v.label}|${data.shiftType}|${data.absenceTypeCode}`;
+      let group = groups.get(groupKey);
+      if (!group) {
+        group = { date: v.date!, label: v.label, data, create: [], update: [] };
+        groups.set(groupKey, group);
+      }
+      (existingKeys.has(key) ? group.update : group.create).push(employee.id);
+      filled++;
     }
   }
 
-  // Plain Promise.all in bounded chunks, not $transaction — same reasoning
-  // as the CompanyHoliday upsert above: a full year x ~186 employees is
-  // thousands of independent, idempotent writes, run concurrently in
-  // batches rather than one giant sequential interactive transaction
-  // (which would hit the same 5s timeout, just later).
-  const CHUNK = 50;
-  for (let i = 0; i < writes.length; i += CHUNK) {
-    await Promise.all(writes.slice(i, i + CHUNK).map((run) => run()));
+  // Bulk statements per group, in bounded concurrent chunks (not one big
+  // interactive transaction, which would hit the 5s timeout). skipDuplicates
+  // keeps a concurrent insert from failing the whole batch.
+  const stamp = { classifiedAt: now, classifiedByAccountId: session.user.id };
+  const statements: (() => Promise<unknown>)[] = [];
+  for (const g of groups.values()) {
+    const fields = { ...g.data, classificationNote: g.label, ...stamp };
+    if (g.create.length > 0) {
+      statements.push(() =>
+        prisma.dailyAttendanceRecord.createMany({
+          data: g.create.map((employeeId) => ({ employeeId, attendanceDate: g.date, ...fields })),
+          skipDuplicates: true,
+        })
+      );
+    }
+    if (g.update.length > 0) {
+      statements.push(() =>
+        prisma.dailyAttendanceRecord.updateMany({ where: { attendanceDate: g.date, employeeId: { in: g.update } }, data: fields })
+      );
+    }
+  }
+  const CHUNK = 20;
+  for (let i = 0; i < statements.length; i += CHUNK) {
+    await Promise.all(statements.slice(i, i + CHUNK).map((run) => run()));
   }
 
   await logAudit({
     actorAccountId: session.user.id,
     action: "UPDATE",
     datasetName: "CompanyHoliday",
-    reason: `Added ${valid.length} ${holidayType} date(s), filled ${writes.length} employee-day(s) (${blockedKeys.size} already classified, skipped)`,
+    reason: `Added ${valid.length} ${holidayType} date(s), filled ${filled} employee-day(s) (${blockedKeys.size} already classified, skipped)`,
   });
 
   revalidatePath("/admin/absence-settings");

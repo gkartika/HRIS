@@ -4,10 +4,9 @@ import { getActiveSession } from "@/lib/require-session";
 import { canManageConsumables } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import { buildHistoryWhere, listItemsWithStock } from "@/lib/consumables-queries";
+import { buildHistoryWhere, getMonthlyReportRows, listItemsWithStock } from "@/lib/consumables-queries";
 import {
   buildHistorySheet,
-  buildMonthlyReport,
   buildMonthlyReportSheet,
   monthKey,
   monthRange,
@@ -95,14 +94,7 @@ export async function GET(request: Request) {
     const key = searchParams.get("month") ?? monthKey(new Date());
     const range = monthRange(key);
     if (!range) return NextResponse.json({ error: "Bulan tidak valid (format YYYY-MM)." }, { status: 400 });
-    const [items, ledger] = await Promise.all([
-      prisma.consumableItem.findMany({ orderBy: [{ category: "asc" }, { itemCode: "asc" }] }),
-      prisma.consumableTransaction.findMany({
-        where: { cancelledAt: null, occurredAt: { lt: range.end } },
-        select: { itemId: true, type: true, quantityDelta: true, occurredAt: true },
-      }),
-    ]);
-    const report = buildMonthlyReport(items, ledger, range);
+    const report = await getMonthlyReportRows(range);
     sheet = buildMonthlyReportSheet(report);
     sheetName = "Laporan Bulanan";
     filename = `laporan-barang-habis-pakai-${key}.xlsx`;

@@ -602,6 +602,7 @@ model OffboardingCase {
   updatedAt DateTime @updatedAt
 
   @@index([employeeId, status])
+  @@index([status, clearanceDueDate])
 }
 
 // Version after UAT: admin-configurable Exit Clearance questions, answered
@@ -1593,6 +1594,7 @@ model AuditLog {
   @@index([datasetName, eventAt])
   @@index([actorAccountId])
   @@index([eventAt])
+  @@index([action, eventAt])
 }
 
 model ImportBatch {
@@ -1705,6 +1707,8 @@ model AttendanceAssignment {
   createdAt               DateTime            @default(now())
 
   attendanceEvents AttendanceEvent[]
+
+  @@index([employeeId, effectiveTo])
 }
 
 // A single check-in or check-out punch, from either source. Geofence
@@ -1742,6 +1746,7 @@ model AttendanceEvent {
   dailyRecordsAsCheckOut DailyAttendanceRecord[] @relation("DailyRecordCheckOutEvent")
 
   @@index([employeeId, eventAt])
+  @@index([eventSource, eventAt])
 }
 
 // One row per employee per calendar day, produced by the idempotent daily
@@ -1887,7 +1892,7 @@ model AbsenceRequest {
   updatedAt DateTime @updatedAt
 
   @@index([employeeId, status])
-  @@index([status])
+  @@index([status, startDate])
 }
 
 // HR-Admin-set per-employee exception to AbsenceEntitlementConfig's
@@ -2448,6 +2453,7 @@ model LearningAssignment {
 
   @@index([employeeId, status])
   @@index([courseId, status])
+  @@index([status, effectivenessRequiredSnapshot, effectivenessCompletedAt])
 }
 
 // Exactly five target types (TRN-13/DM-41): Employee, Department, Job,
@@ -2692,6 +2698,8 @@ model FixedAsset {
   maintenancePlans      MaintenancePlan[]
   maintenanceWorkOrders MaintenanceWorkOrder[]
   disposalCases         DisposalCase[]
+
+  @@index([activeFlag, status])
 }
 
 // One row per custody period — a return or transfer always creates a new
@@ -2741,6 +2749,7 @@ model AssetCustody {
 
   @@index([employeeId, status])
   @@index([assetId])
+  @@index([status])
 }
 
 // ── Consumables (APD / ATK) ─────────────────────────────────────────────
@@ -2846,6 +2855,7 @@ model ConsumableTransaction {
   @@index([employeeId, itemId, occurredAt])
   @@index([type, occurredAt])
   @@index([batchId])
+  @@index([itemId, type, cancelledAt])
 }
 
 model TaskForceMembership {

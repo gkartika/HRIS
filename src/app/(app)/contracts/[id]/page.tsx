@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { formatDateLong } from "@/lib/format";
 import { notFound } from "next/navigation";
@@ -101,7 +102,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       deptHeadPositions.map((p) => p.positionId)
     )
   ) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const urgency = computeExpiryUrgency(contract.status, contract.endDate);

@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
@@ -7,7 +8,7 @@ import { SubmitTrainingRequestForm } from "./submit-form";
 export default async function NewTrainingRequestPage() {
   const session = await requireSession();
   if (!session.user.employeeId) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const level3DepartmentIds = await getLevel3DepartmentIds(session.user.employeeId);

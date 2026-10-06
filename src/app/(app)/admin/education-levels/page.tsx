@@ -1,14 +1,14 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { SettingsTabs } from "../settings-tabs";
 import { LevelManager } from "./level-manager";
 
 export default async function EducationLevelsPage() {
   const session = await requireSession();
   if (!canManageOrgStructure(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const levels = await prisma.educationLevel.findMany({

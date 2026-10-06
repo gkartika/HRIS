@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { GapTable } from "./gap-table";
 import { isTrainingAdmin } from "@/lib/permissions";
@@ -20,7 +21,7 @@ export default async function CompetencyGapsPage({ searchParams }: { searchParam
   const isDirector = directorCandidates.some((c) => c.employeeId === session.user.employeeId);
 
   if (!isAdmin && level3DepartmentIds.length === 0 && !isDirector) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const cycles = await prisma.competencyAssessmentCycle.findMany({

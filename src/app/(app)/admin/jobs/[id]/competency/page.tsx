@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
 import { canManageCompetencyFramework } from "@/lib/permissions";
@@ -16,7 +17,7 @@ export default async function JobCompetencyRequirementsPage({
   const { saved } = await searchParams;
   const session = await requireSession();
   if (!canManageCompetencyFramework(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const job = await prisma.job.findUnique({ where: { id } });

@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -7,7 +8,7 @@ import { CreateRequestForm } from "./create-request-form";
 export default async function NewRecruitmentRequestPage() {
   const session = await requireSession();
   if (!canSubmitRecruitmentRequest(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [departments, jobs, employees] = await Promise.all([

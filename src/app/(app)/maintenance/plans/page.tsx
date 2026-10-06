@@ -1,15 +1,15 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { formatDateMedium } from "@/lib/format";
 import { canManageGaOperations } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
-import { t } from "@/lib/i18n/id";
 import { CreatePlanForm } from "./create-plan-form";
 import { CreateWorkOrderFromPlanForm, DeactivatePlanButton } from "./plan-row-actions";
 
 export default async function MaintenancePlansPage() {
   const session = await requireSession();
   if (!canManageGaOperations(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [plans, assets] = await Promise.all([

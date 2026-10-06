@@ -1,22 +1,18 @@
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { nextSequence } from "@/lib/number-sequence";
-import {
-  EMPLOYEE_NUMBER_SEQUENCE_KEY,
-  formatEmployeeNumber,
-  parseEmployeeNumber,
-} from "@/lib/employee-number";
+import { EMPLOYEE_NUMBER_SEQUENCE_KEY, formatEmployeeNumber } from "@/lib/employee-number";
 
 type Db = typeof prisma | Prisma.TransactionClient;
 
-// Highest CBP-number already on an employee (0 when none). Numbers in another
-// format (old "0027", imported "EMP-9") are ignored.
+// Highest CBP-number already on an employee (0 when none), as one aggregate
+// instead of reading every employee. Numbers in another format (old "0027",
+// imported "EMP-9") are ignored.
 async function highestUsed(db: Db): Promise<number> {
-  const rows = await db.employee.findMany({
-    where: { employeeNumber: { startsWith: "CBP-" } },
-    select: { employeeNumber: true },
-  });
-  return rows.reduce((max, r) => Math.max(max, parseEmployeeNumber(r.employeeNumber) ?? 0), 0);
+  const rows = await db.$queryRaw<{ m: number | null }[]>`
+    SELECT MAX(CAST(SUBSTRING("employeeNumber" FROM 5) AS INTEGER)) AS m
+    FROM "Employee" WHERE "employeeNumber" ~ '^CBP-[0-9]+$'`;
+  return Number(rows[0]?.m ?? 0);
 }
 
 // What the next employee will most likely get, for the "Nomor karyawan" hint on

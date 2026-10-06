@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
@@ -25,7 +26,7 @@ export default async function AssetsPage({
 }) {
   const session = await requireSession();
   if (!canViewAssetMaster(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const { q, trackingType, status, page: pageRaw } = await searchParams;
@@ -45,7 +46,6 @@ export default async function AssetsPage({
   }
 
   const { page, skip, take } = pageParams(pageRaw);
-  const total = await prisma.fixedAsset.count({ where });
   const [assets, filteredCount, totalCount] = await Promise.all([
     prisma.fixedAsset.findMany({
       skip,
@@ -57,6 +57,7 @@ export default async function AssetsPage({
     prisma.fixedAsset.count({ where }),
     prisma.fixedAsset.count(),
   ]);
+  const total = filteredCount;
 
   const hasFilters = !!(q || trackingType || status);
 

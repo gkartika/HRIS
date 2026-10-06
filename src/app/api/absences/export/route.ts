@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/require-session";
 import { canExportAbsenceData } from "@/lib/permissions";
@@ -48,11 +49,5 @@ export async function GET(request: Request) {
     reason: `Exported ${requests.length} absence request(s)`,
   });
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="absences-${new Date().toISOString().slice(0, 10)}.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, `absences-${new Date().toISOString().slice(0, 10)}.csv`);
 }

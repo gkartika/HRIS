@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canManageAttendanceMasterData } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
@@ -9,7 +10,7 @@ import { ToggleActiveForm } from "./toggle-form";
 export default async function AttendanceGeofencesPage() {
   const session = await requireSession();
   if (!canManageAttendanceMasterData(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const geofences = await prisma.attendanceGeofence.findMany({ orderBy: { siteName: "asc" } });

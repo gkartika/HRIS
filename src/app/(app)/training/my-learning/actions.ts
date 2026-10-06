@@ -79,11 +79,11 @@ export async function submitQuizAttempt(assignmentId: string, _prevState: string
         passed,
       },
     });
-    for (const [questionId, optionIds] of Object.entries(answers)) {
-      for (const optionId of optionIds) {
-        await tx.quizAttemptAnswer.create({ data: { attemptId: created.id, questionId, optionId } });
-      }
-    }
+    await tx.quizAttemptAnswer.createMany({
+      data: Object.entries(answers).flatMap(([questionId, optionIds]) =>
+        optionIds.map((optionId) => ({ attemptId: created.id, questionId, optionId }))
+      ),
+    });
     return created;
   });
 

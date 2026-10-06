@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
@@ -10,7 +11,7 @@ const CUSTODY_STATUS_TONE: Record<string, string> = {
 export default async function MyAssetsPage() {
   const session = await requireSession();
   if (!session.user.employeeId) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const custodies = await prisma.assetCustody.findMany({

@@ -1,3 +1,4 @@
+import { csvResponse } from "@/lib/csv-response";
 import { NextResponse } from "next/server";
 import { getActiveSession } from "@/lib/require-session";
 import { canManageLearningAssignment } from "@/lib/permissions";
@@ -51,11 +52,5 @@ export async function GET() {
     reason: `Exported ${assignments.length} overdue learning assignment(s)`,
   });
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="learning-assignments-overdue.csv"`,
-      "Cache-Control": "no-store",
-    },
-  });
+  return csvResponse(csv, "learning-assignments-overdue.csv");
 }

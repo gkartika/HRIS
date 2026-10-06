@@ -1,3 +1,4 @@
+import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageCompetencyFramework } from "@/lib/permissions";
@@ -10,7 +11,7 @@ const SCORES = [0, 25, 50, 75, 100];
 export default async function CompetencyFrameworkPage() {
   const session = await requireSession();
   if (!canManageCompetencyFramework(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const [competencyFrameworkVersion, companyValueFrameworkVersion] = await Promise.all([

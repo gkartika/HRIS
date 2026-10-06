@@ -1,5 +1,7 @@
+import { AccessDenied } from "@/components/access-denied";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -30,7 +32,7 @@ import { t } from "@/lib/i18n/id";
 import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
 import { EmployeeProfileFields } from "@/components/employee-profile-view";
 import { EmployeeHeader } from "./employee-header";
-import { EmployeeTabs } from "./employee-tabs";
+import { EmployeeTabs, parseEmployeeTab } from "./employee-tabs";
 import { BpjsCardsPanel } from "./bpjs-cards-panel";
 import { AccountHoldPanel } from "./account-panel";
 import { PenempatanTabContent } from "./penempatan-tab";
@@ -69,15 +71,18 @@ const SECTION_DIVIDERS = "[&>*:not(:first-child)]:mt-6 [&>*:not(:first-child)]:b
 
 export default async function EmployeeDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const activeTab = parseEmployeeTab((await searchParams).tab);
   const session = await requireSession();
   const isSelf = session.user.employeeId === id;
 
   if (!isSelf && !canListEmployees(session)) {
-    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+    return <AccessDenied />;
   }
 
   const employee = await prisma.employee.findUnique({
@@ -95,23 +100,28 @@ export default async function EmployeeDetailPage({
           },
         },
       },
-      files: true,
+      // Documents and BPJS cards only appear on the Profil tab.
+      files: activeTab === "profil",
       educationLevel: true,
       ptkpStatus: true,
-      bpjsTkFile: true,
-      bpjsKesehatanFile: true,
+      bpjsTkFile: activeTab === "profil",
+      bpjsKesehatanFile: activeTab === "profil",
       account: { select: { accountStatus: true, usernameOrEmail: true } },
     },
   });
   if (!employee) notFound();
 
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "VIEW",
-    datasetName: "Employee",
-    recordId: employee.id,
-    reason: isSelf ? "Viewed own profile" : "Viewed employee detail",
-  });
+  // The audit write does not hold up the page; it runs right after the response.
+  const viewedAs = isSelf ? "Viewed own profile" : "Viewed employee detail";
+  after(() =>
+    logAudit({
+      actorAccountId: session.user.id,
+      action: "VIEW",
+      datasetName: "Employee",
+      recordId: employee.id,
+      reason: viewedAs,
+    })
+  );
 
   const projected = projectEmployee(employee, session);
   // Documents carry their own sensitivity (many are Highly Restricted, e.g.
@@ -122,15 +132,17 @@ export default async function EmployeeDetailPage({
   // wider view audience (canViewBpjs, not canViewDocs).
   const canViewDocs = canViewEmployeeDocument(session, employee.id);
   const visibleFiles = canViewDocs
-    ? employee.files.filter((f) => f.category !== "BPJS_TK" && f.category !== "BPJS_KESEHATAN")
+    ? (employee.files ?? []).filter((f) => f.category !== "BPJS_TK" && f.category !== "BPJS_KESEHATAN")
     : [];
   const canViewBpjs = canViewBpjsCard(session, employee.id);
   const canEdit = isSelf || isHrAdmin(session);
   const canManage = canManageAssignments(session);
-  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  const [hrManagerPositions, isLevel3InDepartment] = await Promise.all([
+    getActiveHrManagerPositions(session.user.employeeId),
+    isLevel3ForEmployeeDepartment(session.user.employeeId, employee.id, employee.currentPosition?.orgUnitId ?? null),
+  ]);
   const canHoldAccount = canManageAccountHold(session, hrManagerPositions.map((p) => p.positionId));
   const canUploadDocs = canUploadEmployeeDocument(session);
-  const isLevel3InDepartment = await isLevel3ForEmployeeDepartment(session.user.employeeId, employee.id);
   const canSubmitMovement =
     !!employee.currentPositionId && canSubmitMovementRequest(session, isLevel3InDepartment);
   const canReportThisResignation = canStartOffboarding(session);
@@ -242,8 +254,8 @@ export default async function EmployeeDetailPage({
         </div>
       </div>
 
-      <EmployeeTabs
-        profil={
+      <EmployeeTabs active={activeTab}>
+        {activeTab === "profil" && (
           <div className={SECTION_DIVIDERS}>
             <EmployeeProfileFields employee={projected} educationLevelLabel={educationLevelLabel} ptkpLabel={ptkpLabel} />
             {(canViewBpjs || visibleFiles.length > 0) && (
@@ -278,8 +290,8 @@ export default async function EmployeeDetailPage({
               </div>
             )}
           </div>
-        }
-        penempatan={
+        )}
+        {activeTab === "penempatan" && (
           <Suspense fallback={<TabSkeleton />}>
             <PenempatanTabContent
               employeeId={employee.id}
@@ -294,8 +306,8 @@ export default async function EmployeeDetailPage({
               canCreateContract={canCreateContract}
             />
           </Suspense>
-        }
-        akun={
+        )}
+        {activeTab === "akun" && (
           <Suspense fallback={<TabSkeleton />}>
             <AkunTabContent
               employeeId={employee.id}
@@ -307,8 +319,8 @@ export default async function EmployeeDetailPage({
               canManageAbsenceQuota={canManageAbsenceQuota}
             />
           </Suspense>
-        }
-      />
+        )}
+      </EmployeeTabs>
     </div>
   );
 }

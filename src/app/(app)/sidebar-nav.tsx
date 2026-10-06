@@ -28,6 +28,7 @@ import {
   Wrench,
   Trash2,
   TrendingDown,
+  Boxes,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,6 +60,7 @@ const ICONS: Record<string, LucideIcon> = {
   Wrench,
   Trash2,
   TrendingDown,
+  Boxes,
 };
 
 export interface SidebarNavItem {

@@ -10,6 +10,7 @@ import {
   canImportMandatoryTrainingParticipants,
   canImportTrainingAttendance,
   canImportAssetMaster,
+  canManageConsumables,
 } from "@/lib/permissions";
 import { DATASET_REGISTRY, isDatasetKey } from "@/lib/import-export/registry";
 import { templateCsv } from "@/lib/import-export/csv";
@@ -22,6 +23,7 @@ function canAccessDataset(session: Session, dataset: string): boolean {
   if (dataset === "mandatory-training-participants") return canImportMandatoryTrainingParticipants(session);
   if (dataset === "training-attendance") return canImportTrainingAttendance(session);
   if (dataset === "asset-master") return canImportAssetMaster(session);
+  if (dataset.startsWith("consumable-")) return canManageConsumables(session);
   return canManageOrgStructure(session);
 }
 

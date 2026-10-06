@@ -5,6 +5,7 @@ import {
   canImportMandatoryTrainingParticipants,
   canImportTrainingAttendance,
   canImportAssetMaster,
+  canManageConsumables,
 } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
@@ -24,6 +25,9 @@ const DATASET_ORDER: DatasetKey[] = [
   "mandatory-training-participants",
   "training-attendance",
   "asset-master",
+  "consumable-items",
+  "consumable-stock-history",
+  "consumable-issue-history",
 ];
 
 // The 7 HR-domain datasets above are all HR-Admin-only (every existing
@@ -35,6 +39,8 @@ const DATASET_ORDER: DatasetKey[] = [
 // either from seeing upload forms they can't actually submit).
 const TRAINING_DATASETS: DatasetKey[] = ["mandatory-training-participants", "training-attendance"];
 const GA_DATASETS: DatasetKey[] = ["asset-master"];
+// Consumables (APD/ATK) imports are GA-Admin-only like the rest of that module.
+const CONSUMABLE_DATASETS: DatasetKey[] = ["consumable-items", "consumable-stock-history", "consumable-issue-history"];
 
 export default async function ImportPage() {
   const session = await requireSession();
@@ -45,11 +51,16 @@ export default async function ImportPage() {
   const visibleDatasets = DATASET_ORDER.filter((key) => {
     if (TRAINING_DATASETS.includes(key)) return canImportMandatoryTrainingParticipants(session) || canImportTrainingAttendance(session);
     if (GA_DATASETS.includes(key)) return canImportAssetMaster(session);
+    if (CONSUMABLE_DATASETS.includes(key)) return canManageConsumables(session);
     return isHrAdmin(session);
   });
 
   const batches = await prisma.importBatch.findMany({
-    where: isHrAdmin(session) ? {} : { importType: { in: visibleDatasets } },
+    where: isHrAdmin(session)
+      ? canManageConsumables(session)
+        ? {}
+        : { importType: { notIn: CONSUMABLE_DATASETS } }
+      : { importType: { in: visibleDatasets } },
     orderBy: { uploadedAt: "desc" },
     take: 20,
   });

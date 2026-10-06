@@ -902,6 +902,12 @@ export function canManageGaOperations(session: Session): boolean {
   return isGaAdmin(session);
 }
 
+// Consumables (APD/ATK) are purely a GA Admin back-office ledger: no
+// employee-facing view, and HR Admin has no access, same boundary as above.
+export function canManageConsumables(session: Session): boolean {
+  return isGaAdmin(session);
+}
+
 // Submission is self-service only — any employee-linked account may report
 // a need, damage or loss for themselves. No HR-Admin-on-behalf-of exception
 // here (unlike Absence): the PDF's requester lane is the employee/GA-user

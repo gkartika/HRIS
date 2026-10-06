@@ -9,6 +9,7 @@ import {
   canViewAssetMaster,
   canManageAssets,
   canManageGaOperations,
+  canManageConsumables,
   canSubmitGaRequest,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -256,6 +257,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     buckets.asetGa.push({ href: "/maintenance/plans", label: t("maintenance.plansNavLabel"), icon: "Wrench" });
     buckets.asetGa.push({ href: "/maintenance/work-orders", label: t("maintenance.workOrdersNavLabel"), icon: "Wrench" });
     buckets.asetGa.push({ href: "/disposal-cases", label: t("disposalCase.navLabel"), icon: "Trash2" });
+  }
+  // Consumables (APD/ATK): GA-Admin-only back-office ledger — no employee-
+  // facing entry anywhere, and HR Admin deliberately gets none either.
+  if (canManageConsumables(session)) {
+    buckets.asetGa.push({ href: "/consumables", label: t("consumable.navLabel"), icon: "Boxes" });
   }
 
   const groups: SidebarNavGroup[] = [

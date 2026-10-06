@@ -8,6 +8,9 @@ import * as competencyMigration from "./competency-migration";
 import * as mandatoryTrainingParticipants from "./mandatory-training-participants";
 import * as trainingAttendance from "./training-attendance";
 import * as assetMaster from "./asset-master";
+import * as consumableItems from "./consumable-items";
+import * as consumableStockHistory from "./consumable-stock-history";
+import * as consumableIssueHistory from "./consumable-issue-history";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
 import type { Session } from "next-auth";
 
@@ -21,7 +24,10 @@ export type DatasetKey =
   | "competency-migration"
   | "mandatory-training-participants"
   | "training-attendance"
-  | "asset-master";
+  | "asset-master"
+  | "consumable-items"
+  | "consumable-stock-history"
+  | "consumable-issue-history";
 
 export interface DatasetModule {
   label: string;
@@ -46,6 +52,9 @@ export const DATASET_REGISTRY: Record<DatasetKey, DatasetModule> = {
   "mandatory-training-participants": mandatoryTrainingParticipants as DatasetModule,
   "training-attendance": trainingAttendance as DatasetModule,
   "asset-master": assetMaster as DatasetModule,
+  "consumable-items": consumableItems as DatasetModule,
+  "consumable-stock-history": consumableStockHistory as DatasetModule,
+  "consumable-issue-history": consumableIssueHistory as DatasetModule,
 };
 
 export function isDatasetKey(value: string): value is DatasetKey {

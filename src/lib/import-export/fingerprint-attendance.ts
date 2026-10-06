@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { companyToday, companyDateParts } from "@/lib/company-time";
+import { normalizeName } from "@/lib/name-match";
 import { normalizeWeekStart, buildIsScheduledToWorkLookup } from "@/lib/shift-assignment";
 import type { AttendanceEventType } from "@/generated/prisma/enums";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
@@ -22,10 +23,6 @@ const VALID_EVENT_TYPES = ["CHECK_IN", "CHECK_OUT"];
 // extra UI choice.
 function isRawMachineFormat(row: Record<string, string> | undefined): boolean {
   return !!row && "Name" in row && "Status" in row && "Date/Time" in row;
-}
-
-function normalizeName(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 // The raw export's "DD/MM/YYYY HH:mm:ss" breaks native Date parsing (it's

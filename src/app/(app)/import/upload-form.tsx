@@ -11,7 +11,10 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
   const [error, formAction, isPending] = useActionState(action, undefined);
   // Fingerprint machine exports are commonly XLSX rather than CSV — every
   // other dataset in this app stays CSV-only.
-  const acceptedTypes = dataset === "fingerprint-attendance" ? ".csv,.xlsx,.xls" : ".csv";
+  // The old inventory sheets are Excel files, so the consumables datasets
+  // take XLSX as well.
+  const isConsumable = dataset.startsWith("consumable-");
+  const acceptedTypes = dataset === "fingerprint-attendance" || isConsumable ? ".csv,.xlsx,.xls" : ".csv";
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -37,6 +40,13 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
           Mendukung format ekspor CSV standar (fingerprintDeviceUserId/eventType/eventAt) maupun ekspor mentah
           mesin fingerprint (Name/Date-Time/Status) — formatnya terdeteksi otomatis. Untuk ekspor mentah, isi ID
           Perangkat Fingerprint karyawan di Penugasan Absensi dengan nama persis seperti yang tampil di mesin.
+        </p>
+      )}
+      {isConsumable && (
+        <p className="mb-2 text-xs text-slate-400">
+          Impor dalam urutan: Master Barang, lalu Riwayat Stok Masuk &amp; Penyesuaian, lalu Riwayat Pengambilan. Kolom
+          mengikuti sistem inventori lama (Kode Barang, Nama Karyawan, Jumlah, dst). Nama karyawan yang tidak cocok
+          satu-satunya tetap diimpor sebagai teks. Berkas yang sama bisa diunggah ulang tanpa menggandakan data.
         </p>
       )}
       <form action={formAction} className="flex items-center gap-3">

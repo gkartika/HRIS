@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import * as XLSX from "xlsx";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import {
@@ -14,9 +13,10 @@ import {
   canImportMandatoryTrainingParticipants,
   canImportTrainingAttendance,
   canImportAssetMaster,
+  canManageConsumables,
 } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { parseCsvRows } from "@/lib/import-export/csv";
+import { fileToRows } from "@/lib/import-export/read-rows";
 import { DATASET_REGISTRY, isDatasetKey, type DatasetKey } from "@/lib/import-export/registry";
 import { importEmployeeDocumentsZip } from "@/lib/import-export/employee-documents-zip";
 import type { Session } from "next-auth";
@@ -35,23 +35,8 @@ function canImportDataset(session: Session, dataset: DatasetKey): boolean {
   if (dataset === "mandatory-training-participants") return canImportMandatoryTrainingParticipants(session);
   if (dataset === "training-attendance") return canImportTrainingAttendance(session);
   if (dataset === "asset-master") return canImportAssetMaster(session);
+  if (dataset.startsWith("consumable-")) return canManageConsumables(session);
   return canManageOrgStructure(session);
-}
-
-// Fingerprint machine exports are commonly XLSX, unlike every other dataset
-// in this app which is CSV-only — detected by extension and converted to
-// the same plain row-object shape parseCsvRows already produces, so the
-// rest of the dry-run/commit pipeline stays dataset-agnostic.
-async function fileToRows(file: File): Promise<Record<string, string>[]> {
-  const name = file.name.toLowerCase();
-  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    return XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false, defval: "" });
-  }
-  const csvText = await file.text();
-  return parseCsvRows(csvText);
 }
 
 export async function uploadAndPreviewImport(
@@ -70,7 +55,7 @@ export async function uploadAndPreviewImport(
     return "Pilih berkas terlebih dahulu.";
   }
 
-  const parsedRows = await fileToRows(file);
+  const parsedRows = await fileToRows(file, { isoDates: dataset.startsWith("consumable-") });
   if (parsedRows.length === 0) {
     return "Berkas kosong atau tidak dapat dibaca.";
   }
@@ -155,6 +140,7 @@ export async function commitImportBatch(batchId: string) {
   revalidatePath("/admin/positions");
   revalidatePath("/organization");
   revalidatePath("/training/learning-assignments");
+  revalidatePath("/consumables", "layout");
   redirect(`/import/${batchId}`);
 }
 

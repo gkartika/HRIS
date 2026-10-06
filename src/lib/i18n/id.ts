@@ -840,6 +840,20 @@ export const strings = {
   disposalCase: {
     navLabel: "Kasus Disposal",
   },
+  consumable: {
+    navLabel: "Barang Habis Pakai",
+    title: "Barang Habis Pakai",
+    tabTake: "Catat Pengambilan",
+    tabStock: "Stok Barang",
+    tabHistory: "Riwayat",
+    tabItems: "Kelola Barang & Label",
+    tabDashboard: "Dashboard & Laporan",
+  },
+  consumableStatus: {
+    AMAN: "Aman",
+    MENIPIS: "Menipis",
+    HABIS: "Habis",
+  },
   assetTrackingType: {
     INDIVIDUAL: "Individual",
     QUANTITY_TRACKED: "Kuantitas",

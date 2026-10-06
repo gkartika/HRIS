@@ -60,6 +60,7 @@ import {
   canViewAssetMaster,
   canImportAssetMaster,
   canManageGaOperations,
+  canManageConsumables,
   canSubmitGaRequest,
   canViewGaRequest,
   canCancelGaRequest,
@@ -650,6 +651,12 @@ describe("Phase 4B GA Operations permissions — GA Admin only, never HR Admin",
     expect(canManageGaOperations(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
     expect(canManageGaOperations(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
     expect(canManageGaOperations(mockSession({ roles: ["TRAINING_ADMIN"] }))).toBe(false);
+  });
+
+  it("canManageConsumables is GA Admin only — not HR Admin, not a plain employee", () => {
+    expect(canManageConsumables(mockSession({ roles: ["GA_ADMIN"] }))).toBe(true);
+    expect(canManageConsumables(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
+    expect(canManageConsumables(mockSession({ employeeId: "emp-1" }))).toBe(false);
   });
 
   it("canSubmitGaRequest: any employee-linked account, no HR-Admin-on-behalf-of exception", () => {

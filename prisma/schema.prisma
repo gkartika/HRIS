@@ -426,9 +426,9 @@ model Evaluation {
   p2Scores      Json?
   p2Total       Int?
 
-  completedAt     DateTime?
-  cancelledAt     DateTime?
-  notes           String?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  notes       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -893,6 +893,10 @@ model Account {
   assetCustodiesAssignedBy AssetCustody[] @relation("AssetCustodyAssignedBy")
   assetCustodiesReturnedBy AssetCustody[] @relation("AssetCustodyReturnedBy")
 
+  consumableItemsCreatedBy          ConsumableItem[]        @relation("ConsumableItemCreatedBy")
+  consumableTransactionsRecordedBy  ConsumableTransaction[] @relation("ConsumableTxRecordedBy")
+  consumableTransactionsCancelledBy ConsumableTransaction[] @relation("ConsumableTxCancelledBy")
+
   gaRequestsSubmittedBy        GaRequest[]            @relation("GaRequestSubmittedBy")
   gaRequestsVerifiedBy         GaRequest[]            @relation("GaRequestVerifiedBy")
   gaRequestsDecidedBy          GaRequest[]            @relation("GaRequestDecidedBy")
@@ -919,54 +923,54 @@ model AccountRole {
 // ---------- Employee & Organization (Phase 1 core data model) ----------
 
 model Employee {
-  id                       String           @id @default(cuid())
-  employeeNumber           String           @unique
-  fullLegalName            String
-  nationalIdNumber         String?
-  birthPlace               String?
-  birthDate                DateTime?
-  gender                   Gender?
-  personalEmail            String?
-  mobileNumber             String?
+  id                         String           @id @default(cuid())
+  employeeNumber             String           @unique
+  fullLegalName              String
+  nationalIdNumber           String?
+  birthPlace                 String?
+  birthDate                  DateTime?
+  gender                     Gender?
+  personalEmail              String?
+  mobileNumber               String?
   // Domisili = where the employee actually lives today; split into DM-blueprint
   // administrative components (RT/RW through postal code) instead of one free-
   // text blob, so it can be printed/matched against government forms cleanly.
-  currentAddressLine       String?
-  currentAddressRtRw       String?
-  currentAddressCity       String?
-  currentAddressDistrict   String?
-  currentAddressVillage    String?
-  currentAddressPostalCode String?
+  currentAddressLine         String?
+  currentAddressRtRw         String?
+  currentAddressCity         String?
+  currentAddressDistrict     String?
+  currentAddressVillage      String?
+  currentAddressPostalCode   String?
   // KTP address defaults to "same as domisili" (the common case) — only
   // filled in separately when the employee's ID card lists a different
   // address than where they currently live.
-  idCardAddressSameAsCurrent Boolean @default(true)
-  idCardAddressLine        String?
-  idCardAddressRtRw        String?
-  idCardAddressCity        String?
-  idCardAddressDistrict    String?
-  idCardAddressVillage     String?
-  idCardAddressPostalCode  String?
-  emergencyContactName     String?
-  emergencyContactRelation String?
-  emergencyContactPhone    String?
-  bankAccountName          String?
-  bankAccountNumber        String?
-  taxId                    String?
-  bpjsEmploymentNumber     String?
-  bpjsHealthNumber         String?
+  idCardAddressSameAsCurrent Boolean          @default(true)
+  idCardAddressLine          String?
+  idCardAddressRtRw          String?
+  idCardAddressCity          String?
+  idCardAddressDistrict      String?
+  idCardAddressVillage       String?
+  idCardAddressPostalCode    String?
+  emergencyContactName       String?
+  emergencyContactRelation   String?
+  emergencyContactPhone      String?
+  bankAccountName            String?
+  bankAccountNumber          String?
+  taxId                      String?
+  bpjsEmploymentNumber       String?
+  bpjsHealthNumber           String?
   // DM-17: Kartu Keluarga number. Text, not numeric — must preserve leading
   // zeroes and is never used as a join/relationship key, just stored/validated
   // as exactly 16 digits (see src/lib/validation/employee-fields.ts).
-  noKk                     String?
-  namaIbuKandung           String?
+  noKk                       String?
+  namaIbuKandung             String?
   // DM-19/DM-20: admin-maintained dropdowns, stored as a stable reference
   // (row id for education, the code itself for PTKP since that's already a
   // stable regulatory identifier), never free text.
-  educationLevelId         String?
-  educationLevel           EducationLevel?  @relation(fields: [educationLevelId], references: [id])
-  ptkpStatusCode           String?
-  ptkpStatus               PtkpStatus?      @relation(fields: [ptkpStatusCode], references: [code])
+  educationLevelId           String?
+  educationLevel             EducationLevel?  @relation(fields: [educationLevelId], references: [id])
+  ptkpStatusCode             String?
+  ptkpStatus                 PtkpStatus?      @relation(fields: [ptkpStatusCode], references: [code])
   // DM-18/CTL-12: private file references, never a public URL or base64 blob.
   // A new upload creates a new FileObject and repoints this FK — the
   // superseded FileObject row is kept (still linked via FileObject.employeeId)
@@ -975,20 +979,20 @@ model Employee {
   // documents still stored as files, downloadable (not editable) by GA
   // Admin and Training Admin too since HSE/GA need them on hand for a
   // workplace accident.
-  bpjsTkFileId             String?          @unique
-  bpjsTkFile               FileObject?      @relation("EmployeeBpjsTkFile", fields: [bpjsTkFileId], references: [id])
-  bpjsKesehatanFileId      String?          @unique
-  bpjsKesehatanFile        FileObject?      @relation("EmployeeBpjsKesehatanFile", fields: [bpjsKesehatanFileId], references: [id])
-  hireDate                 DateTime
-  employmentStatus         EmploymentStatus
+  bpjsTkFileId               String?          @unique
+  bpjsTkFile                 FileObject?      @relation("EmployeeBpjsTkFile", fields: [bpjsTkFileId], references: [id])
+  bpjsKesehatanFileId        String?          @unique
+  bpjsKesehatanFile          FileObject?      @relation("EmployeeBpjsKesehatanFile", fields: [bpjsKesehatanFileId], references: [id])
+  hireDate                   DateTime
+  employmentStatus           EmploymentStatus
   // Denormalized pointer to the Position of this employee's current Primary
   // Assignment, kept in sync by application code. Source of truth for history
   // and for "who holds what" is always the Assignment table, never this field.
-  currentPositionId        String?
-  currentPosition          Position?        @relation("PositionHolder", fields: [currentPositionId], references: [id])
-  activeFlag               Boolean          @default(true)
-  createdAt                DateTime         @default(now())
-  updatedAt                DateTime         @updatedAt
+  currentPositionId          String?
+  currentPosition            Position?        @relation("PositionHolder", fields: [currentPositionId], references: [id])
+  activeFlag                 Boolean          @default(true)
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
 
   account                        Account?
   assignments                    Assignment[]                   @relation("EmployeeAssignments")
@@ -1001,6 +1005,7 @@ model Employee {
   movementRequestsCancelled      MovementRequest[]              @relation("MovementCancelledByEmployee")
   onboardingCase                 OnboardingCase?
   assetCustodies                 AssetCustody[]                 @relation("AssetCustodyEmployee")
+  consumableIssues               ConsumableTransaction[]        @relation("ConsumableTxEmployee")
   contracts                      Contract[]                     @relation("EmployeeContracts")
   contractRecommendationsGiven   Contract[]                     @relation("ContractRecommendationBy")
   renewalCases                   ContractRenewalCase[]          @relation("RenewalCaseEmployee")
@@ -1073,27 +1078,28 @@ model OrgUnit {
   effectiveFrom DateTime  @default(now())
   effectiveTo   DateTime?
 
-  positions             Position[]
-  recruitmentRequests   RecruitmentRequest[]
-  absenceApproverConfig AbsenceApproverConfig?
+  positions              Position[]
+  recruitmentRequests    RecruitmentRequest[]
+  absenceApproverConfig  AbsenceApproverConfig?
   jobsWithDefaultOrgUnit Job[]
 
   competencyAssessments        CompetencyAssessment[]
   trainingRequestsSnapshot     TrainingRequest[]
   mandatoryTrainingRuleTargets MandatoryTrainingRule[]
   assetCustodies               AssetCustody[]
+  consumableIssues             ConsumableTransaction[] @relation("ConsumableTxOrgUnit")
 
   @@index([parentUnitId])
 }
 
 model Job {
-  id                String   @id @default(cuid())
-  jobCode           String   @unique
-  jobTitle          String
-  jobPurpose        String?
-  approvalStatus    String   @default("Approved")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id             String   @id @default(cuid())
+  jobCode        String   @unique
+  jobTitle       String
+  jobPurpose     String?
+  approvalStatus String   @default("Approved")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Optional convenience defaults — per direct request, so re-selecting the
   // same Job for a new Position doesn't require re-picking its usual
@@ -1104,7 +1110,7 @@ model Job {
   // same Job legitimately used across different units/tiers), same
   // reasoning as jobLevel staying per-seat on Position, not on Job.
   defaultOrgUnitId    String?
-  defaultOrgUnit      OrgUnit?     @relation(fields: [defaultOrgUnitId], references: [id])
+  defaultOrgUnit      OrgUnit?      @relation(fields: [defaultOrgUnitId], references: [id])
   defaultPositionType PositionType?
 
   positions           Position[]
@@ -1153,30 +1159,30 @@ model Position {
   effectiveFrom         DateTime       @default(now())
   effectiveTo           DateTime?
 
-  currentHolders                              Employee[]              @relation("PositionHolder")
-  assignments                                 Assignment[]
-  requesterForRecruitment                     RecruitmentRequest[]    @relation("RequesterPosition")
-  recruitmentDecisions                        RecruitmentRequest[]    @relation("RecruitmentDecisionPosition")
-  recruitmentDeptHeadDecisions                RecruitmentRequest[]    @relation("RecruitmentDeptHeadDecisionPosition")
-  movementRequestsAsCurrent                   MovementRequest[]       @relation("MovementCurrentPosition")
-  movementRequestsAsProposed                  MovementRequest[]       @relation("MovementProposedPosition")
-  movementRequestsAsRequesterPosition         MovementRequest[]       @relation("MovementRequesterPosition")
-  movementRequestsDecisions                   MovementRequest[]       @relation("MovementDecisionPosition")
-  movementRequestsDeptHeadDecisions           MovementRequest[]       @relation("MovementDeptHeadDecisionPosition")
-  contractRecommendations                     Contract[]              @relation("ContractRecommendationPosition")
-  contractDecisions                           Contract[]              @relation("ContractDecisionPosition")
-  renewalSnapshotOf                           ContractRenewalCase[]   @relation("RenewalSnapshotPosition")
-  renewalDeptHeadPositionOf                   ContractRenewalCase[]   @relation("RenewalDeptHeadPosition")
-  renewalDeptHeadProposedPositionOf           ContractRenewalCase[]   @relation("RenewalDeptHeadProposedPosition")
-  renewalDecisionPositionOf                   ContractRenewalCase[]   @relation("RenewalDecisionPosition")
-  evaluationsAsSnapshotPosition               Evaluation[]            @relation("EvaluationSnapshotPosition")
-  evaluationsAsP1Position                     Evaluation[]            @relation("EvaluationP1Position")
-  evaluationsAsP2Position                     Evaluation[]            @relation("EvaluationP2Position")
-  contractsReleasedByPositionOf               Contract[]              @relation("ContractReleasedByPosition")
-  shiftAssignmentsSubmittedByPositionOf       ShiftAssignment[]       @relation("ShiftAssignmentSubmittedByPosition")
-  absenceApproverConfigOf                     AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
-  absenceRequestsAsFirstApproverPosition      AbsenceRequest[]        @relation("AbsenceFirstApproverPosition")
-  absenceRequestsAsSecondApproverPosition     AbsenceRequest[]        @relation("AbsenceSecondApproverPosition")
+  currentHolders                          Employee[]              @relation("PositionHolder")
+  assignments                             Assignment[]
+  requesterForRecruitment                 RecruitmentRequest[]    @relation("RequesterPosition")
+  recruitmentDecisions                    RecruitmentRequest[]    @relation("RecruitmentDecisionPosition")
+  recruitmentDeptHeadDecisions            RecruitmentRequest[]    @relation("RecruitmentDeptHeadDecisionPosition")
+  movementRequestsAsCurrent               MovementRequest[]       @relation("MovementCurrentPosition")
+  movementRequestsAsProposed              MovementRequest[]       @relation("MovementProposedPosition")
+  movementRequestsAsRequesterPosition     MovementRequest[]       @relation("MovementRequesterPosition")
+  movementRequestsDecisions               MovementRequest[]       @relation("MovementDecisionPosition")
+  movementRequestsDeptHeadDecisions       MovementRequest[]       @relation("MovementDeptHeadDecisionPosition")
+  contractRecommendations                 Contract[]              @relation("ContractRecommendationPosition")
+  contractDecisions                       Contract[]              @relation("ContractDecisionPosition")
+  renewalSnapshotOf                       ContractRenewalCase[]   @relation("RenewalSnapshotPosition")
+  renewalDeptHeadPositionOf               ContractRenewalCase[]   @relation("RenewalDeptHeadPosition")
+  renewalDeptHeadProposedPositionOf       ContractRenewalCase[]   @relation("RenewalDeptHeadProposedPosition")
+  renewalDecisionPositionOf               ContractRenewalCase[]   @relation("RenewalDecisionPosition")
+  evaluationsAsSnapshotPosition           Evaluation[]            @relation("EvaluationSnapshotPosition")
+  evaluationsAsP1Position                 Evaluation[]            @relation("EvaluationP1Position")
+  evaluationsAsP2Position                 Evaluation[]            @relation("EvaluationP2Position")
+  contractsReleasedByPositionOf           Contract[]              @relation("ContractReleasedByPosition")
+  shiftAssignmentsSubmittedByPositionOf   ShiftAssignment[]       @relation("ShiftAssignmentSubmittedByPosition")
+  absenceApproverConfigOf                 AbsenceApproverConfig[] @relation("AbsenceApproverPosition")
+  absenceRequestsAsFirstApproverPosition  AbsenceRequest[]        @relation("AbsenceFirstApproverPosition")
+  absenceRequestsAsSecondApproverPosition AbsenceRequest[]        @relation("AbsenceSecondApproverPosition")
 
   competencyAssessmentsAsSnapshotPosition    CompetencyAssessment[]  @relation("CompetencyAssessmentPosition")
   competencyAssessmentsAsP1Position          CompetencyAssessment[]  @relation("CompetencyAssessmentP1Position")
@@ -1384,16 +1390,16 @@ model MovementRequest {
   // "Absensi 3 Bulan Terakhir" + evaluation reference) — added/verified by
   // HR Admin, never visible or editable by the requester. Evaluation
   // reference is mandatory for Promosi (validated in the action, not here).
-  attendanceAlpha             Int?
-  attendanceSakit             Int?
-  attendanceIjin              Int?
-  attendanceIjinHalfDay       Int?
-  attendanceCuti              Int?
+  attendanceAlpha          Int?
+  attendanceSakit          Int?
+  attendanceIjin           Int?
+  attendanceIjinHalfDay    Int?
+  attendanceCuti           Int?
   // Superseded by the shared Evaluation below (WF-19/DEC-020) — kept only as
   // an optional HR-only supplementary note/legacy field for pre-refactor
   // rows, no longer required or treated as "the evaluation" for any type.
-  performanceEvaluationRef    String?
-  hrConfidentialNotes         String?
+  performanceEvaluationRef String?
+  hrConfidentialNotes      String?
 
   // DM-27/WF-17/LIF-14: every Promosi, Mutasi or Demotasi auto-creates one
   // linked Evaluation Draft on submission (never a requester trigger) —
@@ -1762,12 +1768,12 @@ model DailyAttendanceRecord {
   // second set of actor fields (same "in-place overwrite with mandatory
   // identity/timestamp" convention as AbsenceRequest's HR override).
   absenceTypeCode       String?
-  absenceType           AbsenceTypeConfig?  @relation(fields: [absenceTypeCode], references: [code])
+  absenceType           AbsenceTypeConfig?   @relation(fields: [absenceTypeCode], references: [code])
   shiftType             ShiftAssignmentType?
   classificationNote    String?
   classifiedAt          DateTime?
   classifiedByAccountId String?
-  classifiedByAccount   Account?            @relation("DailyAttendanceRecordClassifiedBy", fields: [classifiedByAccountId], references: [id])
+  classifiedByAccount   Account?             @relation("DailyAttendanceRecordClassifiedBy", fields: [classifiedByAccountId], references: [id])
 
   // "Masuk (Lupa Absen)" override, per direct request: a day with no punch
   // is often just a forgotten scan, not a real absence — HR marks it
@@ -1776,7 +1782,6 @@ model DailyAttendanceRecord {
   presentOverride Boolean @default(false)
 
   @@unique([employeeId, attendanceDate])
-
   @@index([attendanceDate])
 }
 
@@ -2210,7 +2215,6 @@ model CompetencyAssessment {
   evaluatorChanges CompetencyEvaluatorChange[]
 
   @@unique([cycleId, employeeId])
-
   @@index([employeeId])
 }
 
@@ -2737,6 +2741,111 @@ model AssetCustody {
 
   @@index([employeeId, status])
   @@index([assetId])
+}
+
+// ── Consumables (APD / ATK) ─────────────────────────────────────────────
+// GA-Admin-only quantity ledger, deliberately separate from FixedAsset: a
+// consumable is never returned and has no per-unit identity, so there is no
+// custody, status lifecycle or approval flow. Current stock and the
+// Aman/Menipis/Habis status are NEVER stored — they are derived from
+// openingStock + the non-cancelled ledger rows (see lib/consumables.ts).
+// Transactions are cancelled, never deleted.
+
+enum ConsumableCategory {
+  APD
+  ATK
+}
+
+enum ConsumableTxType {
+  ISSUE
+  RECEIPT
+  ADJUSTMENT
+}
+
+enum ConsumableRecipientType {
+  EMPLOYEE
+  DEPARTMENT
+}
+
+enum ConsumableTxSource {
+  APP
+  IMPORT
+}
+
+model ConsumableItem {
+  id                      String             @id @default(cuid())
+  // Printed on the QR label, so it never changes once created.
+  itemCode                String             @unique
+  itemName                String
+  category                ConsumableCategory
+  unit                    String
+  openingStock            Int                @default(0)
+  minStock                Int                @default(0)
+  // 0 = no replacement-period rule for this item.
+  replacementPeriodMonths Int                @default(0)
+  // Hides the item from pickers and labels; history and stock stay intact.
+  archived                Boolean            @default(false)
+  createdByAccountId      String
+  createdByAccount        Account            @relation("ConsumableItemCreatedBy", fields: [createdByAccountId], references: [id])
+  createdAt               DateTime           @default(now())
+
+  transactions ConsumableTransaction[]
+
+  @@index([category])
+}
+
+// One ledger for all three movement types. quantityDelta is signed: ISSUE
+// negative, RECEIPT positive, ADJUSTMENT = physical - system at save time.
+model ConsumableTransaction {
+  id            String             @id @default(cuid())
+  itemId        String
+  item          ConsumableItem     @relation(fields: [itemId], references: [id])
+  type          ConsumableTxType
+  quantityDelta Int
+  occurredAt    DateTime           @default(now())
+  source        ConsumableTxSource @default(APP)
+
+  // ISSUE only. Exactly one of employeeId/orgUnitId is set for an in-app
+  // take; an unmatched imported name keeps employeeId null and only the
+  // snapshot text. Snapshots keep history readable after transfers/renames.
+  recipientType          ConsumableRecipientType?
+  employeeId             String?
+  employee               Employee?                @relation("ConsumableTxEmployee", fields: [employeeId], references: [id])
+  orgUnitId              String?
+  orgUnit                OrgUnit?                 @relation("ConsumableTxOrgUnit", fields: [orgUnitId], references: [id])
+  recipientNameSnapshot  String?
+  departmentNameSnapshot String?
+  purpose                String?
+  beforePeriod           Boolean                  @default(false)
+  exceededStock          Boolean                  @default(false)
+  warningReason          String?
+  // Groups the lines of one multi-item handover.
+  batchId                String?
+
+  // RECEIPT only.
+  reference String?
+  note      String?
+
+  // ADJUSTMENT only.
+  systemStockSnapshot Int?
+  physicalStock       Int?
+  reason              String?
+
+  recordedByAccountId String
+  recordedByAccount   Account  @relation("ConsumableTxRecordedBy", fields: [recordedByAccountId], references: [id])
+  // Optional free text: the shared GA Admin account records for several people.
+  recordedByLabel     String?
+  createdAt           DateTime @default(now())
+
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelledByAccount   Account?  @relation("ConsumableTxCancelledBy", fields: [cancelledByAccountId], references: [id])
+  cancelReason         String?
+
+  @@index([itemId, occurredAt])
+  @@index([employeeId, itemId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([batchId])
 }
 
 model TaskForceMembership {

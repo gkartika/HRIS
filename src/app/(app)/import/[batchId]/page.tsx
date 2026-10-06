@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
-import { canAccessImport } from "@/lib/permissions";
+import { canAccessImport, canManageConsumables } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { commitImportBatch } from "../actions";
@@ -22,6 +22,11 @@ export default async function ImportBatchPage({
     include: { rows: { orderBy: { rowNumber: "asc" } } },
   });
   if (!batch) notFound();
+  // A consumables batch holds employee names and what each took — GA Admin
+  // only, even for the other admins who may open the import hub.
+  if (batch.importType.startsWith("consumable-") && !canManageConsumables(session)) {
+    return <p className="text-sm text-rose-600">{t("common.accessDenied")}</p>;
+  }
 
   const mod = isDatasetKey(batch.importType) ? DATASET_REGISTRY[batch.importType] : null;
   const previewColumns = mod ? mod.templateHeaders.slice(0, 3) : [];

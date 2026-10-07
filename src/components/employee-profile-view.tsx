@@ -172,9 +172,12 @@ export function EmployeeProfileFields({
 export function EmployeeAssignmentHistory({
   assignments,
   reportsTo,
+  startDateEditor,
 }: {
   assignments: AssignmentWithPosition[];
   reportsTo?: { label: string; holderName: string | null } | null;
+  /** When given (HR admin), shown instead of the plain start date so it can be changed in place. */
+  startDateEditor?: (assignment: AssignmentWithPosition) => React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-slate-100 p-4">
@@ -196,8 +199,8 @@ export function EmployeeAssignmentHistory({
                   {a.position.jobLevel} {a.position.job.jobTitle}
                 </p>
                 <p className="text-xs text-slate-500">{a.position.orgUnit.unitName}</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {t("assignmentUi.effectiveFrom")} {formatDate(a.effectiveFrom)}
+                <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-slate-400">
+                  {t("assignmentUi.effectiveFrom")} {startDateEditor ? startDateEditor(a) : formatDate(a.effectiveFrom)}
                   {" — "}
                   {a.effectiveTo ? formatDate(a.effectiveTo) : t("assignmentUi.ongoing")}
                 </p>

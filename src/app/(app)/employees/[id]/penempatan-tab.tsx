@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { EmployeeAssignmentHistory } from "@/components/employee-profile-view";
+import { EmployeeAssignmentHistory, formatDate } from "@/components/employee-profile-view";
+import { StartDateEditor } from "./start-date-editor";
 import { AssignmentManagementPanel } from "./assignment-panel";
 import { TaskForcePanel } from "./task-force-panel";
 
@@ -97,7 +98,23 @@ export async function PenempatanTabContent({
 
   return (
     <div className={SECTION_DIVIDERS}>
-      <EmployeeAssignmentHistory assignments={assignments} reportsTo={reportsTo} />
+      <EmployeeAssignmentHistory
+        assignments={assignments}
+        reportsTo={reportsTo}
+        startDateEditor={
+          canManage
+            ? (a) => (
+                <StartDateEditor
+                  employeeId={employeeId}
+                  assignmentId={a.id}
+                  label={formatDate(a.effectiveFrom)}
+                  isoDate={a.effectiveFrom ? a.effectiveFrom.toISOString().slice(0, 10) : ""}
+                  positionCode={a.position.positionCode}
+                />
+              )
+            : undefined
+        }
+      />
       {canManage && (
         <AssignmentManagementPanel
           employeeId={employeeId}

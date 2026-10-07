@@ -105,8 +105,10 @@ export async function getOrgChartData(asOfDate: Date): Promise<OrgChartData> {
     // one does.
     prisma.assignment.findMany({
       where: {
-        effectiveFrom: { lte: asOfDate },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOfDate } }],
+        AND: [
+          { OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: asOfDate } }] },
+          { OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOfDate } }] },
+        ],
       },
       include: { employee: true },
     }),

@@ -23,6 +23,7 @@ export async function addAssignment(
   if (!positionId || !assignmentType || !effectiveFrom) {
     return "Posisi, jenis penempatan, dan tanggal mulai wajib diisi.";
   }
+  if (Number.isNaN(Date.parse(effectiveFrom))) return "Tanggal mulai tidak valid.";
   if (assignmentType === "PRIMARY") {
     return "Gunakan 'Pindahkan ke Posisi Baru' untuk mengubah Penempatan Utama.";
   }
@@ -69,6 +70,48 @@ export async function addAssignment(
     datasetName: "Assignment",
     recordId: assignment.id,
     reason: `Added ${assignmentType} assignment to position ${position.positionCode}`,
+  });
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/organization");
+  revalidatePath("/team");
+}
+
+// HR can correct a placement's Berlaku Sejak later, e.g. one that was filled in
+// automatically at import (hire date / import day) once the real date is known.
+// Only the start date changes; position, type and status stay as they are.
+export async function updateAssignmentStartDate(
+  employeeId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageAssignments(session)) return "Anda tidak memiliki akses.";
+
+  const assignmentId = formData.get("assignmentId") as string;
+  const effectiveFrom = ((formData.get("effectiveFrom") as string) ?? "").trim();
+  if (!assignmentId || !effectiveFrom) return "Pilih penempatan dan isi tanggal mulai.";
+  if (Number.isNaN(Date.parse(effectiveFrom))) return "Tanggal mulai tidak valid.";
+
+  const assignment = await prisma.assignment.findFirst({
+    where: { id: assignmentId, employeeId },
+    include: { position: { select: { positionCode: true } } },
+  });
+  if (!assignment) return "Penempatan tidak ditemukan.";
+
+  const newDate = new Date(effectiveFrom);
+  if (assignment.effectiveTo && newDate > assignment.effectiveTo) {
+    return "Tanggal mulai tidak boleh setelah tanggal berakhir penempatan ini.";
+  }
+
+  await prisma.assignment.update({ where: { id: assignmentId }, data: { effectiveFrom: newDate } });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "Assignment",
+    recordId: assignmentId,
+    reason: `Changed Berlaku Sejak of ${assignment.position.positionCode} from ${assignment.effectiveFrom ? assignment.effectiveFrom.toISOString().slice(0, 10) : "-"} to ${effectiveFrom}`,
   });
 
   revalidatePath(`/employees/${employeeId}`);

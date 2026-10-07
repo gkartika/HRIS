@@ -1,5 +1,6 @@
 "use server";
 
+import { activeAssignmentWhere } from "@/lib/active-assignments";
 import { revalidatePath } from "next/cache";
 import { companyYear } from "@/lib/company-time";
 import { nextSequence } from "@/lib/number-sequence";
@@ -80,20 +81,16 @@ export async function openCompetencyCycle(
       activeFlag: true,
       assignments: {
         some: {
-          status: "ACTIVE",
+          ...activeAssignmentWhere(cutoffDate),
           primaryAssignmentFlag: true,
-          effectiveFrom: { lte: cutoffDate },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gt: cutoffDate } }],
         },
       },
     },
     include: {
       assignments: {
         where: {
-          status: "ACTIVE",
+          ...activeAssignmentWhere(cutoffDate),
           primaryAssignmentFlag: true,
-          effectiveFrom: { lte: cutoffDate },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gt: cutoffDate } }],
         },
         include: { position: { include: { job: true } } },
         take: 1,

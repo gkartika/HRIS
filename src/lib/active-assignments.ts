@@ -38,10 +38,14 @@ export const getOrgUnitMap = cache(async () => {
 
 // Prisma `where` fragment for "assignment in force at asOf" — one definition
 // for the half-open interval effectiveFrom <= asOf < effectiveTo.
+// A placement with no start date (unknown, e.g. imported without one) counts as
+// already in force.
 export function activeAssignmentWhere(asOf: Date) {
   return {
     status: "ACTIVE" as const,
-    effectiveFrom: { lte: asOf },
-    OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
+    AND: [
+      { OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: asOf } }] },
+      { OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }] },
+    ],
   };
 }

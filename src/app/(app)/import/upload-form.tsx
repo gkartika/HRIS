@@ -42,6 +42,12 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
           Perangkat Fingerprint karyawan di Penugasan Absensi dengan nama persis seperti yang tampil di mesin.
         </p>
       )}
+      {dataset === "assignments" && (
+        <p className="mb-2 text-xs text-slate-400">
+          Berlaku Sejak (effectiveFrom) boleh dikosongkan: otomatis diisi Tanggal Bergabung karyawan, atau hari ini jika
+          belum ada. Tanggalnya bisa diubah nanti di tab Penempatan karyawan. Jika diisi, formatnya YYYY-MM-DD (mis. 2026-01-31).
+        </p>
+      )}
       {isConsumable && (
         <p className="mb-2 text-xs text-slate-400">
           Impor dalam urutan: Master Barang, lalu Riwayat Stok Masuk &amp; Penyesuaian, lalu Riwayat Pengambilan. Kolom

@@ -1209,7 +1209,9 @@ model Assignment {
   assignmentType        AssignmentType
   primaryAssignmentFlag Boolean          @default(false)
   status                AssignmentStatus @default(ACTIVE)
-  effectiveFrom         DateTime
+  // Start date of the placement. Blank = not known (e.g. bulk-imported without
+  // dates); it is then treated as already in force.
+  effectiveFrom         DateTime?
   effectiveTo           DateTime?
   createdAt             DateTime         @default(now())
 

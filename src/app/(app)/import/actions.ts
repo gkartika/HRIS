@@ -16,6 +16,7 @@ import {
   canManageConsumables,
 } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { claimImportBatch, releaseImportBatch } from "@/lib/import-claim";
 import { fileToRows } from "@/lib/import-export/read-rows";
 import { DATASET_REGISTRY, isDatasetKey, type DatasetKey } from "@/lib/import-export/registry";
 import { importEmployeeDocumentsZip } from "@/lib/import-export/employee-documents-zip";
@@ -94,34 +95,45 @@ export async function uploadAndPreviewImport(
 export async function commitImportBatch(batchId: string) {
   const session = await requireSession();
 
-  const batch = await prisma.importBatch.findUnique({
-    where: { id: batchId },
-    include: { rows: true },
-  });
+  const batch = await prisma.importBatch.findUnique({ where: { id: batchId } });
   if (!batch) throw new Error("Import batch not found");
   if (!isDatasetKey(batch.importType)) throw new Error("Unknown dataset for this batch");
   if (!canImportDataset(session, batch.importType)) throw new Error("Access denied");
 
   const mod = DATASET_REGISTRY[batch.importType];
 
-  if (batch.importStatus !== "POSTED") {
+  // Only ONE run may write a batch. A second click / second tab / double submit
+  // gets "in-progress" or "already-posted" here and just lands on the batch
+  // page, instead of writing the same rows a second time.
+  const claim = await claimImportBatch(batchId);
+  if (claim === "claimed") {
     let createdCount = 0;
     let updatedCount = 0;
-    for (const row of batch.rows) {
-      if (!row.isValid || row.createdRecordId) continue;
-      const raw = JSON.parse(row.rawData) as Record<string, string>;
-      const result = await mod.commitRow(raw, session);
-      await prisma.importRow.update({
-        where: { id: row.id },
-        data: { createdRecordId: result.id, rowAction: result.action },
-      });
-      if (result.action === "UPDATE") updatedCount += 1;
-      else createdCount += 1;
+    try {
+      // Read the rows only now, after the claim, so rows a dead earlier run
+      // already wrote (createdRecordId set) are skipped.
+      const rows = await prisma.importRow.findMany({ where: { importBatchId: batchId }, orderBy: { rowNumber: "asc" } });
+      for (const row of rows) {
+        if (!row.isValid || row.createdRecordId) continue;
+        const raw = JSON.parse(row.rawData) as Record<string, string>;
+        const result = await mod.commitRow(raw, session);
+        await prisma.importRow.update({
+          where: { id: row.id },
+          data: { createdRecordId: result.id, rowAction: result.action },
+        });
+        if (result.action === "UPDATE") updatedCount += 1;
+        else createdCount += 1;
+      }
+    } catch (error) {
+      // Hand the batch back so it can be retried; rows already written stay
+      // marked and are skipped next time.
+      await releaseImportBatch(batchId);
+      throw error;
     }
 
     await prisma.importBatch.update({
       where: { id: batchId },
-      data: { importStatus: "POSTED", postedAt: new Date() },
+      data: { importStatus: "POSTED", postedAt: new Date(), postingStartedAt: null },
     });
 
     await logAudit({

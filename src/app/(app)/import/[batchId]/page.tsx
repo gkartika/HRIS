@@ -6,6 +6,9 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { commitImportBatch } from "../actions";
 import { DATASET_REGISTRY, isDatasetKey } from "@/lib/import-export/registry";
+import { STALE_AFTER_MS } from "@/lib/import-claim";
+import { CommitButton } from "./commit-button";
+import { AutoRefresh } from "./auto-refresh";
 
 export default async function ImportBatchPage({
   params,
@@ -32,6 +35,12 @@ export default async function ImportBatchPage({
   const mod = isDatasetKey(batch.importType) ? DATASET_REGISTRY[batch.importType] : null;
   const previewColumns = mod ? mod.templateHeaders.slice(0, 3) : [];
   const commitWithId = commitImportBatch.bind(null, batchId);
+  // Another run is writing this batch right now (and is not dead yet): show
+  // progress instead of a button, so it cannot be started a second time.
+  const isImporting =
+    batch.importStatus === "POSTING" &&
+    !!batch.postingStartedAt &&
+    new Date().getTime() - batch.postingStartedAt.getTime() < STALE_AFTER_MS;
 
   return (
     <div>
@@ -98,14 +107,16 @@ export default async function ImportBatchPage({
       <div className="mt-4 flex items-center gap-3">
         {batch.importStatus === "POSTED" ? (
           <p className="text-sm font-medium text-emerald-700">{t("importUi.commitSuccess")}</p>
+        ) : isImporting ? (
+          <>
+            <AutoRefresh />
+            <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+              Sedang diimpor… jangan tekan tombol lagi. Halaman ini memperbarui sendiri setelah selesai.
+            </p>
+          </>
         ) : (
           <form action={commitWithId}>
-            <button
-              type="submit"
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-            >
-              {t("importUi.commitButton")} ({batch.validRows})
-            </button>
+            <CommitButton label={`${t("importUi.commitButton")} (${batch.validRows})`} />
           </form>
         )}
       </div>

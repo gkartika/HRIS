@@ -135,6 +135,9 @@ enum ImportStatus {
   UPLOADED
   VALIDATED
   NEEDS_FIX
+  // Being written right now. Set atomically by the first "Import" click, so a
+  // second click (or a second tab) cannot write the same rows again.
+  POSTING
   POSTED
   ROLLED_BACK
 }
@@ -1610,6 +1613,9 @@ model ImportBatch {
   importStatus        ImportStatus @default(UPLOADED)
   previewConfirmedAt  DateTime?
   postedAt            DateTime?
+  // When the current POSTING run started; a run older than a few minutes is
+  // treated as dead (e.g. the server timed out) and may be resumed.
+  postingStartedAt    DateTime?
 
   rows ImportRow[]
 }

@@ -1,3 +1,4 @@
+import { CONSUMABLE_STATUS_TONE } from "@/lib/status-ui";
 import Link from "next/link";
 import { getMonthlyIssued, getMonthlyReportRows, listItemsWithStock } from "@/lib/consumables-queries";
 import { t } from "@/lib/i18n/id";
@@ -5,11 +6,6 @@ import { bucketMonthlyIssued, monthKey, monthLabel, monthRange } from "@/lib/con
 import type { ConsumableStatusValue } from "@/lib/consumables";
 import { consumablesAccessDenied } from "../access";
 
-const STATUS_TONE: Record<ConsumableStatusValue, string> = {
-  AMAN: "bg-emerald-50 text-emerald-700",
-  MENIPIS: "bg-amber-50 text-amber-700",
-  HABIS: "bg-rose-50 text-rose-700",
-};
 const MONTHS_SHOWN = 6;
 const SHORT_MONTH = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
@@ -47,7 +43,7 @@ export default async function ConsumableDashboardPage({ searchParams }: { search
         {(["AMAN", "MENIPIS", "HABIS"] as const).map((s) => (
           <div key={s} className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs text-slate-500">{t(`consumableStatus.${s}`)}</p>
-            <p className={`mt-1 text-2xl font-semibold ${STATUS_TONE[s].split(" ")[1]}`}>{counts[s]}</p>
+            <p className={`mt-1 text-2xl font-semibold ${CONSUMABLE_STATUS_TONE[s].split(" ")[1]}`}>{counts[s]}</p>
           </div>
         ))}
       </div>
@@ -91,7 +87,7 @@ export default async function ConsumableDashboardPage({ searchParams }: { search
                   </span>
                   <span className="flex items-center gap-2 text-xs text-slate-500">
                     sisa {i.stock} / min {i.minStock}
-                    <span className={`rounded-md px-2 py-0.5 text-[10.5px] font-semibold ${STATUS_TONE[i.status]}`}>{t(`consumableStatus.${i.status}`)}</span>
+                    <span className={`rounded-md px-2 py-0.5 text-[10.5px] font-semibold ${CONSUMABLE_STATUS_TONE[i.status]}`}>{t(`consumableStatus.${i.status}`)}</span>
                   </span>
                 </div>
               ))}

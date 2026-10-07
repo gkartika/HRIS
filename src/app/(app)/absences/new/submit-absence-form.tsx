@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import { submitAbsenceRequest } from "../actions";
 import { remainingEntitlementDays } from "@/lib/absence";
@@ -139,7 +140,7 @@ export function SubmitAbsenceForm({
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("absence.attachmentLabel")}</label>
-        <input name="attachment" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <DocumentFileInput name="attachment" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
         <FieldError state={state} name="attachment" />
       </div>
 

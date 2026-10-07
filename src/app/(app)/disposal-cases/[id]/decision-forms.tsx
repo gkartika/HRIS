@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import { submitDisposalCaseForApproval, decideDisposalCase, executeDisposalCase } from "../actions";
 import { t } from "@/lib/i18n/id";
@@ -11,7 +12,7 @@ export function SubmitForApprovalForm({ caseId }: { caseId: string }) {
       <label className="block text-xs text-slate-500">Catatan Proposal</label>
       <textarea name="proposalNote" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       <label className="block text-xs text-slate-500">Bukti Proposal</label>
-      <input name="proposalEvidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+      <DocumentFileInput name="proposalEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <button
         type="submit"
@@ -95,7 +96,7 @@ export function ExecuteDisposalForm({ caseId }: { caseId: string }) {
       </div>
       <div className="md:col-span-2">
         <label className="mb-1 block text-xs text-slate-500">Bukti Pelaksanaan (wajib)</label>
-        <input name="executionEvidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" required className="text-sm" />
+        <DocumentFileInput name="executionEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" required className="text-sm" />
       </div>
       <div className="md:col-span-2">
         <button

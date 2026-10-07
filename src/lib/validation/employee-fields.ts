@@ -33,7 +33,10 @@ export const ALLOWED_DOCUMENT_MIME_TYPES = [
 
 export const ALLOWED_DOCUMENT_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"] as const;
 
-export const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB, per CTL-12/DM-18
+// 4 MB: the hosting platform rejects request bodies above ~4.5 MB, so a larger
+// limit would only fail after the upload. Photos are shrunk in the browser
+// (components/document-file-input.tsx) so this fits a normal phone picture.
+export const MAX_DOCUMENT_SIZE_BYTES = 4 * 1024 * 1024;
 
 export function getExtension(fileName: string): string {
   const idx = fileName.lastIndexOf(".");
@@ -50,7 +53,7 @@ export function validateDocumentFile(file: { name: string; type: string; size: n
     return "Jenis berkas tidak didukung. Gunakan PDF, JPG, JPEG, atau PNG.";
   }
   if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
-    return "Ukuran berkas melebihi batas maksimum 10 MB.";
+    return "Ukuran berkas melebihi batas maksimum 4 MB.";
   }
   if (file.size === 0) {
     return "Berkas kosong atau tidak dapat dibaca.";

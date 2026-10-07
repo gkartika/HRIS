@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import { completeLearningAssignment } from "./actions";
 
@@ -35,7 +36,7 @@ export function CompleteForm({
           <label className="block text-[11px] text-slate-500">Tanggal Kedaluwarsa (opsional)</label>
           <input name="certificateExpiryDate" type="date" className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs" />
           <label className="block text-[11px] text-slate-500">Berkas Sertifikat (opsional)</label>
-          <input name="certificateFile" type="file" accept="application/pdf,image/jpeg,image/png" className="w-full text-xs" />
+          <DocumentFileInput name="certificateFile" accept="application/pdf,image/jpeg,image/png" className="w-full text-xs" />
         </>
       )}
       <div className="flex gap-2">

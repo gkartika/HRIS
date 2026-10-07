@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { CONSUMABLE_STATUS_TONE } from "@/lib/status-ui";
 import Link from "next/link";
 import { listItemsWithStock } from "@/lib/consumables-queries";
 import { t } from "@/lib/i18n/id";
@@ -6,12 +8,6 @@ import type { ConsumableCategory } from "@/generated/prisma/enums";
 import type { ConsumableStatusValue } from "@/lib/consumables";
 import { ReceiptDialog, AdjustmentDialog } from "../stock-forms";
 import { consumablesAccessDenied } from "../access";
-
-const STATUS_TONE: Record<ConsumableStatusValue, string> = {
-  AMAN: "bg-emerald-50 text-emerald-700",
-  MENIPIS: "bg-amber-50 text-amber-700",
-  HABIS: "bg-rose-50 text-rose-700",
-};
 
 export default async function ConsumableStockPage({
   searchParams,
@@ -39,7 +35,7 @@ export default async function ConsumableStockPage({
         {(["AMAN", "MENIPIS", "HABIS"] as const).map((s) => (
           <div key={s} className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs text-slate-500">{t(`consumableStatus.${s}`)}</p>
-            <p className={`mt-1 text-2xl font-semibold ${STATUS_TONE[s].split(" ")[1]}`}>{counts[s]}</p>
+            <p className={`mt-1 text-2xl font-semibold ${CONSUMABLE_STATUS_TONE[s].split(" ")[1]}`}>{counts[s]}</p>
           </div>
         ))}
       </div>
@@ -130,7 +126,7 @@ export default async function ConsumableStockPage({
                   <td className="px-3 text-right font-semibold text-slate-900">{i.stock}</td>
                   <td className="px-3 text-right text-slate-600">{i.minStock}</td>
                   <td className="px-3">
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${STATUS_TONE[i.status]}`}>{t(`consumableStatus.${i.status}`)}</span>
+                    <StatusChip tone={CONSUMABLE_STATUS_TONE[i.status]}>{t(`consumableStatus.${i.status}`)}</StatusChip>
                   </td>
                   <td className="whitespace-nowrap px-3 text-right">
                     {!i.archived && (

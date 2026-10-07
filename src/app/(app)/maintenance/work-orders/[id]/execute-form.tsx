@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState } from "react";
 import { executeMaintenanceWorkOrder } from "../../actions";
 
@@ -31,7 +32,7 @@ export function ExecuteMaintenanceForm({ workOrderId }: { workOrderId: string })
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">Bukti</label>
-        <input name="evidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <DocumentFileInput name="evidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">Hasil</label>

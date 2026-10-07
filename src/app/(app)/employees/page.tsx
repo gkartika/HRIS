@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { LIFECYCLE_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { InviteAllButton } from "./invite-all-button";
@@ -10,12 +12,6 @@ import { EmptyState } from "@/components/empty-state";
 import { isEmployeeProfileIncomplete } from "@/lib/employee-completeness";
 import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
 import type { Prisma } from "@/generated/prisma/client";
-
-const LIFECYCLE_BADGE_TONE: Record<string, string> = {
-  AKAN_MASUK: "bg-amber-50 text-amber-700",
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  OUT: "bg-rose-50 text-rose-700",
-};
 
 const EMPLOYMENT_STATUSES = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"] as const;
 const PAGE_SIZE = 25;
@@ -236,9 +232,9 @@ export default async function EmployeesPage({
                         {(() => {
                           const lifecycleStatus = deriveEmployeeLifecycleStatus(employee.activeFlag, employee.hireDate);
                           return (
-                            <span className={`rounded-md px-2 py-1 text-xs font-medium ${LIFECYCLE_BADGE_TONE[lifecycleStatus]}`}>
+                            <StatusChip tone={LIFECYCLE_STATUS_TONE[lifecycleStatus]}>
                               {t(`employeeLifecycleStatus.${lifecycleStatus}`)}
-                            </span>
+                            </StatusChip>
                           );
                         })()}
                       </td>

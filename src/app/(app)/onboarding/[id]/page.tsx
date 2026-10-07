@@ -1,3 +1,4 @@
+import { LEARNING_STATUS_LABEL } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { formatDateLong } from "@/lib/format";
@@ -12,13 +13,6 @@ import { computeOnboardingStatus, isOnboardingTrainingComplete, isOnboardingAsse
 import { ContractToggle, DueDateForm } from "./toggle-buttons";
 import { AssignAssetDuringOnboardingForm } from "./assign-asset-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-
-const LEARNING_STATUS_LABELS: Record<string, string> = {
-  ASSIGNED: "Berjalan",
-  ATTENDED: "Hadir",
-  COMPLETED: "Selesai",
-  CANCELLED: "Dibatalkan",
-};
 
 function toDateInputValue(date: Date | null): string {
   return date ? new Date(date).toISOString().slice(0, 10) : "";
@@ -160,7 +154,7 @@ export default async function OnboardingDetailPage({ params }: { params: Promise
               <ul className="mt-2 space-y-1 pl-7 text-xs text-slate-500">
                 {trainingAssignments.map((a) => (
                   <li key={a.id}>
-                    {a.course.title} — {LEARNING_STATUS_LABELS[a.status]}
+                    {a.course.title} — {LEARNING_STATUS_LABEL[a.status]}
                   </li>
                 ))}
               </ul>

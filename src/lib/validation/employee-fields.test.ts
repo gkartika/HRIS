@@ -56,16 +56,16 @@ describe("validateDocumentFile", () => {
     expect(error).toContain("PDF, JPG, JPEG, atau PNG");
   });
 
-  it("rejects a file over 10 MB", () => {
+  it("rejects a file over 4 MB", () => {
     const error = validateDocumentFile({
       name: "big.pdf",
       type: "application/pdf",
       size: MAX_DOCUMENT_SIZE_BYTES + 1,
     });
-    expect(error).toContain("10 MB");
+    expect(error).toContain("4 MB");
   });
 
-  it("accepts a file exactly at the 10 MB limit", () => {
+  it("accepts a file exactly at the 4 MB limit", () => {
     expect(
       validateDocumentFile({ name: "exact.pdf", type: "application/pdf", size: MAX_DOCUMENT_SIZE_BYTES })
     ).toBeNull();

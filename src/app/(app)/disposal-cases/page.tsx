@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { DISPOSAL_STATUS_LABEL, DISPOSAL_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
@@ -8,22 +10,6 @@ const REASON_LABEL: Record<string, string> = {
   BEYOND_REPAIR: "Tidak Dapat Diperbaiki",
   OBSOLETE: "Obsolete",
   CONFIRMED_LOSS: "Kehilangan Dikonfirmasi",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT: "Draf",
-  PENDING_APPROVAL: "Menunggu Persetujuan",
-  APPROVED: "Disetujui",
-  REJECTED: "Ditolak",
-  EXECUTED: "Dilaksanakan",
-};
-
-const STATUS_TONE: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-600",
-  PENDING_APPROVAL: "bg-amber-50 text-amber-700",
-  APPROVED: "bg-emerald-50 text-emerald-700",
-  REJECTED: "bg-rose-50 text-rose-700",
-  EXECUTED: "bg-indigo-50 text-indigo-700",
 };
 
 export default async function DisposalCasesPage() {
@@ -77,7 +63,7 @@ export default async function DisposalCasesPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{REASON_LABEL[c.reason]}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${STATUS_TONE[c.status]}`}>{STATUS_LABEL[c.status]}</span>
+                    <StatusChip tone={DISPOSAL_STATUS_TONE[c.status]}>{DISPOSAL_STATUS_LABEL[c.status]}</StatusChip>
                   </td>
                 </tr>
               ))}

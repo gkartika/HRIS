@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { LEARNING_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import type { Prisma } from "@/generated/prisma/client";
@@ -13,13 +15,6 @@ import { ConfirmAttendanceButton } from "./confirm-attendance-button";
 import { CompleteForm } from "./complete-form";
 import { CancelButton } from "./cancel-button";
 import type { LearningAssignmentStatus } from "@/generated/prisma/enums";
-
-const STATUS_TONE: Record<string, string> = {
-  ASSIGNED: "bg-amber-100 text-amber-700",
-  ATTENDED: "bg-blue-100 text-blue-700",
-  COMPLETED: "bg-emerald-100 text-emerald-700",
-  CANCELLED: "bg-slate-100 text-slate-500",
-};
 
 // TRN-13/ACC-23 rules section: "Only Training Admin manages courses,
 // assignments, attendance, results and certificates" — Manager/HR Manager
@@ -167,7 +162,7 @@ export default async function LearningAssignmentsPage({ searchParams }: { search
                 <td className="px-4 py-3 text-xs text-slate-600">{a.session?.startDate.toISOString().slice(0, 10) ?? "—"}</td>
                 <td className="px-4 py-3 text-xs text-slate-600">{a.sourceType === "TRAINING_REQUEST" ? "Permintaan" : "Wajib"}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_TONE[a.status]}`}>{a.status}</span>
+                  <StatusChip tone={LEARNING_STATUS_TONE[a.status]} shape="pill">{a.status}</StatusChip>
                   {a.course.mode !== "IN_PERSON" && a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
                     <p className="mt-1 text-[11px] text-slate-400">
                       Materi{" "}

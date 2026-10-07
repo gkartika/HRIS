@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import { submitGaRequest } from "../actions";
 import type { GaRequestType } from "@/generated/prisma/enums";
@@ -80,7 +81,7 @@ export function NewGaRequestForm({ assets, locations }: { assets: Option[]; loca
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">Bukti / Foto (opsional)</label>
-        <input name="evidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <DocumentFileInput name="evidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
       </div>
 
       {error && <p className="text-xs text-rose-600">{error}</p>}

@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState } from "react";
 import { uploadBpjsCard } from "./bpjs-actions";
 
@@ -32,8 +33,7 @@ function DocumentSlot({ employeeId, category, label, currentFile, canUpload }: D
       )}
       {canUpload && (
         <form action={formAction} className="mt-3 flex items-center gap-2">
-          <input
-            type="file"
+          <DocumentFileInput
             name="file"
             accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
             required
@@ -49,7 +49,7 @@ function DocumentSlot({ employeeId, category, label, currentFile, canUpload }: D
         </form>
       )}
       {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
-      <p className="mt-2 text-[11px] text-slate-400">PDF, JPG, JPEG, atau PNG — maksimum 10 MB.</p>
+      <p className="mt-2 text-[11px] text-slate-400">PDF, JPG, JPEG, atau PNG — maksimum 4 MB (foto besar diperkecil otomatis).</p>
     </div>
   );
 }

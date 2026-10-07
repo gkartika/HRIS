@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import { returnAssetCustody, transferAssetCustody } from "../actions";
 import { t } from "@/lib/i18n/id";
@@ -27,7 +28,7 @@ function ReturnForm({ custodyId }: { custodyId: string }) {
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.returnEvidenceLabel")}</label>
-        <input name="returnEvidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <DocumentFileInput name="returnEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
       </div>
       <div className="flex items-end">
         <button

@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { LIFECYCLE_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
@@ -49,12 +51,6 @@ function TabSkeleton() {
     </div>
   );
 }
-
-const LIFECYCLE_BADGE_TONE: Record<string, string> = {
-  AKAN_MASUK: "bg-amber-50 text-amber-700",
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  OUT: "bg-rose-50 text-rose-700",
-};
 
 const ACCOUNT_STATUS_LABEL: Record<string, string> = {
   INVITED: "Diundang",
@@ -187,9 +183,9 @@ export default async function EmployeeDetailPage({
   const badges = (
     <>
       {lifecycleStatus && (
-        <span className={`rounded-md px-2 py-1 text-xs font-medium ${LIFECYCLE_BADGE_TONE[lifecycleStatus]}`}>
+        <StatusChip tone={LIFECYCLE_STATUS_TONE[lifecycleStatus]}>
           {t(`employeeLifecycleStatus.${lifecycleStatus}`)}
-        </span>
+        </StatusChip>
       )}
       {employee.employmentStatus && (
         <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">

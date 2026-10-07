@@ -3166,3 +3166,13 @@ model AccountToken {
 
   @@index([accountId])
 }
+
+// Bytes of every uploaded file (BPJS cards, GA/absence/training evidence ...),
+// keyed by FileObject.storageKey. Kept in the database because the app runs
+// on Vercel, whose disk is read-only, so a local folder cannot hold uploads.
+// Access control stays in /api/files/[id]; this table is never read directly.
+model FileBlob {
+  storageKey String   @id
+  data       Bytes
+  createdAt  DateTime @default(now())
+}

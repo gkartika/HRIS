@@ -1,3 +1,4 @@
+import { COURSE_STATUS_LABEL } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
@@ -6,7 +7,6 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { CreateCourseForm } from "./create-course-form";
 
-const STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", PUBLISHED: "Dipublikasikan", ARCHIVED: "Diarsipkan" };
 const MODE_LABELS: Record<string, string> = { ONLINE: "Daring", IN_PERSON: "Tatap Muka", BLENDED: "Campuran" };
 
 export default async function TrainingCoursesPage({
@@ -57,7 +57,7 @@ export default async function TrainingCoursesPage({
           <label className="mb-1 block text-xs text-slate-500">Status</label>
           <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">{t("common.allOption")}</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            {Object.entries(COURSE_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
@@ -123,7 +123,7 @@ export default async function TrainingCoursesPage({
                           : "bg-amber-100 text-amber-700"
                     }`}
                   >
-                    {STATUS_LABELS[c.status]}
+                    {COURSE_STATUS_LABEL[c.status]}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">{c.effectivenessRequired ? `Ya (D+${c.effectivenessFollowupDays})` : "Tidak"}</td>

@@ -1,3 +1,4 @@
+import { StatusChip } from "@/components/status-chip";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
@@ -144,9 +145,9 @@ export default async function TrainingRequestsPage({ searchParams }: { searchPar
                 <td className="px-4 py-3 text-xs text-slate-600">{r.requestedTopic}</td>
                 <td className="px-4 py-3 text-xs text-slate-600">{r.course?.title ?? "—"}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_TONE[r.status]}`}>
+                  <StatusChip tone={STATUS_TONE[r.status]} shape="pill">
                     {t(`trainingRequestStatus.${r.status}`)}
-                  </span>
+                  </StatusChip>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Link href={`/training-requests/${r.id}`} className="text-xs text-indigo-600 hover:underline">

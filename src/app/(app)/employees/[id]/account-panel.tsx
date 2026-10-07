@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/status-chip";
 import { useActionState } from "react";
 import { putAccountOnHold, reactivateAccount } from "./account-actions";
 
@@ -88,9 +89,9 @@ export function AccountHoldPanel({
           <h2 className="text-sm font-medium text-slate-900">Status Akun</h2>
           <p className="mt-1 text-xs text-slate-500">{usernameOrEmail}</p>
         </div>
-        <span className={`rounded-md px-2 py-1 text-xs font-medium ${STATUS_TONE[accountStatus] ?? "bg-slate-100 text-slate-600"}`}>
+        <StatusChip tone={STATUS_TONE[accountStatus] ?? "bg-slate-100 text-slate-600"}>
           {STATUS_LABEL[accountStatus] ?? accountStatus}
-        </span>
+        </StatusChip>
       </div>
       {accountStatus === "ACTIVE" ? (
         <HoldForm employeeId={employeeId} />

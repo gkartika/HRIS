@@ -1,3 +1,4 @@
+import { StatusChip } from "@/components/status-chip";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
@@ -62,7 +63,7 @@ export default async function CompetencyCyclesPage() {
                 <td className="px-4 py-3 font-mono text-xs">{c.cycleCode}</td>
                 <td className="px-4 py-3">{c.periodLabel}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_TONE[c.status]}`}>{c.status}</span>
+                  <StatusChip tone={STATUS_TONE[c.status]} shape="pill">{c.status}</StatusChip>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{c._count.assessments}</td>
                 <td className="px-4 py-3 text-right">

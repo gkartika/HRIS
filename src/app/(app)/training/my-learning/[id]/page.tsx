@@ -1,3 +1,4 @@
+import { LEARNING_STATUS_LABEL } from "@/lib/status-ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
@@ -8,7 +9,6 @@ import { MarkMaterialButton } from "./mark-material-button";
 import { QuizAttemptForm } from "./quiz-attempt-form";
 
 const MATERIAL_TYPE_LABELS: Record<string, string> = { PDF: "PDF", DOCX: "DOCX", PPTX: "PPTX", VIDEO: "Video", URL: "Tautan" };
-const STATUS_LABELS: Record<string, string> = { ASSIGNED: "Berjalan", ATTENDED: "Hadir", COMPLETED: "Selesai", CANCELLED: "Dibatalkan" };
 const MODE_LABELS: Record<string, string> = { ONLINE: "Daring", IN_PERSON: "Tatap Muka", BLENDED: "Campuran" };
 
 export default async function MyLearningDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -52,7 +52,7 @@ export default async function MyLearningDetailPage({ params }: { params: Promise
       </Link>
       <div className="mt-2 flex items-center gap-2">
         <h1 className="text-lg font-medium text-slate-900">{assignment.course.title}</h1>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{STATUS_LABELS[assignment.status]}</span>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{LEARNING_STATUS_LABEL[assignment.status]}</span>
       </div>
       <p className="mt-1 text-sm text-slate-500">
         {MODE_LABELS[assignment.course.mode]}

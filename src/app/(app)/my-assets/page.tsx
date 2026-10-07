@@ -1,12 +1,9 @@
+import { StatusChip } from "@/components/status-chip";
+import { CUSTODY_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-
-const CUSTODY_STATUS_TONE: Record<string, string> = {
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  RETURNED: "bg-slate-100 text-slate-500",
-};
 
 export default async function MyAssetsPage() {
   const session = await requireSession();
@@ -39,9 +36,9 @@ export default async function MyAssetsPage() {
                     {c.conditionAtHandover ? ` · Kondisi: ${c.conditionAtHandover}` : ""}
                   </p>
                 </div>
-                <span className={`rounded-md px-2 py-1 text-xs font-medium ${CUSTODY_STATUS_TONE[c.status]}`}>
+                <StatusChip tone={CUSTODY_STATUS_TONE[c.status]}>
                   {t(`assetCustodyStatus.${c.status}`)}
-                </span>
+                </StatusChip>
               </div>
             </div>
           ))}

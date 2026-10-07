@@ -110,6 +110,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   const bytes = await readPrivateFile(file.storageKey);
+  if (!bytes) {
+    return NextResponse.json({ error: "Berkas tidak ditemukan di penyimpanan." }, { status: 404 });
+  }
 
   await logAudit({
     actorAccountId: session.user.id,

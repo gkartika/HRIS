@@ -1,3 +1,4 @@
+import { COURSE_STATUS_LABEL } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
@@ -12,7 +13,6 @@ import { AddQuestionForm } from "./add-question-form";
 import { PublishArchiveButtons } from "./publish-archive-buttons";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
-const STATUS_LABELS: Record<string, string> = { DRAFT: "Draft", PUBLISHED: "Dipublikasikan", ARCHIVED: "Diarsipkan" };
 const MODE_LABELS: Record<string, string> = { ONLINE: "Daring", IN_PERSON: "Tatap Muka", BLENDED: "Campuran" };
 const MATERIAL_TYPE_LABELS: Record<string, string> = { PDF: "PDF", DOCX: "DOCX", PPTX: "PPTX", VIDEO: "Video", URL: "Tautan" };
 const QUESTION_TYPE_LABELS: Record<string, string> = {
@@ -54,7 +54,7 @@ export default async function TrainingCourseDetailPage({ params }: { params: Pro
                     : "bg-amber-100 text-amber-700"
               }`}
             >
-              {STATUS_LABELS[course.status]}
+              {COURSE_STATUS_LABEL[course.status]}
             </span>
             {course.isOnboardingRequired && (
               <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">

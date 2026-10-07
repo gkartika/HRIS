@@ -1,3 +1,4 @@
+import { GA_REQUEST_STATUS_LABEL } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
@@ -19,19 +20,6 @@ const TYPE_LABEL: Record<string, string> = {
   NEW_ASSET_NEED: "Kebutuhan Aset Baru",
   DAMAGE_OR_ABNORMAL_CONDITION: "Kerusakan / Kondisi Tidak Normal",
   LOSS: "Kehilangan",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  SUBMITTED: "Diajukan",
-  PENDING_APPROVAL: "Menunggu Persetujuan",
-  APPROVED: "Disetujui",
-  REJECTED: "Ditolak",
-  PROCESSED: "Diproses",
-  WORK_ORDER_CREATED: "Work Order Dibuat",
-  PENDING_LOSS_REVIEW: "Menunggu Peninjauan",
-  LOSS_CONFIRMED: "Kehilangan Dikonfirmasi",
-  LOSS_NOT_CONFIRMED: "Kehilangan Tidak Dikonfirmasi",
-  CANCELLED: "Dibatalkan",
 };
 
 export default async function GaRequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -113,7 +101,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-xs text-slate-500">Status</p>
-            <p className="mt-1 text-slate-900">{STATUS_LABEL[request.status]}</p>
+            <p className="mt-1 text-slate-900">{GA_REQUEST_STATUS_LABEL[request.status]}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Urgensi</p>

@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { ASSET_STATUS_TONE, CUSTODY_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -8,20 +10,6 @@ import { AssignForms } from "./assign-forms";
 import { CustodyActions } from "./custody-actions";
 import { MarkObsoleteForm } from "./mark-obsolete-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-
-const STATUS_TONE: Record<string, string> = {
-  AVAILABLE: "bg-emerald-50 text-emerald-700",
-  IN_USE: "bg-indigo-50 text-indigo-700",
-  UNDER_REPAIR: "bg-amber-50 text-amber-700",
-  DISPOSED: "bg-slate-100 text-slate-500",
-  LOST_PENDING_REVIEW: "bg-rose-50 text-rose-700",
-  RETIRED: "bg-slate-100 text-slate-500",
-};
-
-const CUSTODY_STATUS_TONE: Record<string, string> = {
-  ACTIVE: "bg-emerald-50 text-emerald-700",
-  RETURNED: "bg-slate-100 text-slate-500",
-};
 
 function custodyTargetLabel(c: {
   targetType: string;
@@ -89,7 +77,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-medium text-slate-900">{asset.assetName}</h1>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_TONE[asset.status]}`}>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ASSET_STATUS_TONE[asset.status]}`}>
               {t(`assetStatus.${asset.status}`)}
             </span>
           </div>
@@ -123,9 +111,9 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
                     {asset.trackingType === "QUANTITY_TRACKED" && ` · ${c.quantity} unit`}
                   </p>
                 </div>
-                <span className={`rounded-md px-2 py-1 text-xs font-medium ${CUSTODY_STATUS_TONE[c.status]}`}>
+                <StatusChip tone={CUSTODY_STATUS_TONE[c.status]}>
                   {t(`assetCustodyStatus.${c.status}`)}
-                </span>
+                </StatusChip>
               </div>
               {canManage && <CustodyActions custodyId={c.id} employees={employees} orgUnits={orgUnits} locations={locations} />}
             </div>
@@ -171,9 +159,9 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
               <tr key={c.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 text-slate-900">{custodyTargetLabel(c)}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-md px-2 py-1 text-xs font-medium ${CUSTODY_STATUS_TONE[c.status]}`}>
+                  <StatusChip tone={CUSTODY_STATUS_TONE[c.status]}>
                     {t(`assetCustodyStatus.${c.status}`)}
-                  </span>
+                  </StatusChip>
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">{c.assignedAt.toISOString().slice(0, 10)}</td>
                 <td className="px-4 py-3 text-xs text-slate-600">{c.returnedAt ? c.returnedAt.toISOString().slice(0, 10) : "—"}</td>

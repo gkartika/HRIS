@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import { confirmLearningAssignmentAttendance } from "./actions";
 
@@ -23,7 +24,7 @@ export function ConfirmAttendanceButton({ assignmentId }: { assignmentId: string
         placeholder="Catatan bukti kehadiran (opsional)"
         className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs"
       />
-      <input name="attendanceEvidenceFile" type="file" accept="application/pdf,image/jpeg,image/png" className="w-full text-xs" />
+      <DocumentFileInput name="attendanceEvidenceFile" accept="application/pdf,image/jpeg,image/png" className="w-full text-xs" />
       <div className="flex gap-2">
         <button
           type="submit"

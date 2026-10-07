@@ -1,3 +1,4 @@
+import { DISPOSAL_STATUS_LABEL } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
@@ -13,14 +14,6 @@ const REASON_LABEL: Record<string, string> = {
   BEYOND_REPAIR: "Tidak Dapat Diperbaiki",
   OBSOLETE: "Obsolete",
   CONFIRMED_LOSS: "Kehilangan Dikonfirmasi",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT: "Draf",
-  PENDING_APPROVAL: "Menunggu Persetujuan",
-  APPROVED: "Disetujui",
-  REJECTED: "Ditolak",
-  EXECUTED: "Dilaksanakan",
 };
 
 export default async function DisposalCaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -67,7 +60,7 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-xs text-slate-500">Status</p>
-            <p className="mt-1 text-slate-900">{STATUS_LABEL[disposalCase.status]}</p>
+            <p className="mt-1 text-slate-900">{DISPOSAL_STATUS_LABEL[disposalCase.status]}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Dibuat</p>

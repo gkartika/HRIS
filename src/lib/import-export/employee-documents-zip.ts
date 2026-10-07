@@ -34,6 +34,7 @@ export async function buildEmployeeDocumentsZip(): Promise<Buffer> {
     const safeCategory = (file.category ?? "lainnya").replace(/[^a-zA-Z0-9-]/g, "-");
     const zipEntryPath = `${employeeNumber}/${safeCategory}-${file.id}-${file.originalFileName}`;
     const bytes = await readPrivateFile(file.storageKey);
+    if (!bytes) continue; // no bytes stored for this record; leave it out of the archive
     zip.file(zipEntryPath, bytes);
 
     manifestRows.push({

@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { ASSET_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
@@ -9,15 +11,6 @@ import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import type { Prisma } from "@/generated/prisma/client";
 import { CreateAssetForm } from "./create-form";
-
-const STATUS_TONE: Record<string, string> = {
-  AVAILABLE: "bg-emerald-50 text-emerald-700",
-  IN_USE: "bg-indigo-50 text-indigo-700",
-  UNDER_REPAIR: "bg-amber-50 text-amber-700",
-  DISPOSED: "bg-slate-100 text-slate-500",
-  LOST_PENDING_REVIEW: "bg-rose-50 text-rose-700",
-  RETIRED: "bg-slate-100 text-slate-500",
-};
 
 export default async function AssetsPage({
   searchParams,
@@ -162,9 +155,9 @@ export default async function AssetsPage({
                     {asset.trackingType === "INDIVIDUAL" ? t("asset.trackingTypeIndividual") : t("asset.trackingTypeQuantity")}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${STATUS_TONE[asset.status]}`}>
+                    <StatusChip tone={ASSET_STATUS_TONE[asset.status]}>
                       {t(`assetStatus.${asset.status}`)}
-                    </span>
+                    </StatusChip>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600">
                     {asset.trackingType === "QUANTITY_TRACKED" ? `${asset.availableQuantity ?? 0} / ${asset.totalQuantity ?? 0}` : "—"}

@@ -1,3 +1,5 @@
+import { StatusChip } from "@/components/status-chip";
+import { GA_REQUEST_STATUS_LABEL } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
@@ -27,19 +29,6 @@ const TYPE_LABEL: Record<GaRequestType, string> = {
   NEW_ASSET_NEED: "Kebutuhan Aset Baru",
   DAMAGE_OR_ABNORMAL_CONDITION: "Kerusakan / Kondisi Tidak Normal",
   LOSS: "Kehilangan",
-};
-
-const STATUS_LABEL: Record<GaRequestStatus, string> = {
-  SUBMITTED: "Diajukan",
-  PENDING_APPROVAL: "Menunggu Persetujuan",
-  APPROVED: "Disetujui",
-  REJECTED: "Ditolak",
-  PROCESSED: "Diproses",
-  WORK_ORDER_CREATED: "Work Order Dibuat",
-  PENDING_LOSS_REVIEW: "Menunggu Peninjauan",
-  LOSS_CONFIRMED: "Kehilangan Dikonfirmasi",
-  LOSS_NOT_CONFIRMED: "Kehilangan Tidak Dikonfirmasi",
-  CANCELLED: "Dibatalkan",
 };
 
 const STATUS_TONE: Record<GaRequestStatus, string> = {
@@ -129,7 +118,7 @@ export default async function GaRequestsPage({
             <option value="">{t("common.allOption")}</option>
             {REQUEST_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABEL[s]}
+                {GA_REQUEST_STATUS_LABEL[s]}
               </option>
             ))}
           </select>
@@ -174,7 +163,7 @@ export default async function GaRequestsPage({
                   <td className="px-4 py-3 text-slate-600">{r.asset ? `${r.asset.assetName} (${r.asset.assetCode})` : "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{r.urgency}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${STATUS_TONE[r.status]}`}>{STATUS_LABEL[r.status]}</span>
+                    <StatusChip tone={STATUS_TONE[r.status]}>{GA_REQUEST_STATUS_LABEL[r.status]}</StatusChip>
                   </td>
                 </tr>
               ))}

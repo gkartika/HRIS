@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import {
   verifyGaRequest,
@@ -19,7 +20,7 @@ export function VerifyForm({ requestId, needsEvidence }: { requestId: string; ne
       {needsEvidence && (
         <>
           <label className="block text-xs text-slate-500">Bukti Kehilangan (jika belum ada)</label>
-          <input name="evidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+          <DocumentFileInput name="evidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
         </>
       )}
       {error && <p className="text-xs text-rose-600">{error}</p>}
@@ -235,7 +236,7 @@ export function ProcessForm({
           </div>
           <div>
             <label className="mb-1 block text-xs text-slate-500">Bukti Serah Terima</label>
-            <input name="handoverEvidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+            <DocumentFileInput name="handoverEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
           </div>
         </>
       )}

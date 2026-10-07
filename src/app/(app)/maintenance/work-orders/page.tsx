@@ -1,3 +1,4 @@
+import { StatusChip } from "@/components/status-chip";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
@@ -101,9 +102,9 @@ export default async function MaintenanceWorkOrdersPage({ searchParams }: { sear
                   <td className="px-4 py-3 text-slate-600">{w.sourceType === "PREVENTIVE" ? "Preventif" : "Korektif"}</td>
                   <td className="px-4 py-3 text-slate-600">{w.workType === "INTERNAL" ? "Internal" : "Vendor"}</td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${STATUS_TONE[w.status]}`}>
+                    <StatusChip tone={STATUS_TONE[w.status]}>
                       {w.status === "OPEN" ? "Terbuka" : "Selesai"}
-                    </span>
+                    </StatusChip>
                   </td>
                 </tr>
               ))}

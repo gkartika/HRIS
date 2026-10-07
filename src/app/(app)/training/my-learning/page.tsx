@@ -1,16 +1,11 @@
+import { StatusChip } from "@/components/status-chip";
+import { LEARNING_STATUS_LABEL, LEARNING_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 
-const STATUS_LABELS: Record<string, string> = { ASSIGNED: "Berjalan", ATTENDED: "Hadir", COMPLETED: "Selesai", CANCELLED: "Dibatalkan" };
-const STATUS_TONE: Record<string, string> = {
-  ASSIGNED: "bg-amber-100 text-amber-700",
-  ATTENDED: "bg-blue-100 text-blue-700",
-  COMPLETED: "bg-emerald-100 text-emerald-700",
-  CANCELLED: "bg-slate-100 text-slate-500",
-};
 const MODE_LABELS: Record<string, string> = { ONLINE: "Daring", IN_PERSON: "Tatap Muka", BLENDED: "Campuran" };
 
 export default async function MyLearningPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
@@ -41,7 +36,7 @@ export default async function MyLearningPage({ searchParams }: { searchParams: P
           <label className="mb-1 block text-xs text-slate-500">Status</label>
           <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">{t("common.allOption")}</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+            {Object.entries(LEARNING_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
@@ -76,7 +71,7 @@ export default async function MyLearningPage({ searchParams }: { searchParams: P
                 <td className="px-4 py-3 text-slate-900">{a.course.title}</td>
                 <td className="px-4 py-3 text-xs text-slate-600">{MODE_LABELS[a.course.mode]}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_TONE[a.status]}`}>{STATUS_LABELS[a.status]}</span>
+                  <StatusChip tone={LEARNING_STATUS_TONE[a.status]} shape="pill">{LEARNING_STATUS_LABEL[a.status]}</StatusChip>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Link href={`/training/my-learning/${a.id}`} className="text-xs text-indigo-600 hover:underline">

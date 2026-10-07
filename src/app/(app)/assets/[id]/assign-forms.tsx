@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
 import { assignAssetToEmployee, assignAssetToDepartment, assignAssetToLocation } from "../actions";
 import { t } from "@/lib/i18n/id";
@@ -61,7 +62,7 @@ function EmployeeForm({
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.handoverEvidenceLabel")}</label>
-        <input name="handoverEvidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <DocumentFileInput name="handoverEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
       </div>
       <div className="flex items-end">
         <button
@@ -109,7 +110,7 @@ function DepartmentForm({
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.handoverEvidenceLabel")}</label>
-        <input name="handoverEvidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <DocumentFileInput name="handoverEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
       </div>
       <div className="flex items-end">
         <button
@@ -157,7 +158,7 @@ function LocationForm({
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.handoverEvidenceLabel")}</label>
-        <input name="handoverEvidenceFile" type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        <DocumentFileInput name="handoverEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
       </div>
       <div className="flex items-end">
         <button

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { companyYear } from "@/lib/company-time";
+import { companyYear, companyToday } from "@/lib/company-time";
 import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -32,9 +32,10 @@ export async function createEmployee(
   const educationLevelId = (formData.get("educationLevelId") as string) || null;
   const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
 
-  if (!fullLegalName || !hireDate || !employmentStatus) {
-    return "Nama lengkap, tanggal bergabung, dan status kepegawaian wajib diisi.";
+  if (!fullLegalName || !employmentStatus) {
+    return "Nama lengkap dan status kepegawaian wajib diisi.";
   }
+  if (hireDate && Number.isNaN(Date.parse(hireDate))) return "Tanggal bergabung tidak valid.";
   // Everything else (identitas, pendidikan, PTKP) is filled in later from the
   // employee's own detail page — see lib/employee-completeness.ts for the
   // non-blocking "profil belum lengkap" flag shown until then.
@@ -47,7 +48,10 @@ export async function createEmployee(
     if (noKkError) return noKkError;
   }
 
-  const hireDateObj = new Date(hireDate);
+  // Tanggal bergabung is optional. Without one, the onboarding case simply
+  // plans to start today.
+  const hireDateObj = hireDate ? new Date(hireDate) : null;
+  const plannedStart = hireDateObj ?? companyToday();
 
   // LIF-03: "After Employee creation..." — an Onboarding Case is created
   // automatically alongside every new Employee, reusing hireDate as the
@@ -72,13 +76,13 @@ export async function createEmployee(
       },
     });
 
-    const year = companyYear(hireDateObj);
+    const year = companyYear(plannedStart);
     const seq = await nextSequence(`ONB-${year}`, tx);
     await tx.onboardingCase.create({
       data: {
         caseNumber: formatOnboardingCaseNumber(seq, year),
         employeeId: created.id,
-        plannedStartDate: hireDateObj,
+        plannedStartDate: plannedStart,
       },
     });
 
@@ -219,8 +223,12 @@ export async function updateEmployee(
     // (contracts/actions.ts, movements/actions.ts) and Offboarding
     // (offboarding/actions.ts) respectively, so editing them directly here
     // would let an admin silently bypass those processes.
-    const hireDateRaw = (formData.get("hireDate") as string)?.trim();
-    if (hireDateRaw) data.hireDate = new Date(hireDateRaw);
+    // Optional: an empty field clears it.
+    if (formData.has("hireDate")) {
+      const hireDateRaw = ((formData.get("hireDate") as string) ?? "").trim();
+      if (hireDateRaw && Number.isNaN(Date.parse(hireDateRaw))) return "Tanggal bergabung tidak valid.";
+      data.hireDate = hireDateRaw ? new Date(hireDateRaw) : null;
+    }
   }
 
   await prisma.employee.update({ where: { id: employeeId }, data });

@@ -13,9 +13,10 @@ export type EmployeeLifecycleStatus = "AKAN_MASUK" | "ACTIVE" | "OUT";
 
 export function deriveEmployeeLifecycleStatus(
   activeFlag: boolean,
-  hireDate: Date,
+  hireDate: Date | null,
   now: Date = new Date()
 ): EmployeeLifecycleStatus {
   if (!activeFlag) return "OUT";
-  return hireDate > now ? "AKAN_MASUK" : "ACTIVE";
+  // No hire date recorded: nothing says they haven't started, so treat as active.
+  return hireDate && hireDate > now ? "AKAN_MASUK" : "ACTIVE";
 }

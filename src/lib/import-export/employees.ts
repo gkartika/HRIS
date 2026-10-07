@@ -112,8 +112,9 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
     // Blank = a new employee; the system assigns the next CBP-xxxx number.
     if (employeeNumber && seenInFile.has(employeeNumber)) reasons.push(`Nomor karyawan ${employeeNumber} duplikat dalam berkas`);
     if (!fullLegalName) reasons.push("Nama lengkap (fullLegalName) wajib diisi");
-    if (!hireDate || Number.isNaN(Date.parse(hireDate))) {
-      reasons.push("Tanggal bergabung (hireDate) wajib diisi dengan format tanggal yang valid");
+    // Optional; only the format is checked when given.
+    if (hireDate && Number.isNaN(Date.parse(hireDate))) {
+      reasons.push("Tanggal bergabung (hireDate) harus berformat tanggal yang valid (mis. 2026-01-31) atau dikosongkan");
     }
     if (!employmentStatus || !VALID_EMPLOYMENT_STATUSES.includes(employmentStatus)) {
       reasons.push(`Status kepegawaian (employmentStatus) harus salah satu dari: ${VALID_EMPLOYMENT_STATUSES.join(", ")}`);
@@ -175,7 +176,8 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
 
   const data = {
     fullLegalName: raw.fullLegalName.trim(),
-    hireDate: new Date(raw.hireDate.trim()),
+    // Blank: unset on a new employee, unchanged on an update.
+    hireDate: raw.hireDate?.trim() ? new Date(raw.hireDate.trim()) : undefined,
     employmentStatus: raw.employmentStatus.trim().toUpperCase() as EmploymentStatus,
     // Blank leaves each optional field unchanged on UPDATE (matching the
     // org-units/jobs/positions importers) instead of nulling out real data

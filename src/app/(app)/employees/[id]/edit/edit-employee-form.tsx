@@ -309,11 +309,11 @@ export function EditEmployeeForm({
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-slate-500">Tanggal Bergabung</label>
+              <label className="mb-1 block text-xs text-slate-500">Tanggal Bergabung (opsional)</label>
               <input
                 name="hireDate"
                 type="date"
-                defaultValue={new Date(employee.hireDate).toISOString().slice(0, 10)}
+                defaultValue={employee.hireDate ? new Date(employee.hireDate).toISOString().slice(0, 10) : ""}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
             </div>

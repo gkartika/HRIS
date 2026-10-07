@@ -17,4 +17,9 @@ describe("deriveEmployeeLifecycleStatus", () => {
     expect(deriveEmployeeLifecycleStatus(true, new Date("2020-01-01"), now)).toBe("ACTIVE");
     expect(deriveEmployeeLifecycleStatus(true, now, now)).toBe("ACTIVE");
   });
+
+  it("no hire date recorded: ACTIVE when active, OUT when not", () => {
+    expect(deriveEmployeeLifecycleStatus(true, null, now)).toBe("ACTIVE");
+    expect(deriveEmployeeLifecycleStatus(false, null, now)).toBe("OUT");
+  });
 });

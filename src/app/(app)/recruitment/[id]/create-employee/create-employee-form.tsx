@@ -55,11 +55,10 @@ export function CreateEmployeeFromRequestForm({
           <input name="fullLegalName" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("employee.hireDate")}</label>
+          <label className="mb-1 block text-xs text-slate-500">{t("employee.hireDate")} (opsional — kosong = hari ini)</label>
           <input
             name="hireDate"
             type="date"
-            required
             defaultValue={new Date().toISOString().slice(0, 10)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />

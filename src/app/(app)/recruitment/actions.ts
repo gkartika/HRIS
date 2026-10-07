@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { authorizeDeptHeadDecision, authorizeHrManagerDecision } from "@/lib/approval-authority";
-import { companyYear } from "@/lib/company-time";
+import { companyYear, companyToday } from "@/lib/company-time";
 import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -356,7 +356,7 @@ export async function createEmployeeFromRecruitmentRequest(
   const educationLevelId = (formData.get("educationLevelId") as string) || null;
   const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
 
-  if (!fullLegalName || !hireDate || !employmentStatus || !positionId) {
+  if (!fullLegalName || !employmentStatus || !positionId) {
     return "Nama lengkap, tanggal bergabung, status kepegawaian, dan posisi wajib diisi.";
   }
   // Identitas/Pendidikan/PTKP are optional here too — completed later from
@@ -381,7 +381,11 @@ export async function createEmployeeFromRecruitmentRequest(
     return "Posisi ini sudah memiliki pemegang Utama aktif — pilih posisi lain.";
   }
 
-  const hireDateObj = new Date(hireDate);
+  // Tanggal bergabung is optional; without one the placement and onboarding
+  // start today.
+  if (hireDate && Number.isNaN(Date.parse(hireDate))) return "Tanggal bergabung tidak valid.";
+  const hireDateObj = hireDate ? new Date(hireDate) : null;
+  const startDate = hireDateObj ?? companyToday();
 
   // WF-14: "create Employee, initial Primary Position Assignment and
   // RecruitmentRequestFulfillment in one transaction."
@@ -410,7 +414,7 @@ export async function createEmployeeFromRecruitmentRequest(
         assignmentType: "PRIMARY",
         primaryAssignmentFlag: true,
         status: "ACTIVE",
-        effectiveFrom: hireDateObj,
+        effectiveFrom: startDate,
       },
     });
 
@@ -434,13 +438,13 @@ export async function createEmployeeFromRecruitmentRequest(
     // LIF-03: same automatic Onboarding Case as direct Employee creation —
     // this path must not skip it just because the Employee came from a
     // Recruitment Request.
-    const onbYear = companyYear(hireDateObj);
+    const onbYear = companyYear(startDate);
     const onbSeq = await nextSequence(`ONB-${onbYear}`, tx);
     await tx.onboardingCase.create({
       data: {
         caseNumber: formatOnboardingCaseNumber(onbSeq, onbYear),
         employeeId: employee.id,
-        plannedStartDate: hireDateObj,
+        plannedStartDate: startDate,
       },
     });
 

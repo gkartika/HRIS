@@ -984,7 +984,7 @@ model Employee {
   bpjsTkFile                 FileObject?      @relation("EmployeeBpjsTkFile", fields: [bpjsTkFileId], references: [id])
   bpjsKesehatanFileId        String?          @unique
   bpjsKesehatanFile          FileObject?      @relation("EmployeeBpjsKesehatanFile", fields: [bpjsKesehatanFileId], references: [id])
-  hireDate                   DateTime
+  hireDate                   DateTime?
   employmentStatus           EmploymentStatus
   // Denormalized pointer to the Position of this employee's current Primary
   // Assignment, kept in sync by application code. Source of truth for history

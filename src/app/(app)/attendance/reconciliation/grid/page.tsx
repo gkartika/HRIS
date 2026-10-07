@@ -390,18 +390,26 @@ export default async function AttendanceReconciliationGridPage({
                   const isSelected = editEmployeeId === row.employeeId && editDate === dateParam;
                   const label = formatDayCode(d);
                   const effectiveShift = d.shiftType ?? d.assignedShiftType;
+                  // One punch but not the pair yet (e.g. checked in today, not out): not "missing", just incomplete.
+                  const halfPunched = !d.absenceTypeCode && !d.presentOverride && !d.shiftType && d.hasCheckIn !== d.hasCheckOut;
                   const tone = d.absenceTypeCode
                     ? "text-amber-700"
                     : d.presentOverride || d.shiftType || (d.hasCheckIn && d.hasCheckOut)
                       ? (SHIFT_TONE[effectiveShift] ?? "text-slate-400")
-                      : "text-rose-500";
+                      : halfPunched
+                        ? "text-amber-600"
+                        : "text-rose-500";
                   return (
                     <Fragment key={dateParam}>
                       <td className={`border-l border-slate-100 p-0 text-center ${isSelected ? "bg-brand-accent-soft" : ""}`}>
                         <Link
                           href={cellHref(row.employeeId, dateParam)}
                           className={`block px-1 py-2 text-[11px] font-bold hover:bg-slate-50 ${tone}`}
-                          title={d.presentOverride ? "Masuk (Lupa Absen)" : d.absenceTypeLabel ?? undefined}
+                          title={
+                            d.presentOverride
+                              ? "Masuk (Lupa Absen)"
+                              : (d.absenceTypeLabel ?? (halfPunched ? (d.hasCheckIn ? "Sudah check-in, belum check-out" : "Check-out tercatat, belum ada check-in") : undefined))
+                          }
                         >
                           {label}
                         </Link>

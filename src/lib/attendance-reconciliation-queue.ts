@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { companyToday, companyDateParts } from "@/lib/company-time";
+import { companyToday, companyDateParts, startOfCompanyDay } from "@/lib/company-time";
+import { buildPunchDayLookup, punchDayKey } from "@/lib/punch-days";
 import type { CutoffPeriod } from "@/lib/absence-cutoff";
 import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
 import { computeDayMinutes, computeActualDayMinutes } from "@/lib/attendance-hours";
@@ -8,6 +9,21 @@ import { haversineDistanceMeters } from "@/lib/attendance";
 function formatCompanyTime(date: Date): string {
   const { hour, minute } = companyDateParts(date);
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+// Real punches for these employees in [start, end), read straight from the
+// events so a check-in shows up the moment it is made (see punch-days.ts).
+async function loadPunchDays(employeeIds: string[], start: Date, end: Date) {
+  if (employeeIds.length === 0 || end <= start) return buildPunchDayLookup([]);
+  const events = await prisma.attendanceEvent.findMany({
+    where: {
+      employeeId: { in: employeeIds },
+      eventType: { in: ["CHECK_IN", "CHECK_OUT"] },
+      eventAt: { gte: startOfCompanyDay(start), lt: startOfCompanyDay(end) },
+    },
+    select: { employeeId: true, eventType: true, eventAt: true },
+  });
+  return buildPunchDayLookup(events.map((e) => ({ ...e, eventType: e.eventType as "CHECK_IN" | "CHECK_OUT" })));
 }
 
 // Shared by Opsi A (the exception queue) and Opsi B (the full grid) so both
@@ -78,7 +94,17 @@ export async function getUnresolvedDays(period: CutoffPeriod): Promise<Unresolve
   const isCoveredByApprovedAbsence = (employeeId: string, date: Date) =>
     approvedAbsences.some((a) => a.employeeId === employeeId && a.startDate <= date && a.endDate >= date);
 
-  const unresolved = records.filter((r) => !isCoveredByApprovedAbsence(r.employeeId, r.attendanceDate));
+  // A day is only unresolved if neither the day's record NOR the live punch
+  // events show a complete check-in + check-out.
+  const punchDays = await loadPunchDays([...new Set(records.map((r) => r.employeeId))], period.start, queryEnd);
+  const punched = (r: (typeof records)[number]) => {
+    const p = punchDays.get(punchDayKey(r.employeeId, r.attendanceDate));
+    return { hasIn: !!r.checkInEventId || !!p?.hasCheckIn, hasOut: !!r.checkOutEventId || !!p?.hasCheckOut };
+  };
+  const unresolved = records.filter((r) => {
+    const { hasIn, hasOut } = punched(r);
+    return !(hasIn && hasOut) && !isCoveredByApprovedAbsence(r.employeeId, r.attendanceDate);
+  });
 
   const weekStarts = [...new Set(unresolved.map((r) => normalizeWeekStart(r.attendanceDate).getTime()))].map((t) => new Date(t));
   const employeeIds = [...new Set(unresolved.map((r) => r.employeeId))];
@@ -89,20 +115,23 @@ export async function getUnresolvedDays(period: CutoffPeriod): Promise<Unresolve
   const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
 
   return unresolved
-    .map((r) => ({
-      employeeId: r.employeeId,
-      employeeNumber: r.employee.employeeNumber,
-      employeeName: r.employee.fullLegalName,
-      departmentName: r.employee.currentPosition?.orgUnit.unitName ?? "—",
-      date: r.attendanceDate,
-      reason:
-        !r.checkInEventId && !r.checkOutEventId
-          ? "Tidak ada check-in/check-out. Tidak ada Cuti/Izin disetujui untuk tanggal ini."
-          : !r.checkInEventId
-            ? "Check-out tercatat, tidak ada check-in. Tidak ada Cuti/Izin disetujui untuk tanggal ini."
-            : "Check-in tercatat, tidak ada check-out. Tidak ada Cuti/Izin disetujui untuk tanggal ini.",
-      assignedShiftType: assignedShiftFor(r.employeeId, normalizeWeekStart(r.attendanceDate)),
-    }))
+    .map((r) => {
+      const { hasIn, hasOut } = punched(r);
+      return {
+        employeeId: r.employeeId,
+        employeeNumber: r.employee.employeeNumber,
+        employeeName: r.employee.fullLegalName,
+        departmentName: r.employee.currentPosition?.orgUnit.unitName ?? "—",
+        date: r.attendanceDate,
+        reason:
+          !hasIn && !hasOut
+            ? "Tidak ada check-in/check-out. Tidak ada Cuti/Izin disetujui untuk tanggal ini."
+            : !hasIn
+              ? "Check-out tercatat, tidak ada check-in. Tidak ada Cuti/Izin disetujui untuk tanggal ini."
+              : "Check-in tercatat, tidak ada check-out. Tidak ada Cuti/Izin disetujui untuk tanggal ini.",
+        assignedShiftType: assignedShiftFor(r.employeeId, normalizeWeekStart(r.attendanceDate)),
+      };
+    })
     .sort((a, b) => a.date.getTime() - b.date.getTime() || a.employeeName.localeCompare(b.employeeName));
 }
 
@@ -156,7 +185,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
   const dates: Date[] = Array.from({ length: dayCount }, (_, i) => new Date(period.start.getTime() + i * 24 * 60 * 60 * 1000));
   const weekStarts = [...new Set(dates.map((d) => normalizeWeekStart(d).getTime()))].map((t) => new Date(t));
 
-  const [employees, records, absenceTypes, workSchedule, shiftAssignments] = await Promise.all([
+  const [employees, records, absenceTypes, workSchedule, shiftAssignments, punchDays] = await Promise.all([
     prisma.employee.findMany({
       where: { id: { in: employeeIds } },
       select: {
@@ -186,6 +215,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
     weekStarts.length > 0
       ? prisma.shiftAssignment.findMany({ where: { employeeId: { in: employeeIds }, weekStartDate: { in: weekStarts } } })
       : Promise.resolve([]),
+    loadPunchDays(employeeIds, period.start, queryEnd),
   ]);
 
   const labelByCode = new Map(absenceTypes.map((t) => [t.code, t.label]));
@@ -210,11 +240,15 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
     let totalActualMinutes = 0;
     const days = dates.map((date) => {
       const record = recordByDate.get(date.getTime());
+      const punch = punchDays.get(punchDayKey(employee.id, date));
+      // Either the day's record or a live punch event counts.
+      const hasCheckIn = !!record?.checkInEventId || !!punch?.hasCheckIn;
+      const hasCheckOut = !!record?.checkOutEventId || !!punch?.hasCheckOut;
       const assignedShiftType = assignedShiftFor(employee.id, normalizeWeekStart(date));
       const hoursInput = {
         dayOfWeek: date.getUTCDay(),
-        hasCheckIn: !!record?.checkInEventId,
-        hasCheckOut: !!record?.checkOutEventId,
+        hasCheckIn,
+        hasCheckOut,
         recordShiftType: record?.shiftType ?? null,
         assignedShiftType,
         absenceTypeCode: record?.absenceTypeCode ?? null,
@@ -231,8 +265,8 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
         assignedShiftType,
         absenceTypeCode: record?.absenceTypeCode ?? null,
         absenceTypeLabel: record?.absenceTypeCode ? (labelByCode.get(record.absenceTypeCode) ?? record.absenceTypeCode) : null,
-        hasCheckIn: !!record?.checkInEventId,
-        hasCheckOut: !!record?.checkOutEventId,
+        hasCheckIn,
+        hasCheckOut,
         presentOverride: !!record?.presentOverride,
         minutes,
         actualMinutes,

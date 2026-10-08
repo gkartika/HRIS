@@ -3,7 +3,7 @@
 import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { authorizeDeptHeadDecision, authorizeHrManagerDecision } from "@/lib/approval-authority";
-import { companyYear } from "@/lib/company-time";
+import { companyYear, companyToday } from "@/lib/company-time";
 import { nextSequence } from "@/lib/number-sequence";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -18,8 +18,10 @@ import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isLevel3ForEmployeeDepartment, resolveDepartmentId } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
+import { shouldScheduleMove } from "@/lib/placement-timing";
 import {
   formatMovementRequestNumber,
+  OPEN_MOVEMENT_STATUSES,
   canDecideMovementRequestStatus,
   canExecuteMovementRequestStatus,
   canCancelMovementRequestStatus,
@@ -102,6 +104,16 @@ export async function submitMovementRequest(
     return "Anda tidak memiliki akses. Hanya pemegang Posisi Level 3 (3A/3B) di department karyawan ini yang dapat mengajukan.";
   }
 
+  // One open request per employee: a second one could be approved alongside
+  // the first and would then fail at execution.
+  const openRequest = await prisma.movementRequest.findFirst({
+    where: { employeeId, status: { in: OPEN_MOVEMENT_STATUSES } },
+    select: { requestNumber: true },
+  });
+  if (openRequest) {
+    return `Karyawan ini masih memiliki permintaan Perubahan Posisi yang berjalan (${openRequest.requestNumber}). Selesaikan atau batalkan permintaan itu terlebih dahulu.`;
+  }
+
   const positionError = validateProposedPosition(movementType, employee.currentPositionId, proposedPositionId);
   if (positionError) return positionError;
 
@@ -127,6 +139,16 @@ export async function submitMovementRequest(
 
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
   if (!requester) return "Karyawan pengaju tidak ditemukan.";
+
+  // A move already scheduled for the future is still pending on the old
+  // placement; a new request now would target a placement that is about to end.
+  const alreadyScheduled = await prisma.assignment.findFirst({
+    where: { employeeId, assignmentType: "PRIMARY", status: "SCHEDULED" },
+    select: { effectiveFrom: true },
+  });
+  if (alreadyScheduled) {
+    return "Karyawan ini sudah memiliki perpindahan penempatan yang terjadwal. Tunggu sampai berlaku atau batalkan jadwalnya terlebih dahulu.";
+  }
 
   const year = companyYear();
   const seq = await nextSequence(`MOV-${year}`);
@@ -282,6 +304,19 @@ export async function decideMovementRequest(
     return "Posisi yang diusulkan sudah memiliki pemegang Utama aktif — permintaan ini tidak dapat disetujui.";
   }
 
+  // Recheck at approval: if the placement this request was meant to change is
+  // no longer active (the employee was moved or left in the meantime),
+  // approving it would only produce a request that can never be executed.
+  if (decision === "APPROVED" && request.currentAssignmentId) {
+    const assignmentToEnd = await prisma.assignment.findUnique({
+      where: { id: request.currentAssignmentId },
+      select: { status: true },
+    });
+    if (!assignmentToEnd || assignmentToEnd.status !== "ACTIVE") {
+      return "Penempatan yang akan diubah sudah tidak aktif (karyawan sudah dipindahkan atau keluar). Batalkan permintaan ini dan ajukan ulang.";
+    }
+  }
+
   await prisma.movementRequest.update({
     where: { id: requestId },
     data: {
@@ -392,6 +427,17 @@ export async function executeMovementRequest(requestId: string): Promise<string 
     return "Assignment yang akan diakhiri sudah tidak aktif — permintaan ini perlu ditinjau ulang.";
   }
 
+  // A future-dated move keeps the current placement in force until that date
+  // (decided 2026-10-08): it only gets an end date, the new placement is stored
+  // as SCHEDULED, and the nightly job completes the switch.
+  const scheduleMove =
+    request.movementType !== "STATUS_CHANGE" &&
+    shouldScheduleMove({
+      hasCurrentPrimary: !!assignmentToEnd,
+      effectiveDate: request.proposedEffectiveDate,
+      today: companyToday(),
+    });
+
   const result = await prisma.$transaction(async (tx) => {
     let newAssignmentId: string | null = null;
 
@@ -399,7 +445,9 @@ export async function executeMovementRequest(requestId: string): Promise<string 
       if (assignmentToEnd) {
         await tx.assignment.update({
           where: { id: assignmentToEnd.id },
-          data: { status: "ENDED", effectiveTo: request.proposedEffectiveDate },
+          data: scheduleMove
+            ? { effectiveTo: request.proposedEffectiveDate }
+            : { status: "ENDED", effectiveTo: request.proposedEffectiveDate },
         });
       }
       const newAssignment = await tx.assignment.create({
@@ -408,19 +456,21 @@ export async function executeMovementRequest(requestId: string): Promise<string 
           positionId: request.proposedPositionId,
           assignmentType: "PRIMARY",
           primaryAssignmentFlag: true,
-          status: "ACTIVE",
+          status: scheduleMove ? "SCHEDULED" : "ACTIVE",
           effectiveFrom: request.proposedEffectiveDate,
         },
       });
       newAssignmentId = newAssignment.id;
-      await tx.employee.update({
-        where: { id: request.employeeId },
-        data: { currentPositionId: request.proposedPositionId },
-      });
-      if (assignmentToEnd) {
-        await syncPositionStatus(assignmentToEnd.positionId);
+      if (!scheduleMove) {
+        await tx.employee.update({
+          where: { id: request.employeeId },
+          data: { currentPositionId: request.proposedPositionId },
+        });
+        if (assignmentToEnd) {
+          await syncPositionStatus(assignmentToEnd.positionId);
+        }
+        await syncPositionStatus(request.proposedPositionId);
       }
-      await syncPositionStatus(request.proposedPositionId);
     }
 
     if (request.proposedEmploymentStatus) {

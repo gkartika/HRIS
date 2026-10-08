@@ -2,8 +2,14 @@ import { prisma } from "@/lib/db";
 import { companyToday, startOfCompanyDay, formatCompanyTime } from "@/lib/company-time";
 import { buildPunchDayLookup, punchDayKey } from "@/lib/punch-days";
 import type { CutoffPeriod } from "@/lib/absence-cutoff";
-import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
+import {
+  normalizeWeekStart,
+  buildScheduleMinutesLookup,
+  buildAssignedShiftLookup,
+  buildIsScheduledToWorkLookup,
+} from "@/lib/shift-assignment";
 import { computeDayMinutes, computeActualDayMinutes } from "@/lib/attendance-hours";
+import { pickLeaveRequestForGridDay } from "@/lib/leave-on-grid";
 import { haversineDistanceMeters } from "@/lib/attendance";
 
 // Real punches for these employees in [start, end), read straight from the
@@ -137,6 +143,8 @@ export interface GridDayCell {
   assignedShiftType: string;
   absenceTypeCode: string | null;
   absenceTypeLabel: string | null;
+  /** True when the leave type shown comes from an approved leave request, not from a classification HR entered on this day. */
+  fromLeaveRequest: boolean;
   hasCheckIn: boolean;
   hasCheckOut: boolean;
   /** HR manually confirmed this day as present despite no punch (forgotten scan). */
@@ -180,7 +188,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
   const dates: Date[] = Array.from({ length: dayCount }, (_, i) => new Date(period.start.getTime() + i * 24 * 60 * 60 * 1000));
   const weekStarts = [...new Set(dates.map((d) => normalizeWeekStart(d).getTime()))].map((t) => new Date(t));
 
-  const [employees, records, absenceTypes, workSchedule, shiftAssignments, punchDays] = await Promise.all([
+  const [employees, records, absenceTypes, workSchedule, shiftAssignments, punchDays, approvedRequests, holidays] = await Promise.all([
     prisma.employee.findMany({
       where: { id: { in: employeeIds } },
       select: {
@@ -211,6 +219,21 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
       ? prisma.shiftAssignment.findMany({ where: { employeeId: { in: employeeIds }, weekStartDate: { in: weekStarts } } })
       : Promise.resolve([]),
     loadPunchDays(employeeIds, period.start, queryEnd),
+    // Approved leave shows on the grid by itself (decided 2026-10-08), so the
+    // grid and the payroll Excel no longer depend on Admin SDM re-entering it.
+    prisma.absenceRequest.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        status: "APPROVED",
+        startDate: { lt: queryEnd },
+        endDate: { gte: period.start },
+      },
+      select: { employeeId: true, startDate: true, endDate: true, absenceTypeCode: true },
+    }),
+    prisma.companyHoliday.findMany({
+      where: { date: { gte: period.start, lt: queryEnd } },
+      select: { date: true },
+    }),
   ]);
 
   const labelByCode = new Map(absenceTypes.map((t) => [t.code, t.label]));
@@ -218,6 +241,13 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
   const hoursMultiplierByCode = new Map(absenceTypes.map((t) => [t.code, t.hoursMultiplier]));
   const scheduleMinutesFor = buildScheduleMinutesLookup(workSchedule);
   const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
+  const isScheduledToWork = buildIsScheduledToWorkLookup(holidays, workSchedule, shiftAssignments);
+  const requestsByEmployee = new Map<string, typeof approvedRequests>();
+  for (const request of approvedRequests) {
+    const list = requestsByEmployee.get(request.employeeId) ?? [];
+    list.push(request);
+    requestsByEmployee.set(request.employeeId, list);
+  }
 
   const recordsByEmployee = new Map<string, typeof records>();
   for (const r of records) {
@@ -229,7 +259,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
   return employees.map((employee) => {
     const employeeRecords = recordsByEmployee.get(employee.id) ?? [];
     const recordByDate = new Map(employeeRecords.map((r) => [r.attendanceDate.getTime(), r]));
-    const points = employeeRecords.reduce((sum, r) => sum + (r.absenceTypeCode ? (pointsByCode.get(r.absenceTypeCode) ?? 0) : 0), 0);
+    const employeeRequests = requestsByEmployee.get(employee.id) ?? [];
 
     let totalMinutes = 0;
     let totalActualMinutes = 0;
@@ -240,14 +270,32 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
       const hasCheckIn = !!record?.checkInEventId || !!punch?.hasCheckIn;
       const hasCheckOut = !!record?.checkOutEventId || !!punch?.hasCheckOut;
       const assignedShiftType = assignedShiftFor(employee.id, normalizeWeekStart(date));
+      // An approved leave request covers this day only when nobody has made an
+      // explicit call for it (a classification by Admin SDM, or "Masuk"), the
+      // person did not actually punch in and out, and it is a real working day
+      // for them (not a day off or public holiday). Same precedence as the
+      // mandays-lost report: what Admin SDM entered always wins.
+      const leaveRequest = pickLeaveRequestForGridDay({
+        date,
+        hasExplicitAbsenceCode: !!record?.absenceTypeCode,
+        presentOverride: !!record?.presentOverride,
+        hasCheckIn,
+        hasCheckOut,
+        isScheduledToWork: isScheduledToWork(employee.id, date),
+        requests: employeeRequests,
+      });
+      const absenceTypeCode = record?.absenceTypeCode ?? leaveRequest?.absenceTypeCode ?? null;
       const hoursInput = {
         dayOfWeek: date.getUTCDay(),
         hasCheckIn,
         hasCheckOut,
-        recordShiftType: record?.shiftType ?? null,
+        // With no punch to say which schedule applies, a leave day is paid on
+        // the shift the person is rostered for that week (the weekly shift
+        // assignment, Shift 1 when none), unless a shift was entered for the day.
+        recordShiftType: record?.shiftType ?? (leaveRequest ? assignedShiftType : null),
         assignedShiftType,
-        absenceTypeCode: record?.absenceTypeCode ?? null,
-        hoursMultiplier: record?.absenceTypeCode ? (hoursMultiplierByCode.get(record.absenceTypeCode) ?? 0) : 0,
+        absenceTypeCode,
+        hoursMultiplier: absenceTypeCode ? (hoursMultiplierByCode.get(absenceTypeCode) ?? 0) : 0,
         presentOverride: !!record?.presentOverride,
       };
       const minutes = computeDayMinutes(hoursInput, scheduleMinutesFor);
@@ -258,8 +306,9 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
         date,
         shiftType: record?.shiftType ?? null,
         assignedShiftType,
-        absenceTypeCode: record?.absenceTypeCode ?? null,
-        absenceTypeLabel: record?.absenceTypeCode ? (labelByCode.get(record.absenceTypeCode) ?? record.absenceTypeCode) : null,
+        absenceTypeCode,
+        absenceTypeLabel: absenceTypeCode ? (labelByCode.get(absenceTypeCode) ?? absenceTypeCode) : null,
+        fromLeaveRequest: !!leaveRequest,
         hasCheckIn,
         hasCheckOut,
         presentOverride: !!record?.presentOverride,
@@ -267,6 +316,9 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
         actualMinutes,
       };
     });
+
+    // Points follow the codes actually shown, leave requests included.
+    const points = days.reduce((sum, d) => sum + (d.absenceTypeCode ? (pointsByCode.get(d.absenceTypeCode) ?? 0) : 0), 0);
 
     return {
       employeeId: employee.id,

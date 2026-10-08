@@ -7,6 +7,9 @@ import { requireSession } from "@/lib/require-session";
 import { canManageAssignments } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
+import { applyOnboardingTrainingIfFirstPlacement } from "@/lib/onboarding-placement";
+import { shouldScheduleMove } from "@/lib/placement-timing";
+import { companyToday } from "@/lib/company-time";
 import type { AssignmentType } from "@/generated/prisma/enums";
 
 export async function addAssignment(
@@ -148,6 +151,45 @@ export async function movePrimaryAssignment(
     where: { employeeId, assignmentType: "PRIMARY", status: "ACTIVE" },
   });
 
+  const pendingMove = await prisma.assignment.findFirst({
+    where: { employeeId, assignmentType: "PRIMARY", status: "SCHEDULED" },
+    include: { position: true },
+  });
+  if (pendingMove) {
+    return `Karyawan ini sudah memiliki perpindahan terjadwal ke ${pendingMove.position.positionCode}. Batalkan jadwal itu dahulu sebelum memindahkan lagi.`;
+  }
+
+  // A move dated in the future keeps the current placement fully in force
+  // until that date (decided 2026-10-08): its end date is set, the new
+  // placement is stored as SCHEDULED, and the nightly job completes the
+  // switch. Authority and the org chart follow the dates, so nothing is lost
+  // in between.
+  if (currentPrimary && shouldScheduleMove({ hasCurrentPrimary: true, effectiveDate, today: companyToday() })) {
+    const scheduled = await prisma.$transaction(async (tx) => {
+      await tx.assignment.update({ where: { id: currentPrimary.id }, data: { effectiveTo: effectiveDate } });
+      return tx.assignment.create({
+        data: {
+          employeeId,
+          positionId,
+          assignmentType: "PRIMARY",
+          primaryAssignmentFlag: true,
+          status: "SCHEDULED",
+          effectiveFrom: effectiveDate,
+        },
+      });
+    });
+    await logAudit({
+      actorAccountId: session.user.id,
+      action: "UPDATE",
+      datasetName: "Assignment",
+      recordId: scheduled.id,
+      reason: `Movement scheduled: primary position changes to ${newPosition.positionCode} effective ${effectiveFrom}`,
+    });
+    revalidatePath(`/employees/${employeeId}`);
+    revalidatePath("/organization");
+    return undefined;
+  }
+
   if (currentPrimary) {
     await prisma.assignment.update({
       where: { id: currentPrimary.id },
@@ -173,18 +215,73 @@ export async function movePrimaryAssignment(
   });
   await syncPositionStatus(positionId);
 
+  // First placement of a new hire: now that a position exists, give them the
+  // onboarding courses that depend on it (decided 2026-10-08).
+  const onboardingCoursesAssigned = await applyOnboardingTrainingIfFirstPlacement(
+    employeeId,
+    !!currentPrimary,
+    session.user.id
+  );
+
   await logAudit({
     actorAccountId: session.user.id,
     action: "UPDATE",
     datasetName: "Assignment",
     recordId: newAssignment.id,
-    reason: `Movement: primary position changed to ${newPosition.positionCode} effective ${effectiveFrom}`,
+    reason: `Movement: primary position changed to ${newPosition.positionCode} effective ${effectiveFrom}${onboardingCoursesAssigned > 0 ? ` (${onboardingCoursesAssigned} onboarding course(s) assigned)` : ""}`,
   });
 
   revalidatePath(`/employees/${employeeId}`);
   revalidatePath("/employees");
   revalidatePath("/organization");
   revalidatePath("/team");
+  revalidatePath("/onboarding");
+}
+
+// A scheduled move that has not taken effect yet can be called off: the old
+// placement goes back to open-ended and the scheduled one is closed without
+// ever having been in force (history is kept, never deleted).
+export async function cancelScheduledPlacement(
+  assignmentId: string,
+  employeeId: string,
+  _prevState: string | undefined,
+  _formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageAssignments(session)) return t("common.forbidden");
+
+  const scheduled = await prisma.assignment.findUnique({ where: { id: assignmentId }, include: { position: true } });
+  if (!scheduled || scheduled.employeeId !== employeeId) return "Penempatan tidak ditemukan.";
+  if (scheduled.status !== "SCHEDULED") return "Perpindahan ini sudah berlaku atau sudah dibatalkan.";
+
+  await prisma.$transaction(async (tx) => {
+    // The placement it was going to replace: still ACTIVE, with its end date
+    // set to this move's start date.
+    const replaced = await tx.assignment.findFirst({
+      where: {
+        employeeId,
+        assignmentType: "PRIMARY",
+        status: "ACTIVE",
+        ...(scheduled.effectiveFrom ? { effectiveTo: scheduled.effectiveFrom } : {}),
+      },
+    });
+    if (replaced) await tx.assignment.update({ where: { id: replaced.id }, data: { effectiveTo: null } });
+    await tx.assignment.update({
+      where: { id: assignmentId },
+      data: { status: "ENDED", effectiveTo: scheduled.effectiveFrom },
+    });
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "Assignment",
+    recordId: assignmentId,
+    reason: `Scheduled move to ${scheduled.position.positionCode} cancelled before it took effect`,
+  });
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/organization");
 }
 
 export async function endAssignment(

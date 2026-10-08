@@ -40,9 +40,14 @@ export const getOrgUnitMap = cache(async () => {
 // for the half-open interval effectiveFrom <= asOf < effectiveTo.
 // A placement with no start date (unknown, e.g. imported without one) counts as
 // already in force.
+//
+// A SCHEDULED placement (a future-dated move) is included: the date clause below
+// already keeps it out until its start date, so authority and the org chart
+// switch over exactly on the effective date, without waiting for the nightly
+// job to flip the stored status.
 export function activeAssignmentWhere(asOf: Date) {
   return {
-    status: "ACTIVE" as const,
+    status: { in: ["ACTIVE", "SCHEDULED"] as ("ACTIVE" | "SCHEDULED")[] },
     AND: [
       { OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: asOf } }] },
       { OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }] },

@@ -62,3 +62,33 @@ const NOT_CANCELLABLE_STATUSES: RecruitmentRequestStatus[] = ["FILLED", "CLOSED"
 export function canCancelRequestStatus(status: RecruitmentRequestStatus): boolean {
   return !NOT_CANCELLABLE_STATUSES.includes(status);
 }
+
+// "Tutup" (decided 2026-10-08): a request that has produced at least one hire
+// but will not reach its headcount is closed, not cancelled. Only a partly
+// filled request qualifies; one with no hires is cancelled instead.
+export function canCloseRequestStatus(status: RecruitmentRequestStatus): boolean {
+  return status === "PARTIALLY_FILLED";
+}
+
+// A returned request (Kembalikan) can be edited and sent again (decided
+// 2026-10-08). It goes back to the stage that returned it, so whoever sent
+// it back sees the corrected version. If the department was changed, the new
+// department's own Dept Head has never seen it, so it restarts from the top.
+export function canResubmitRequestStatus(status: RecruitmentRequestStatus): boolean {
+  return status === "RETURNED";
+}
+
+export function statusAfterResubmit(args: {
+  returnedByHrManager: boolean;
+  departmentChanged: boolean;
+  submitterIsDeptHead: boolean;
+}): RecruitmentRequestStatus {
+  if (args.returnedByHrManager && !args.departmentChanged) return "SUBMITTED";
+  return initialRecruitmentStatus(args.submitterIsDeptHead);
+}
+
+// Vacant seats for the job being approved, shown to the HR Manager as a
+// heads-up (never a block): hiring needs a vacant position to exist first.
+export function vacantSeatShortfall(requestedHeadcount: number, vacantSeats: number): number {
+  return Math.max(0, requestedHeadcount - vacantSeats);
+}

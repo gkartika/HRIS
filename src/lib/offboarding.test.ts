@@ -4,6 +4,8 @@ import {
   INITIAL_OFFBOARDING_CASE_STATUS,
   canExecuteExitClearanceStatus,
   canCancelOffboardingCaseStatus,
+  isPastLastWorkingDay,
+  parseExitReturnCondition,
 } from "./offboarding";
 
 describe("formatOffboardingCaseNumber", () => {
@@ -34,5 +36,41 @@ describe("canCancelOffboardingCaseStatus", () => {
   it("a terminal state cannot be cancelled again", () => {
     expect(canCancelOffboardingCaseStatus("COMPLETED")).toBe(false);
     expect(canCancelOffboardingCaseStatus("CANCELLED")).toBe(false);
+  });
+});
+
+describe("isPastLastWorkingDay", () => {
+  const lwd = new Date("2026-10-20T00:00:00.000Z");
+  it("keeps access through the whole last working day", () => {
+    expect(isPastLastWorkingDay(lwd, new Date("2026-10-19T00:00:00.000Z"))).toBe(false);
+    expect(isPastLastWorkingDay(lwd, new Date("2026-10-20T00:00:00.000Z"))).toBe(false);
+  });
+  it("ends access the day after", () => {
+    expect(isPastLastWorkingDay(lwd, new Date("2026-10-21T00:00:00.000Z"))).toBe(true);
+  });
+});
+
+describe("parseExitReturnCondition", () => {
+  it("returns good and repairable assets to normal status without a disposal", () => {
+    expect(parseExitReturnCondition("GOOD")).toMatchObject({ assetStatus: "AVAILABLE", disposalReason: null });
+    expect(parseExitReturnCondition("NEEDS_REPAIR")).toMatchObject({ assetStatus: "UNDER_REPAIR", disposalReason: null });
+  });
+  it("sends a lost asset to loss review with a disposal proposal, never straight to disposed", () => {
+    expect(parseExitReturnCondition("LOST")).toMatchObject({
+      inspectionResult: "LOST_OR_BEYOND_REPAIR",
+      disposalReason: "CONFIRMED_LOSS",
+      assetStatus: "LOST_PENDING_REVIEW",
+    });
+  });
+  it("sends a beyond-repair asset to a disposal proposal, never straight to disposed", () => {
+    expect(parseExitReturnCondition("BEYOND_REPAIR")).toMatchObject({ disposalReason: "BEYOND_REPAIR", assetStatus: "UNDER_REPAIR" });
+  });
+  it("reads the old combined value as beyond repair", () => {
+    expect(parseExitReturnCondition("LOST_OR_BEYOND_REPAIR")?.condition).toBe("BEYOND_REPAIR");
+  });
+  it("rejects anything else", () => {
+    expect(parseExitReturnCondition("")).toBeNull();
+    expect(parseExitReturnCondition("DISPOSED")).toBeNull();
+    expect(parseExitReturnCondition(undefined)).toBeNull();
   });
 });

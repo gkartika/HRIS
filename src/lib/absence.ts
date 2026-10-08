@@ -21,6 +21,27 @@ export function absenceDayCount(startDate: Date, endDate: Date): number {
   return Math.round((end - start) / DAY_MS) + 1;
 }
 
+// Days of a leave request that are real working days for this employee
+// (decided 2026-10-08): weekends, days off in their shift, and public holidays
+// (Tanggal Merah and Cuti Bersama) do not use up leave. `isScheduled` is the
+// same "is this person scheduled to work that day" rule the attendance
+// reconciliation uses (buildIsScheduledToWorkLookup in shift-assignment.ts).
+export function scheduledDaysInRange(
+  isScheduled: (employeeId: string, day: Date) => boolean,
+  employeeId: string,
+  startDate: Date,
+  endDate: Date
+): Date[] {
+  const start = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
+  const end = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
+  const days: Date[] = [];
+  for (let time = start; time <= end; time += DAY_MS) {
+    const day = new Date(time);
+    if (isScheduled(employeeId, day)) days.push(day);
+  }
+  return days;
+}
+
 // Chain: configured first-approver Position, optionally a second (only for
 // requesters whose Section AND Department both have their own
 // AbsenceApproverConfig row), then HR Admin — no HR Manager stage anywhere

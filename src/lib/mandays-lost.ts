@@ -71,6 +71,10 @@ function formatMonthBucketLabel(bucketStart: Date): string {
 //    manday even if classified, and doesn't count toward the % denominator
 //    either (every active employee's own scheduled days are the
 //    denominator, not just the ones who lost time).
+// 3. It is not a public holiday in the holiday calendar (decided
+//    2026-10-08): Tanggal Merah AND Cuti Bersama are never working days, so
+//    they are neither a lost manday (even inside an approved leave) nor part
+//    of the scheduled days in the % denominator.
 // A day can be "lost" two ways — HR's explicit Rekonsiliasi classification
 // (DailyAttendanceRecord.absenceTypeCode), or an approved AbsenceRequest
 // range — but never both for the same day: an explicit HR record for that
@@ -95,7 +99,7 @@ export async function getMandaysLostReport(period: ReportPeriod, bucketBy: Bucke
   // one ShiftAssignment row covering its single week.
   const weekStartTimes = [...new Set(dates.map((d) => normalizeWeekStart(d).getTime()))];
 
-  const [explicitRecords, absenceRequests, absenceTypes, workSchedule, shiftAssignments, employees] = await Promise.all([
+  const [explicitRecords, absenceRequests, absenceTypes, workSchedule, shiftAssignments, employees, holidays] = await Promise.all([
     prisma.dailyAttendanceRecord.findMany({
       where: {
         attendanceDate: { gte: period.start, lte: period.end },
@@ -121,13 +125,19 @@ export async function getMandaysLostReport(period: ReportPeriod, bucketBy: Bucke
       where: { activeFlag: true },
       select: { id: true, currentPosition: { select: { orgUnitId: true } } },
     }),
+    prisma.companyHoliday.findMany({
+      where: { date: { gte: period.start, lte: period.end } },
+      select: { date: true },
+    }),
   ]);
 
   const employeeById = new Map(employees.map((e) => [e.id, e]));
   const typeByCode = new Map(absenceTypes.map((t) => [t.code, t]));
   const scheduleMinutesFor = buildScheduleMinutesLookup(workSchedule);
   const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
+  const holidayTimes = new Set(holidays.map((h) => h.date.getTime()));
   const isScheduledWorkDay = (employeeId: string, date: Date) =>
+    !holidayTimes.has(date.getTime()) &&
     scheduleMinutesFor(assignedShiftFor(employeeId, normalizeWeekStart(date)), date.getUTCDay()) > 0;
 
   // Walked up to the actual Department (not the raw Position.orgUnitId) —

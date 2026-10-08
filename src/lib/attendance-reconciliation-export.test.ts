@@ -9,6 +9,7 @@ function makeCell(overrides: Partial<GridDayCell> = {}): GridDayCell {
     assignedShiftType: "SHIFT_1",
     absenceTypeCode: null,
     absenceTypeLabel: null,
+    fromLeaveRequest: false,
     hasCheckIn: false,
     hasCheckOut: false,
     presentOverride: false,

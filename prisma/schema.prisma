@@ -123,6 +123,10 @@ enum AssignmentType {
 enum AssignmentStatus {
   ACTIVE
   ENDED
+  // A future-dated move to a new primary placement: created now, switches to
+  // ACTIVE on its start date (nightly job) while the old placement stays
+  // ACTIVE until its end date. Never counts as held before it starts.
+  SCHEDULED
 }
 
 enum Sensitivity {
@@ -150,6 +154,7 @@ enum OnboardingOverallStatus {
   IN_PROGRESS
   OVERDUE
   COMPLETE
+  CANCELLED
 }
 
 // DM-25 / WF-13: who had the authority to cancel a Recruitment Request.
@@ -853,6 +858,8 @@ model Account {
   recruitmentRequestsDeptHeadDecisionsBy      RecruitmentRequest[]            @relation("RecruitmentDeptHeadDecisionBy")
   recruitmentFulfillmentsLinked               RecruitmentRequestFulfillment[]
   recruitmentRequestsCancelledBy              RecruitmentRequest[]            @relation("RecruitmentCancelledByAccount")
+  recruitmentRequestsClosedBy                 RecruitmentRequest[]            @relation("RecruitmentClosedByAccount")
+  onboardingCasesCancelledBy                  OnboardingCase[]                @relation("OnboardingCancelledBy")
   movementRequestsSubmittedBy                 MovementRequest[]               @relation("MovementSubmittedBy")
   movementRequestsDecidedBy                   MovementRequest[]               @relation("MovementDecisionBy")
   movementRequestsDeptHeadDecisionsBy         MovementRequest[]               @relation("MovementDeptHeadDecisionBy")
@@ -1303,6 +1310,14 @@ model RecruitmentRequest {
   cancellationReason    String?
   previousStatus        RecruitmentRequestStatus?
 
+  // Closing a partly filled request ("Tutup"): hiring stops with fewer people
+  // than requested. Distinct from cancelling, which is for requests that
+  // never produced a hire. The hires already made stay linked.
+  closedAt          DateTime?
+  closedByAccountId String?
+  closedByAccount   Account?  @relation("RecruitmentClosedByAccount", fields: [closedByAccountId], references: [id])
+  closeReason       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1487,6 +1502,13 @@ model OnboardingCase {
   // and overall_status (Not Started/In Progress/Overdue/Complete) is
   // computed live from these fields, never stored (src/lib/onboarding.ts).
   completedAt DateTime?
+
+  // Cancelled (no-show, hired by mistake, left during onboarding). The row is
+  // kept; reopening clears these three fields.
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelledByAccount   Account?  @relation("OnboardingCancelledBy", fields: [cancelledByAccountId], references: [id])
+  cancellationReason   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -32,6 +32,7 @@ export async function getPendingApprovals(session: Session) {
   const myPositionId = me?.activeFlag ? me.currentPositionId : null;
   const absenceRow = {
     id: true,
+    employeeId: true,
     startDate: true,
     endDate: true,
     employee: { select: { fullLegalName: true } },

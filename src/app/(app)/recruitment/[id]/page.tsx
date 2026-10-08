@@ -14,8 +14,21 @@ import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { computeFulfillmentCounts, canRequestAcceptFulfillment, canCancelRequestStatus } from "@/lib/recruitment";
-import { StartReviewButton, DecisionButtons, DeptHeadDecisionButtons, CancelRequestForm } from "./decision-forms";
+import {
+  computeFulfillmentCounts,
+  canRequestAcceptFulfillment,
+  canCancelRequestStatus,
+  canCloseRequestStatus,
+  canResubmitRequestStatus,
+} from "@/lib/recruitment";
+import { findVacantPositionsInDepartment } from "@/lib/recruitment-seats";
+import {
+  StartReviewButton,
+  DecisionButtons,
+  DeptHeadDecisionButtons,
+  CancelRequestForm,
+  CloseRequestForm,
+} from "./decision-forms";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function RecruitmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,6 +49,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
       decisionPosition: { include: { job: true } },
       cancelledByAccount: true,
       cancelledByEmployee: true,
+      closedByAccount: true,
       fulfillments: {
         include: { employee: true, assignment: { include: { position: { include: { job: true } } } } },
       },
@@ -63,8 +77,18 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
   // here as part of Approve, so the job list only needs fetching when this
   // session could actually reach that decision.
   const jobs = canApprove ? await prisma.job.findMany({ orderBy: { jobTitle: "asc" } }) : [];
+  // Heads-up for the HR Manager: how many vacant seats exist per job in this
+  // department, so a request for more people than seats is noticed early.
+  const vacantByJob: Record<string, number> = {};
+  if (canApprove && (request.status === "SUBMITTED" || request.status === "UNDER_REVIEW")) {
+    for (const p of await findVacantPositionsInDepartment(request.departmentId)) {
+      vacantByJob[p.jobId] = (vacantByJob[p.jobId] ?? 0) + 1;
+    }
+  }
   const canFulfill =
     canCreateEmployeeFromRequest(session) && canRequestAcceptFulfillment(request.status) && !counts.isFull;
+  const canClose = canCloseRequestStatus(request.status) && (isHrAdmin(session) || isHrManagerNow);
+  const canResubmit = canResubmitRequestStatus(request.status) && (isOwnRequest || isHrAdmin(session));
   const canCancel =
     canCancelRecruitmentRequest(session, request.requesterEmployeeId, activeHrManagerPositionIds) &&
     canCancelRequestStatus(request.status);
@@ -189,6 +213,13 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
               )}
             </>
           )}
+          {request.status === "CLOSED" && (
+            <>
+              {" · "}
+              {t("recruitment.closedBy")}: {request.closedByAccount?.usernameOrEmail ?? "—"} (
+              {formatDateLong(request.closedAt)}){request.closeReason && <> — {request.closeReason}</>}
+            </>
+          )}
           {request.status === "CANCELLED" && (
             <>
               {" · "}
@@ -201,6 +232,18 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
         </p>
       </div>
 
+      {canResubmit && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+          <p className="text-sm font-medium text-amber-900">{t("recruitment.resubmitTitle")}</p>
+          <p className="mt-1 text-sm text-amber-800">{t("recruitment.resubmitHint")}</p>
+          <Link
+            href={`/recruitment/${request.id}/edit`}
+            className="mt-3 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            {t("recruitment.resubmitButton")}
+          </Link>
+        </div>
+      )}
       {canApproveAsDeptHead && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="mb-3 text-sm font-medium text-slate-900">{t("recruitment.deptHeadApprovalSectionTitle")}</p>
@@ -213,13 +256,34 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
             <StartReviewButton requestId={request.id} />
           </div>
           <div className="mt-3">
-            <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} defaultJobId={request.jobId} />
+            <DecisionButtons
+              requestId={request.id}
+              positions={hrManagerPositions}
+              jobs={jobs}
+              defaultJobId={request.jobId}
+              vacantByJob={vacantByJob}
+              requestedHeadcount={request.requestedHeadcount}
+            />
           </div>
         </div>
       )}
       {canApprove && request.status === "UNDER_REVIEW" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <DecisionButtons requestId={request.id} positions={hrManagerPositions} jobs={jobs} defaultJobId={request.jobId} />
+          <DecisionButtons
+            requestId={request.id}
+            positions={hrManagerPositions}
+            jobs={jobs}
+            defaultJobId={request.jobId}
+            vacantByJob={vacantByJob}
+            requestedHeadcount={request.requestedHeadcount}
+          />
+        </div>
+      )}
+      {canClose && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <p className="mb-1 text-sm font-medium text-slate-900">{t("recruitment.closeRequestTitle")}</p>
+          <p className="mb-3 text-xs text-slate-500">{t("recruitment.closeRequestHint")}</p>
+          <CloseRequestForm requestId={request.id} />
         </div>
       )}
       {canCancel && (

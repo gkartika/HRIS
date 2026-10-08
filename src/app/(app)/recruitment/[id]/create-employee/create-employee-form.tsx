@@ -37,13 +37,13 @@ export function CreateEmployeeFromRequestForm({
               <option value="">— Pilih —</option>
               {candidatePositions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.positionCode} — {p.positionStatus}
+                  {p.positionCode} — {p.orgUnit.unitName}
                 </option>
               ))}
             </select>
             {candidatePositions.length === 0 && (
               <p className="mt-1 text-xs text-amber-700">
-                Belum ada Posisi untuk Jabatan/Department ini — buat terlebih dahulu di Pengaturan Organisasi &gt; Posisi.
+                Belum ada Posisi kosong untuk Jabatan/Department ini — buat terlebih dahulu di Pengaturan &gt; Posisi Organisasi.
               </p>
             )}
           </div>

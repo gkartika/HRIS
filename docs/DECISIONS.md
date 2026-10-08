@@ -3,6 +3,193 @@
 Material decisions made while building this app, in addition to the Decision
 Log tab (16 Decisions) in the HR App Build Guide. Newest first.
 
+## 2026-10-08 — ATT-1: approved leave shows on the attendance grid and the payroll Excel (workflow gap review)
+
+Before: approving a leave request removed the days from the "unresolved days"
+queue but never reached the attendance grid, so the grid and the payroll Excel
+(built from the same grid) showed no leave code and 0 hours for those days
+until Admin SDM classified each day by hand.
+
+Now (option chosen by the owner: the grid reads approved leave directly, nothing
+extra is stored): `getReconciliationGrid` loads the approved requests and, for
+each day, uses the request's leave type when ALL of these hold
+(`src/lib/leave-on-grid.ts`):
+- Admin SDM has not made an explicit call for the day (no absence code
+  classified, no "Masuk (Lupa Absen)"); what Admin SDM enters always wins, the
+  same precedence the mandays-lost report uses;
+- the person did not punch both in and out that day;
+- it is a working day for them (not a day off, not a public holiday).
+The day then gets the leave type's code, points and paid-hours multiplier
+exactly as if Admin SDM had classified it, and the cell tooltip says it comes
+from an approved request. If the leave is later cancelled or overridden to
+Ditolak, the grid follows by itself.
+- **Hours:** with no punch to say which schedule applies, a leave day is paid on
+  the shift the person is rostered for that week (weekly shift assignment,
+  Shift 1 when none), unless a shift was entered for that day. This is a
+  deliberate exception to the older "category without a shift does not count"
+  rule, which was written for days Admin SDM classifies by hand.
+- Days up to today are shown, as before; future leave appears when its day
+  arrives.
+
+## 2026-10-08 — EMP-1: a future-dated move no longer leaves a gap (workflow gap review)
+
+Before: the direct move, executing a Movement request and the placement import
+all marked the old primary placement ENDED immediately, even when the move was
+dated in the future. Authority (HR Manager / Dept Head), the org-chart seat and
+the renewal scan only count placements that are ACTIVE and inside their dates,
+so until the effective date the employee had no active primary placement, while
+`currentPositionId` already pointed at the new seat.
+
+Now: when a move REPLACES a current primary placement and its date is after
+today (WIB), the old placement stays ACTIVE and only gets its end date, and the
+new placement is stored with the new status **SCHEDULED** (additive migration
+`20261008050000_assignment_scheduled`). Everything that decides authority reads
+the dates (`activeAssignmentWhere` now accepts ACTIVE and SCHEDULED, the date
+clause keeps a scheduled row out until its start), so the switch happens at
+midnight on the effective date. The nightly job (`applyDuePlacementChanges`)
+then makes the stored data catch up: the new placement becomes ACTIVE, the old
+one ENDED, `currentPositionId` and the seats' Kosong/Terisi follow.
+- A move dated today or earlier works exactly as before. A FIRST placement
+  (nobody to replace) is never scheduled; its own start date already decides.
+- A scheduled move reserves its seat (`isPositionOccupiedByPrimary`, vacant-seat
+  list and "archive position" all count SCHEDULED), so nobody else can be put
+  there first.
+- One scheduled move per employee: a second direct move, transfer request or
+  import row is refused until the first has taken effect or been cancelled.
+- Admin SDM can call off a scheduled move on the Penempatan tab ("Batalkan
+  jadwal"): the old placement goes back to open-ended and the scheduled row is
+  closed as an empty period (history kept).
+- If the employee leaves before the date, Exit Clearance closes the scheduled
+  placement too.
+
+## 2026-10-08 — Onboarding, transfers, offboarding and leave decisions (workflow gap review)
+
+**Onboarding**
+- **ONB-1.** When a new hire is FIRST placed in a position (direct move on the
+  employee page, or the placement import), the onboarding courses that depend
+  on the position (position, job, department rules) are assigned then
+  (`src/lib/onboarding-placement.ts`). Only for someone with an open onboarding
+  case, so imported staff never receive onboarding courses. The "Materi Wajib"
+  item no longer shows as done for an employee with no placement: it says
+  "Menunggu penempatan", and for a placed employee with nothing assigned it says
+  no mandatory material applies to the position.
+- **ONB-3.** An onboarding case can be cancelled with a reason (no-show, hired by
+  mistake, left during onboarding) and reopened. New status "Dibatalkan"
+  (additive migration `20261008040000_onboarding_cancel`). Admin SDM can edit
+  the planned start date, and it follows the employee's Tanggal Bergabung when
+  that is corrected (open cases only).
+
+**Transfers (Perubahan Posisi)**
+- **MOV-1.** One open request (Menunggu Kepala Dept, Diajukan or Disetujui) per
+  employee; a second is refused with the number of the open one. At the HR
+  Manager's approval the request is also refused if the placement it was meant
+  to change is no longer active.
+- **MOV-2.** Left as is: Promosi and Mutasi will get a separate document, so an
+  ordinary move still does not update the contract.
+
+**Offboarding**
+- **OFF-2.** The employee keeps their placements and login through the whole
+  last working day. Exit Clearance done before the day is over only completes
+  the case; the nightly job (`runOffboardingDeactivations`) then ends the
+  placements, marks the employee inactive and disables the login. Clearance
+  done after the last day deactivates immediately, as before. A case still
+  waiting for clearance after its last day has the LOGIN disabled by the nightly
+  job (the employee record stays until clearance, so asset accountability is
+  kept); if that case is later cancelled, the login is re-enabled by hand from
+  the employee page.
+- **OFF-3.** A cancelled non-renewal offboarding can be started again from the
+  renewal case (the cancelled case is reopened, since a renewal case links to
+  exactly one offboarding case). Starting any offboarding is refused while the
+  employee already has an open one.
+- **OFF-4.** At asset clearance the return condition is Baik / Perlu perbaikan /
+  Rusak berat / Hilang. Rusak berat and Hilang no longer mark the asset
+  disposed on the spot: the asset goes to Under Repair (beyond repair) or Lost
+  Pending Review (lost) and a disposal proposal (Draft) is created, which goes
+  through the normal approval. Quantity-tracked items get no disposal case. The
+  single-asset return screen in the Assets module still has the old shortcut
+  (not part of this decision).
+
+**Leave and attendance**
+- **ATT-4.** Leave uses only working days: weekends, the employee's days off and
+  public holidays are not counted against quota. The request page and the
+  dashboard list show "N hari kerja" (`src/lib/leave-days.ts`).
+- **ATT-5.** A day is counted once in the quota even when it is both inside an
+  approved request and classified by HR with the same type.
+- **ATT-6.** Public holidays, Tanggal Merah AND Cuti Bersama, are not lost
+  mandays (also inside an approved leave) and not part of the scheduled days in
+  the % denominator. This only has effect once holidays are entered in the
+  holiday calendar (it was empty on 2026-10-08).
+- **ATT-8, ATT-9, ATT-10.** Left as they are: no employee punch-correction
+  request, no overtime process, and employees without an attendance method are
+  not chased by the nightly job.
+
+## 2026-10-08 — Recruitment workflow decisions (from the workflow gap review)
+
+1. **REC-1, Dept Head stage can't be skipped.** The requester is always the
+   logged-in employee; the requester id sent by the form is ignored unless
+   the logged-in user is Admin SDM (who may file on someone's behalf). The
+   Dept Head stage is skipped only when the person actually submitting is the
+   Dept Head of that department. Admin SDM filing for a Dept Head still sends
+   it to that Dept Head. (The Dept Head can still approve a request filed in
+   their own name; the general self-approval question is gap X-2.)
+2. **REC-2, any seat under the department can be filled.** A request names a
+   Department, and a seat belongs to it when it sits in that Department or
+   anywhere below it (Section, Group, Team). Before this, only seats placed
+   directly on the Department could be used: 14 of 185 positions. The
+   "Buat Karyawan" picker now lists only VACANT seats of the approved job
+   (`src/lib/recruitment-seats.ts`), labelled with their unit, and the action
+   also refuses archived seats.
+3. **REC-3, "Tutup" and a vacancy heads-up.**
+   - A partly filled request can be closed (status CLOSED, reason required,
+     by Admin SDM or the active HR Manager); hires already made stay linked.
+     A request with no hires is cancelled instead. Stored in the new columns
+     `closedAt`, `closedByAccountId`, `closeReason` (additive migration
+     `20261008030000_recruitment_close_reason`).
+   - When the HR Manager picks the Jabatan at approval, the form shows how
+     many vacant seats that job has in the department against the headcount
+     asked for. It is a warning only; approval is never blocked, since the
+     seats may be added afterwards.
+   - A returned request (Kembalikan) can be edited and resubmitted by its
+     requester or Admin SDM ("Ubah & Ajukan Ulang"). It returns to the stage
+     that sent it back (Dept Head or HR Manager); if the department was
+     changed it restarts at the new department's Dept Head. The old return
+     note is cleared from the request and kept in the audit log.
+
+## 2026-10-08 — Org structure workflow decisions (from the workflow gap review)
+
+The owner went through the Org structure gaps in the workflow review
+(artifact "CBP HRIS Workflow Map") and decided:
+
+1. **Position status is only Kosong (VACANT) or Terisi (FILLED)**, always
+   derived from active placements. Planned is not needed. The status field
+   is gone from the edit form and from the position import (an old file
+   with a `positionStatus` column is still accepted; the column is ignored).
+   `syncPositionStatus` now overwrites any leftover value. PLANNED/FROZEN/
+   CLOSED stay in the database enum only because enum values are never
+   dropped from the shared production database. At the time, all 185
+   production positions were FILLED, so no data needed converting.
+2. **A seat that is no longer needed is archived straight away**: no
+   Dibekukan/Ditutup step. Archiving still requires no active placement and
+   no (non-archived) position reporting to it; it also clears the HR
+   Manager flag. This supersedes the "Ditutup first, then archive" rule.
+3. **ORG-1, position import**: a blank `reportsToPositionCode` now leaves an
+   existing position's line manager unchanged (new position: no manager);
+   `KOSONGKAN` removes it. A row whose manager is a new position in the
+   same file is held back if that position's row is rejected, and a manager
+   created further down the file gets a "move that row up" message instead
+   of "not found". Rules live in `src/lib/import-export/position-rules.ts`
+   (unit-tested).
+4. **ORG-3, vacancies**: kept as is. A vacancy does not create anything;
+   hiring always goes through Permintaan Tenaga Kerja.
+5. **ORG-5, HR Manager access**: only ONE position may carry
+   `grantsHrManagerAccess`. The create/edit form refuses a second one and
+   names the current holder; the import rejects a "Ya" row unless the
+   current holder is set to "Tidak" in the same file, and rejects every
+   "Ya" row when a file has more than one. At the time no production
+   position had the flag, so nobody had HR Manager authority yet.
+6. **ORG-4, structure warnings**: kept as is (warnings on the org chart,
+   not blocks).
+
 ## 2026-08-18 (UAT prep) — Removed Employee.preferredName; fullLegalName everywhere
 
 Resumed a task paused on 2026-08-06 (see that date's memory note) — the

@@ -32,10 +32,15 @@ export function ConfirmGaAssetClearanceForm({ caseId, custodies }: { caseId: str
               >
                 <option value="GOOD">{t("assetInspectionResult.GOOD")}</option>
                 <option value="NEEDS_REPAIR">{t("assetInspectionResult.NEEDS_REPAIR")}</option>
-                <option value="LOST_OR_BEYOND_REPAIR">{t("assetInspectionResult.LOST_OR_BEYOND_REPAIR")}</option>
+                <option value="BEYOND_REPAIR">Rusak berat (tidak bisa diperbaiki)</option>
+                <option value="LOST">Hilang</option>
               </select>
             </div>
           ))}
+          <p className="text-xs text-slate-500">
+            Aset yang hilang atau rusak berat tidak langsung dihapus: sistem membuatkan usulan penghapusan (Draft) yang
+            masih perlu diajukan dan disetujui di menu Disposal.
+          </p>
         </div>
       )}
       <div>

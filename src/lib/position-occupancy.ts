@@ -12,23 +12,22 @@ export async function isPositionOccupiedByPrimary(
     where: {
       positionId,
       assignmentType: "PRIMARY",
-      status: "ACTIVE",
+      // A scheduled move into the seat reserves it, so nobody else can be put there first.
+      status: { in: ["ACTIVE", "SCHEDULED"] },
       ...(excludingEmployeeId ? { employeeId: { not: excludingEmployeeId } } : {}),
     },
   });
   return !!existing;
 }
 
-// If a position's stored status is just VACANT/FILLED (not an admin-set
-// PLANNED/FROZEN/CLOSED override), keep it in sync with whether it actually
-// has an active Assignment right now. The org chart itself always computes
-// live occupancy from Assignment rows — this is only so the plain admin list
-// view (src/app/(app)/admin/positions) shows a status that isn't obviously stale.
+// Keep a position's stored status (Kosong/Terisi) in sync with whether it
+// has an active Assignment right now. Status is never set by hand any more
+// (2026-10-08), so any leftover PLANNED/FROZEN/CLOSED value is overwritten
+// too. The org chart itself always computes live occupancy from Assignment
+// rows; this is so the admin list and its filter are not stale.
 export async function syncPositionStatus(positionId: string): Promise<void> {
   const position = await prisma.position.findUnique({ where: { id: positionId } });
-  if (!position || (position.positionStatus !== "VACANT" && position.positionStatus !== "FILLED")) {
-    return;
-  }
+  if (!position) return;
   const activeCount = await prisma.assignment.count({
     where: { positionId, status: "ACTIVE" },
   });

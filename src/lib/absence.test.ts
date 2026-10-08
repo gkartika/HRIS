@@ -9,6 +9,7 @@ import {
   canCancelAbsenceRequestStatus,
   canHrOverrideAbsenceRequestStatus,
   remainingEntitlementDays,
+  scheduledDaysInRange,
 } from "./absence";
 
 describe("formatAbsenceRequestNumber", () => {
@@ -88,5 +89,30 @@ describe("remainingEntitlementDays", () => {
 
   it("never goes negative", () => {
     expect(remainingEntitlementDays(12, 20)).toBe(0);
+  });
+});
+
+describe("scheduledDaysInRange (leave counts only working days)", () => {
+  const isMonToFri = (_employeeId: string, day: Date) => day.getUTCDay() >= 1 && day.getUTCDay() <= 5;
+  const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it("a Friday to Monday leave is 2 working days, not 4", () => {
+    // 2026-10-09 is a Friday, 2026-10-12 a Monday
+    const days = scheduledDaysInRange(isMonToFri, "e1", d("2026-10-09"), d("2026-10-12"));
+    expect(days.map((x) => x.toISOString().slice(0, 10))).toEqual(["2026-10-09", "2026-10-12"]);
+  });
+
+  it("skips public holidays inside the range", () => {
+    const holiday = d("2026-10-14");
+    const isScheduled = (id: string, day: Date) => isMonToFri(id, day) && day.getTime() !== holiday.getTime();
+    expect(scheduledDaysInRange(isScheduled, "e1", d("2026-10-13"), d("2026-10-15")).length).toBe(2);
+  });
+
+  it("a range that is only a weekend counts as zero", () => {
+    expect(scheduledDaysInRange(isMonToFri, "e1", d("2026-10-10"), d("2026-10-11")).length).toBe(0);
+  });
+
+  it("a single working day counts as one", () => {
+    expect(scheduledDaysInRange(isMonToFri, "e1", d("2026-10-12"), d("2026-10-12")).length).toBe(1);
   });
 });

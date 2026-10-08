@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { reconcileDueDailyAttendance } from "@/lib/attendance-reconciliation";
 import { runDueRenewalScan } from "@/lib/renewal-scan";
+import { runOffboardingDeactivations } from "@/lib/offboarding-deactivate";
+import { applyDuePlacementChanges } from "@/lib/placement-schedule";
 
 // Daily scheduled job (Vercel Cron, see vercel.json): the two things that used
 // to run — and write to the database — whenever someone opened the Kontrak or
@@ -14,5 +16,18 @@ export async function GET(request: Request) {
 
   await reconcileDueDailyAttendance();
   const renewals = await runDueRenewalScan();
-  return NextResponse.json({ ok: true, renewalCasesCreated: renewals.created });
+  // Access ends with the last working day: deactivate people whose Exit
+  // Clearance was done early, and switch off the login of anyone still
+  // waiting for clearance after their last day.
+  const offboarding = await runOffboardingDeactivations();
+  // Future-dated moves whose start date has arrived: new placement becomes
+  // ACTIVE, the old one ENDED, current position and seat status follow.
+  const placements = await applyDuePlacementChanges();
+  return NextResponse.json({
+    ok: true,
+    renewalCasesCreated: renewals.created,
+    employeesDeactivated: offboarding.deactivated,
+    loginsDisabled: offboarding.loginsDisabled,
+    placementChangesApplied: placements.activated,
+  });
 }

@@ -18,6 +18,16 @@ export function canExecuteMovementRequestStatus(status: MovementRequestStatus): 
   return status === "APPROVED";
 }
 
+// An employee may have only ONE open Perubahan Posisi request at a time
+// (decided 2026-10-08): two open requests for the same person could be
+// approved side by side, and the second would then fail at execution. A
+// returned request counts as closed here; it can only be cancelled.
+export const OPEN_MOVEMENT_STATUSES: MovementRequestStatus[] = ["PENDING_DEPT_HEAD", "SUBMITTED", "APPROVED"];
+
+export function isMovementRequestOpen(status: MovementRequestStatus): boolean {
+  return OPEN_MOVEMENT_STATUSES.includes(status);
+}
+
 // Blueprint's approval_status has no "Returned" state; cancellation is only
 // meaningful before execution.
 const NOT_CANCELLABLE_STATUSES: MovementRequestStatus[] = ["IMPLEMENTED", "CANCELLED", "REJECTED"];

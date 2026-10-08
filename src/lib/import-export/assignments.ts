@@ -3,6 +3,10 @@ import type { AssignmentType } from "@/generated/prisma/enums";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
 import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
 import { resolveAssignmentStart } from "@/lib/assignment-start";
+import { applyOnboardingTrainingIfFirstPlacement } from "@/lib/onboarding-placement";
+import { shouldScheduleMove } from "@/lib/placement-timing";
+import { companyToday } from "@/lib/company-time";
+import type { Session } from "next-auth";
 
 export const label = "Penempatan (Assignment)";
 export const templateHeaders = ["employeeNumber", "positionCode", "assignmentType", "effectiveFrom", "effectiveTo"];
@@ -96,7 +100,7 @@ export async function dryRun(rows: Record<string, string>[]): Promise<DryRunRow[
   });
 }
 
-export async function commitRow(raw: Record<string, string>): Promise<CommitResult> {
+export async function commitRow(raw: Record<string, string>, session?: Session): Promise<CommitResult> {
   const employee = await prisma.employee.findUniqueOrThrow({ where: { employeeNumber: raw.employeeNumber.trim() } });
   const position = await prisma.position.findUniqueOrThrow({ where: { positionCode: raw.positionCode.trim() } });
   const assignmentType = raw.assignmentType.trim().toUpperCase() as AssignmentType;
@@ -129,6 +133,29 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     const currentPrimary = await prisma.assignment.findFirst({
       where: { employeeId: employee.id, assignmentType: "PRIMARY", status: "ACTIVE" },
     });
+    // A future-dated move keeps the current placement in force until that date;
+    // the new one is stored as SCHEDULED and the nightly job completes the
+    // switch (decided 2026-10-08).
+    if (currentPrimary && effectiveFrom && shouldScheduleMove({ hasCurrentPrimary: true, effectiveDate: effectiveFrom, today: companyToday() })) {
+      const alreadyScheduled = await prisma.assignment.findFirst({
+        where: { employeeId: employee.id, assignmentType: "PRIMARY", status: "SCHEDULED" },
+        select: { id: true },
+      });
+      if (alreadyScheduled) throw new Error("Karyawan ini sudah memiliki perpindahan terjadwal; batalkan jadwalnya terlebih dahulu");
+      await prisma.assignment.update({ where: { id: currentPrimary.id }, data: { effectiveTo: effectiveFrom } });
+      const scheduled = await prisma.assignment.create({
+        data: {
+          employeeId: employee.id,
+          positionId: position.id,
+          assignmentType,
+          primaryAssignmentFlag: true,
+          status: "SCHEDULED",
+          effectiveFrom,
+          effectiveTo,
+        },
+      });
+      return { id: scheduled.id, action: "CREATE" };
+    }
     if (currentPrimary) {
       await prisma.assignment.update({
         where: { id: currentPrimary.id },
@@ -149,6 +176,9 @@ export async function commitRow(raw: Record<string, string>): Promise<CommitResu
     });
     await prisma.employee.update({ where: { id: employee.id }, data: { currentPositionId: position.id } });
     await syncPositionStatus(position.id);
+    // Only someone with an open onboarding case (a new hire) gets onboarding
+    // courses on a first placement; people brought in by import have no case.
+    if (session) await applyOnboardingTrainingIfFirstPlacement(employee.id, !!currentPrimary, session.user.id);
     return { id: created.id, action: "CREATE" };
   }
 

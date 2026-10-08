@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n/id";
 import { computeFulfillmentCounts, canRequestAcceptFulfillment } from "@/lib/recruitment";
 import { CreateEmployeeFromRequestForm } from "./create-employee-form";
 import { peekNextEmployeeNumber } from "@/lib/employee-number-allocate";
+import { findVacantPositionsInDepartment } from "@/lib/recruitment-seats";
 
 export default async function CreateEmployeeFromRequestPage({
   params,
@@ -41,11 +42,9 @@ export default async function CreateEmployeeFromRequestPage({
   }
 
   const [candidatePositions, educationLevels, ptkpStatuses, nextEmployeeNumber] = await Promise.all([
-    prisma.position.findMany({
-      where: { jobId: request.jobId, orgUnitId: request.departmentId, archived: false },
-      include: { job: true, orgUnit: true },
-      orderBy: { positionCode: "asc" },
-    }),
+    // Vacant seats of this job anywhere under the request's department
+    // (Section/Group/Team included), not only seats placed directly on it.
+    findVacantPositionsInDepartment(request.departmentId, request.jobId),
     prisma.educationLevel.findMany({
       where: { activeFlag: true },
       orderBy: [{ displayOrder: "asc" }, { label: "asc" }],

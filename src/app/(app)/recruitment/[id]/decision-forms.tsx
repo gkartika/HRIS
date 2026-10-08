@@ -7,7 +7,9 @@ import {
   decideRecruitmentRequest,
   decideRecruitmentRequestAsDeptHead,
   cancelRecruitmentRequest,
+  closeRecruitmentRequest,
 } from "../actions";
+import { vacantSeatShortfall } from "@/lib/recruitment";
 import { t } from "@/lib/i18n/id";
 
 type DecideAction = typeof decideRecruitmentRequest;
@@ -62,14 +64,49 @@ function DecisionPositionField({ positions }: { positions: DecisionPositionOptio
   );
 }
 
-function DecisionJobField({ jobs, defaultJobId }: { jobs: DecisionJobOption[]; defaultJobId?: string | null }) {
+// Heads-up only, never a block: hiring needs a vacant position for the chosen
+// job to exist in this department, so the HR Manager sees how many there are
+// before approving. Admin SDM adds missing positions in Posisi Organisasi.
+function VacantSeatNote({
+  jobId,
+  vacantByJob,
+  requestedHeadcount,
+}: {
+  jobId: string;
+  vacantByJob: Record<string, number>;
+  requestedHeadcount: number;
+}) {
+  if (!jobId) return null;
+  const vacant = vacantByJob[jobId] ?? 0;
+  const shortfall = vacantSeatShortfall(requestedHeadcount, vacant);
+  return (
+    <p className={`mt-1 text-xs ${shortfall > 0 ? "text-amber-700" : "text-slate-500"}`}>
+      {t("recruitment.vacantSeatsForJob", { vacant, requested: requestedHeadcount })}
+      {shortfall > 0 && <> {t("recruitment.vacantSeatsShortfall", { shortfall })}</>}
+    </p>
+  );
+}
+
+function DecisionJobField({
+  jobs,
+  defaultJobId,
+  vacantByJob,
+  requestedHeadcount,
+}: {
+  jobs: DecisionJobOption[];
+  defaultJobId?: string | null;
+  vacantByJob?: Record<string, number>;
+  requestedHeadcount?: number;
+}) {
+  const [selectedJobId, setSelectedJobId] = useState(defaultJobId ?? "");
   return (
     <div>
       <label className="block text-xs text-slate-500">{t("recruitment.setJobToApprove")}</label>
       <select
         name="jobId"
         required
-        defaultValue={defaultJobId ?? ""}
+        value={selectedJobId}
+        onChange={(e) => setSelectedJobId(e.target.value)}
         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
       >
         <option value="">— Pilih —</option>
@@ -79,6 +116,9 @@ function DecisionJobField({ jobs, defaultJobId }: { jobs: DecisionJobOption[]; d
           </option>
         ))}
       </select>
+      {vacantByJob && requestedHeadcount !== undefined && (
+        <VacantSeatNote jobId={selectedJobId} vacantByJob={vacantByJob} requestedHeadcount={requestedHeadcount} />
+      )}
     </div>
   );
 }
@@ -92,6 +132,8 @@ function DecisionButton({
   positions,
   jobs,
   defaultJobId,
+  vacantByJob,
+  requestedHeadcount,
   decideAction = decideRecruitmentRequest,
 }: {
   requestId: string;
@@ -102,6 +144,8 @@ function DecisionButton({
   positions: DecisionPositionOption[];
   jobs?: DecisionJobOption[];
   defaultJobId?: string | null;
+  vacantByJob?: Record<string, number>;
+  requestedHeadcount?: number;
   decideAction?: DecideAction;
 }) {
   const [open, setOpen] = useState(false);
@@ -122,7 +166,14 @@ function DecisionButton({
   return (
     <form action={formAction} className="w-full space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <DecisionPositionField positions={positions} />
-      {decision === "APPROVED" && jobs && <DecisionJobField jobs={jobs} defaultJobId={defaultJobId} />}
+      {decision === "APPROVED" && jobs && (
+        <DecisionJobField
+          jobs={jobs}
+          defaultJobId={defaultJobId}
+          vacantByJob={vacantByJob}
+          requestedHeadcount={requestedHeadcount}
+        />
+      )}
       <label className="block text-xs text-slate-500">
         {t("recruitment.decisionNote")} {requireNote && "(wajib)"}
       </label>
@@ -156,11 +207,15 @@ export function DecisionButtons({
   positions,
   jobs,
   defaultJobId,
+  vacantByJob,
+  requestedHeadcount,
 }: {
   requestId: string;
   positions: DecisionPositionOption[];
   jobs: DecisionJobOption[];
   defaultJobId?: string | null;
+  vacantByJob?: Record<string, number>;
+  requestedHeadcount?: number;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -173,6 +228,8 @@ export function DecisionButtons({
         positions={positions}
         jobs={jobs}
         defaultJobId={defaultJobId}
+        vacantByJob={vacantByJob}
+        requestedHeadcount={requestedHeadcount}
       />
       <DecisionButton
         requestId={requestId}
@@ -248,6 +305,21 @@ export function CancelRequestForm({ requestId }: { requestId: string }) {
       action={cancelRecruitmentRequest.bind(null, requestId)}
       triggerLabel={t("recruitment.cancelRequestButton")}
       reasonLabel={t("recruitment.cancellationReason")}
+    />
+  );
+}
+
+// "Tutup": stop hiring on a partly filled request. Visibility is decided by
+// the server page (Admin SDM or the active HR Manager, status Terisi Sebagian).
+export function CloseRequestForm({ requestId }: { requestId: string }) {
+  return (
+    <ReasonForm
+      action={closeRecruitmentRequest.bind(null, requestId)}
+      triggerLabel={t("recruitment.closeRequestButton")}
+      reasonLabel={t("recruitment.closeReason")}
+      fieldName="closeReason"
+      required
+      variant="slate"
     />
   );
 }

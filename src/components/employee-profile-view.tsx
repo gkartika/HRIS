@@ -173,11 +173,14 @@ export function EmployeeAssignmentHistory({
   assignments,
   reportsTo,
   startDateEditor,
+  scheduledAction,
 }: {
   assignments: AssignmentWithPosition[];
   reportsTo?: { label: string; holderName: string | null } | null;
   /** When given (HR admin), shown instead of the plain start date so it can be changed in place. */
   startDateEditor?: (assignment: AssignmentWithPosition) => React.ReactNode;
+  /** When given (HR admin), shown under a scheduled (future-dated) placement, e.g. a cancel button. */
+  scheduledAction?: (assignment: AssignmentWithPosition) => React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-slate-100 p-4">
@@ -205,9 +208,19 @@ export function EmployeeAssignmentHistory({
                   {a.effectiveTo ? formatDate(a.effectiveTo) : t("assignmentUi.ongoing")}
                 </p>
               </div>
-              <span className={`rounded-md px-2 py-1 text-xs font-medium ${ASSIGNMENT_BADGE_TONE[a.assignmentType]}`}>
-                {t(`assignmentType.${a.assignmentType}`)}
-              </span>
+              <div className="flex flex-col items-end gap-1">
+                <span className={`rounded-md px-2 py-1 text-xs font-medium ${ASSIGNMENT_BADGE_TONE[a.assignmentType]}`}>
+                  {t(`assignmentType.${a.assignmentType}`)}
+                </span>
+                {a.status === "SCHEDULED" && (
+                  <>
+                    <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                      Dijadwalkan, berlaku {formatDate(a.effectiveFrom)}
+                    </span>
+                    {scheduledAction?.(a)}
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>

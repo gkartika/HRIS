@@ -19,12 +19,15 @@ import { syncPositionStatus } from "@/lib/position-occupancy";
 import {
   canExecuteExitClearanceStatus,
   canCancelOffboardingCaseStatus,
+  isPastLastWorkingDay,
+  parseExitReturnCondition,
+  type ExitReturnOutcome,
 } from "@/lib/offboarding";
-import { blocksOffboarding, computeAssetStatusAfterReturn, computeAvailableQuantityAfterReturn } from "@/lib/assets";
+import { companyToday } from "@/lib/company-time";
+import { deactivateEmployee } from "@/lib/offboarding-deactivate";
+import { createDisposalCaseInternal } from "@/lib/disposal-create";
+import { blocksOffboarding, computeAvailableQuantityAfterReturn } from "@/lib/assets";
 import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
-import type { AssetInspectionResult } from "@/generated/prisma/enums";
-
-const VALID_INSPECTION_RESULTS = ["GOOD", "NEEDS_REPAIR", "LOST_OR_BEYOND_REPAIR"];
 
 
 // HR Admin alone opens a resignation case — no approval stage follows.
@@ -139,29 +142,16 @@ export async function executeExitClearance(
 
   const clearanceNote = (formData.get("clearanceNote") as string)?.trim() || null;
 
-  const activeAssignments = await prisma.assignment.findMany({
-    where: { employeeId: offboardingCase.employeeId, status: "ACTIVE" },
-  });
+  // The employee keeps their placements and login through the last working
+  // day (decided 2026-10-08). Clearance done early only completes the case;
+  // the nightly job deactivates them once that day has passed. Done after the
+  // last day, the employee is deactivated right here.
+  const deactivateNow = isPastLastWorkingDay(offboardingCase.lastWorkingDay, companyToday());
 
-  await prisma.$transaction(async (tx) => {
-    for (const assignment of activeAssignments) {
-      await tx.assignment.update({
-        where: { id: assignment.id },
-        data: { status: "ENDED", effectiveTo: offboardingCase.lastWorkingDay },
-      });
-    }
-
-    await tx.employee.update({
-      where: { id: offboardingCase.employeeId },
-      data: { currentPositionId: null, activeFlag: false },
-    });
-
-    if (offboardingCase.employee.account) {
-      await tx.account.update({
-        where: { id: offboardingCase.employee.account.id },
-        data: { accountStatus: "DISABLED", accountDisabledAt: new Date() },
-      });
-    }
+  const deactivation = await prisma.$transaction(async (tx) => {
+    const result = deactivateNow
+      ? await deactivateEmployee(tx, { employeeId: offboardingCase.employeeId, lastWorkingDay: offboardingCase.lastWorkingDay })
+      : { positionIds: [] as string[], accountDisabled: false };
 
     await tx.offboardingCase.update({
       where: { id: caseId },
@@ -172,10 +162,11 @@ export async function executeExitClearance(
         clearanceNote,
       },
     });
+    return result;
   });
 
-  for (const assignment of activeAssignments) {
-    await syncPositionStatus(assignment.positionId);
+  for (const positionId of deactivation.positionIds) {
+    await syncPositionStatus(positionId);
   }
 
   await logAudit({
@@ -183,7 +174,9 @@ export async function executeExitClearance(
     action: "UPDATE",
     datasetName: "OffboardingCase",
     recordId: caseId,
-    reason: `${offboardingCase.caseNumber}: exit clearance completed, ${activeAssignments.length} assignment(s) ended${offboardingCase.employee.account ? ", account disabled" : ""}`,
+    reason: deactivateNow
+      ? `${offboardingCase.caseNumber}: exit clearance completed, ${deactivation.positionIds.length} assignment(s) ended${deactivation.accountDisabled ? ", account disabled" : ""}`
+      : `${offboardingCase.caseNumber}: exit clearance completed before the last working day; employee is deactivated automatically after it`,
   });
 
   revalidatePath(`/offboarding/${caseId}`);
@@ -308,7 +301,10 @@ export async function confirmGaAssetClearance(
   const session = await requireSession();
   if (!canConfirmGaAssetClearance(session)) return t("common.forbidden");
 
-  const offboardingCase = await prisma.offboardingCase.findUnique({ where: { id: caseId } });
+  const offboardingCase = await prisma.offboardingCase.findUnique({
+    where: { id: caseId },
+    include: { employee: { select: { fullLegalName: true, employeeNumber: true } } },
+  });
   if (!offboardingCase) return "Kasus tidak ditemukan.";
 
   const openCustodies = await prisma.assetCustody.findMany({
@@ -317,19 +313,20 @@ export async function confirmGaAssetClearance(
   });
   const blockingCustodies = openCustodies.filter((c) => blocksOffboarding("EMPLOYEE", c.status));
 
-  const inspectionResultByCustodyId = new Map<string, AssetInspectionResult>();
+  const outcomeByCustodyId = new Map<string, ExitReturnOutcome>();
   for (const custody of blockingCustodies) {
-    const raw = formData.get(`inspectionResult-${custody.id}`) as string;
-    if (!VALID_INSPECTION_RESULTS.includes(raw)) {
+    const outcome = parseExitReturnCondition(formData.get(`inspectionResult-${custody.id}`) as string);
+    if (!outcome) {
       return `Pilih kondisi pengembalian untuk ${custody.asset.assetName} (${custody.asset.assetCode}).`;
     }
-    inspectionResultByCustodyId.set(custody.id, raw as AssetInspectionResult);
+    outcomeByCustodyId.set(custody.id, outcome);
   }
 
   if (blockingCustodies.length > 0) {
     await prisma.$transaction(async (tx) => {
       for (const custody of blockingCustodies) {
-        const inspectionResult = inspectionResultByCustodyId.get(custody.id)!;
+        const outcome = outcomeByCustodyId.get(custody.id)!;
+        const inspectionResult = outcome.inspectionResult;
         await tx.assetCustody.update({
           where: { id: custody.id },
           data: {
@@ -343,7 +340,7 @@ export async function confirmGaAssetClearance(
         if (custody.asset.trackingType === "INDIVIDUAL") {
           await tx.fixedAsset.update({
             where: { id: custody.assetId },
-            data: { status: computeAssetStatusAfterReturn(inspectionResult) },
+            data: { status: outcome.assetStatus },
           });
         } else {
           await tx.fixedAsset.update({
@@ -360,12 +357,34 @@ export async function confirmGaAssetClearance(
       }
     });
 
+    // A lost or beyond-repair asset is not written off here. It gets a
+    // disposal proposal (Draft) that goes through the normal approval, the
+    // same as a confirmed GA loss or a work order that ends beyond repair.
+    // Quantity-tracked items have no per-unit asset record to dispose of.
+    let disposalDrafts = 0;
+    for (const custody of blockingCustodies) {
+      const outcome = outcomeByCustodyId.get(custody.id)!;
+      if (!outcome.disposalReason || custody.asset.trackingType !== "INDIVIDUAL") continue;
+      const alreadyOpen = await prisma.disposalCase.findFirst({
+        where: { assetId: custody.assetId, status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } },
+        select: { id: true },
+      });
+      if (alreadyOpen) continue;
+      await createDisposalCaseInternal({
+        assetId: custody.assetId,
+        reason: outcome.disposalReason,
+        createdByAccountId: session.user.id,
+        proposalNote: `Dikembalikan ${outcome.condition === "LOST" ? "hilang" : "rusak berat"} saat klirens aset ${offboardingCase.caseNumber} (${offboardingCase.employee.fullLegalName}, ${offboardingCase.employee.employeeNumber}).`,
+      });
+      disposalDrafts += 1;
+    }
+
     await logAudit({
       actorAccountId: session.user.id,
       action: "UPDATE",
       datasetName: "AssetCustody",
       recordId: caseId,
-      reason: `${offboardingCase.caseNumber}: bulk-returned ${blockingCustodies.length} asset custody record(s) via Klirens Aset Offboarding`,
+      reason: `${offboardingCase.caseNumber}: bulk-returned ${blockingCustodies.length} asset custody record(s) via Klirens Aset Offboarding${disposalDrafts > 0 ? `; ${disposalDrafts} disposal proposal(s) drafted` : ""}`,
     });
   }
 
@@ -403,4 +422,5 @@ export async function confirmGaAssetClearance(
   revalidatePath(`/offboarding/${caseId}`);
   revalidatePath(`/employees/${offboardingCase.employeeId}`);
   revalidatePath("/assets");
+  revalidatePath("/disposal-cases");
 }

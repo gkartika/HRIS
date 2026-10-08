@@ -21,6 +21,7 @@ import {
 import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
 import { resolveAnnualQuota, usedDaysThisYear } from "@/lib/absence-quota";
+import { scheduledDayCountsForRequests } from "@/lib/leave-days";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -115,7 +116,10 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
     return <AccessDenied />;
   }
 
-  const thisRequestDays = absenceDayCount(request.startDate, request.endDate);
+  // Leave uses only the days the person is actually scheduled to work:
+  // weekends, days off in their shift and public holidays are not counted.
+  const workingDayCounts = await scheduledDayCountsForRequests([request]);
+  const thisRequestDays = workingDayCounts.get(request.id) ?? 0;
   const totalDaysIfApproved = usedBeforeThis + thisRequestDays;
   const overQuota = quota !== null && totalDaysIfApproved > quota;
 
@@ -165,7 +169,7 @@ export default async function AbsenceRequestDetailPage({ params }: { params: Pro
           <div>
             <p className="text-xs text-slate-500">{t("absence.endDateLabel")}</p>
             <p className="mt-1 text-slate-900">
-              {formatDateLong(request.endDate)} ({absenceDayCount(request.startDate, request.endDate)} hari)
+              {formatDateLong(request.endDate)} ({thisRequestDays} hari kerja dari {absenceDayCount(request.startDate, request.endDate)} hari kalender)
             </p>
           </div>
           <div className="col-span-2">

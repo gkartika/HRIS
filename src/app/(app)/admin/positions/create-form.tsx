@@ -17,6 +17,7 @@ export function CreatePositionForm({
   const [error, formAction, isPending] = useActionState(createPosition, undefined);
   const orgUnitRef = useRef<HTMLSelectElement>(null);
   const positionTypeRef = useRef<HTMLSelectElement>(null);
+  const hrManagerPositionCode = positions.find((p) => p.grantsHrManagerAccess)?.positionCode ?? null;
 
   // Pre-fills Unit Organisasi/Jenis Posisi from the selected Job's own
   // defaults (set on the Job's edit page) — a convenience only, never
@@ -113,11 +114,16 @@ export function CreatePositionForm({
           ))}
         </select>
       </div>
-      <div className="flex items-end pb-2">
+      <div className="flex flex-col justify-end pb-2">
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" name="grantsHrManagerAccess" />
           Memberikan Akses HR Manager
         </label>
+        {hrManagerPositionCode && (
+          <p className="mt-1 text-xs text-slate-400">
+            Hanya satu posisi boleh memilikinya; saat ini <span className="font-mono">{hrManagerPositionCode}</span>.
+          </p>
+        )}
       </div>
       <div className="md:col-span-3">
         <button

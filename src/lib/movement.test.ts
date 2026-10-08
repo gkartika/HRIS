@@ -9,6 +9,7 @@ import {
   isPerubahanPosisiType,
   compareJobLevels,
   validateJobLevelDirection,
+  isMovementRequestOpen,
 } from "./movement";
 
 describe("formatMovementRequestNumber", () => {
@@ -125,5 +126,14 @@ describe("validateJobLevelDirection", () => {
 
   it("skips validation when a level code can't be parsed", () => {
     expect(validateJobLevelDirection("PROMOTION", "Senior", "3B")).toBeNull();
+  });
+});
+
+describe("isMovementRequestOpen (one open request per employee)", () => {
+  it("counts the three in-flight statuses as open", () => {
+    for (const s of ["PENDING_DEPT_HEAD", "SUBMITTED", "APPROVED"] as const) expect(isMovementRequestOpen(s)).toBe(true);
+  });
+  it("counts finished and returned requests as closed", () => {
+    for (const s of ["IMPLEMENTED", "CANCELLED", "REJECTED", "RETURNED"] as const) expect(isMovementRequestOpen(s)).toBe(false);
   });
 });

@@ -108,7 +108,8 @@ function MoveForm({ employeeId, positions }: { employeeId: string; positions: Po
       {error && <p className="text-xs text-rose-600 md:col-span-4">{error}</p>}
       <p className="text-xs text-slate-400 md:col-span-4">
         Menutup Penempatan Utama saat ini pada tanggal efektif dan membuat Penempatan Utama baru.
-        Riwayat lama tetap tersimpan, tidak ditimpa.
+        Riwayat lama tetap tersimpan, tidak ditimpa. Jika tanggal efektif di masa depan, penempatan saat ini tetap
+        berlaku sampai tanggal itu lalu berpindah otomatis; jadwal bisa dibatalkan sebelum berlaku.
       </p>
     </form>
   );

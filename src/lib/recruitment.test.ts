@@ -6,6 +6,10 @@ import {
   nextStatusAfterFulfillment,
   formatRequestNumber,
   initialRecruitmentStatus,
+  canCloseRequestStatus,
+  canResubmitRequestStatus,
+  statusAfterResubmit,
+  vacantSeatShortfall,
 } from "./recruitment";
 
 describe("computeFulfillmentCounts (DM-23)", () => {
@@ -101,5 +105,41 @@ describe("formatRequestNumber", () => {
   it("pads the sequence to 4 digits", () => {
     expect(formatRequestNumber(1, 2026)).toBe("REQ-2026-0001");
     expect(formatRequestNumber(42, 2026)).toBe("REQ-2026-0042");
+  });
+});
+
+describe("close (Tutup) and resubmit rules", () => {
+  it("only a partly filled request can be closed", () => {
+    expect(canCloseRequestStatus("PARTIALLY_FILLED")).toBe(true);
+    for (const s of ["APPROVED", "FILLED", "CLOSED", "CANCELLED", "RETURNED", "SUBMITTED"] as const) {
+      expect(canCloseRequestStatus(s)).toBe(false);
+    }
+  });
+
+  it("only a returned request can be resubmitted", () => {
+    expect(canResubmitRequestStatus("RETURNED")).toBe(true);
+    expect(canResubmitRequestStatus("REJECTED")).toBe(false);
+    expect(canResubmitRequestStatus("CANCELLED")).toBe(false);
+  });
+
+  it("goes back to the HR Manager when the HR Manager returned it", () => {
+    expect(statusAfterResubmit({ returnedByHrManager: true, departmentChanged: false, submitterIsDeptHead: false })).toBe("SUBMITTED");
+  });
+
+  it("goes back to the Dept Head when the Dept Head returned it", () => {
+    expect(statusAfterResubmit({ returnedByHrManager: false, departmentChanged: false, submitterIsDeptHead: false })).toBe("PENDING_DEPT_HEAD");
+  });
+
+  it("restarts from the Dept Head when the department changed", () => {
+    expect(statusAfterResubmit({ returnedByHrManager: true, departmentChanged: true, submitterIsDeptHead: false })).toBe("PENDING_DEPT_HEAD");
+  });
+
+  it("skips the Dept Head stage when the person resubmitting is the Dept Head", () => {
+    expect(statusAfterResubmit({ returnedByHrManager: false, departmentChanged: false, submitterIsDeptHead: true })).toBe("SUBMITTED");
+  });
+
+  it("computes how many seats are still missing", () => {
+    expect(vacantSeatShortfall(3, 1)).toBe(2);
+    expect(vacantSeatShortfall(2, 5)).toBe(0);
   });
 });

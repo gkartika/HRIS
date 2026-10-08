@@ -7,7 +7,18 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageOrgStructure } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import type { PositionType, PositionStatus } from "@/generated/prisma/enums";
+import type { PositionType } from "@/generated/prisma/enums";
+
+// Only one position in the company may carry HR Manager access (decided
+// 2026-10-08). Returns an error naming the current holder, or undefined.
+async function hrManagerAccessConflict(excludingPositionId?: string): Promise<string | undefined> {
+  const holder = await prisma.position.findFirst({
+    where: { grantsHrManagerAccess: true, ...(excludingPositionId ? { id: { not: excludingPositionId } } : {}) },
+    select: { positionCode: true },
+  });
+  if (!holder) return undefined;
+  return `Akses HR Manager sudah diberikan ke posisi ${holder.positionCode}. Hanya satu posisi yang boleh memilikinya: hapus centang di posisi ${holder.positionCode} terlebih dahulu.`;
+}
 
 export async function createPosition(
   _prevState: string | undefined,
@@ -30,6 +41,10 @@ export async function createPosition(
 
   const existing = await prisma.position.findUnique({ where: { positionCode } });
   if (existing) return `Kode posisi ${positionCode} sudah digunakan.`;
+  if (grantsHrManagerAccess) {
+    const conflict = await hrManagerAccessConflict();
+    if (conflict) return conflict;
+  }
 
   const position = await prisma.position.create({
     data: {
@@ -60,10 +75,9 @@ export async function createPosition(
 // Archiving hides a defunct Position from every "pick a Position" dropdown
 // (reportsTo, new Assignment, Movement, Recruitment fulfillment, Contract
 // renewal, org chart) without deleting the row, since the many workflow
-// tables above hold a non-cascading FK into it. Gated on Status Posisi
-// already being Ditutup (CLOSED) — same "deactivate, then archive" two-step
-// as Jenis Absensi — plus no active holder, so nothing currently relying on
-// this seat gets hidden out from under it.
+// tables above hold a non-cascading FK into it. A seat that is no longer
+// needed is archived straight away (no Dibekukan/Ditutup step, decided
+// 2026-10-08), as long as nobody holds it and nobody reports to it.
 export async function archivePosition(
   positionId: string,
   _prevState: string | undefined,
@@ -74,20 +88,22 @@ export async function archivePosition(
 
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";
-  if (position.positionStatus !== "CLOSED") {
-    return "Ubah Status Posisi menjadi Ditutup terlebih dahulu sebelum mengarsipkan.";
-  }
 
   const [activeAssignment, subordinateCount] = await Promise.all([
-    prisma.assignment.findFirst({ where: { positionId, status: "ACTIVE" } }),
-    prisma.position.count({ where: { reportsToPositionId: positionId } }),
+    prisma.assignment.findFirst({ where: { positionId, status: { in: ["ACTIVE", "SCHEDULED"] } } }),
+    prisma.position.count({ where: { reportsToPositionId: positionId, archived: false } }),
   ]);
   if (activeAssignment) return "Posisi ini masih memiliki penempatan aktif — akhiri dahulu.";
   if (subordinateCount > 0) {
     return "Posisi lain masih melapor ke posisi ini — ubah dahulu sebelum mengarsipkan.";
   }
 
-  await prisma.position.update({ where: { id: positionId }, data: { archived: true } });
+  // An archived seat has nobody in it, so it can't hand out HR Manager
+  // access anyway; clearing the flag frees it for the seat that replaces it.
+  await prisma.position.update({
+    where: { id: positionId },
+    data: { archived: true, positionStatus: "VACANT", grantsHrManagerAccess: false },
+  });
 
   await logAudit({
     actorAccountId: session.user.id,
@@ -140,17 +156,21 @@ export async function updatePosition(
   const jobLevel = (formData.get("jobLevel") as string)?.trim();
   const orgUnitId = formData.get("orgUnitId") as string;
   const positionType = formData.get("positionType") as PositionType;
-  const positionStatus = formData.get("positionStatus") as PositionStatus;
   const reportsToPositionId = (formData.get("reportsToPositionId") as string) || null;
   const grantsHrManagerAccess = formData.get("grantsHrManagerAccess") === "on";
 
-  if (!jobId || !jobLevel || !orgUnitId || !positionType || !positionStatus) {
-    return "Jabatan, level, unit organisasi, jenis, dan status posisi wajib diisi.";
+  if (!jobId || !jobLevel || !orgUnitId || !positionType) {
+    return "Jabatan, level, unit organisasi, dan jenis posisi wajib diisi.";
   }
   if (reportsToPositionId === positionId) {
     return "Posisi tidak dapat melapor ke dirinya sendiri.";
   }
+  if (grantsHrManagerAccess) {
+    const conflict = await hrManagerAccessConflict(positionId);
+    if (conflict) return conflict;
+  }
 
+  // Status Posisi is not on the form any more; it follows the placements.
   await prisma.position.update({
     where: { id: positionId },
     data: {
@@ -158,7 +178,6 @@ export async function updatePosition(
       jobLevel,
       orgUnitId,
       positionType,
-      positionStatus,
       reportsToPositionId: reportsToPositionId || null,
       grantsHrManagerAccess,
     },

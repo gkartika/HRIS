@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, isTrainingAdmin, isGaAdmin, canListEmployees } from "@/lib/permissions";
 import { computeExpiryUrgency, type ExpiryUrgency } from "@/lib/contract";
-import { absenceDayCount } from "@/lib/absence";
+import { scheduledDayCountsForRequests } from "@/lib/leave-days";
 import { isManagerOfAnyPosition } from "@/lib/manager-scope";
 import { getActiveDeptHeadPositions, getDeptHeadDepartmentIds } from "@/lib/dept-head";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -129,6 +129,12 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
 
   const needsRenewalPositions = pending.pendingDeptHeadRenewals.length > 0 || pending.pendingHrManagerRenewals.length > 0;
   const needsJobs = pending.pendingRequests.length > 0;
+  const absenceRequests = [
+    ...pending.pendingAbsenceHrAdmin,
+    ...pending.pendingAbsenceSecondApprover,
+    ...pending.pendingAbsenceFirstApprover,
+  ];
+  const absenceWorkingDays = await scheduledDayCountsForRequests(absenceRequests);
   const [renewalPositions, jobs] = await Promise.all([
     needsRenewalPositions
       ? prisma.position.findMany({
@@ -163,7 +169,7 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
             <ApprovalRow
               key={r.id}
               title={`${r.absenceType.label} — ${r.employee.fullLegalName}`}
-              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceDayCount(r.startDate, r.endDate)} hari)`}
+              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceWorkingDays.get(r.id) ?? 0} hari kerja)`}
               href={`/absences/${r.id}`}
             >
               <HrAdminDecisionButtons requestId={r.id} />
@@ -173,7 +179,7 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
             <ApprovalRow
               key={r.id}
               title={`${r.absenceType.label} — ${r.employee.fullLegalName}`}
-              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceDayCount(r.startDate, r.endDate)} hari)`}
+              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceWorkingDays.get(r.id) ?? 0} hari kerja)`}
               href={`/absences/${r.id}`}
             >
               <SecondApproverDecisionButtons requestId={r.id} />
@@ -183,7 +189,7 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
             <ApprovalRow
               key={r.id}
               title={`${r.absenceType.label} — ${r.employee.fullLegalName}`}
-              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceDayCount(r.startDate, r.endDate)} hari)`}
+              subtitle={`${r.startDate.toISOString().slice(0, 10)} – ${r.endDate.toISOString().slice(0, 10)} (${absenceWorkingDays.get(r.id) ?? 0} hari kerja)`}
               href={`/absences/${r.id}`}
             >
               <FirstApproverDecisionButtons requestId={r.id} />

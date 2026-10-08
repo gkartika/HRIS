@@ -5,6 +5,10 @@ import {
   isOnboardingFullyComplete,
   isOnboardingTrainingComplete,
   isOnboardingAssetsComplete,
+  onboardingTrainingNote,
+  canCancelOnboardingCase,
+  canReopenOnboardingCase,
+  shouldApplyOnboardingTrainingOnPlacement,
 } from "./onboarding";
 
 describe("formatOnboardingCaseNumber", () => {
@@ -106,5 +110,48 @@ describe("isOnboardingAssetsComplete", () => {
   it("ignores RETURNED custodies — they're closed history, not a blocker", () => {
     expect(isOnboardingAssetsComplete(["ACTIVE", "RETURNED"])).toBe(true);
     expect(isOnboardingAssetsComplete(["RETURNED"])).toBe(true);
+  });
+});
+
+describe("onboarding decided 2026-10-08", () => {
+  it("is not complete for an employee with no placement and nothing assigned", () => {
+    expect(isOnboardingTrainingComplete([], false)).toBe(false);
+  });
+  it("is complete for a placed employee with nothing assigned", () => {
+    expect(isOnboardingTrainingComplete([], true)).toBe(true);
+    expect(isOnboardingTrainingComplete([])).toBe(true);
+  });
+  it("still follows the assignments once there are some", () => {
+    expect(isOnboardingTrainingComplete(["COMPLETED"], false)).toBe(true);
+    expect(isOnboardingTrainingComplete(["ASSIGNED"], true)).toBe(false);
+  });
+  it("explains an empty list instead of showing a bare tick", () => {
+    expect(onboardingTrainingNote([], false)).toBe("WAITING_FOR_PLACEMENT");
+    expect(onboardingTrainingNote(["CANCELLED"], true)).toBe("NONE_FOR_POSITION");
+    expect(onboardingTrainingNote(["ASSIGNED"], true)).toBeNull();
+  });
+  it("a cancelled case reports CANCELLED whatever else is true", () => {
+    expect(
+      computeOnboardingStatus({
+        contractComplete: true,
+        mandatoryMaterialComplete: true,
+        assetsComplete: true,
+        plannedStartDate: new Date("2026-01-01"),
+        mandatoryMaterialDueDate: null,
+        cancelledAt: new Date("2026-02-01"),
+      })
+    ).toBe("CANCELLED");
+  });
+  it("cancels only open cases and reopens only cancelled ones", () => {
+    expect(canCancelOnboardingCase({ cancelledAt: null, completedAt: null })).toBe(true);
+    expect(canCancelOnboardingCase({ cancelledAt: new Date(), completedAt: null })).toBe(false);
+    expect(canCancelOnboardingCase({ cancelledAt: null, completedAt: new Date() })).toBe(false);
+    expect(canReopenOnboardingCase({ cancelledAt: new Date() })).toBe(true);
+    expect(canReopenOnboardingCase({ cancelledAt: null })).toBe(false);
+  });
+  it("assigns onboarding courses only on the first placement of someone with an open case", () => {
+    expect(shouldApplyOnboardingTrainingOnPlacement({ hadPrimaryPlacementBefore: false, hasOpenOnboardingCase: true })).toBe(true);
+    expect(shouldApplyOnboardingTrainingOnPlacement({ hadPrimaryPlacementBefore: true, hasOpenOnboardingCase: true })).toBe(false);
+    expect(shouldApplyOnboardingTrainingOnPlacement({ hadPrimaryPlacementBefore: false, hasOpenOnboardingCase: false })).toBe(false);
   });
 });

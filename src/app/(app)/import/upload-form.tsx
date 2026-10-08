@@ -5,6 +5,7 @@ import { Download, Upload as UploadIcon } from "lucide-react";
 import { uploadAndPreviewImport } from "./actions";
 import { t } from "@/lib/i18n/id";
 import type { DatasetKey } from "@/lib/import-export/registry";
+import { CLEAR_REPORTS_TO_KEYWORD } from "@/lib/import-export/position-rules";
 
 export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: string }) {
   const action = uploadAndPreviewImport.bind(null, dataset);
@@ -40,6 +41,14 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
           Mendukung format ekspor CSV standar (fingerprintDeviceUserId/eventType/eventAt) maupun ekspor mentah
           mesin fingerprint (Name/Date-Time/Status) — formatnya terdeteksi otomatis. Untuk ekspor mentah, isi ID
           Perangkat Fingerprint karyawan di Penugasan Absensi dengan nama persis seperti yang tampil di mesin.
+        </p>
+      )}
+      {dataset === "positions" && (
+        <p className="mb-2 text-xs text-slate-400">
+          Melapor Ke (reportsToPositionCode) yang dikosongkan tidak mengubah atasan posisi yang sudah ada; isi{" "}
+          <span className="font-mono">{CLEAR_REPORTS_TO_KEYWORD}</span> untuk menghapus atasannya. Posisi atasan yang baru
+          dibuat di berkas yang sama harus berada di baris sebelumnya. Akses HR Manager hanya boleh &quot;Ya&quot; untuk
+          satu posisi. Status Posisi tidak perlu diisi: otomatis Kosong/Terisi dari penempatan.
         </p>
       )}
       {dataset === "assignments" && (

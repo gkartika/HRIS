@@ -225,6 +225,15 @@ export async function updateEmployee(
 
   await prisma.employee.update({ where: { id: employeeId }, data });
 
+  // The planned start of an open onboarding case follows the hire date when it
+  // is corrected (decided 2026-10-08). Cancelled and finished cases are left alone.
+  if (data.hireDate instanceof Date) {
+    await prisma.onboardingCase.updateMany({
+      where: { employeeId, cancelledAt: null, completedAt: null },
+      data: { plannedStartDate: data.hireDate },
+    });
+  }
+
   await logAudit({
     actorAccountId: session.user.id,
     action: "UPDATE",
@@ -234,5 +243,6 @@ export async function updateEmployee(
   });
 
   revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/onboarding");
   redirect(`/employees/${employeeId}`);
 }

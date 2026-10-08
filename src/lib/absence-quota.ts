@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { companyYear } from "@/lib/company-time";
-import { absenceDayCount } from "@/lib/absence";
+import { scheduledDaysInRange } from "@/lib/absence";
+import { loadScheduledDayLookup } from "@/lib/leave-days";
 
 /**
  * Resolves the effective annual-days quota for one employee/type pair: an
@@ -22,40 +23,73 @@ export async function resolveAnnualQuota(employeeId: string, absenceTypeCode: st
 }
 
 /**
- * Sum of absenceDayCount() over this employee's APPROVED requests of this
- * type since Jan 1 of the current year — same computation the Cuti-only
- * "remaining days" hint already used, generalized to any type — PLUS every
- * day HR directly classified with this type via Rekonsiliasi Absensi
- * (DailyAttendanceRecord.absenceTypeCode). Per direct request: an HR
- * override of Cuti/Izin/Sakit deducts the employee's quota immediately,
- * with no separate AbsenceRequest and no approval step — the classified day
- * itself is the only record, so it must count here or the quota would never
- * reflect it. `excludeRequestId` lets a request's own detail page compute
- * "used before this one" without double-counting itself once approved.
+ * The distinct days this employee has used, per absence type, since Jan 1 of
+ * the current year. Two sources feed it:
+ *  - APPROVED requests: only the days that are real working days for the
+ *    employee (weekends, days off and public holidays do not use up leave);
+ *  - days HR directly classified with a type via Rekonsiliasi Absensi
+ *    (DailyAttendanceRecord.absenceTypeCode), which deduct quota immediately
+ *    with no request or approval, so the classified day itself is the record.
+ * Days are collected in a Set, so a day covered by both an approved request
+ * and an HR classification of the same type is counted once, not twice
+ * (decided 2026-10-08). `excludeRequestId` lets a request's own detail page
+ * compute "used before this one" without counting itself once approved.
  */
-export async function usedDaysThisYear(
+async function collectUsedDays(
   employeeId: string,
-  absenceTypeCode: string,
-  excludeRequestId?: string
-): Promise<number> {
+  options: { absenceTypeCode?: string; excludeRequestId?: string }
+): Promise<Map<string, Set<number>>> {
   const yearStart = new Date(Date.UTC(companyYear(), 0, 1));
   const [requests, classifiedDays] = await Promise.all([
     prisma.absenceRequest.findMany({
       where: {
         employeeId,
-        absenceTypeCode,
+        ...(options.absenceTypeCode ? { absenceTypeCode: options.absenceTypeCode } : {}),
         status: "APPROVED",
         startDate: { gte: yearStart },
-        ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+        ...(options.excludeRequestId ? { id: { not: options.excludeRequestId } } : {}),
       },
-      select: { startDate: true, endDate: true },
+      select: { absenceTypeCode: true, startDate: true, endDate: true },
     }),
-    prisma.dailyAttendanceRecord.count({
-      where: { employeeId, absenceTypeCode, attendanceDate: { gte: yearStart } },
+    prisma.dailyAttendanceRecord.findMany({
+      where: {
+        employeeId,
+        absenceTypeCode: options.absenceTypeCode ?? { not: null },
+        attendanceDate: { gte: yearStart },
+      },
+      select: { absenceTypeCode: true, attendanceDate: true },
     }),
   ]);
-  const requestedDays = requests.reduce((sum, r) => sum + absenceDayCount(r.startDate, r.endDate), 0);
-  return requestedDays + classifiedDays;
+
+  const daysByType = new Map<string, Set<number>>();
+  const addDay = (code: string, day: Date) => {
+    if (!daysByType.has(code)) daysByType.set(code, new Set());
+    daysByType.get(code)!.add(day.getTime());
+  };
+
+  if (requests.length > 0) {
+    const rangeStart = new Date(Math.min(...requests.map((r) => r.startDate.getTime())));
+    const rangeEnd = new Date(Math.max(...requests.map((r) => r.endDate.getTime())));
+    const isScheduled = await loadScheduledDayLookup([employeeId], rangeStart, rangeEnd);
+    for (const r of requests) {
+      for (const day of scheduledDaysInRange(isScheduled, employeeId, r.startDate, r.endDate)) {
+        addDay(r.absenceTypeCode, day);
+      }
+    }
+  }
+  for (const record of classifiedDays) {
+    if (record.absenceTypeCode) addDay(record.absenceTypeCode, record.attendanceDate);
+  }
+  return daysByType;
+}
+
+export async function usedDaysThisYear(
+  employeeId: string,
+  absenceTypeCode: string,
+  excludeRequestId?: string
+): Promise<number> {
+  const daysByType = await collectUsedDays(employeeId, { absenceTypeCode, excludeRequestId });
+  return daysByType.get(absenceTypeCode)?.size ?? 0;
 }
 
 /**
@@ -78,37 +112,11 @@ export async function resolveAnnualQuotaByType(employeeId: string): Promise<Map<
 }
 
 /**
- * Batched sibling of usedDaysThisYear — same "every type at once" reasoning
- * as resolveAnnualQuotaByType, collapsing N types x 2 queries into 2
- * queries total. A missing key means 0 used, so callers should read it as
+ * Batched sibling of usedDaysThisYear — every type at once instead of one
+ * call per type. A missing key means 0 used, so callers should read it as
  * `usedByType.get(code) ?? 0`.
  */
 export async function usedDaysThisYearByType(employeeId: string, excludeRequestId?: string): Promise<Map<string, number>> {
-  const yearStart = new Date(Date.UTC(companyYear(), 0, 1));
-  const [requests, classifiedGroups] = await Promise.all([
-    prisma.absenceRequest.findMany({
-      where: {
-        employeeId,
-        status: "APPROVED",
-        startDate: { gte: yearStart },
-        ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
-      },
-      select: { absenceTypeCode: true, startDate: true, endDate: true },
-    }),
-    prisma.dailyAttendanceRecord.groupBy({
-      by: ["absenceTypeCode"],
-      where: { employeeId, absenceTypeCode: { not: null }, attendanceDate: { gte: yearStart } },
-      _count: { _all: true },
-    }),
-  ]);
-
-  const usedByType = new Map<string, number>();
-  for (const r of requests) {
-    usedByType.set(r.absenceTypeCode, (usedByType.get(r.absenceTypeCode) ?? 0) + absenceDayCount(r.startDate, r.endDate));
-  }
-  for (const g of classifiedGroups) {
-    if (!g.absenceTypeCode) continue;
-    usedByType.set(g.absenceTypeCode, (usedByType.get(g.absenceTypeCode) ?? 0) + g._count._all);
-  }
-  return usedByType;
+  const daysByType = await collectUsedDays(employeeId, { excludeRequestId });
+  return new Map([...daysByType.entries()].map(([code, days]) => [code, days.size]));
 }

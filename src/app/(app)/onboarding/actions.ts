@@ -11,6 +11,8 @@ import {
   isOnboardingFullyComplete,
   isOnboardingTrainingComplete,
   isOnboardingAssetsComplete,
+  canCancelOnboardingCase,
+  canReopenOnboardingCase,
 } from "@/lib/onboarding";
 import { getOnboardingTrainingStatusesForEmployee } from "@/lib/mandatory-training";
 import { logAudit } from "@/lib/audit";
@@ -65,15 +67,22 @@ export async function toggleContractComplete(caseId: string): Promise<string | u
   const session = await requireSession();
   if (!canMarkOnboardingContract(session)) return t("common.forbidden");
 
-  const onboardingCase = await prisma.onboardingCase.findUnique({ where: { id: caseId } });
+  const onboardingCase = await prisma.onboardingCase.findUnique({
+    where: { id: caseId },
+    include: { employee: { select: { currentPositionId: true } } },
+  });
   if (!onboardingCase) return "Kasus onboarding tidak ditemukan.";
+  if (onboardingCase.cancelledAt) return "Kasus ini dibatalkan. Buka kembali dahulu untuk mengubahnya.";
 
   const nextValue = !onboardingCase.contractComplete;
   const [trainingAssignments, assetCustodies] = await Promise.all([
     getOnboardingTrainingStatusesForEmployee(onboardingCase.employeeId),
     prisma.assetCustody.findMany({ where: { employeeId: onboardingCase.employeeId }, select: { status: true } }),
   ]);
-  const trainingComplete = isOnboardingTrainingComplete(trainingAssignments.map((a) => a.status));
+  const trainingComplete = isOnboardingTrainingComplete(
+    trainingAssignments.map((a) => a.status),
+    !!onboardingCase.employee.currentPositionId
+  );
   const assetsComplete = isOnboardingAssetsComplete(assetCustodies.map((c) => c.status));
   const nowComplete = isOnboardingFullyComplete(nextValue, trainingComplete, assetsComplete);
 
@@ -93,6 +102,100 @@ export async function toggleContractComplete(caseId: string): Promise<string | u
     datasetName: "OnboardingCase",
     recordId: caseId,
     reason: `Kontrak ${nextValue ? "marked complete" : "marked incomplete"} for ${onboardingCase.caseNumber}`,
+  });
+
+  revalidatePath(`/onboarding/${caseId}`);
+  revalidatePath("/onboarding");
+}
+
+// Cancel a case that no longer applies: a no-show, a hire entered by mistake,
+// or someone who left during onboarding. The case is kept (never deleted) and
+// can be reopened. Admin SDM only, like creating one.
+export async function cancelOnboardingCase(
+  caseId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canCreateOnboardingCase(session)) return t("common.forbidden");
+
+  const onboardingCase = await prisma.onboardingCase.findUnique({ where: { id: caseId } });
+  if (!onboardingCase) return "Kasus onboarding tidak ditemukan.";
+  if (!canCancelOnboardingCase(onboardingCase)) {
+    return "Kasus yang sudah selesai atau sudah dibatalkan tidak dapat dibatalkan.";
+  }
+
+  const cancellationReason = (formData.get("cancellationReason") as string)?.trim();
+  if (!cancellationReason) return "Alasan pembatalan wajib diisi.";
+
+  await prisma.onboardingCase.update({
+    where: { id: caseId },
+    data: { cancelledAt: new Date(), cancelledByAccountId: session.user.id, cancellationReason },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "OnboardingCase",
+    recordId: caseId,
+    reason: `${onboardingCase.caseNumber} cancelled: ${cancellationReason}`,
+  });
+
+  revalidatePath(`/onboarding/${caseId}`);
+  revalidatePath("/onboarding");
+}
+
+export async function reopenOnboardingCase(caseId: string): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canCreateOnboardingCase(session)) return t("common.forbidden");
+
+  const onboardingCase = await prisma.onboardingCase.findUnique({ where: { id: caseId } });
+  if (!onboardingCase) return "Kasus onboarding tidak ditemukan.";
+  if (!canReopenOnboardingCase(onboardingCase)) return "Kasus ini tidak sedang dibatalkan.";
+
+  await prisma.onboardingCase.update({
+    where: { id: caseId },
+    data: { cancelledAt: null, cancelledByAccountId: null, cancellationReason: null },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "OnboardingCase",
+    recordId: caseId,
+    reason: `${onboardingCase.caseNumber} reopened (was cancelled: ${onboardingCase.cancellationReason ?? "-"})`,
+  });
+
+  revalidatePath(`/onboarding/${caseId}`);
+  revalidatePath("/onboarding");
+}
+
+// The planned start date normally follows the employee's hire date (see
+// employees/actions.ts); this is for the rare case where the first day moves
+// without the hire date changing.
+export async function updateOnboardingPlannedStartDate(
+  caseId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canCreateOnboardingCase(session)) return t("common.forbidden");
+
+  const onboardingCase = await prisma.onboardingCase.findUnique({ where: { id: caseId } });
+  if (!onboardingCase) return "Kasus onboarding tidak ditemukan.";
+  if (onboardingCase.cancelledAt) return "Kasus ini dibatalkan. Buka kembali dahulu untuk mengubahnya.";
+
+  const plannedStartDate = formData.get("plannedStartDate") as string;
+  if (!plannedStartDate || Number.isNaN(Date.parse(plannedStartDate))) return "Tanggal mulai tidak valid.";
+
+  await prisma.onboardingCase.update({ where: { id: caseId }, data: { plannedStartDate: new Date(plannedStartDate) } });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "OnboardingCase",
+    recordId: caseId,
+    reason: `${onboardingCase.caseNumber}: planned start date changed to ${plannedStartDate}`,
   });
 
   revalidatePath(`/onboarding/${caseId}`);

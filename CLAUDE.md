@@ -112,6 +112,21 @@ section disagree, this section wins.
   `MONTH_LABELS_ID`/`formatCompanyTime` in `src/lib/company-time.ts`, `createOnboardingCase`,
   `EmployeeCoreFields`/`EmployeeExtraFields`, `t("common.forbidden")`, `countByStatus`.
   Last deployed commit when this was written: 1288f34.
+- Workflow gap review (2026-10-08): the owner decides gaps module by module; every decision is in
+  `docs/DECISIONS.md` (entries dated 2026-10-08). Built: positions are only Kosong/Terisi and are
+  archived in one step, only ONE position may carry HR Manager access, position import keeps the
+  line manager when the column is blank (`KOSONGKAN` clears it); recruitment (requester is always
+  the logged-in user, seats under Sections can fill a request, "Tutup", edit-and-resubmit after a
+  return, vacant-seat warning); onboarding (cancel/reopen, start date follows hire date, courses
+  assigned on first placement); one open transfer per employee; offboarding (employee stays active
+  through the last working day, nightly job in `/api/cron/daily` deactivates after it, lost assets
+  draft a disposal case, cancelled non-renewal can be restarted); leave counts working days only,
+  holidays are not lost mandays, approved leave shows on the attendance grid and Excel by itself;
+  future-dated moves use the new placement status SCHEDULED (`placement-schedule.ts`).
+  Three additive migrations (20261008030000/040000/050000) were already applied to the shared DB.
+  Tested live with disposable ZZT data (all removed). The workflow map artifact tracks which gaps
+  are decided. Still open from that review: see the artifact (contracts, evaluations, training,
+  GA, cross-module items).
 
 ### Current data and open items
 - Production data: 185 employees (CBP-0001 ...) and 185 positions imported; 3 admin

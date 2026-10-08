@@ -559,8 +559,54 @@ export async function createOffboardingHandoff(caseId: string): Promise<string |
   if (renewalCase.status !== "APPROVED" || renewalCase.finalRecommendation !== "TIDAK_DIPERPANJANG") {
     return "Kasus ini bukan keputusan Tidak Diperpanjang yang disetujui.";
   }
-  if (renewalCase.offboardingCase) return "Proses Offboarding untuk kasus ini sudah dibuat.";
   if (!renewalCase.currentContract.endDate) return "Kontrak ini tidak memiliki Tanggal Berakhir.";
+
+  // Never two open offboarding cases for one person (a resignation and a
+  // non-renewal at the same time). The case already linked to this renewal is
+  // the one exception: it is the one being reopened below.
+  const otherOpenCase = await prisma.offboardingCase.findFirst({
+    where: {
+      employeeId: renewalCase.employeeId,
+      status: "PENDING_CLEARANCE",
+      ...(renewalCase.offboardingCase ? { id: { not: renewalCase.offboardingCase.id } } : {}),
+    },
+    select: { caseNumber: true },
+  });
+  if (otherOpenCase) {
+    return `Karyawan ini sudah memiliki kasus Offboarding aktif (${otherOpenCase.caseNumber}). Selesaikan atau batalkan kasus itu terlebih dahulu.`;
+  }
+
+  if (renewalCase.offboardingCase) {
+    const existing = renewalCase.offboardingCase;
+    if (existing.status !== "CANCELLED") return "Proses Offboarding untuk kasus ini sudah dibuat.";
+
+    // A cancelled case is reopened (the renewal case links to exactly one
+    // offboarding case), so a non-renewal can be restarted after a cancel
+    // (decided 2026-10-08).
+    await prisma.offboardingCase.update({
+      where: { id: existing.id },
+      data: {
+        status: "PENDING_CLEARANCE",
+        lastWorkingDay: renewalCase.currentContract.endDate,
+        clearanceDueDate: renewalCase.currentContract.endDate,
+        cancelledAt: null,
+        cancelledByAccountId: null,
+        cancellationReason: null,
+      },
+    });
+    await logAudit({
+      actorAccountId: session.user.id,
+      action: "UPDATE",
+      datasetName: "OffboardingCase",
+      recordId: existing.id,
+      reason: `${existing.caseNumber} reopened from the non-renewal decision (was cancelled: ${existing.cancellationReason ?? "-"})`,
+    });
+
+    revalidatePath(`/contracts/${renewalCase.currentContractId}`);
+    revalidatePath(`/offboarding/${existing.id}`);
+    revalidatePath("/offboarding");
+    return undefined;
+  }
 
   await createOffboardingCaseInternal({
     employeeId: renewalCase.employeeId,

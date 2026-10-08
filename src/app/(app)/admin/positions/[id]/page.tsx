@@ -48,6 +48,9 @@ export default async function EditPositionPage({ params }: { params: Promise<{ i
           jobs={jobs}
           orgUnits={orgUnits}
           otherPositions={allPositions.filter((p) => p.id !== position.id)}
+          otherHrManagerPositionCode={
+            allPositions.find((p) => p.grantsHrManagerAccess && p.id !== position.id)?.positionCode ?? null
+          }
         />
       </div>
     </div>

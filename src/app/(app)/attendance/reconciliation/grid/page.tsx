@@ -408,7 +408,9 @@ export default async function AttendanceReconciliationGridPage({
                           title={
                             d.presentOverride
                               ? "Masuk (Lupa Absen)"
-                              : (d.absenceTypeLabel ?? (halfPunched ? (d.hasCheckIn ? "Sudah check-in, belum check-out" : "Check-out tercatat, belum ada check-in") : undefined))
+                              : d.fromLeaveRequest
+                                ? `${d.absenceTypeLabel} (dari pengajuan yang disetujui)`
+                                : (d.absenceTypeLabel ?? (halfPunched ? (d.hasCheckIn ? "Sudah check-in, belum check-out" : "Check-out tercatat, belum ada check-in") : undefined))
                           }
                         >
                           {label}

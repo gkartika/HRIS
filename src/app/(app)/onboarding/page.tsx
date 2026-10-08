@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/empty-state";
 import { computeOnboardingStatus, isOnboardingTrainingComplete, isOnboardingAssetsComplete } from "@/lib/onboarding";
 import type { Prisma, OnboardingOverallStatus } from "@/generated/prisma/client";
 
-const ONBOARDING_STATUSES: OnboardingOverallStatus[] = ["NOT_STARTED", "IN_PROGRESS", "OVERDUE", "COMPLETE"];
+const ONBOARDING_STATUSES: OnboardingOverallStatus[] = ["NOT_STARTED", "IN_PROGRESS", "OVERDUE", "COMPLETE", "CANCELLED"];
 
 export default async function OnboardingListPage({
   searchParams,
@@ -87,10 +87,14 @@ export default async function OnboardingListPage({
       overallStatus: computeOnboardingStatus(
         {
           contractComplete: c.contractComplete,
-          mandatoryMaterialComplete: isOnboardingTrainingComplete(trainingStatusesByEmployee.get(c.employeeId) ?? []),
+          mandatoryMaterialComplete: isOnboardingTrainingComplete(
+            trainingStatusesByEmployee.get(c.employeeId) ?? [],
+            !!c.employee.currentPositionId
+          ),
           assetsComplete: isOnboardingAssetsComplete(assetStatusesByEmployee.get(c.employeeId) ?? []),
           plannedStartDate: c.plannedStartDate,
           mandatoryMaterialDueDate: c.mandatoryMaterialDueDate,
+          cancelledAt: c.cancelledAt,
         },
         now
       ),
@@ -198,7 +202,9 @@ export default async function OnboardingListPage({
                           ? "bg-emerald-50 text-emerald-700"
                           : overallStatus === "OVERDUE"
                             ? "bg-rose-50 text-rose-700"
-                            : "bg-slate-100 text-slate-600"
+                            : overallStatus === "CANCELLED"
+                              ? "bg-slate-200 text-slate-600"
+                              : "bg-slate-100 text-slate-600"
                       }`}
                     >
                       {t(`onboardingStatus.${overallStatus}`)}

@@ -162,7 +162,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       canManage &&
       renewalCase.status === "APPROVED" &&
       renewalCase.finalRecommendation === "TIDAK_DIPERPANJANG" &&
-      !renewalCase.offboardingCase;
+      (!renewalCase.offboardingCase || renewalCase.offboardingCase.status === "CANCELLED");
 
     if (canSubmitDeptHead || canDecideCombined) {
       renewalPositions = await prisma.position.findMany({

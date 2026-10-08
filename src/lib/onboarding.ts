@@ -13,6 +13,8 @@ export interface OnboardingCompletionInput {
   assetsComplete: boolean;
   plannedStartDate: Date;
   mandatoryMaterialDueDate: Date | null;
+  /** Set once the case is cancelled; overrides every other status. */
+  cancelledAt?: Date | null;
 }
 
 /**
@@ -28,6 +30,8 @@ export function computeOnboardingStatus(
 ): OnboardingOverallStatus {
   const { contractComplete, mandatoryMaterialComplete, assetsComplete, plannedStartDate, mandatoryMaterialDueDate } =
     input;
+
+  if (input.cancelledAt) return "CANCELLED";
 
   if (contractComplete && mandatoryMaterialComplete && assetsComplete) return "COMPLETE";
   if (mandatoryMaterialDueDate && !mandatoryMaterialComplete && now > mandatoryMaterialDueDate) return "OVERDUE";
@@ -50,9 +54,45 @@ export function isOnboardingFullyComplete(
 // don't block (they're not a real obligation anymore), and an employee with
 // no onboarding-required courses at all is trivially complete (nothing to
 // do), same as a checklist item with zero requirements.
-export function isOnboardingTrainingComplete(learningAssignmentStatuses: string[]): boolean {
+//
+// Exception (decided 2026-10-08): an employee with no placement yet cannot be
+// "complete", because the courses depend on the position and nothing could
+// have been assigned. It becomes complete only after the employee is placed
+// (and then has either finished everything assigned or has nothing assigned).
+export function isOnboardingTrainingComplete(learningAssignmentStatuses: string[], hasPlacement = true): boolean {
   const relevant = learningAssignmentStatuses.filter((status) => status !== "CANCELLED");
-  return relevant.length === 0 || relevant.every((status) => status === "COMPLETED");
+  if (relevant.length === 0) return hasPlacement;
+  return relevant.every((status) => status === "COMPLETED");
+}
+
+export type OnboardingTrainingNote = "WAITING_FOR_PLACEMENT" | "NONE_FOR_POSITION" | null;
+
+// What to tell the user instead of a bare tick when nothing is assigned.
+export function onboardingTrainingNote(learningAssignmentStatuses: string[], hasPlacement: boolean): OnboardingTrainingNote {
+  const relevant = learningAssignmentStatuses.filter((status) => status !== "CANCELLED");
+  if (relevant.length > 0) return null;
+  return hasPlacement ? "NONE_FOR_POSITION" : "WAITING_FOR_PLACEMENT";
+}
+
+// A case can be cancelled until it is complete or already cancelled; a
+// cancelled case can be reopened. Complete cases are never cancelled.
+export function canCancelOnboardingCase(c: { cancelledAt: Date | null; completedAt: Date | null }): boolean {
+  return !c.cancelledAt && !c.completedAt;
+}
+
+export function canReopenOnboardingCase(c: { cancelledAt: Date | null }): boolean {
+  return !!c.cancelledAt;
+}
+
+// Onboarding courses are assigned when a new hire is FIRST placed in a
+// position. Only for someone who has an open onboarding case: employees
+// brought in by import have none, and must not receive onboarding courses
+// just because their placements were imported later.
+export function shouldApplyOnboardingTrainingOnPlacement(args: {
+  hadPrimaryPlacementBefore: boolean;
+  hasOpenOnboardingCase: boolean;
+}): boolean {
+  return !args.hadPrimaryPlacementBefore && args.hasOpenOnboardingCase;
 }
 
 // Phase 4A: "Perlengkapan Selesai" is derived from real AssetCustody rows

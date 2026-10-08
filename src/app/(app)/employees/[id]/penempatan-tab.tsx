@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmployeeAssignmentHistory, formatDate } from "@/components/employee-profile-view";
 import { StartDateEditor } from "./start-date-editor";
+import { CancelScheduledPlacementButton } from "./cancel-scheduled-button";
 import { AssignmentManagementPanel } from "./assignment-panel";
 import { TaskForcePanel } from "./task-force-panel";
 
@@ -101,6 +102,9 @@ export async function PenempatanTabContent({
       <EmployeeAssignmentHistory
         assignments={assignments}
         reportsTo={reportsTo}
+        scheduledAction={
+          canManage ? (a) => <CancelScheduledPlacementButton assignmentId={a.id} employeeId={employeeId} /> : undefined
+        }
         startDateEditor={
           canManage
             ? (a) => (

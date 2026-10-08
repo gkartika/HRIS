@@ -2,7 +2,8 @@
 
 import { useActionState } from "react";
 import { updatePosition } from "../actions";
-import { POSITION_TYPES, POSITION_STATUSES } from "@/lib/position-type";
+import { POSITION_TYPES } from "@/lib/position-type";
+import { t } from "@/lib/i18n/id";
 import type { Job, OrgUnit, Position } from "@/generated/prisma/client";
 
 export function EditPositionForm({
@@ -10,11 +11,13 @@ export function EditPositionForm({
   jobs,
   orgUnits,
   otherPositions,
+  otherHrManagerPositionCode,
 }: {
   position: Position;
   jobs: Job[];
   orgUnits: OrgUnit[];
   otherPositions: Position[];
+  otherHrManagerPositionCode: string | null;
 }) {
   const updateWithId = updatePosition.bind(null, position.id);
   const [error, formAction, isPending] = useActionState(updateWithId, undefined);
@@ -88,21 +91,10 @@ export function EditPositionForm({
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">Status Posisi</label>
-        <select
-          name="positionStatus"
-          defaultValue={position.positionStatus}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        >
-          {POSITION_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <span className="mb-1 block text-xs text-slate-500">Status Posisi</span>
+        <p className="text-sm text-slate-700">{t(`positionStatus.${position.positionStatus}`)}</p>
         <p className="mt-1 text-xs text-slate-400">
-          Kosong/Terisi biasanya diperbarui otomatis saat Penempatan berubah — atur manual di sini
-          hanya untuk Direncanakan/Dibekukan/Ditutup.
+          Otomatis: Terisi jika ada Penempatan aktif, Kosong jika tidak. Posisi yang tidak dipakai lagi cukup diarsipkan.
         </p>
       </div>
       <div>
@@ -112,7 +104,11 @@ export function EditPositionForm({
         </label>
         <p className="mt-1 text-xs text-slate-400">
           Karyawan dengan Penempatan aktif pada Posisi ini otomatis mendapat akses ruang kerja HR Manager
-          (ACC-14) — dan kehilangan akses tersebut otomatis saat Penempatan berakhir.
+          (ACC-14) — dan kehilangan akses tersebut otomatis saat Penempatan berakhir. Hanya satu posisi yang boleh
+          memiliki akses ini.
+          {otherHrManagerPositionCode && (
+            <> Saat ini dimiliki posisi <span className="font-mono">{otherHrManagerPositionCode}</span>.</>
+          )}
         </p>
       </div>
       {error && <p className="text-xs text-rose-600">{error}</p>}

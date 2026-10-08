@@ -12,9 +12,8 @@ export default async function NewRecruitmentRequestPage() {
   }
 
   const [departments, jobs, employees] = await Promise.all([
-    // DEPARTMENT-only — RecruitmentRequest.departmentId is matched exactly
-    // against Position.orgUnitId at fulfillment time (recruitment/actions.ts),
-    // so it must not offer Section/Group/Team-tier units here.
+    // DEPARTMENT-only — the request names a Department; at fulfillment any
+    // vacant seat in it or below it (Section/Group/Team) can be used.
     prisma.orgUnit.findMany({ where: { activeFlag: true, unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
     prisma.job.findMany({ orderBy: { jobTitle: "asc" } }),
     isHrAdmin(session)

@@ -14,6 +14,7 @@ import {
   canCreateEmployeeFromRequest,
   canCancelRecruitmentRequest,
   isHrManager,
+  isHrAdmin,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
@@ -26,7 +27,11 @@ import {
   nextStatusAfterFulfillment,
   formatRequestNumber,
   initialRecruitmentStatus,
+  canCloseRequestStatus,
+  canResubmitRequestStatus,
+  statusAfterResubmit,
 } from "@/lib/recruitment";
+import { buildOrgUnitTree } from "@/lib/org-unit-tree";
 import { createOnboardingCase } from "@/lib/onboarding-create";
 import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
@@ -42,13 +47,25 @@ import type {
   EmploymentStatus,
 } from "@/generated/prisma/enums";
 
-export async function submitRecruitmentRequest(
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canSubmitRecruitmentRequest(session)) return t("common.forbidden");
+// The fields of FR-HC-01-01 that the requester fills in. Shared by the first
+// submission and by resubmitting a returned request, so both validate the same.
+type RequestFields = {
+  requestDate: string;
+  reasonCode: RecruitmentReasonCode;
+  departmentId: string;
+  jobId: string | null;
+  shiftCode: ShiftCode;
+  requestedHeadcount: number;
+  jobDescriptionSnapshot: string;
+  educationRequirementCode: EducationRequirementCode;
+  workExperienceBand: WorkExperienceBand;
+  ageBand: AgeBand;
+  genderRequirement: Gender | null;
+  requestedJobLevel: RequestedJobLevel;
+  specialCriteria: string | null;
+};
 
+function readRequestFields(formData: FormData): { fields: RequestFields } | { error: string } {
   const requestDate = formData.get("requestDate") as string;
   const reasonCode = formData.get("reasonCode") as RecruitmentReasonCode;
   const departmentId = formData.get("departmentId") as string;
@@ -62,7 +79,6 @@ export async function submitRecruitmentRequest(
   const genderRequirement = (formData.get("genderRequirement") as string) || null;
   const requestedJobLevel = formData.get("requestedJobLevel") as RequestedJobLevel;
   const specialCriteria = (formData.get("specialCriteria") as string)?.trim() || null;
-  const requesterEmployeeId = (formData.get("requesterEmployeeId") as string) || session.user.employeeId;
 
   if (
     !requestDate ||
@@ -74,28 +90,16 @@ export async function submitRecruitmentRequest(
     !educationRequirementCode ||
     !workExperienceBand ||
     !ageBand ||
-    !requestedJobLevel ||
-    !requesterEmployeeId
+    !requestedJobLevel
   ) {
-    return "Semua field wajib (kecuali Posisi yang Dituju, Jenis Kelamin, dan Kriteria Khusus) harus diisi.";
+    return { error: "Semua field wajib (kecuali Posisi yang Dituju, Jenis Kelamin, dan Kriteria Khusus) harus diisi." };
   }
-  if (requestedHeadcount < 1) return "Jumlah harus minimal 1.";
+  if (requestedHeadcount < 1) return { error: "Jumlah harus minimal 1." };
+  if (Number.isNaN(Date.parse(requestDate))) return { error: "Tanggal permintaan tidak valid." };
 
-  const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
-  if (!requester) return "Karyawan pengaju tidak ditemukan.";
-
-  const requesterDeptHeadPositions = await getActiveDeptHeadPositions(requesterEmployeeId, departmentId);
-  const initialStatus = initialRecruitmentStatus(requesterDeptHeadPositions.length > 0);
-
-  const year = companyYear(new Date(requestDate));
-  const seq = await nextSequence(`REQ-${year}`);
-  const requestNumber = formatRequestNumber(seq, year);
-  const now = new Date();
-
-  const request = await prisma.recruitmentRequest.create({
-    data: {
-      requestNumber,
-      requestDate: new Date(requestDate),
+  return {
+    fields: {
+      requestDate,
       reasonCode,
       departmentId,
       jobId,
@@ -108,6 +112,58 @@ export async function submitRecruitmentRequest(
       genderRequirement: genderRequirement ? (genderRequirement as Gender) : null,
       requestedJobLevel,
       specialCriteria,
+    },
+  };
+}
+
+export async function submitRecruitmentRequest(
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canSubmitRecruitmentRequest(session)) return t("common.forbidden");
+
+  const parsed = readRequestFields(formData);
+  if ("error" in parsed) return parsed.error;
+  const f = parsed.fields;
+
+  // Only Admin SDM may file on someone else's behalf. Everyone else is always
+  // the requester: a requester id in the form is ignored, so nobody can name
+  // a Dept Head as requester to skip the Dept Head stage.
+  const requesterEmployeeId =
+    (isHrAdmin(session) ? (formData.get("requesterEmployeeId") as string) : null) || session.user.employeeId;
+  if (!requesterEmployeeId) return "Pilih karyawan pengaju terlebih dahulu.";
+
+  const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
+  if (!requester) return "Karyawan pengaju tidak ditemukan.";
+
+  // The Dept Head stage is skipped only when the person actually submitting is
+  // themself the Dept Head of this department (nobody else to approve). When
+  // Admin SDM files for a Dept Head, the request still goes to that Dept Head.
+  const submitterDeptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, f.departmentId);
+  const initialStatus = initialRecruitmentStatus(submitterDeptHeadPositions.length > 0);
+
+  const year = companyYear(new Date(f.requestDate));
+  const seq = await nextSequence(`REQ-${year}`);
+  const requestNumber = formatRequestNumber(seq, year);
+  const now = new Date();
+
+  const request = await prisma.recruitmentRequest.create({
+    data: {
+      requestNumber,
+      requestDate: new Date(f.requestDate),
+      reasonCode: f.reasonCode,
+      departmentId: f.departmentId,
+      jobId: f.jobId,
+      shiftCode: f.shiftCode,
+      requestedHeadcount: f.requestedHeadcount,
+      jobDescriptionSnapshot: f.jobDescriptionSnapshot,
+      educationRequirementCode: f.educationRequirementCode,
+      workExperienceBand: f.workExperienceBand,
+      ageBand: f.ageBand,
+      genderRequirement: f.genderRequirement,
+      requestedJobLevel: f.requestedJobLevel,
+      specialCriteria: f.specialCriteria,
       status: initialStatus,
       requesterEmployeeId,
       requesterPositionId: requester.currentPositionId,
@@ -121,11 +177,94 @@ export async function submitRecruitmentRequest(
     action: "CREATE",
     datasetName: "RecruitmentRequest",
     recordId: request.id,
-    reason: `Submitted recruitment request ${requestNumber} for ${requestedHeadcount} position(s)`,
+    reason: `Submitted recruitment request ${requestNumber} for ${f.requestedHeadcount} position(s)`,
   });
 
   revalidatePath("/recruitment");
   redirect(`/recruitment/${request.id}`);
+}
+
+// A returned request (Kembalikan) is edited by its requester (or Admin SDM)
+// and sent again. It goes back to the stage that returned it; the earlier
+// return note is cleared from the request (it stays in the audit log) so it
+// is not mistaken for a decision on the corrected version.
+export async function resubmitRecruitmentRequest(
+  requestId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId } });
+  if (!request) return "Permintaan tidak ditemukan.";
+
+  const isRequester = !!session.user.employeeId && session.user.employeeId === request.requesterEmployeeId;
+  if (!isRequester && !isHrAdmin(session)) return t("common.forbidden");
+  if (!canResubmitRequestStatus(request.status)) {
+    return "Hanya permintaan yang dikembalikan yang dapat diajukan ulang.";
+  }
+
+  const parsed = readRequestFields(formData);
+  if ("error" in parsed) return parsed.error;
+  const f = parsed.fields;
+
+  const returnedByHrManager = !!request.approvedByAccountId;
+  const departmentChanged = f.departmentId !== request.departmentId;
+  const submitterDeptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, f.departmentId);
+  const nextStatus = statusAfterResubmit({
+    returnedByHrManager,
+    departmentChanged,
+    submitterIsDeptHead: submitterDeptHeadPositions.length > 0,
+  });
+  const returnNote = returnedByHrManager ? request.decisionNote : request.deptHeadDecisionNote;
+
+  const clearHrManagerStage = {
+    approvedAt: null,
+    approvedByAccountId: null,
+    decisionPositionId: null,
+    decisionNote: null,
+  };
+  const clearDeptHeadStage = {
+    deptHeadDecisionAt: null,
+    deptHeadDecisionByAccountId: null,
+    deptHeadDecisionPositionId: null,
+    deptHeadDecisionNote: null,
+  };
+
+  await prisma.recruitmentRequest.update({
+    where: { id: requestId },
+    data: {
+      requestDate: new Date(f.requestDate),
+      reasonCode: f.reasonCode,
+      departmentId: f.departmentId,
+      jobId: f.jobId,
+      shiftCode: f.shiftCode,
+      requestedHeadcount: f.requestedHeadcount,
+      jobDescriptionSnapshot: f.jobDescriptionSnapshot,
+      educationRequirementCode: f.educationRequirementCode,
+      workExperienceBand: f.workExperienceBand,
+      ageBand: f.ageBand,
+      genderRequirement: f.genderRequirement,
+      requestedJobLevel: f.requestedJobLevel,
+      specialCriteria: f.specialCriteria,
+      status: nextStatus,
+      // Whoever sent it back no longer has a pending decision on record.
+      ...(returnedByHrManager ? clearHrManagerStage : clearDeptHeadStage),
+      // Restarting from the Dept Head means both earlier decisions are void.
+      ...(nextStatus === "PENDING_DEPT_HEAD" ? { ...clearHrManagerStage, ...clearDeptHeadStage } : {}),
+    },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "RecruitmentRequest",
+    recordId: requestId,
+    reason: `Resubmitted ${request.requestNumber} after return by ${returnedByHrManager ? "HR Manager" : "Dept Head"} (now ${nextStatus}). Return note: ${returnNote ?? "-"}`,
+  });
+
+  revalidatePath(`/recruitment/${requestId}`);
+  revalidatePath("/recruitment");
+  redirect(`/recruitment/${requestId}`);
 }
 
 export async function startReviewRecruitmentRequest(requestId: string) {
@@ -327,6 +466,46 @@ export async function cancelRecruitmentRequest(
   revalidatePath("/recruitment");
 }
 
+// "Tutup": hiring stops with fewer people than requested. Only a partly filled
+// request can be closed (one with no hires is cancelled instead); the hires
+// already made stay linked. Admin SDM or the active HR Manager may close it.
+export async function closeRecruitmentRequest(
+  requestId: string,
+  _prevState: string | undefined,
+  formData: FormData
+): Promise<string | undefined> {
+  const session = await requireSession();
+  const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
+  if (!isHrAdmin(session) && !isHrManager(hrManagerPositions.map((p) => p.positionId))) {
+    return t("common.forbidden");
+  }
+
+  const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId } });
+  if (!request) return "Permintaan tidak ditemukan.";
+  if (!canCloseRequestStatus(request.status)) {
+    return "Hanya permintaan berstatus Terisi Sebagian yang dapat ditutup. Permintaan tanpa karyawan dibatalkan saja.";
+  }
+
+  const closeReason = (formData.get("closeReason") as string)?.trim();
+  if (!closeReason) return "Alasan penutupan wajib diisi.";
+
+  await prisma.recruitmentRequest.update({
+    where: { id: requestId },
+    data: { status: "CLOSED", closedAt: new Date(), closedByAccountId: session.user.id, closeReason },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "RecruitmentRequest",
+    recordId: requestId,
+    reason: `Closed ${request.requestNumber} (was ${request.status}): ${closeReason}`,
+  });
+
+  revalidatePath(`/recruitment/${requestId}`);
+  revalidatePath("/recruitment");
+}
+
 export async function createEmployeeFromRecruitmentRequest(
   requestId: string,
   _prevState: string | undefined,
@@ -374,7 +553,15 @@ export async function createEmployeeFromRecruitmentRequest(
   }
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";
-  if (position.jobId !== request.jobId || position.orgUnitId !== request.departmentId) {
+  if (position.archived) return "Posisi ini sudah diarsipkan — pilih posisi lain.";
+  // A seat belongs to the request's Department when it sits in that Department
+  // itself or anywhere below it (Section, Group, Team) — decided 2026-10-08;
+  // most seats sit under a Section or Group, not directly under the Department.
+  const orgUnits = await prisma.orgUnit.findMany({
+    select: { id: true, unitName: true, unitType: true, parentUnitId: true },
+  });
+  const seatDepartmentId = buildOrgUnitTree(orgUnits).departmentOf(position.orgUnitId)?.id;
+  if (position.jobId !== request.jobId || seatDepartmentId !== request.departmentId) {
     return "Posisi yang dipilih tidak sesuai dengan Jabatan/Department pada permintaan ini.";
   }
   // Prevent assigning an already-occupied Position (DM-07 / acceptance criteria).

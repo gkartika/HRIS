@@ -11,7 +11,9 @@ import {
 import {
   canExecuteExitClearanceStatus,
   canCancelOffboardingCaseStatus,
+  isPastLastWorkingDay,
 } from "@/lib/offboarding";
+import { companyToday } from "@/lib/company-time";
 import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
 import { isOverdue } from "@/lib/work-calendar";
 import { prisma } from "@/lib/db";
@@ -49,6 +51,11 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
   const canCancel = canCancelOffboardingCase(session) && canCancelOffboardingCaseStatus(offboardingCase.status);
   const overdue = offboardingCase.status === "PENDING_CLEARANCE" && isOverdue(offboardingCase.clearanceDueDate);
   const isSelf = session.user.employeeId === offboardingCase.employeeId;
+  const lastDayHasPassed = isPastLastWorkingDay(offboardingCase.lastWorkingDay, companyToday());
+  // Clearance done early: the employee stays active until the last day is over.
+  const awaitingAutoDeactivation =
+    offboardingCase.status === "COMPLETED" && offboardingCase.employee.activeFlag && !lastDayHasPassed;
+  const loginAutoDisabled = offboardingCase.status === "PENDING_CLEARANCE" && lastDayHasPassed;
 
   // Version after UAT: employee-facing Exit Clearance form — informational
   // only, visible read-only to anyone who can already view this case once
@@ -217,6 +224,21 @@ export default async function OffboardingCaseDetailPage({ params }: { params: Pr
                 </div>
               ))}
           </div>
+        </div>
+      )}
+
+      {awaitingAutoDeactivation && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+          Exit Clearance sudah selesai. Karyawan tetap aktif sampai akhir Hari Kerja Terakhir (
+          {formatDateLong(offboardingCase.lastWorkingDay)}); setelah itu sistem otomatis mengakhiri penempatan,
+          menandai karyawan tidak aktif, dan menonaktifkan login.
+        </div>
+      )}
+      {loginAutoDisabled && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Hari Kerja Terakhir sudah lewat. Login karyawan dinonaktifkan otomatis oleh sistem; status karyawan baru berubah
+          tidak aktif setelah Exit Clearance diselesaikan. Jika kasus ini dibatalkan, aktifkan kembali login dari halaman
+          karyawan.
         </div>
       )}
 

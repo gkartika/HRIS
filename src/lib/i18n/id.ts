@@ -4,12 +4,12 @@
 
 export const strings = {
   app: {
-    name: "Aplikasi SDM",
+    name: "Aplikasi HC",
     company: "PT Cahaya Bukit Perunggu",
     tagline: "Manajemen Karyawan, Pengembangan Organisasi, dan Urusan Umum",
   },
   auth: {
-    loginTitle: "Masuk ke Aplikasi SDM",
+    loginTitle: "Masuk ke Aplikasi HC",
     loginSubtitle: "Masuk menggunakan akun perusahaan Anda",
     usernameLabel: "Email",
     passwordLabel: "Kata Sandi",

@@ -5,8 +5,8 @@ import type { MetadataRoute } from "next";
 // own window; it does not store any employee data on the device.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Aplikasi SDM — PT Cahaya Bukit Perunggu",
-    short_name: "SDM CBP",
+    name: "Aplikasi HC — PT Cahaya Bukit Perunggu",
+    short_name: "HC CBP",
     description: "Manajemen Karyawan, Pengembangan Organisasi, dan Urusan Umum",
     id: "/",
     start_url: "/",

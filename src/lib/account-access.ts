@@ -15,10 +15,10 @@ function linkEmail(kind: AccountTokenPurpose, name: string, url: string) {
   const days = TOKEN_TTL_MS[kind] / (24 * 60 * 60 * 1000);
   const validity = days >= 2 ? `${days} hari` : "24 jam";
   const invite = kind === "INVITE";
-  const subject = invite ? "Undangan akun Aplikasi SDM" : "Atur ulang kata sandi Aplikasi SDM";
+  const subject = invite ? "Undangan akun Aplikasi HC" : "Atur ulang kata sandi Aplikasi HC";
   const lead = invite
-    ? "Admin SDM sudah menyiapkan akun Aplikasi SDM untuk Anda. Klik tautan di bawah untuk membuat kata sandi."
-    : "Kami menerima permintaan untuk mengatur ulang kata sandi akun Aplikasi SDM Anda. Klik tautan di bawah untuk membuat kata sandi baru.";
+    ? "Admin SDM sudah menyiapkan akun Aplikasi HC untuk Anda. Klik tautan di bawah untuk membuat kata sandi."
+    : "Kami menerima permintaan untuk mengatur ulang kata sandi akun Aplikasi HC Anda. Klik tautan di bawah untuk membuat kata sandi baru.";
   const action = invite ? "Buat kata sandi" : "Atur ulang kata sandi";
   const footer = `Tautan berlaku ${validity} dan hanya bisa dipakai sekali. ${
     invite ? "Jika Anda tidak merasa perlu akun ini, abaikan email ini." : "Jika Anda tidak memintanya, abaikan email ini — kata sandi Anda tidak berubah."

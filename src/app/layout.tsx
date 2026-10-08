@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aplikasi SDM — PT Cahaya Bukit Perunggu",
+  title: "Aplikasi HC — PT Cahaya Bukit Perunggu",
   description: "Manajemen Karyawan, Pengembangan Organisasi, dan Urusan Umum",
   // Icons come from src/app/favicon.ico, icon.png and apple-icon.png (company logo mark).
-  appleWebApp: { title: "Aplikasi SDM" },
+  appleWebApp: { title: "Aplikasi HC" },
 };
 
 export const viewport: Viewport = {

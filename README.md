@@ -1,4 +1,4 @@
-# Aplikasi SDM — PT Cahaya Bukit Perunggu
+# Aplikasi HC — PT Cahaya Bukit Perunggu
 
 HR application covering Employee Management, Organizational Development, and
 General Affairs for an Indonesian manufacturing company (~160 employees). See

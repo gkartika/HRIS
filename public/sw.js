@@ -2,7 +2,7 @@
 // friendly "no connection" page when a page cannot be loaded. It never stores
 // pages, API responses or employee data, so nothing sensitive is kept on the
 // device and every screen always comes live from the server.
-const CACHE = "sdm-offline-v2";
+const CACHE = "hc-offline-v1";
 const OFFLINE_URL = "/offline.html";
 const OFFLINE_ASSETS = [OFFLINE_URL, "/logo-cbp.png"];
 

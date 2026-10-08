@@ -108,6 +108,11 @@ section disagree, this section wins.
   and check-out counts the full scheduled shift; Setengah Hari is only set by HR (an
   automatic half-day rule was considered and deliberately NOT wanted).
 
+- Code tidying (2026-10-08): `ReasonForm` (cancel with a reason), `WIB_OFFSET_MS`/`DAY_MS`/
+  `MONTH_LABELS_ID`/`formatCompanyTime` in `src/lib/company-time.ts`, `createOnboardingCase`,
+  `EmployeeCoreFields`/`EmployeeExtraFields`, `t("common.forbidden")`, `countByStatus`.
+  Last deployed commit when this was written: 1288f34.
+
 ### Current data and open items
 - Production data: 185 employees (CBP-0001 ...) and 185 positions imported; 3 admin
   logins: Admin SDM `humancapital@ptcbp.com`, Admin GA `cahayabp.ga@gmail.com` (changed
@@ -116,12 +121,12 @@ section disagree, this section wins.
   (penempatan) file, then check the org chart.
 - `scripts/wipe-ga-data.ts` was prepared for emptying the GA module (1 asset, 1 location,
   counters); whether the owner ran it is not recorded here, so check before assuming.
-- Not done on purpose (offer, don't assume): shared `ReasonForm` for the 7 cancel-with-reason
-  forms, shared date/time helpers, shared onboarding-creation helper, shared employee-fields
-  component, the ~115 copies of the "Anda tidak memiliki akses." action string, deeper import
-  speed-ups (a large import can hit the server time limit and needs a retry), an
-  "Otomatis/Dikonfirmasi" marker for auto-filled placement dates, camera QR scanning (needs a
-  real phone to test), and direct-to-storage uploads for files over 4.5 MB.
+- Not done on purpose (offer, don't assume): deeper import speed-ups (a large import can hit
+  the server time limit and needs a retry), an "Otomatis/Dikonfirmasi" marker for auto-filled
+  placement dates, camera QR scanning (needs a real phone to test), and direct-to-storage uploads
+  for files over 4.5 MB (course materials, employee-documents ZIP). The code tidying that used to
+  be on this list (shared ReasonForm, date/time helpers, onboarding creator, employee form fields,
+  the "Anda tidak memiliki akses." string) is DONE (commit 1288f34).
 - Detailed history of decisions: `docs/DECISIONS.md`. Optimization plan:
   `C:\Users\gayatri\.claude\plans\cheeky-stargazing-firefly.md`.
 

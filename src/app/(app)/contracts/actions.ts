@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -35,7 +36,7 @@ export async function createContract(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return t("common.forbidden");
 
   const employeeId = formData.get("employeeId") as string;
   const contractType = formData.get("contractType") as EmploymentStatus;
@@ -93,7 +94,7 @@ export async function createContract(
 
 export async function startContractReview(contractId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return t("common.forbidden");
 
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) return "Kontrak tidak ditemukan.";
@@ -137,7 +138,7 @@ export async function submitContractRecommendation(
   }
 
   const isManager = await isDirectManagerOfEmployee(session.user.employeeId, contract.employeeId);
-  if (!canSubmitContractRecommendation(session, isManager)) return "Anda tidak memiliki akses.";
+  if (!canSubmitContractRecommendation(session, isManager)) return t("common.forbidden");
 
   const recommender = await prisma.employee.findUnique({ where: { id: recommendationByEmployeeId } });
   if (!recommender) return "Karyawan pemberi rekomendasi tidak ditemukan.";
@@ -220,7 +221,7 @@ export async function createRenewalDraft(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return t("common.forbidden");
 
   const oldContract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!oldContract) return "Kontrak tidak ditemukan.";
@@ -300,7 +301,7 @@ export async function signContract(contractId: string): Promise<string | undefin
 
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) return "Kontrak tidak ditemukan.";
-  if (!canSignContract(session, contract.employeeId)) return "Anda tidak memiliki akses.";
+  if (!canSignContract(session, contract.employeeId)) return t("common.forbidden");
   if (!canSignContractStatus(contract.status)) return "Kontrak ini belum dirilis.";
 
   await prisma.contract.update({
@@ -326,7 +327,7 @@ export async function signContract(contractId: string): Promise<string | undefin
 // currentPositionId is synced by Assignment changes.
 export async function activateContract(contractId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return t("common.forbidden");
 
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) return "Kontrak tidak ditemukan.";

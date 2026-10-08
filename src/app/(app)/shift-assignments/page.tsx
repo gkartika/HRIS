@@ -1,3 +1,4 @@
+import { MONTH_LABELS_ID, DAY_MS } from "@/lib/company-time";
 import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin } from "@/lib/permissions";
@@ -8,8 +9,6 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { ShiftScheduler, type SchedulerEmployee, type SchedulerShift } from "./shift-scheduler";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 function isoOf(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -20,8 +19,8 @@ function weekLabel(weekStart: Date): string {
   const startPart =
     weekStart.getUTCMonth() === end.getUTCMonth()
       ? String(weekStart.getUTCDate())
-      : `${weekStart.getUTCDate()} ${MONTHS[weekStart.getUTCMonth()]}`;
-  return `${startPart} – ${end.getUTCDate()} ${MONTHS[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
+      : `${weekStart.getUTCDate()} ${MONTH_LABELS_ID[weekStart.getUTCMonth()]}`;
+  return `${startPart} – ${end.getUTCDate()} ${MONTH_LABELS_ID[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
 }
 
 function weekTag(weekStart: Date, currentWeekStart: Date): string {

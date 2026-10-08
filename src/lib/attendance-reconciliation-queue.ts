@@ -1,15 +1,10 @@
 import { prisma } from "@/lib/db";
-import { companyToday, companyDateParts, startOfCompanyDay } from "@/lib/company-time";
+import { companyToday, startOfCompanyDay, formatCompanyTime } from "@/lib/company-time";
 import { buildPunchDayLookup, punchDayKey } from "@/lib/punch-days";
 import type { CutoffPeriod } from "@/lib/absence-cutoff";
 import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
 import { computeDayMinutes, computeActualDayMinutes } from "@/lib/attendance-hours";
 import { haversineDistanceMeters } from "@/lib/attendance";
-
-function formatCompanyTime(date: Date): string {
-  const { hour, minute } = companyDateParts(date);
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
 
 // Real punches for these employees in [start, end), read straight from the
 // events so a check-in shows up the moment it is made (see punch-days.ts).

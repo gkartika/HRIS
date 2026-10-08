@@ -1,4 +1,4 @@
-import { companyDateParts } from "@/lib/company-time";
+import { companyDateParts, MONTH_LABELS_ID, DAY_MS } from "@/lib/company-time";
 // Rekonsiliasi Absensi cutoff period — per direct request, the company's
 // payroll cutoff runs 21st through the 20th of the next month (both
 // inclusive), the same convention the old spreadsheet tracker used. Pure/
@@ -22,9 +22,8 @@ export interface CutoffPeriod {
   label: string;
 }
 
-export const MONTH_LABELS_ID = [
-  "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des",
-];
+// Kept as a re-export: older code imports it from here.
+export { MONTH_LABELS_ID };
 
 function formatPeriodLabel(start: Date, end: Date): string {
   const startLabel = `${start.getUTCDate()} ${MONTH_LABELS_ID[start.getUTCMonth()]}`;
@@ -44,12 +43,12 @@ export function resolveCutoffPeriod(referenceDate: Date): CutoffPeriod {
 }
 
 export function previousCutoffPeriod(period: CutoffPeriod): CutoffPeriod {
-  const dayBeforeStart = new Date(period.start.getTime() - 24 * 60 * 60 * 1000);
+  const dayBeforeStart = new Date(period.start.getTime() - DAY_MS);
   return resolveCutoffPeriod(dayBeforeStart);
 }
 
 export function nextCutoffPeriod(period: CutoffPeriod): CutoffPeriod {
-  const dayAfterEnd = new Date(period.end.getTime() + 24 * 60 * 60 * 1000);
+  const dayAfterEnd = new Date(period.end.getTime() + DAY_MS);
   return resolveCutoffPeriod(dayAfterEnd);
 }
 

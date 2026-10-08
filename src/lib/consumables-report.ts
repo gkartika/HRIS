@@ -2,9 +2,8 @@
 // so the figures are unit-testable (same pattern as
 // attendance-reconciliation-export.ts). All month boundaries are company
 // (WIB, fixed +07:00) calendar months.
-import { companyDateParts } from "@/lib/company-time";
+import { companyDateParts, WIB_OFFSET_MS } from "@/lib/company-time";
 
-const WIB_MS = 7 * 60 * 60 * 1000;
 
 export interface ReportItem {
   id: string;
@@ -48,8 +47,8 @@ export function monthRange(key: string): { start: Date; end: Date } | null {
   const month = Number(match[2]);
   if (month < 1 || month > 12) return null;
   return {
-    start: new Date(Date.UTC(year, month - 1, 1) - WIB_MS),
-    end: new Date(Date.UTC(year, month, 1) - WIB_MS),
+    start: new Date(Date.UTC(year, month - 1, 1) - WIB_OFFSET_MS),
+    end: new Date(Date.UTC(year, month, 1) - WIB_OFFSET_MS),
   };
 }
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { companyToday, companyDateParts } from "@/lib/company-time";
+import { companyToday, WIB_OFFSET_MS, formatCompanyTime } from "@/lib/company-time";
 import { normalizeName } from "@/lib/name-match";
 import { normalizeWeekStart, buildIsScheduledToWorkLookup } from "@/lib/shift-assignment";
 import type { AttendanceEventType } from "@/generated/prisma/enums";
@@ -38,7 +38,7 @@ function parseMachineDateTime(value: string): Date | null {
   const mm = Number(mmStr);
   if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
   const date = new Date(
-    Date.UTC(Number(yyyyStr), mm - 1, dd, Number(hhStr), Number(minStr), Number(ssStr)) - 7 * 60 * 60 * 1000
+    Date.UTC(Number(yyyyStr), mm - 1, dd, Number(hhStr), Number(minStr), Number(ssStr)) - WIB_OFFSET_MS
   );
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -48,11 +48,6 @@ function mapMachineStatus(value: string): AttendanceEventType | null {
   if (normalized === "c/in") return "CHECK_IN";
   if (normalized === "c/out") return "CHECK_OUT";
   return null;
-}
-
-function formatCompanyTime(date: Date): string {
-  const { hour, minute } = companyDateParts(date);
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 interface ParsedMachineRow {

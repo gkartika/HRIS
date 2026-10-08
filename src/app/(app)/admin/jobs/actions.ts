@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -13,7 +14,7 @@ export async function createJob(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const jobCode = (formData.get("jobCode") as string)?.trim();
   const jobTitle = (formData.get("jobTitle") as string)?.trim();
@@ -48,7 +49,7 @@ export async function updateJob(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const jobTitle = (formData.get("jobTitle") as string)?.trim();
   const jobPurpose = (formData.get("jobPurpose") as string)?.trim() || null;

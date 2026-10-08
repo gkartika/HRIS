@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
 import { companyYear } from "@/lib/company-time";
@@ -30,7 +31,7 @@ import type { GaRequestType, GaRequestUrgency } from "@/generated/prisma/enums";
 
 export async function submitGaRequest(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canSubmitGaRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canSubmitGaRequest(session)) return t("common.forbidden");
 
   const requestTypeRaw = formData.get("requestType") as string;
   if (!["NEW_ASSET_NEED", "DAMAGE_OR_ABNORMAL_CONDITION", "LOSS"].includes(requestTypeRaw)) {
@@ -116,7 +117,7 @@ export async function submitGaRequest(_prevState: string | undefined, formData: 
 // can't be assigned while the issue is unresolved.
 export async function verifyGaRequest(requestId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -202,7 +203,7 @@ export async function decideGaRequestAsApprover(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -241,7 +242,7 @@ export async function decideGaRequestAsApprover(
 // this asset) since those actions don't return it directly.
 export async function processGaRequest(requestId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -347,7 +348,7 @@ export async function reviewGaRequestLoss(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";

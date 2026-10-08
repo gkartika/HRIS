@@ -1,10 +1,10 @@
+import { DAY_MS } from "@/lib/company-time";
 import { prisma } from "@/lib/db";
 import { MONTH_LABELS_ID } from "@/lib/absence-cutoff";
 import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
 import { resolveDepartmentId } from "@/lib/level3-scope";
 import type { ReportPeriod } from "@/lib/report-period";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // "cycle" shows one bucket per week within the payroll period — the
 // weekly cadence the old spreadsheet ("mandays lost every week") used;

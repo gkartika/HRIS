@@ -1,5 +1,6 @@
 "use client";
 
+import { ReasonForm } from "@/components/reason-form";
 import { useActionState, useState } from "react";
 import {
   startReviewRecruitmentRequest,
@@ -242,42 +243,11 @@ export function DeptHeadDecisionButtons({
 // may cancel an eligible request. Visibility is decided by the server page
 // (canCancelRecruitmentRequest); this component just renders the form.
 export function CancelRequestForm({ requestId }: { requestId: string }) {
-  const [open, setOpen] = useState(false);
-  const action = cancelRecruitmentRequest.bind(null, requestId);
-  const [error, formAction, isPending] = useActionState(action, undefined);
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100"
-      >
-        {t("recruitment.cancelRequestButton")}
-      </button>
-    );
-  }
-
   return (
-    <form action={formAction} className="w-full space-y-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
-      <label className="block text-xs text-slate-600">{t("recruitment.cancellationReason")} (wajib)</label>
-      <textarea name="cancellationReason" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-      {error && <p className="text-xs text-rose-600">{error}</p>}
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60"
-        >
-          {isPending ? t("common.loading") : t("recruitment.cancelRequestButton")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="rounded-lg px-4 py-2 text-sm text-slate-500"
-        >
-          {t("common.cancel")}
-        </button>
-      </div>
-    </form>
+    <ReasonForm
+      action={cancelRecruitmentRequest.bind(null, requestId)}
+      triggerLabel={t("recruitment.cancelRequestButton")}
+      reasonLabel={t("recruitment.cancellationReason")}
+    />
   );
 }

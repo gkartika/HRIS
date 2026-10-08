@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -37,7 +38,7 @@ export async function submitQuizAttempt(assignmentId: string, _prevState: string
   const session = await requireSession();
 
   const assignment = await prisma.learningAssignment.findUnique({ where: { id: assignmentId } });
-  if (!assignment || !canTakeQuiz(session, assignment.employeeId)) return "Anda tidak memiliki akses.";
+  if (!assignment || !canTakeQuiz(session, assignment.employeeId)) return t("common.forbidden");
   if (assignment.status === "CANCELLED" || assignment.status === "COMPLETED") {
     return "Kuis tidak dapat diambil untuk penugasan ini.";
   }

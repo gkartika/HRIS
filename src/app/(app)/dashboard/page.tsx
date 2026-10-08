@@ -1,3 +1,4 @@
+import { DAY_MS } from "@/lib/company-time";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -391,7 +392,7 @@ async function ExpiringContracts({
 }) {
   // computeExpiryUrgency only ever flags a contract up to 90 days out (or
   // already expired), so anything further away is not even read.
-  const horizon = new Date(new Date().getTime() + 91 * 24 * 60 * 60 * 1000);
+  const horizon = new Date(new Date().getTime() + 91 * DAY_MS);
   const [orgUnits, contracts] = await Promise.all([
     // DEPARTMENT-only — feeds the "Departemen" filter below, which must not
     // list Section/Group/Team-tier units (ORG-01 depth work).

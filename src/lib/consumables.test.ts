@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addMonthsCompany,
+  countByStatus,
   adjustmentDelta,
   cancelWouldGoNegative,
   evaluateIssueWarnings,
@@ -147,5 +148,12 @@ describe("suggestNextItemCode", () => {
   });
   it("ignores codes without a numeric suffix", () => {
     expect(suggestNextItemCode("APD", ["APD-X", "APD-007"])).toBe("APD-008");
+  });
+});
+
+describe("countByStatus", () => {
+  it("counts each stock status and zero-fills the rest", () => {
+    expect(countByStatus([{ status: "AMAN" }, { status: "HABIS" }, { status: "HABIS" }])).toEqual({ AMAN: 1, MENIPIS: 0, HABIS: 2 });
+    expect(countByStatus([])).toEqual({ AMAN: 0, MENIPIS: 0, HABIS: 0 });
   });
 });

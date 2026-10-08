@@ -1,6 +1,7 @@
 // Pure business logic for Phase 2 Extension: Absence (Cuti/Izin/Sakit/
 // Lainnya). No Prisma/Next imports — unit testable with plain values, same
 // pattern as offboarding.ts/contract-renewal.ts.
+import { DAY_MS } from "@/lib/company-time";
 import type { AbsenceStatus } from "@/generated/prisma/enums";
 
 export function formatAbsenceRequestNumber(sequence: number, year: number): string {
@@ -15,10 +16,9 @@ export function doDateRangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd
 
 // Inclusive day count — e.g. Monday to Wednesday is 3 days, not 2.
 export function absenceDayCount(startDate: Date, endDate: Date): number {
-  const msPerDay = 24 * 60 * 60 * 1000;
   const start = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
   const end = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
-  return Math.round((end - start) / msPerDay) + 1;
+  return Math.round((end - start) / DAY_MS) + 1;
 }
 
 // Chain: configured first-approver Position, optionally a second (only for

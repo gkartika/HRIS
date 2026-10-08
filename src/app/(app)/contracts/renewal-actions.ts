@@ -1,7 +1,8 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
-import { companyToday, companyYear } from "@/lib/company-time";
+import { companyToday, companyYear, DAY_MS } from "@/lib/company-time";
 import { nextSequence } from "@/lib/number-sequence";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -40,7 +41,7 @@ import type { RenewalRecommendation } from "@/generated/prisma/enums";
 // two cases for the same contract.
 export async function triggerRenewalCaseNow(contractId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return t("common.forbidden");
 
   const contract = await prisma.contract.findUnique({
     where: { id: contractId },
@@ -179,7 +180,7 @@ export async function submitDeptHeadRecommendation(
       const requestNumber = formatMovementRequestNumber(seq, year);
 
       const proposedEffectiveDate = renewalCase.currentContract.endDate
-        ? new Date(renewalCase.currentContract.endDate.getTime() + 24 * 60 * 60 * 1000)
+        ? new Date(renewalCase.currentContract.endDate.getTime() + DAY_MS)
         : companyToday();
 
       const movement = await tx.movementRequest.create({
@@ -341,7 +342,7 @@ export async function decideRenewalCase(
         const seq = await nextSequence(`MOV-${year}`, tx);
         const requestNumber = formatMovementRequestNumber(seq, year);
         const proposedEffectiveDate = renewalCase.currentContract.endDate
-          ? new Date(renewalCase.currentContract.endDate.getTime() + 24 * 60 * 60 * 1000)
+          ? new Date(renewalCase.currentContract.endDate.getTime() + DAY_MS)
           : new Date();
 
         const created = await tx.movementRequest.create({
@@ -417,7 +418,7 @@ export async function decideRenewalCase(
         // generation isn't gated on anything further; draft it now.
         const durationMonths = recommendationDurationMonths(finalRecommendation)!;
         const startDate = renewalCase.currentContract.endDate
-          ? new Date(renewalCase.currentContract.endDate.getTime() + 24 * 60 * 60 * 1000)
+          ? new Date(renewalCase.currentContract.endDate.getTime() + DAY_MS)
           : new Date();
         const endDate = new Date(startDate);
         endDate.setUTCMonth(endDate.getUTCMonth() + durationMonths);
@@ -488,7 +489,7 @@ export async function createRenewalContractAfterMovementExecuted(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return t("common.forbidden");
 
   const renewalCase = await prisma.contractRenewalCase.findUnique({
     where: { id: caseId },
@@ -548,7 +549,7 @@ export async function createRenewalContractAfterMovementExecuted(
 // constraint) — a second click simply returns the already-created case.
 export async function createOffboardingHandoff(caseId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageContracts(session)) return "Anda tidak memiliki akses.";
+  if (!canManageContracts(session)) return t("common.forbidden");
 
   const renewalCase = await prisma.contractRenewalCase.findUnique({
     where: { id: caseId },

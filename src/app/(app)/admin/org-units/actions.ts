@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -13,7 +14,7 @@ export async function createOrgUnit(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const unitCode = (formData.get("unitCode") as string)?.trim();
   const unitName = (formData.get("unitName") as string)?.trim();
@@ -49,7 +50,7 @@ export async function updateOrgUnit(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const unitCode = (formData.get("unitCode") as string)?.trim();
   const unitName = (formData.get("unitName") as string)?.trim();

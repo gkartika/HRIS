@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
 import { redirect } from "next/navigation";
@@ -32,7 +33,7 @@ const MAX_COURSE_MATERIAL_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB — training d
 // Publish is a separate, explicit action below.
 export async function createTrainingCourse(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageTrainingCourse(session)) return "Anda tidak memiliki akses.";
+  if (!canManageTrainingCourse(session)) return t("common.forbidden");
 
   const title = (formData.get("title") as string)?.trim();
   if (!title) return "Judul pelatihan wajib diisi.";
@@ -88,7 +89,7 @@ export async function createTrainingSession(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageTrainingCourse(session)) return "Anda tidak memiliki akses.";
+  if (!canManageTrainingCourse(session)) return t("common.forbidden");
 
   const startDateRaw = formData.get("startDate") as string;
   if (!startDateRaw) return "Tanggal mulai wajib diisi.";
@@ -130,7 +131,7 @@ export async function addCourseMaterial(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageTrainingCourse(session)) return "Anda tidak memiliki akses.";
+  if (!canManageTrainingCourse(session)) return t("common.forbidden");
 
   const course = await prisma.trainingCourse.findUnique({ where: { id: courseId } });
   if (!course) return "Pelatihan tidak ditemukan.";
@@ -228,7 +229,7 @@ export async function createQuiz(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageTrainingCourse(session)) return "Anda tidak memiliki akses.";
+  if (!canManageTrainingCourse(session)) return t("common.forbidden");
 
   const course = await prisma.trainingCourse.findUnique({ where: { id: courseId }, include: { quiz: true } });
   if (!course) return "Pelatihan tidak ditemukan.";
@@ -266,7 +267,7 @@ export async function addQuizQuestion(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageTrainingCourse(session)) return "Anda tidak memiliki akses.";
+  if (!canManageTrainingCourse(session)) return t("common.forbidden");
 
   const quiz = await prisma.quiz.findUnique({ where: { id: quizId }, include: { course: true } });
   if (!quiz) return "Kuis tidak ditemukan.";

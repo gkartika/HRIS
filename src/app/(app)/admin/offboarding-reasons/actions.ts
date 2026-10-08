@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -16,7 +17,7 @@ export async function createOffboardingReason(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageExitClearanceQuestions(session)) return "Anda tidak memiliki akses.";
+  if (!canManageExitClearanceQuestions(session)) return t("common.forbidden");
 
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Alasan wajib diisi.";
@@ -41,7 +42,7 @@ export async function renameOffboardingReason(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageExitClearanceQuestions(session)) return "Anda tidak memiliki akses.";
+  if (!canManageExitClearanceQuestions(session)) return t("common.forbidden");
 
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Alasan wajib diisi.";

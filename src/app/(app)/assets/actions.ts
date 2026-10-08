@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
 import { redirect } from "next/navigation";
@@ -20,7 +21,7 @@ import type { AssetCustodyTargetType, AssetInspectionResult, AssetTrackingType }
 
 export async function createFixedAsset(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssets(session)) return t("common.forbidden");
 
   const assetCode = (formData.get("assetCode") as string)?.trim();
   const assetName = (formData.get("assetName") as string)?.trim();
@@ -91,7 +92,7 @@ async function createCustody(
   session: Awaited<ReturnType<typeof requireSession>>,
   formData: FormData
 ): Promise<string | undefined> {
-  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssets(session)) return t("common.forbidden");
 
   const asset = await prisma.fixedAsset.findUnique({ where: { id: assetId } });
   if (!asset) return "Aset tidak ditemukan.";
@@ -224,7 +225,7 @@ export async function returnAssetCustody(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssets(session)) return t("common.forbidden");
 
   const custody = await prisma.assetCustody.findUnique({ where: { id: custodyId }, include: { asset: true } });
   if (!custody) return "Catatan penguasaan tidak ditemukan.";
@@ -316,7 +317,7 @@ export async function transferAssetCustody(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssets(session)) return t("common.forbidden");
 
   const custody = await prisma.assetCustody.findUnique({ where: { id: custodyId }, include: { asset: true } });
   if (!custody) return "Catatan penguasaan tidak ditemukan.";

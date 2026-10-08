@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -17,7 +18,7 @@ const VALID_SHIFT_TYPES: ShiftAssignmentType[] = ["SHIFT_1", "SHIFT_2", "SHIFT_3
 // convention as AbsenceRequest's HR override.
 export async function classifyAttendanceDay(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!isHrAdmin(session)) return "Anda tidak memiliki akses.";
+  if (!isHrAdmin(session)) return t("common.forbidden");
 
   const employeeId = (formData.get("employeeId") as string)?.trim();
   const dateRaw = (formData.get("date") as string)?.trim();

@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -17,7 +18,7 @@ export async function saveJobCompetencyRequirements(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageCompetencyFramework(session)) return "Anda tidak memiliki akses.";
+  if (!canManageCompetencyFramework(session)) return t("common.forbidden");
 
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   if (!job) return "Jabatan tidak ditemukan.";

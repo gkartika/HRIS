@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { startOfCompanyDay } from "@/lib/company-time";
+import { startOfCompanyDay, DAY_MS } from "@/lib/company-time";
 import { prisma } from "@/lib/db";
 import { AttendanceCheckSection } from "./attendance-check-section";
 
@@ -31,7 +31,7 @@ function ProfileIcon() {
 export async function SimpleKaryawanHome({ employeeId, userName }: { employeeId: string; userName: string }) {
   const now = new Date();
   const start = startOfCompanyDay(now);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + DAY_MS);
   const [checkInEvent, checkOutEvent] = await Promise.all([
     prisma.attendanceEvent.findFirst({ where: { employeeId, eventType: "CHECK_IN", eventAt: { gte: start, lt: end } } }),
     prisma.attendanceEvent.findFirst({ where: { employeeId, eventType: "CHECK_OUT", eventAt: { gte: start, lt: end } } }),

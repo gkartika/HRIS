@@ -615,6 +615,8 @@ export const strings = {
     error: "Terjadi kesalahan",
     notFound: "Data tidak ditemukan",
     accessDenied: "Anda tidak memiliki akses ke halaman ini",
+    // The same message as a server action result (a form error), not a page.
+    forbidden: "Anda tidak memiliki akses.",
     confirm: "Konfirmasi",
     yes: "Ya",
     no: "Tidak",

@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -13,7 +14,7 @@ export async function createPosition(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const positionCode = (formData.get("positionCode") as string)?.trim();
   const jobId = formData.get("jobId") as string;
@@ -69,7 +70,7 @@ export async function archivePosition(
   _formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";
@@ -107,7 +108,7 @@ export async function unarchivePosition(
   _formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";
@@ -133,7 +134,7 @@ export async function updatePosition(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const jobId = formData.get("jobId") as string;
   const jobLevel = (formData.get("jobLevel") as string)?.trim();

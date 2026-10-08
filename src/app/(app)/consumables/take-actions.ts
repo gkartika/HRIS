@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
@@ -74,7 +75,7 @@ export type IssueResult = { error: string } | { success: string; batchId: string
 
 export async function recordConsumableIssue(input: IssueInput): Promise<IssueResult> {
   const session = await requireSession();
-  if (!canManageConsumables(session)) return { error: "Anda tidak memiliki akses." };
+  if (!canManageConsumables(session)) return { error: t("common.forbidden") };
 
   const purpose = input.purpose?.trim() || null;
   const warningReason = input.warningReason?.trim() || null;

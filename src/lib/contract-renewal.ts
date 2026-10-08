@@ -3,6 +3,7 @@
 // same pattern as contract.ts/movement.ts. FR-HC-01-07 evaluation logic
 // (scores, release/submit guards) now lives in the shared src/lib/
 // evaluation.ts, reused by this flow rather than duplicated here (WF-19).
+import { DAY_MS } from "@/lib/company-time";
 import type { ContractRenewalCaseStatus, RenewalRecommendation, MovementType } from "@/generated/prisma/enums";
 
 export function formatRenewalCaseNumber(sequence: number, year: number): string {
@@ -14,8 +15,7 @@ export function formatRenewalCaseNumber(sequence: number, year: number): string 
 // exactly when the existing urgency badge first shows "DUE_30".
 export function isRenewalDue(endDate: Date | null, now: Date = new Date()): boolean {
   if (!endDate) return false;
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / msPerDay);
+  const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / DAY_MS);
   return daysRemaining <= 30;
 }
 

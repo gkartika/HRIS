@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -12,7 +13,7 @@ export async function createGeofence(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const siteName = (formData.get("siteName") as string)?.trim();
   const latitude = Number(formData.get("latitude"));
@@ -48,7 +49,7 @@ export async function toggleGeofence(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const activeFlag = formData.get("activeFlag") === "on";
   await prisma.attendanceGeofence.update({ where: { id: geofenceId }, data: { activeFlag } });

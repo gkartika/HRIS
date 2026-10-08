@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
 import { companyYear } from "@/lib/company-time";
@@ -21,7 +22,7 @@ import type { MaintenanceWorkType, MaintenanceOutcome } from "@/generated/prisma
 
 export async function createMaintenancePlan(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const assetId = (formData.get("assetId") as string)?.trim();
   if (!assetId) return "Aset wajib dipilih.";
@@ -63,7 +64,7 @@ export async function createMaintenancePlan(_prevState: string | undefined, form
 // other soft-close in this app.
 export async function deactivateMaintenancePlan(planId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const plan = await prisma.maintenancePlan.findUnique({ where: { id: planId } });
   if (!plan) return "Rencana tidak ditemukan.";
@@ -126,7 +127,7 @@ async function createWorkOrder(params: {
 
 export async function createWorkOrderFromPlan(planId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const plan = await prisma.maintenancePlan.findUnique({ where: { id: planId } });
   if (!plan) return "Rencana tidak ditemukan.";
@@ -151,7 +152,7 @@ export async function createCorrectiveWorkOrderFromGaRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -192,7 +193,7 @@ export async function executeMaintenanceWorkOrder(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const workOrder = await prisma.maintenanceWorkOrder.findUnique({ where: { id: workOrderId } });
   if (!workOrder) return "Work order tidak ditemukan.";

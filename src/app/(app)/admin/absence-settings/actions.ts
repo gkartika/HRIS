@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -32,7 +33,7 @@ async function deriveUniqueCode(label: string): Promise<string> {
 
 export async function createAbsenceTypeConfig(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Nama jenis absensi wajib diisi.";
@@ -73,7 +74,7 @@ export async function updateAbsenceTypeAndQuota(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Nama jenis absensi wajib diisi.";
@@ -146,7 +147,7 @@ export async function archiveAbsenceTypeConfig(
   _formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const type = await prisma.absenceTypeConfig.findUnique({ where: { code } });
   if (!type) return "Jenis absensi tidak ditemukan.";
@@ -171,7 +172,7 @@ export async function unarchiveAbsenceTypeConfig(
   _formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const type = await prisma.absenceTypeConfig.findUnique({ where: { code } });
   if (!type) return "Jenis absensi tidak ditemukan.";
@@ -204,7 +205,7 @@ export async function setAbsenceApproverConfig(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const approverPositionId = formData.get("approverPositionId") as string;
   const requiresSecondStage = formData.get("requiresSecondStage") === "on";
@@ -250,7 +251,7 @@ export async function updateWorkSchedule(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
   if (!VALID_SHIFT_TYPES.includes(shiftType as ShiftAssignmentType)) return "Shift tidak valid.";
   const validShiftType = shiftType as ShiftAssignmentType;
 

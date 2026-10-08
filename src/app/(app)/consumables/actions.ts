@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -31,7 +32,7 @@ async function withEcho(formData: FormData, run: () => Promise<ConsumableActionS
   return result?.error ? { ...result, values: echoValues(formData) } : result;
 }
 
-const DENIED = "Anda tidak memiliki akses.";
+const DENIED = t("common.forbidden");
 const ITEM_CODE_PATTERN = /^[A-Z0-9][A-Z0-9-]*$/;
 
 function str(formData: FormData, key: string): string {

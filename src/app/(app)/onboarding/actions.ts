@@ -1,8 +1,8 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
-import { companyYear } from "@/lib/company-time";
-import { nextSequence } from "@/lib/number-sequence";
+import { createOnboardingCase } from "@/lib/onboarding-create";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { redirect } from "next/navigation";
@@ -11,7 +11,6 @@ import {
   isOnboardingFullyComplete,
   isOnboardingTrainingComplete,
   isOnboardingAssetsComplete,
-  formatOnboardingCaseNumber,
 } from "@/lib/onboarding";
 import { getOnboardingTrainingStatusesForEmployee } from "@/lib/mandatory-training";
 import { logAudit } from "@/lib/audit";
@@ -28,7 +27,7 @@ export async function createOnboardingCaseManually(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canCreateOnboardingCase(session)) return "Anda tidak memiliki akses.";
+  if (!canCreateOnboardingCase(session)) return t("common.forbidden");
 
   const employeeId = formData.get("employeeId") as string;
   const plannedStartDate = formData.get("plannedStartDate") as string;
@@ -41,15 +40,7 @@ export async function createOnboardingCaseManually(
   if (existing) return `Karyawan ini sudah memiliki kasus Onboarding (${existing.caseNumber}).`;
 
   const plannedStartDateObj = new Date(plannedStartDate);
-  const year = companyYear(plannedStartDateObj);
-  const seq = await nextSequence(`ONB-${year}`);
-  const onboardingCase = await prisma.onboardingCase.create({
-    data: {
-      caseNumber: formatOnboardingCaseNumber(seq, year),
-      employeeId,
-      plannedStartDate: plannedStartDateObj,
-    },
-  });
+  const onboardingCase = await createOnboardingCase(employeeId, plannedStartDateObj);
 
   await logAudit({
     actorAccountId: session.user.id,
@@ -72,7 +63,7 @@ export async function createOnboardingCaseManually(
 // assigned outside this page.
 export async function toggleContractComplete(caseId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canMarkOnboardingContract(session)) return "Anda tidak memiliki akses.";
+  if (!canMarkOnboardingContract(session)) return t("common.forbidden");
 
   const onboardingCase = await prisma.onboardingCase.findUnique({ where: { id: caseId } });
   if (!onboardingCase) return "Kasus onboarding tidak ditemukan.";
@@ -114,7 +105,7 @@ export async function updateMandatoryMaterialDueDate(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canMarkOnboardingTraining(session)) return "Anda tidak memiliki akses.";
+  if (!canMarkOnboardingTraining(session)) return t("common.forbidden");
 
   const dueDate = (formData.get("mandatoryMaterialDueDate") as string) || null;
   await prisma.onboardingCase.update({
@@ -145,7 +136,7 @@ export async function assignAssetDuringOnboarding(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssets(session)) return t("common.forbidden");
 
   const error = await assignAssetToEmployee(assetId, undefined, formData);
   if (error) return error;

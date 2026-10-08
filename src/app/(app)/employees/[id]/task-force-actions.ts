@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -12,7 +13,7 @@ export async function addTaskForceMembership(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageTaskForceMembership(session)) return "Anda tidak memiliki akses.";
+  if (!canManageTaskForceMembership(session)) return t("common.forbidden");
 
   const name = (formData.get("name") as string)?.trim();
   const roleLabel = (formData.get("roleLabel") as string)?.trim() || null;
@@ -50,7 +51,7 @@ export async function endTaskForceMembership(
   _prevState: string | undefined
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageTaskForceMembership(session)) return "Anda tidak memiliki akses.";
+  if (!canManageTaskForceMembership(session)) return t("common.forbidden");
 
   const membership = await prisma.taskForceMembership.findUnique({ where: { id: membershipId } });
   if (!membership) return "Keanggotaan tidak ditemukan.";

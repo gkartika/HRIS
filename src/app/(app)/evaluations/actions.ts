@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { createDraftEvaluation } from "@/lib/evaluation-create";
 import { redirect } from "next/navigation";
@@ -25,7 +26,7 @@ export async function createManualEvaluation(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canCreateManualEvaluation(session)) return "Anda tidak memiliki akses.";
+  if (!canCreateManualEvaluation(session)) return t("common.forbidden");
 
   const employeeId = (formData.get("employeeId") as string) || "";
   if (!employeeId) return "Karyawan wajib dipilih.";
@@ -58,7 +59,7 @@ export async function releaseEvaluation(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canReleaseEvaluation(session)) return "Anda tidak memiliki akses.";
+  if (!canReleaseEvaluation(session)) return t("common.forbidden");
 
   const evaluation = await prisma.evaluation.findUnique({
     where: { id: evaluationId },

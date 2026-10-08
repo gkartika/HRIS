@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { companyYear } from "@/lib/company-time";
 import { nextSequence } from "@/lib/number-sequence";
@@ -103,7 +104,7 @@ export async function decideTrainingRequestAsDeptHead(
   if (!request.departmentIdSnapshot) return "Departemen karyawan tidak diketahui — tidak dapat diputuskan.";
 
   const deptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, request.departmentIdSnapshot);
-  if (!canDecideTrainingRequestAsDeptHead(deptHeadPositions.map((p) => p.positionId))) return "Anda tidak memiliki akses.";
+  if (!canDecideTrainingRequestAsDeptHead(deptHeadPositions.map((p) => p.positionId))) return t("common.forbidden");
   if (!canDeptHeadDecideTrainingRequest(request.status)) return "Permintaan ini sudah tidak menunggu keputusan Kepala Departemen.";
 
   const decision = formData.get("decision") as string;
@@ -156,7 +157,7 @@ export async function validateTrainingRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canValidateTrainingRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canValidateTrainingRequest(session)) return t("common.forbidden");
 
   const request = await prisma.trainingRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -198,7 +199,7 @@ export async function scheduleTrainingRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canScheduleTrainingRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canScheduleTrainingRequest(session)) return t("common.forbidden");
 
   const request = await prisma.trainingRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -268,7 +269,7 @@ export async function cancelTrainingRequest(
   if (!request) return "Permintaan tidak ditemukan.";
 
   const isRequester = session.user.id === request.submittedByAccountId;
-  if (!canCancelTrainingRequestByActor(session, isRequester)) return "Anda tidak memiliki akses.";
+  if (!canCancelTrainingRequestByActor(session, isRequester)) return t("common.forbidden");
   if (!canCancelTrainingRequestStatus(request.status)) return "Permintaan ini sudah tidak dapat dibatalkan.";
 
   const reason = (formData.get("reason") as string)?.trim();

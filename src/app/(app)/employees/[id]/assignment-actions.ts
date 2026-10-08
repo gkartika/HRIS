@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -14,7 +15,7 @@ export async function addAssignment(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssignments(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssignments(session)) return t("common.forbidden");
 
   const positionId = formData.get("positionId") as string;
   const assignmentType = formData.get("assignmentType") as AssignmentType;
@@ -86,7 +87,7 @@ export async function updateAssignmentStartDate(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssignments(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssignments(session)) return t("common.forbidden");
 
   const assignmentId = formData.get("assignmentId") as string;
   const effectiveFrom = ((formData.get("effectiveFrom") as string) ?? "").trim();
@@ -125,7 +126,7 @@ export async function movePrimaryAssignment(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssignments(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssignments(session)) return t("common.forbidden");
 
   const positionId = formData.get("positionId") as string;
   const effectiveFrom = formData.get("effectiveFrom") as string;
@@ -193,7 +194,7 @@ export async function endAssignment(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssignments(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssignments(session)) return t("common.forbidden");
 
   const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId } });
   if (!assignment) return "Penempatan tidak ditemukan.";
@@ -234,7 +235,7 @@ export async function updatePositionReportsTo(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssignments(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssignments(session)) return t("common.forbidden");
 
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },

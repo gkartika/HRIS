@@ -6,6 +6,125 @@ Real, backend-connected HR application for an Indonesian manufacturing company
 (~160 employees). This is not a prototype — build for production quality within
 the confirmed scope below.
 
+## START HERE: current state and how we work (handoff, 2026-10-08)
+
+Read this section first. Later sections describe the original design; this one says
+what is true now, where things are hosted, and the rules the owner (Gayatri, HR at
+PT Cahaya Bukit Perunggu) expects in every session. Where this section and an older
+section disagree, this section wins.
+
+### Where things live
+- **Code:** the real folder is `C:\Users\gayatri\Desktop\claude`. The copy under
+  `OneDrive\Desktop\claude` is an old leftover; do not work there (no current `.env`,
+  stale files). GitHub: `gkartika/HRIS`, branch `main`.
+- **Database:** ONE Supabase Postgres shared by local dev and production. Anything
+  applied to it is live for real users immediately. `DATABASE_URL` is the transaction
+  pooler (app), `DIRECT_URL` the session pooler (Prisma CLI). SQLite/`dev.db` is gone.
+- **Hosting:** Vercel project `hris` (team `cbp5`). Public site:
+  `https://cbp-hris.vercel.app`. Deploys are MANUAL: `npx vercel deploy --prod --yes`
+  from the project folder (pushing to GitHub does not deploy). Check the result with
+  `npx vercel inspect <url>`.
+- **Vercel environment (names only, values are secret and live in Vercel):**
+  `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `CRON_SECRET`, `APP_URL`, `MAIL_FROM`,
+  `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`. Local `.env` has only the database
+  and auth values, so emails are printed to the server console in dev and can only be
+  really sent from the live site (e.g. submit the public "Lupa kata sandi" form there).
+- **Scheduled job:** `vercel.json` runs `/api/cron/daily` at 20:00 UTC (03:00 WIB):
+  links check-in/out events to daily attendance records and runs the contract-renewal scan.
+- **Files (BPJS cards, evidence photos/PDFs):** stored in the database table `FileBlob`
+  (Vercel's disk is read-only). Limit 4 MB per file; large photos are shrunk in the
+  browser (`src/components/document-file-input.tsx`). Downloads only through
+  `/api/files/[id]`. Course materials and the employee-documents ZIP import can exceed
+  Vercel's ~4.5 MB request limit and would need direct-to-storage uploads (not built).
+
+### Database changes: be careful
+- Because the database is shared with production, change the schema ONLY with
+  additive migrations (new tables/columns, dropping NOT NULL). Write the migration SQL
+  by hand in `prisma/migrations/<timestamp>_<name>/migration.sql`, then
+  `npx prisma migrate deploy`, then `npx prisma generate`, then restart the dev server.
+- NEVER run `npm run db:reset` or `prisma migrate reset` (it would wipe production),
+  and avoid `prisma migrate dev`. Ignore the older note in this file that says to use
+  `npm run db:migrate`.
+- Deleting real data: never do it directly. Write a script in `scripts/` with a
+  read-only PREVIEW, a `--rehearse` mode (runs the deletes inside a transaction and
+  rolls back), and an `--apply --i-have-a-backup` mode. Show the user the preview, and
+  the USER runs `--apply` themselves after taking a Supabase backup. Existing examples:
+  `scripts/wipe-employees-only.ts`, `scripts/wipe-ga-data.ts`,
+  `scripts/wipe-employee-data.ts`. Run them from `C:\Users\gayatri\Desktop\claude`.
+- Test data: create disposable rows (prefix `ZZT`), always delete them afterwards, and
+  restore counters/status you changed (e.g. the `EMP-CBP` number sequence, a position's
+  status). Scratch scripts go in `scripts/_zz_*.ts` and are deleted right after use; the
+  `scripts/` folder is untracked on purpose and is never committed.
+
+### Standing rules from the owner (follow in every session)
+1. **Commit, push and deploy only when asked.** Typical request: "commit and push to
+   vercel". Use `git add -A -- . ':!scripts'`; commit messages end with the
+   Co-Authored-By line given by the session.
+2. **Pause before live testing.** Typecheck, lint and Vitest are always fine to run.
+   Before starting the dev server or testing in the browser, summarize the change and
+   wait for a go-ahead (a plain "test" counts). Once told to test, go ahead.
+3. **UI/UX first** when the owner says so: show a clickable mock-up (published artifact)
+   and ask which option before building.
+4. **No backend work for users.** Every edit or setting must be a button/form in the app.
+   Pages need filters, sensible defaults and bulk actions (see the Shift Assignment page
+   as the minimum bar). Users cannot code or open the database.
+5. **If unsure, ask.** Especially for anything that deletes or overwrites data.
+6. Don't leave things manual when a sibling feature is derived (stock, status and similar
+   values are computed from the ledger, never stored by hand).
+7. Every page must check access itself (the layout's "access denied" still ships the
+   page's data). Use `<AccessDenied />` from `src/components/access-denied.tsx`.
+
+### Working notes for this machine (Windows)
+- Verify with: `npx tsc --noEmit`, `npx eslint src --quiet`, `npx vitest run`,
+  `npm run build`.
+- Start the dev server as a bare background command `npm run dev` (no `nohup`/`&`).
+  Clear `.next/dev` if Turbopack misbehaves; restart it after any Prisma schema change.
+- Bash heredocs often break on long scripts with quotes: write helper scripts with the
+  file-write tool and run them with `node` / `npx tsx --env-file=.env`.
+- The built-in browser pane is often hidden and then stalls page hydration: open a fresh
+  foreground tab per page, wait until the page is hydrated, and drive forms by setting
+  values with the native setter and calling `form.requestSubmit()`.
+- The company time zone is fixed WIB (UTC+7), see `src/lib/company-time.ts`; date-only
+  values are stored as UTC midnight. The work week is Sunday to Saturday.
+
+### What has been built recently (newest last, all deployed unless noted)
+- Barang Habis Pakai (APD/ATK consumables) for GA Admin: ledger, stock, history, QR labels,
+  reports, import of the old inventory sheets. Admin GA home status board.
+- Attendance grid date filter; Exit Clearance form number FR-HC-01-11.
+- Employee numbers auto-assigned as CBP-0001, CBP-0002, ... (counter `EMP-CBP`).
+- Optimization pass: staged loading of the dashboard, `?tab=` employee tabs, SQL
+  aggregates for the consumables report, batched writes, 9 new indexes, shared
+  `AccessDenied`, `StatusChip` + `src/lib/status-ui.ts`, `csvResponse`.
+- File uploads fixed on Vercel (database storage, browser-side photo shrinking).
+- Import safety: a batch can only be written by ONE run at a time (`import-claim.ts`);
+  a stuck run can be resumed after 10 minutes; the Import button locks the screen.
+- Hire date (Tanggal Bergabung) is optional everywhere.
+- Placements: Berlaku Sejak is optional in the import (blank = hire date, else today);
+  re-importing a placement the employee already holds UPDATES its start date; HR admins
+  can change a placement's start date in place ("Ubah") on the Penempatan tab. A placement
+  with no start date counts as already in force (`activeAssignmentWhere`).
+- Attendance grid and unresolved-days queue read punches live from the events
+  (`src/lib/punch-days.ts`) instead of waiting for the nightly job. A day with check-in
+  and check-out counts the full scheduled shift; Setengah Hari is only set by HR (an
+  automatic half-day rule was considered and deliberately NOT wanted).
+
+### Current data and open items
+- Production data: 185 employees (CBP-0001 ...) and 185 positions imported; 3 admin
+  logins: Admin SDM `humancapital@ptcbp.com`, Admin GA `cahayabp.ga@gmail.com` (changed
+  from `ga.admin@cbp.demo`; a password-reset email was sent), and Training Admin
+  `training.admin@cbp.demo`. Next step on the owner's side: import the placements
+  (penempatan) file, then check the org chart.
+- `scripts/wipe-ga-data.ts` was prepared for emptying the GA module (1 asset, 1 location,
+  counters); whether the owner ran it is not recorded here, so check before assuming.
+- Not done on purpose (offer, don't assume): shared `ReasonForm` for the 7 cancel-with-reason
+  forms, shared date/time helpers, shared onboarding-creation helper, shared employee-fields
+  component, the ~115 copies of the "Anda tidak memiliki akses." action string, deeper import
+  speed-ups (a large import can hit the server time limit and needs a retry), an
+  "Otomatis/Dikonfirmasi" marker for auto-filled placement dates, camera QR scanning (needs a
+  real phone to test), and direct-to-storage uploads for files over 4.5 MB.
+- Detailed history of decisions: `docs/DECISIONS.md`. Optimization plan:
+  `C:\Users\gayatri\.claude\plans\cheeky-stargazing-firefly.md`.
+
 ## Source-of-truth order (SRC-01..SRC-06 in the Build Guide)
 
 When the brief, field blueprint, prototype, or existing code in this repo
@@ -120,8 +239,9 @@ English.
   `/api/files/[id]` ([src/app/api/files/[id]/route.ts](src/app/api/files/[id]/route.ts)),
   which re-checks permission and audits on every request. See
   [src/lib/file-storage.ts](src/lib/file-storage.ts).
-- **Database migrations, always.** Change `prisma/schema.prisma`, then run
-  `npm run db:migrate`. Never hand-edit `dev.db`.
+- **Database migrations, always, and additive only.** Change `prisma/schema.prisma`, write the
+  migration SQL by hand, then `npx prisma migrate deploy` (see "Database changes: be careful" at the
+  top: the database is shared with production, so never run `db:reset`).
 - **Fictional data only in dev.** Never put real employee/salary/bank/medical
   data in this repo or its seed data. `prisma/seed.ts` is the canonical set of
   development-safe demo accounts and records.
@@ -256,9 +376,9 @@ English.
 
 ```bash
 npm run dev          # start the app (http://localhost:3000)
-npm run db:migrate   # create/apply a migration after editing schema.prisma
+npm run db:migrate   # DO NOT USE: the database is shared with production, see the top of this file
 npm run db:seed      # (re)seed demo data — safe to re-run, upserts
 npm run db:studio    # Prisma Studio (visual DB browser)
-npm run db:reset     # drop + recreate + reseed the dev database
+npm run db:reset     # DO NOT RUN: it would wipe the production database
 npm test             # run the Vitest unit test suite
 ```

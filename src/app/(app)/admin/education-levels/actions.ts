@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -16,7 +17,7 @@ export async function createEducationLevel(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Nama tingkat pendidikan wajib diisi.";
@@ -49,7 +50,7 @@ export async function renameEducationLevel(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Nama tingkat pendidikan wajib diisi.";
@@ -76,7 +77,7 @@ export async function toggleEducationLevel(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const activeFlag = formData.get("activeFlag") === "on";
   await prisma.educationLevel.update({ where: { id: levelId }, data: { activeFlag } });

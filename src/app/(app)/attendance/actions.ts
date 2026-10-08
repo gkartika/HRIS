@@ -5,13 +5,13 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canRecordOwnAttendance } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { startOfCompanyDay } from "@/lib/company-time";
+import { startOfCompanyDay, DAY_MS } from "@/lib/company-time";
 import { isLateCheckIn, isEventWithinAnyGeofence } from "@/lib/attendance";
 import type { AttendanceEventType } from "@/generated/prisma/enums";
 
 function todayRange(now: Date): { start: Date; end: Date } {
   const start = startOfCompanyDay(now);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + DAY_MS);
   return { start, end };
 }
 

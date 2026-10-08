@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -17,7 +18,7 @@ export async function createExitClearanceQuestion(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageExitClearanceQuestions(session)) return "Anda tidak memiliki akses.";
+  if (!canManageExitClearanceQuestions(session)) return t("common.forbidden");
 
   const questionText = (formData.get("questionText") as string)?.trim();
   if (!questionText) return "Pertanyaan wajib diisi.";
@@ -45,7 +46,7 @@ export async function toggleExitClearanceQuestion(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageExitClearanceQuestions(session)) return "Anda tidak memiliki akses.";
+  if (!canManageExitClearanceQuestions(session)) return t("common.forbidden");
 
   const activeFlag = formData.get("activeFlag") === "on";
   await prisma.exitClearanceQuestion.update({ where: { id: questionId }, data: { activeFlag } });

@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -16,7 +17,7 @@ export async function createPtkpStatus(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const code = (formData.get("code") as string)?.trim();
   const label = (formData.get("label") as string)?.trim();
@@ -53,7 +54,7 @@ export async function renamePtkpStatus(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const label = (formData.get("label") as string)?.trim();
   if (!label) return "Label PTKP wajib diisi.";
@@ -77,7 +78,7 @@ export async function togglePtkpStatus(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageOrgStructure(session)) return "Anda tidak memiliki akses.";
+  if (!canManageOrgStructure(session)) return t("common.forbidden");
 
   const activeFlag = formData.get("activeFlag") === "on";
   await prisma.ptkpStatus.update({ where: { id: statusId }, data: { activeFlag } });

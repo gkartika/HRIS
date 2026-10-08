@@ -6,6 +6,13 @@
 // shift-assignment.ts) keep using the getUTC* getters.
 export const COMPANY_TIME_ZONE = "Asia/Jakarta";
 
+/** WIB is a fixed UTC+7 (no daylight saving). */
+export const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Short Indonesian month names, January first. */
+export const MONTH_LABELS_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
 export interface CompanyDateParts {
   year: number;
   month: number; // 1-12
@@ -56,5 +63,11 @@ export function companyToday(date: Date = new Date()): Date {
 export function startOfCompanyDay(date: Date = new Date()): Date {
   const { year, month, day } = companyDateParts(date);
   // Asia/Jakarta has no daylight saving: a fixed +07:00 offset.
-  return new Date(Date.UTC(year, month - 1, day) - 7 * 60 * 60 * 1000);
+  return new Date(Date.UTC(year, month - 1, day) - WIB_OFFSET_MS);
+}
+
+/** The company-local (WIB) clock time of an instant as "HH:MM". */
+export function formatCompanyTime(date: Date): string {
+  const { hour, minute } = companyDateParts(date);
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }

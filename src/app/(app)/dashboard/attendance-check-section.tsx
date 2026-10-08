@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { startOfCompanyDay } from "@/lib/company-time";
+import { startOfCompanyDay, DAY_MS } from "@/lib/company-time";
 import { t } from "@/lib/i18n/id";
 import { DEFAULT_START_TIME, DEFAULT_GRACE_MINUTES, defaultEndTimeLabel } from "@/lib/attendance";
 import { MobileCheckForm } from "../attendance/mobile-check-form";
@@ -74,7 +74,7 @@ export async function AttendanceCheckSection({ employeeId }: { employeeId: strin
 
   const now = new Date();
   const start = startOfCompanyDay(now);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + DAY_MS);
 
   const [checkInEvent, checkOutEvent] =
     assignment.method === "MOBILE"

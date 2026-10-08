@@ -1,6 +1,7 @@
 // Pure business logic for the Contract + renewal pipeline (WF-10, LIF-08..12,
 // Data Fields Blueprint "08 Contracts"). No Prisma/Next imports — unit
 // testable with plain values, same pattern as recruitment.ts/movement.ts.
+import { DAY_MS } from "@/lib/company-time";
 import type { ContractStatus, EmploymentStatus } from "@/generated/prisma/enums";
 
 // Blueprint's own example ("PKWT/CBP/2026/019") uses a 3-digit sequence,
@@ -23,8 +24,7 @@ export function computeExpiryUrgency(
   now: Date = new Date()
 ): ExpiryUrgency {
   if (status !== "ACTIVE" || !endDate) return "NONE";
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / msPerDay);
+  const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / DAY_MS);
   if (daysRemaining < 0) return "EXPIRED";
   if (daysRemaining <= 7) return "DUE_7";
   if (daysRemaining <= 30) return "DUE_30";

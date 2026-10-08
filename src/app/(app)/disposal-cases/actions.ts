@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
 import { createDisposalCaseInternal } from "@/lib/disposal-create";
@@ -28,7 +29,7 @@ export async function createObsoleteDisposalCase(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const asset = await prisma.fixedAsset.findUnique({ where: { id: assetId } });
   if (!asset) return "Aset tidak ditemukan.";
@@ -64,7 +65,7 @@ export async function submitDisposalCaseForApproval(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
   if (!disposalCase) return "Kasus tidak ditemukan.";
@@ -131,7 +132,7 @@ export async function decideDisposalCase(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
   if (!disposalCase) return "Kasus tidak ditemukan.";
@@ -171,7 +172,7 @@ export async function executeDisposalCase(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageGaOperations(session)) return "Anda tidak memiliki akses.";
+  if (!canManageGaOperations(session)) return t("common.forbidden");
 
   const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
   if (!disposalCase) return "Kasus tidak ditemukan.";

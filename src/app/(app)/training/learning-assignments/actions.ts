@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
 import { redirect } from "next/navigation";
@@ -28,7 +29,7 @@ export async function confirmLearningAssignmentAttendance(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageLearningAssignment(session)) return "Anda tidak memiliki akses.";
+  if (!canManageLearningAssignment(session)) return t("common.forbidden");
 
   const assignment = await prisma.learningAssignment.findUnique({ where: { id: assignmentId } });
   if (!assignment) return "Penugasan tidak ditemukan.";
@@ -93,7 +94,7 @@ export async function completeLearningAssignment(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageLearningAssignment(session)) return "Anda tidak memiliki akses.";
+  if (!canManageLearningAssignment(session)) return t("common.forbidden");
 
   const assignment = await prisma.learningAssignment.findUnique({
     where: { id: assignmentId },
@@ -185,7 +186,7 @@ export async function completeLearningAssignment(
 
 export async function cancelLearningAssignment(assignmentId: string, _prevState: string | undefined): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageLearningAssignment(session)) return "Anda tidak memiliki akses.";
+  if (!canManageLearningAssignment(session)) return t("common.forbidden");
 
   const assignment = await prisma.learningAssignment.findUnique({ where: { id: assignmentId } });
   if (!assignment) return "Penugasan tidak ditemukan.";
@@ -220,7 +221,7 @@ export async function recordLearningEffectiveness(
   if (!assignment) return "Penugasan tidak ditemukan.";
 
   const isSupervisor = await isDirectManagerOfEmployee(session.user.employeeId, assignment.employeeId);
-  if (!canRecordLearningEffectiveness(session, isSupervisor)) return "Anda tidak memiliki akses.";
+  if (!canRecordLearningEffectiveness(session, isSupervisor)) return t("common.forbidden");
   if (assignment.status !== "COMPLETED" || !assignment.effectivenessRequiredSnapshot) return "Evaluasi efektivitas tidak berlaku untuk penugasan ini.";
   if (assignment.effectivenessCompletedAt) return "Evaluasi efektivitas sudah dicatat.";
 

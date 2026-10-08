@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -161,7 +162,7 @@ export async function uploadEmployeeDocumentsZip(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!isHrAdmin(session)) return "Anda tidak memiliki akses.";
+  if (!isHrAdmin(session)) return t("common.forbidden");
 
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return "Pilih berkas ZIP terlebih dahulu.";

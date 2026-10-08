@@ -2,6 +2,7 @@
 // inventory system's exports use headers like "Kode Barang" / "Nama Karyawan"
 // and dd/mm/yyyy dates, so every field accepts a few header spellings and the
 // parsers are forgiving about format but strict about meaning.
+import { WIB_OFFSET_MS } from "@/lib/company-time";
 
 export function normalizeHeader(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -83,6 +84,6 @@ export function isArchivedStatus(value: string): boolean {
 
 // Day key (company-local, WIB) used to spot a row that was imported before.
 export function dayKey(date: Date): string {
-  const shifted = new Date(date.getTime() + 7 * 60 * 60 * 1000);
+  const shifted = new Date(date.getTime() + WIB_OFFSET_MS);
   return shifted.toISOString().slice(0, 10);
 }

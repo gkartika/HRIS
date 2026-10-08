@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -9,7 +10,7 @@ import { logAudit } from "@/lib/audit";
 
 export async function createAssetLocation(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssets(session)) return t("common.forbidden");
 
   const locationName = (formData.get("locationName") as string)?.trim();
   const description = (formData.get("description") as string)?.trim() || null;
@@ -38,7 +39,7 @@ export async function toggleAssetLocation(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAssets(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAssets(session)) return t("common.forbidden");
 
   const activeFlag = formData.get("activeFlag") === "on";
   await prisma.assetLocation.update({ where: { id: locationId }, data: { activeFlag } });

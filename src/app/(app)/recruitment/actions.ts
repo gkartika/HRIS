@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { authorizeDeptHeadDecision, authorizeHrManagerDecision } from "@/lib/approval-authority";
 import { companyYear, companyToday } from "@/lib/company-time";
@@ -26,7 +27,7 @@ import {
   formatRequestNumber,
   initialRecruitmentStatus,
 } from "@/lib/recruitment";
-import { formatOnboardingCaseNumber } from "@/lib/onboarding";
+import { createOnboardingCase } from "@/lib/onboarding-create";
 import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import { validateNoKk } from "@/lib/validation/employee-fields";
@@ -46,7 +47,7 @@ export async function submitRecruitmentRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canSubmitRecruitmentRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canSubmitRecruitmentRequest(session)) return t("common.forbidden");
 
   const requestDate = formData.get("requestDate") as string;
   const reasonCode = formData.get("reasonCode") as RecruitmentReasonCode;
@@ -332,7 +333,7 @@ export async function createEmployeeFromRecruitmentRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canCreateEmployeeFromRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canCreateEmployeeFromRequest(session)) return t("common.forbidden");
 
   const request = await prisma.recruitmentRequest.findUnique({
     where: { id: requestId },
@@ -438,15 +439,7 @@ export async function createEmployeeFromRecruitmentRequest(
     // LIF-03: same automatic Onboarding Case as direct Employee creation —
     // this path must not skip it just because the Employee came from a
     // Recruitment Request.
-    const onbYear = companyYear(startDate);
-    const onbSeq = await nextSequence(`ONB-${onbYear}`, tx);
-    await tx.onboardingCase.create({
-      data: {
-        caseNumber: formatOnboardingCaseNumber(onbSeq, onbYear),
-        employeeId: employee.id,
-        plannedStartDate: startDate,
-      },
-    });
+    await createOnboardingCase(employee.id, startDate, tx);
 
     return { employee, assignment, fulfillment, newStatus };
   });

@@ -3,9 +3,9 @@
 // days they are looking at. Only the visible day columns change: Poin and
 // Jam Kerja are always the whole period, and the Excel export is always the
 // whole period. Pure, UTC-midnight date-only values like absence-cutoff.ts.
-import { formatCutoffParam, parseCutoffParam } from "@/lib/absence-cutoff";
+import { MONTH_LABELS_ID, DAY_MS } from "@/lib/company-time";
+import { parseCutoffParam } from "@/lib/absence-cutoff";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface PeriodBounds {
   start: Date;
@@ -105,9 +105,8 @@ export function sameRange(a: { from: Date; to: Date }, b: { from: Date; to: Date
 }
 
 // "5 Okt" / "5 – 11 Okt" / "28 Sep – 3 Okt" for the "Menampilkan …" line.
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 function dayMonth(date: Date): string {
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+  return `${date.getUTCDate()} ${MONTH_LABELS_ID[date.getUTCMonth()]}`;
 }
 export function formatRangeLabel(from: Date, to: Date): string {
   if (from.getTime() === to.getTime()) return dayMonth(from);

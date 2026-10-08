@@ -1,13 +1,13 @@
+import { countByStatus } from "@/lib/consumables";
+import { MONTH_LABELS_ID } from "@/lib/company-time";
 import { CONSUMABLE_STATUS_TONE } from "@/lib/status-ui";
 import Link from "next/link";
 import { getMonthlyIssued, getMonthlyReportRows, listItemsWithStock } from "@/lib/consumables-queries";
 import { t } from "@/lib/i18n/id";
 import { bucketMonthlyIssued, monthKey, monthLabel, monthRange } from "@/lib/consumables-report";
-import type { ConsumableStatusValue } from "@/lib/consumables";
 import { consumablesAccessDenied } from "../access";
 
 const MONTHS_SHOWN = 6;
-const SHORT_MONTH = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 export default async function ConsumableDashboardPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const denied = await consumablesAccessDenied();
@@ -27,8 +27,7 @@ export default async function ConsumableDashboardPage({ searchParams }: { search
   ]);
 
   const active = items.filter((i) => !i.archived);
-  const counts = { AMAN: 0, MENIPIS: 0, HABIS: 0 };
-  for (const i of active) counts[i.status] += 1;
+  const counts = countByStatus(active);
   const restock = active.filter((i) => i.status !== "AMAN").sort((a, b) => a.stock - b.stock);
 
   const maxUnits = Math.max(1, ...monthly.flatMap((b) => [b.APD, b.ATK]));
@@ -64,7 +63,7 @@ export default async function ConsumableDashboardPage({ searchParams }: { search
                   <div className="w-1/3 rounded-t bg-indigo-600" style={{ height: `${(b.APD / maxUnits) * 100}%` }} title={`APD ${b.APD}`} />
                   <div className="w-1/3 rounded-t bg-amber-400" style={{ height: `${(b.ATK / maxUnits) * 100}%` }} title={`ATK ${b.ATK}`} />
                 </div>
-                <span className="text-[10.5px] text-slate-500">{SHORT_MONTH[Number(b.key.slice(5)) - 1]}</span>
+                <span className="text-[10.5px] text-slate-500">{MONTH_LABELS_ID[Number(b.key.slice(5)) - 1]}</span>
                 <span className="text-[10.5px] text-slate-400">
                   {b.APD}/{b.ATK}
                 </span>

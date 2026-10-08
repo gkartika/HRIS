@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { createOffboardingCaseInternal } from "@/lib/offboarding-create";
 import { redirect } from "next/navigation";
@@ -86,7 +87,7 @@ export async function executeExitClearance(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canExecuteExitClearance(session)) return "Anda tidak memiliki akses.";
+  if (!canExecuteExitClearance(session)) return t("common.forbidden");
 
   const offboardingCase = await prisma.offboardingCase.findUnique({
     where: { id: caseId },
@@ -305,7 +306,7 @@ export async function confirmGaAssetClearance(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canConfirmGaAssetClearance(session)) return "Anda tidak memiliki akses.";
+  if (!canConfirmGaAssetClearance(session)) return t("common.forbidden");
 
   const offboardingCase = await prisma.offboardingCase.findUnique({ where: { id: caseId } });
   if (!offboardingCase) return "Kasus tidak ditemukan.";

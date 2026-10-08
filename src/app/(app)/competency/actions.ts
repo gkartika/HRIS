@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { activeAssignmentWhere } from "@/lib/active-assignments";
 import { revalidatePath } from "next/cache";
 import { companyYear } from "@/lib/company-time";
@@ -29,7 +30,7 @@ export async function openCompetencyCycle(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canOpenCompetencyCycle(session)) return "Anda tidak memiliki akses.";
+  if (!canOpenCompetencyCycle(session)) return t("common.forbidden");
 
   const periodLabel = (formData.get("periodLabel") as string)?.trim();
   const startDateRaw = formData.get("startDate") as string;
@@ -179,7 +180,7 @@ export async function openCompetencyCycle(
 
 export async function closeCompetencyCycle(cycleId: string, _prevState: string | undefined): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canOpenCompetencyCycle(session)) return "Anda tidak memiliki akses.";
+  if (!canOpenCompetencyCycle(session)) return t("common.forbidden");
 
   const cycle = await prisma.competencyAssessmentCycle.findUnique({ where: { id: cycleId } });
   if (!cycle) return "Siklus tidak ditemukan.";
@@ -210,7 +211,7 @@ export async function reassignCompetencyEvaluator(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canReassignCompetencyEvaluator(session)) return "Anda tidak memiliki akses.";
+  if (!canReassignCompetencyEvaluator(session)) return t("common.forbidden");
 
   const slot = formData.get("slot") as EvaluatorSlot;
   const newEmployeeId = (formData.get("newEmployeeId") as string)?.trim();
@@ -285,7 +286,7 @@ export async function submitP1Assessment(
     include: { items: true, valueItems: true },
   });
   if (!assessment) return "Penilaian tidak ditemukan.";
-  if (!canScoreAsCompetencyP1(session.user.employeeId, assessment.p1EmployeeId)) return "Anda tidak memiliki akses.";
+  if (!canScoreAsCompetencyP1(session.user.employeeId, assessment.p1EmployeeId)) return t("common.forbidden");
   if (assessment.p1SubmittedAt) return "Penilaian P1 sudah dikirim.";
 
   const itemUpdates: { id: string; actualLevel: number }[] = [];

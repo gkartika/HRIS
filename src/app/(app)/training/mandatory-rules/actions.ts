@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -11,7 +12,7 @@ import type { MandatoryTargetType } from "@/generated/prisma/enums";
 
 export async function createMandatoryTrainingRule(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageMandatoryTrainingRule(session)) return "Anda tidak memiliki akses.";
+  if (!canManageMandatoryTrainingRule(session)) return t("common.forbidden");
 
   const courseId = (formData.get("courseId") as string)?.trim();
   const targetType = formData.get("targetType") as MandatoryTargetType;
@@ -63,7 +64,7 @@ export async function applyMandatoryTrainingRuleAction(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageMandatoryTrainingRule(session)) return "Anda tidak memiliki akses.";
+  if (!canManageMandatoryTrainingRule(session)) return t("common.forbidden");
 
   const refresherReason = (formData.get("refresherReason") as string)?.trim() || null;
   const result = await applyMandatoryTrainingRule(ruleId, session.user.id, refresherReason);
@@ -84,7 +85,7 @@ export async function applyMandatoryTrainingRuleAction(
 
 export async function deactivateMandatoryTrainingRule(ruleId: string, _prevState: string | undefined): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageMandatoryTrainingRule(session)) return "Anda tidak memiliki akses.";
+  if (!canManageMandatoryTrainingRule(session)) return t("common.forbidden");
 
   await prisma.mandatoryTrainingRule.update({ where: { id: ruleId }, data: { activeFlag: false } });
 

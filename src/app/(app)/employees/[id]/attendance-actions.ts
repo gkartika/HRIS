@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -17,7 +18,7 @@ export async function setAttendanceAssignment(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceAssignment(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceAssignment(session)) return t("common.forbidden");
 
   const method = formData.get("method") as AttendanceMethod;
   const geofenceId = (formData.get("geofenceId") as string) || null;

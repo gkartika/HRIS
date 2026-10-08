@@ -1,3 +1,4 @@
+import { countByStatus } from "@/lib/consumables";
 import { StatusChip } from "@/components/status-chip";
 import { CONSUMABLE_STATUS_TONE } from "@/lib/status-ui";
 import Link from "next/link";
@@ -5,7 +6,6 @@ import { listItemsWithStock } from "@/lib/consumables-queries";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import type { ConsumableCategory } from "@/generated/prisma/enums";
-import type { ConsumableStatusValue } from "@/lib/consumables";
 import { ReceiptDialog, AdjustmentDialog } from "../stock-forms";
 import { consumablesAccessDenied } from "../access";
 
@@ -24,8 +24,7 @@ export default async function ConsumableStockPage({
   // Status is derived from the ledger, so it filters after stock is computed.
   const all = await listItemsWithStock({ includeArchived, category: cat, q });
   const items = statusFilter ? all.filter((i) => i.status === statusFilter) : all;
-  const counts = { AMAN: 0, MENIPIS: 0, HABIS: 0 };
-  for (const i of all) counts[i.status] += 1;
+  const counts = countByStatus(all);
 
   const hasFilters = !!(q || cat || statusFilter || includeArchived);
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { authorizeDeptHeadDecision, authorizeHrManagerDecision } from "@/lib/approval-authority";
 import { companyYear } from "@/lib/company-time";
@@ -315,7 +316,7 @@ export async function updateMovementHrFields(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canExecuteMovementRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canExecuteMovementRequest(session)) return t("common.forbidden");
 
   const request = await prisma.movementRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
@@ -362,7 +363,7 @@ export async function updateMovementHrFields(
 // action's pre-conditions (approval status vs. none) independently clear.
 export async function executeMovementRequest(requestId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canExecuteMovementRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canExecuteMovementRequest(session)) return t("common.forbidden");
 
   const request = await prisma.movementRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";

@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
 import { companyYear } from "@/lib/company-time";
@@ -40,7 +41,7 @@ export async function submitAbsenceRequest(
 
   const employeeId = (formData.get("employeeId") as string) || session.user.employeeId;
   if (!employeeId) return formFail(formData, "Karyawan wajib dipilih.", "employeeId");
-  if (!canSubmitAbsenceRequest(session, employeeId)) return formFail(formData, "Anda tidak memiliki akses.");
+  if (!canSubmitAbsenceRequest(session, employeeId)) return formFail(formData, t("common.forbidden"));
 
   const absenceTypeCode = formData.get("absenceType") as string;
   const startDateRaw = formData.get("startDate") as string;
@@ -148,7 +149,7 @@ export async function decideAbsenceRequestAsFirstApprover(
 
   const holderIds = await getCurrentHolderEmployeeIds(request.firstApproverPositionId);
   if (!canDecideAbsenceRequestAsFirstApprover(session.user.employeeId, holderIds)) {
-    return "Anda tidak memiliki akses.";
+    return t("common.forbidden");
   }
   if (!canDecideAbsenceRequestAsFirstApproverStatus(request.status)) {
     return "Pengajuan ini sudah tidak berada pada tahap penyetuju pertama.";
@@ -198,7 +199,7 @@ export async function decideAbsenceRequestAsSecondApprover(
 
   const holderIds = await getCurrentHolderEmployeeIds(request.secondApproverPositionId);
   if (!canDecideAbsenceRequestAsSecondApprover(session.user.employeeId, holderIds)) {
-    return "Anda tidak memiliki akses.";
+    return t("common.forbidden");
   }
   if (!canDecideAbsenceRequestAsSecondApproverStatus(request.status)) {
     return "Pengajuan ini sudah tidak berada pada tahap penyetuju kedua.";
@@ -236,7 +237,7 @@ export async function decideAbsenceRequestAsHrAdmin(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canDecideAbsenceRequestAsHrAdmin(session)) return "Anda tidak memiliki akses.";
+  if (!canDecideAbsenceRequestAsHrAdmin(session)) return t("common.forbidden");
 
   const request = await prisma.absenceRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Pengajuan tidak ditemukan.";
@@ -279,7 +280,7 @@ export async function overrideAbsenceRequest(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canOverrideAbsenceRequest(session)) return "Anda tidak memiliki akses.";
+  if (!canOverrideAbsenceRequest(session)) return t("common.forbidden");
 
   const request = await prisma.absenceRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Pengajuan tidak ditemukan.";
@@ -323,7 +324,7 @@ export async function cancelAbsenceRequest(
   const request = await prisma.absenceRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Pengajuan tidak ditemukan.";
   if (!canCancelAbsenceRequest(session, request.employeeId, request.submittedByAccountId)) {
-    return "Anda tidak memiliki akses.";
+    return t("common.forbidden");
   }
   if (!canCancelAbsenceRequestStatus(request.status)) {
     return "Pengajuan ini sudah tidak dapat dibatalkan.";

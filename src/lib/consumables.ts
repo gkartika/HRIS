@@ -1,7 +1,7 @@
 // Pure business logic for consumables (APD/ATK). No Prisma/Next imports —
 // unit testable, same pattern as assets.ts. Stock and status are never
 // stored: they are derived here from openingStock + the non-cancelled ledger.
-import { companyDateParts, companyToday, startOfCompanyDay } from "@/lib/company-time";
+import { companyDateParts, companyToday, startOfCompanyDay, WIB_OFFSET_MS } from "@/lib/company-time";
 
 export type ConsumableStatusValue = "AMAN" | "MENIPIS" | "HABIS";
 export type ConsumableCategoryValue = "APD" | "ATK";
@@ -13,6 +13,13 @@ export function stockStatus(stock: number, minStock: number): ConsumableStatusVa
   if (stock <= 0) return "HABIS";
   if (stock <= minStock) return "MENIPIS";
   return "AMAN";
+}
+
+// How many items are in each stock status (Aman / Menipis / Habis).
+export function countByStatus(items: { status: ConsumableStatusValue }[]): Record<ConsumableStatusValue, number> {
+  const counts: Record<ConsumableStatusValue, number> = { AMAN: 0, MENIPIS: 0, HABIS: 0 };
+  for (const i of items) counts[i.status] += 1;
+  return counts;
 }
 
 export function isPositiveInteger(value: number): boolean {
@@ -34,7 +41,7 @@ export function parseCompanyDateInput(raw: string, now: Date = new Date()): Date
   const today = companyToday(now);
   if (day.getTime() > today.getTime()) return "future";
   if (day.getTime() === today.getTime()) return now;
-  return new Date(day.getTime() - 7 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000);
+  return new Date(day.getTime() - WIB_OFFSET_MS + 12 * 60 * 60 * 1000);
 }
 
 // Signed ledger delta for each movement. ISSUE is stored negative, RECEIPT
@@ -57,7 +64,7 @@ export function addMonthsCompany(from: Date, months: number): Date {
   const targetMonth = targetIndex % 12; // 0-11
   const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
   const targetDay = Math.min(day, lastDayOfTargetMonth);
-  return new Date(Date.UTC(targetYear, targetMonth, targetDay) - 7 * 60 * 60 * 1000);
+  return new Date(Date.UTC(targetYear, targetMonth, targetDay) - WIB_OFFSET_MS);
 }
 
 // null when the item has no replacement period, or the person never took it.

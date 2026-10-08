@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import type { HolidayType, ShiftAssignmentType } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
@@ -28,7 +29,7 @@ export async function addCompanyHolidays(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const text = (formData.get("lines") as string) ?? "";
   const { valid, errors } = parseHolidayLines(text);
@@ -140,7 +141,7 @@ export async function addCompanyHolidays(
 // individual days via Rekonsiliasi, same as any other classification).
 export async function deleteCompanyHoliday(id: string, _prevState: string | undefined, _formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageAttendanceMasterData(session)) return "Anda tidak memiliki akses.";
+  if (!canManageAttendanceMasterData(session)) return t("common.forbidden");
 
   const holiday = await prisma.companyHoliday.findUnique({ where: { id } });
   if (!holiday) return "Tanggal tidak ditemukan.";

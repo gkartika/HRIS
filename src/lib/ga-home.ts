@@ -1,11 +1,10 @@
 // Pure helpers for the Admin GA Beranda: how long something has been waiting,
 // how urgent that makes it, and the order of the "Perlu ditindak" list. No
 // Prisma/Next imports — unit testable. Days are company (WIB) calendar days.
-import { companyToday } from "@/lib/company-time";
+import { companyToday, DAY_MS } from "@/lib/company-time";
 
 export type Severity = "rose" | "amber" | "slate";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Whole company days from `from` to `now` (0 = same day).
 export function daysSince(from: Date, now: Date = new Date()): number {

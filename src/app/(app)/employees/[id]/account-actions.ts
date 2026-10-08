@@ -1,5 +1,6 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
@@ -16,7 +17,7 @@ export async function putAccountOnHold(
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   if (!canManageAccountHold(session, hrManagerPositions.map((p) => p.positionId))) {
-    return "Anda tidak memiliki akses.";
+    return t("common.forbidden");
   }
   if (session.user.employeeId === employeeId) {
     return "Anda tidak dapat menahan akun Anda sendiri.";
@@ -53,7 +54,7 @@ export async function reactivateAccount(
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
   if (!canManageAccountHold(session, hrManagerPositions.map((p) => p.positionId))) {
-    return "Anda tidak memiliki akses.";
+    return t("common.forbidden");
   }
 
   const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { activeFlag: true } });
@@ -95,7 +96,7 @@ export async function sendAccountLink(
   _formData: FormData
 ): Promise<AccountLinkResult> {
   const session = await requireSession();
-  if (!canManageAccountAccess(session)) return { ok: false, message: "Anda tidak memiliki akses." };
+  if (!canManageAccountAccess(session)) return { ok: false, message: t("common.forbidden") };
 
   const result = await inviteEmployee(employeeId, session.user.id);
   if (!result.ok) return { ok: false, message: result.error };
@@ -114,7 +115,7 @@ const MAX_INVITES_PER_CLICK = 40;
 // well inside the server time limit; the message says how many are left.
 export async function inviteAllWithoutAccount(): Promise<{ ok: boolean; message: string }> {
   const session = await requireSession();
-  if (!canManageAccountAccess(session)) return { ok: false, message: "Anda tidak memiliki akses." };
+  if (!canManageAccountAccess(session)) return { ok: false, message: t("common.forbidden") };
 
   const candidates = await prisma.employee.findMany({
     where: { activeFlag: true, account: { is: null }, personalEmail: { not: null } },

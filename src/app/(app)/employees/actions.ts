@@ -1,15 +1,15 @@
 "use server";
 
+import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
-import { companyYear, companyToday } from "@/lib/company-time";
-import { nextSequence } from "@/lib/number-sequence";
+import { companyToday } from "@/lib/company-time";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canCreateEmployee, isHrAdmin } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { validateNoKk, validateNationalIdNumber } from "@/lib/validation/employee-fields";
-import { formatOnboardingCaseNumber } from "@/lib/onboarding";
+import { createOnboardingCase } from "@/lib/onboarding-create";
 import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import type { Gender, EmploymentStatus } from "@/generated/prisma/enums";
@@ -19,7 +19,7 @@ export async function createEmployee(
   formData: FormData
 ): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canCreateEmployee(session)) return "Anda tidak memiliki akses.";
+  if (!canCreateEmployee(session)) return t("common.forbidden");
 
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
   const gender = (formData.get("gender") as string) || null;
@@ -76,15 +76,7 @@ export async function createEmployee(
       },
     });
 
-    const year = companyYear(plannedStart);
-    const seq = await nextSequence(`ONB-${year}`, tx);
-    await tx.onboardingCase.create({
-      data: {
-        caseNumber: formatOnboardingCaseNumber(seq, year),
-        employeeId: created.id,
-        plannedStartDate: plannedStart,
-      },
-    });
+    await createOnboardingCase(created.id, plannedStart, tx);
 
     return created;
   });
@@ -117,7 +109,7 @@ export async function updateEmployee(
 ): Promise<string | undefined> {
   const session = await requireSession();
   const isSelf = session.user.employeeId === employeeId;
-  if (!isSelf && !isHrAdmin(session)) return "Anda tidak memiliki akses.";
+  if (!isSelf && !isHrAdmin(session)) return t("common.forbidden");
 
   const fullLegalName = (formData.get("fullLegalName") as string)?.trim();
   const genderRaw = (formData.get("gender") as string)?.trim().toUpperCase();

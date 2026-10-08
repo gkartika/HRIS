@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { setPasswordWithToken } from "./actions";
 import { checkPassword } from "@/lib/password";
 import { FieldError, invalidClass } from "@/components/field-error";
+import { authButtonClass, authInputClass, authLabelClass } from "@/components/auth-shell";
 
 export function SetPasswordForm({ token, email }: { token: string; email: string }) {
   const [state, formAction, isPending] = useActionState(setPasswordWithToken.bind(null, token), undefined);
@@ -12,16 +13,15 @@ export function SetPasswordForm({ token, email }: { token: string; email: string
   const check = checkPassword(password);
   const same = password.length > 0 && password === confirm;
   const ready = check.longEnough && check.hasLetterAndDigit && same;
-  const rule = (ok: boolean) => (ok ? "text-emerald-600" : "text-slate-500");
-  const input = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
+  const rule = (ok: boolean) => (ok ? "text-emerald-600" : "text-[#6a5f72]");
 
   return (
-    <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h1 className="text-lg font-medium text-slate-900">Buat kata sandi</h1>
-      <p className="mt-1 text-sm text-slate-500">Untuk akun {email}</p>
-      <form action={formAction} className="mt-6 space-y-4">
+    <div>
+      <h1 className="mt-6 text-3xl font-extrabold text-[#231a28]">Buat kata sandi</h1>
+      <p className="mt-1.5 text-[14.5px] text-[#6a5f72]">Untuk akun {email}</p>
+      <form action={formAction} className="mt-5 space-y-4">
         <div>
-          <label htmlFor="password" className="mb-1 block text-xs text-slate-500">
+          <label htmlFor="password" className={authLabelClass}>
             Kata sandi baru
           </label>
           <input
@@ -32,7 +32,7 @@ export function SetPasswordForm({ token, email }: { token: string; email: string
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className={`${input} ${invalidClass(state, "password")}`}
+            className={`${authInputClass} ${invalidClass(state, "password")}`}
           />
           <FieldError state={state} name="password" />
           <ul className="mt-2 space-y-0.5 text-xs">
@@ -42,7 +42,7 @@ export function SetPasswordForm({ token, email }: { token: string; email: string
           </ul>
         </div>
         <div>
-          <label htmlFor="confirm" className="mb-1 block text-xs text-slate-500">
+          <label htmlFor="confirm" className={authLabelClass}>
             Ulangi kata sandi
           </label>
           <input
@@ -53,20 +53,16 @@ export function SetPasswordForm({ token, email }: { token: string; email: string
             autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            className={`${input} ${invalidClass(state, "confirm")}`}
+            className={`${authInputClass} ${invalidClass(state, "confirm")}`}
           />
           <FieldError state={state} name="confirm" />
         </div>
         {state && !state.field && (
-          <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          <p role="alert" className="rounded-[10px] border border-[#f3c1c6] bg-[#fdecee] px-3 py-2.5 text-[13.5px] text-[#a1252f]">
             {state.error}
           </p>
         )}
-        <button
-          type="submit"
-          disabled={isPending || !ready}
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
+        <button type="submit" disabled={isPending || !ready} className={`${authButtonClass} mt-2`}>
           {isPending ? "Menyimpan..." : "Simpan dan masuk"}
         </button>
       </form>

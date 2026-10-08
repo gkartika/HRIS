@@ -17,5 +17,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // Public files the sign-in page and the installable app need before anyone is
+  // logged in (logo, icons, manifest, service worker, offline page).
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|sw.js|offline.html|logo-cbp|pwa/).*)",
+  ],
 };

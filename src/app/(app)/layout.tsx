@@ -18,6 +18,7 @@ import { getActiveAssignmentsOf } from "@/lib/active-assignments";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
+import { InstallAppButton } from "@/components/install-app-button";
 import { AppShell } from "./app-shell";
 import { SidebarNav, type SidebarNavGroup, type SidebarNavItem } from "./sidebar-nav";
 
@@ -294,6 +295,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <p className="text-[11px] text-white/50">{t("auth.signedInAs")}</p>
           <p className="text-sm font-bold text-white">{session.user.name}</p>
           <p className="text-xs text-white/65">{roleLabels}</p>
+          <InstallAppButton tone="dark" />
           <LogoutButton />
         </div>
         </>

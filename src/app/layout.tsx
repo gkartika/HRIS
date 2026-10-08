@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { PwaRegister } from "@/components/pwa-register";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +16,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Aplikasi SDM — PT Cahaya Bukit Perunggu",
   description: "Manajemen Karyawan, Pengembangan Organisasi, dan Urusan Umum",
+  // Icons come from src/app/favicon.ico, icon.png and apple-icon.png (company logo mark).
+  appleWebApp: { title: "Aplikasi SDM" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#552c59",
 };
 
 export default function RootLayout({
@@ -27,7 +34,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }

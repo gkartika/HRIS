@@ -22,8 +22,15 @@ export function ApproverRowForm({
   const action = setAbsenceApproverConfig.bind(null, orgUnitId);
   const [error, formAction, isPending] = useActionState(action, undefined);
 
+  // After saving, React resets the form to the value it was first drawn with,
+  // and a <select> never picks up a new defaultValue on its own. Keying on the
+  // saved value redraws the form so it shows what is actually stored.
   return (
-    <form action={formAction} className="flex flex-wrap items-center gap-2">
+    <form
+      key={`${currentApproverPositionId ?? ""}|${currentRequiresSecondStage}`}
+      action={formAction}
+      className="flex flex-wrap items-center gap-2"
+    >
       <select
         name="approverPositionId"
         defaultValue={currentApproverPositionId ?? ""}

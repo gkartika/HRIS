@@ -39,7 +39,14 @@ export function GridEditForm({
         {employeeName} — {dateLabel}
       </p>
       <p className="mt-0.5 text-xs text-slate-500">Tetapkan atau timpa klasifikasi hari ini.</p>
-      <form action={formAction} className="mt-3 flex flex-wrap items-end gap-3">
+      {/* Keyed on the cell and its saved values: a <select> keeps its first
+          defaultValue, so without this the panel could show the previous cell's
+          or the pre-save choice. */}
+      <form
+        key={`${employeeId}|${dateParam}|${currentShiftType ?? ""}|${currentAbsenceTypeCode ?? ""}|${currentPresentOverride}`}
+        action={formAction}
+        className="mt-3 flex flex-wrap items-end gap-3"
+      >
         <input type="hidden" name="employeeId" value={employeeId} />
         <input type="hidden" name="date" value={dateParam} />
         <div>

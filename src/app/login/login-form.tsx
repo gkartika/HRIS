@@ -1,15 +1,21 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { loginAction } from "./actions";
 import Link from "next/link";
 import { t } from "@/lib/i18n/id";
+import { clearAppBadge } from "@/lib/app-badge";
 import { InstallAppButton } from "@/components/install-app-button";
 import { authButtonClass, authInputClass, authLabelClass, authLinkClass } from "@/components/auth-shell";
 
 export function LoginForm({ notice }: { notice?: string }) {
   const [error, formAction, isPending] = useActionState(loginAction, undefined);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Nobody is signed in here, so no approvals can be waiting for them.
+  useEffect(() => {
+    void clearAppBadge();
+  }, []);
 
   return (
     <div>

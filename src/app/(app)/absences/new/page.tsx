@@ -4,6 +4,7 @@ import { isHrAdmin } from "@/lib/permissions";
 import { resolveAnnualQuotaByType, usedDaysThisYearByType } from "@/lib/absence-quota";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { OPEN_ABSENCE_STATUSES } from "@/lib/absence";
 import { SubmitAbsenceForm } from "./submit-absence-form";
 
 export default async function NewAbsenceRequestPage() {
@@ -34,6 +35,17 @@ export default async function NewAbsenceRequestPage() {
   // showing "your" quota wouldn't make sense until one is chosen, which is
   // out of scope here (the request detail page is the real decision-time
   // quota surface, see absences/[id]/page.tsx).
+  // Types this person already has an undecided request for; those cannot be
+  // submitted again. (HR Admin picks any employee, so the server checks too.)
+  const openRequests =
+    !isHrAdminUser && session.user.employeeId
+      ? await prisma.absenceRequest.findMany({
+          where: { employeeId: session.user.employeeId, status: { in: OPEN_ABSENCE_STATUSES } },
+          select: { absenceTypeCode: true, requestNumber: true },
+        })
+      : [];
+  const openTypes = openRequests.map((r) => ({ code: r.absenceTypeCode, requestNumber: r.requestNumber }));
+
   let quotaByType: { code: string; quota: number | null; usedDays: number }[] = [];
   if (!isHrAdminUser && session.user.employeeId) {
     const employeeId = session.user.employeeId;
@@ -61,6 +73,7 @@ export default async function NewAbsenceRequestPage() {
           }
           absenceTypes={absenceTypes}
           quotaByType={quotaByType}
+          openTypes={openTypes}
         />
       </div>
     </div>

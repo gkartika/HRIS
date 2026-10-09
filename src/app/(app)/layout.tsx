@@ -19,6 +19,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
 import { InstallAppButton } from "@/components/install-app-button";
+import { AppBadgeSync } from "@/components/app-badge-sync";
 import { AppShell } from "./app-shell";
 import { SidebarNav, type SidebarNavGroup, type SidebarNavItem } from "./sidebar-nav";
 
@@ -278,6 +279,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ].filter((g) => g.items.length > 0);
 
   // Every account can change its own password.
+  bottomItems.push({ href: "/notifications", label: "Notifikasi", icon: "Bell" });
   bottomItems.push({ href: "/change-password", label: "Ganti Kata Sandi", icon: "ShieldCheck" });
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
 
@@ -301,6 +303,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </>
       }
     >
+      <AppBadgeSync />
       {children}
     </AppShell>
   );

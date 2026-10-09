@@ -14,6 +14,17 @@ export function doDateRangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd
   return aStart.getTime() <= bEnd.getTime() && bStart.getTime() <= aEnd.getTime();
 }
 
+// Requests that have not been decided yet. An employee may have only one of
+// these per absence type at a time (a different type is still allowed).
+export const OPEN_ABSENCE_STATUSES: AbsenceStatus[] = ["SUBMITTED", "PENDING_SECOND_APPROVER", "PENDING_HR_ADMIN"];
+
+export function findOpenRequestOfType<T extends { absenceTypeCode: string; status: AbsenceStatus }>(
+  requests: T[],
+  absenceTypeCode: string
+): T | undefined {
+  return requests.find((r) => r.absenceTypeCode === absenceTypeCode && OPEN_ABSENCE_STATUSES.includes(r.status));
+}
+
 // Inclusive day count — e.g. Monday to Wednesday is 3 days, not 2.
 export function absenceDayCount(startDate: Date, endDate: Date): number {
   const start = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());

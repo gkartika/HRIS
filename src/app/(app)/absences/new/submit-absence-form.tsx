@@ -17,6 +17,11 @@ export interface AbsenceTypeOption {
   label: string;
 }
 
+export interface OpenAbsenceType {
+  code: string;
+  requestNumber: string;
+}
+
 export interface AbsenceTypeQuota {
   code: string;
   quota: number | null;
@@ -36,14 +41,19 @@ export function SubmitAbsenceForm({
   employees,
   absenceTypes,
   quotaByType,
+  openTypes = [],
 }: {
   employeeId?: string;
   employees?: EmployeeOption[];
   absenceTypes: AbsenceTypeOption[];
   quotaByType: AbsenceTypeQuota[];
+  openTypes?: OpenAbsenceType[];
 }) {
   const [state, formAction, isPending] = useActionState(submitAbsenceRequest, undefined);
-  const [selectedType, setSelectedType] = useState(absenceTypes[0]?.code ?? "");
+  const openByType = new Map(openTypes.map((o) => [o.code, o.requestNumber]));
+  const [selectedType, setSelectedType] = useState(
+    (absenceTypes.find((tp) => !openByType.has(tp.code)) ?? absenceTypes[0])?.code ?? ""
+  );
   const selectedQuota = quotaByType.find((q) => q.code === selectedType);
 
   return (
@@ -81,11 +91,13 @@ export function SubmitAbsenceForm({
             className={`rounded-lg border border-slate-200 px-3 py-2 text-sm ${invalidClass(state, "absenceType")}`}
           >
             {absenceTypes.map((tp) => (
-              <option key={tp.code} value={tp.code}>
+              <option key={tp.code} value={tp.code} disabled={openByType.has(tp.code)}>
                 {tp.label}
+                {openByType.has(tp.code) ? " (masih ada pengajuan terbuka)" : ""}
               </option>
             ))}
           </select>
+          <FieldError state={state} name="absenceType" />
           {selectedQuota?.quota != null && (
             <div className="mt-2">
               <span

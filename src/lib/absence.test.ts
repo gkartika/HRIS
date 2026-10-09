@@ -10,6 +10,7 @@ import {
   canHrOverrideAbsenceRequestStatus,
   remainingEntitlementDays,
   scheduledDaysInRange,
+  findOpenRequestOfType,
 } from "./absence";
 
 describe("formatAbsenceRequestNumber", () => {
@@ -114,5 +115,26 @@ describe("scheduledDaysInRange (leave counts only working days)", () => {
 
   it("a single working day counts as one", () => {
     expect(scheduledDaysInRange(isMonToFri, "e1", d("2026-10-12"), d("2026-10-12")).length).toBe(1);
+  });
+});
+
+describe("findOpenRequestOfType (one undecided request per type)", () => {
+  const cuti = (status: "SUBMITTED" | "PENDING_SECOND_APPROVER" | "PENDING_HR_ADMIN" | "APPROVED" | "REJECTED" | "CANCELLED") => ({
+    absenceTypeCode: "CUTI",
+    status,
+  });
+
+  it("finds an undecided request of the same type at every pending stage", () => {
+    expect(findOpenRequestOfType([cuti("SUBMITTED")], "CUTI")).toBeDefined();
+    expect(findOpenRequestOfType([cuti("PENDING_SECOND_APPROVER")], "CUTI")).toBeDefined();
+    expect(findOpenRequestOfType([cuti("PENDING_HR_ADMIN")], "CUTI")).toBeDefined();
+  });
+
+  it("does not block once the request is decided or cancelled", () => {
+    expect(findOpenRequestOfType([cuti("APPROVED"), cuti("REJECTED"), cuti("CANCELLED")], "CUTI")).toBeUndefined();
+  });
+
+  it("does not block a different type", () => {
+    expect(findOpenRequestOfType([cuti("SUBMITTED")], "SAKIT")).toBeUndefined();
   });
 });

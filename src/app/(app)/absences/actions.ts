@@ -24,6 +24,7 @@ import {
   canDecideAbsenceRequestAsHrAdminStatus,
   canHrOverrideAbsenceRequestStatus,
   canCancelAbsenceRequestStatus,
+  findOpenRequestOfType,
 } from "@/lib/absence";
 import { resolveAbsenceApprovalChain } from "@/lib/absence-routing";
 import { getCurrentHolderEmployeeIds } from "@/lib/position-holder";
@@ -67,8 +68,16 @@ export async function submitAbsenceRequest(
 
   const overlapping = await prisma.absenceRequest.findMany({
     where: { employeeId, status: { in: ["SUBMITTED", "PENDING_SECOND_APPROVER", "PENDING_HR_ADMIN", "APPROVED"] } },
-    select: { startDate: true, endDate: true, requestNumber: true },
+    select: { startDate: true, endDate: true, requestNumber: true, absenceTypeCode: true, status: true },
   });
+  const open = findOpenRequestOfType(overlapping, absenceTypeCode);
+  if (open) {
+    return formFail(
+      formData,
+      `Masih ada pengajuan ${typeConfig.label} (${open.requestNumber}) yang belum diputuskan. Tunggu sampai diputuskan atau batalkan dulu; jenis absensi lain tetap bisa diajukan.`,
+      "absenceType"
+    );
+  }
   const overlap = overlapping.find((o) => doDateRangesOverlap(startDate, endDate, o.startDate, o.endDate));
   if (overlap) return formFail(formData, `Rentang tanggal ini tumpang tindih dengan pengajuan ${overlap.requestNumber} yang masih berjalan.`);
 

@@ -845,6 +845,10 @@ model Account {
   failedLoginCount      Int           @default(0)
   passwordResetRequired Boolean       @default(false)
   accountDisabledAt     DateTime?
+  // Where this person wants the number of waiting approvals shown (Notifikasi page).
+  notifyIconBadge       Boolean       @default(true)
+  notifyMenuBadge       Boolean       @default(true)
+  notifyTabTitle        Boolean       @default(true)
   roles                 AccountRole[]
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt

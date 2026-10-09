@@ -2,7 +2,7 @@
 // friendly "no connection" page when a page cannot be loaded. It never stores
 // pages, API responses or employee data, so nothing sensitive is kept on the
 // device and every screen always comes live from the server.
-const CACHE = "hc-offline-v1";
+const CACHE = "hc-offline-v2";
 const OFFLINE_URL = "/offline.html";
 const OFFLINE_ASSETS = [OFFLINE_URL, "/logo-cbp.png"];
 
@@ -35,4 +35,25 @@ self.addEventListener("fetch", (event) => {
   if (pathname === "/logo-cbp.png") {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
   }
+});
+
+// Keeps the number on the app icon right even while the app is closed. The
+// browser runs this now and then (installed apps only); the count itself is
+// asked from the server, so nothing about the approvals is stored here.
+async function refreshBadge() {
+  try {
+    const res = await fetch("/api/pending-count", { cache: "no-store", credentials: "same-origin" });
+    if (!res.ok) return self.navigator.clearAppBadge && (await self.navigator.clearAppBadge());
+    const { count, prefs } = await res.json();
+    // Respect the person's own switch for the number on the icon.
+    if (prefs && prefs.icon === false) return self.navigator.clearAppBadge && (await self.navigator.clearAppBadge());
+    if (count > 0 && self.navigator.setAppBadge) await self.navigator.setAppBadge(count);
+    else if (self.navigator.clearAppBadge) await self.navigator.clearAppBadge();
+  } catch {
+    // Offline: leave the number as it was.
+  }
+}
+
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "hc-pending-approvals") event.waitUntil(refreshBadge());
 });

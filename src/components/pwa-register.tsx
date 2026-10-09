@@ -10,7 +10,17 @@ startInstallListener();
 export function PwaRegister() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .then(async (registration) => {
+        // Ask the browser to refresh the number on the app icon about twice a day
+        // while the app is closed (installed apps only; others refuse quietly).
+        const periodic = (registration as ServiceWorkerRegistration & {
+          periodicSync?: { register: (tag: string, options: { minInterval: number }) => Promise<void> };
+        }).periodicSync;
+        await periodic?.register("hc-pending-approvals", { minInterval: 12 * 60 * 60 * 1000 }).catch(() => {});
+      })
+      .catch(() => {});
   }, []);
   return null;
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bell,
   ChevronRight,
   LayoutDashboard,
   Users,
@@ -31,6 +32,8 @@ import {
   Boxes,
   type LucideIcon,
 } from "lucide-react";
+import { getPendingState, getServerPendingState, subscribePending } from "@/lib/pending-count-store";
+import { countLabel } from "@/lib/notification-prefs";
 
 // Server Components can't pass a component/function reference (the icon
 // itself) as a prop to a Client Component — only serializable data crosses
@@ -61,6 +64,7 @@ const ICONS: Record<string, LucideIcon> = {
   Trash2,
   TrendingDown,
   Boxes,
+  Bell,
 };
 
 export interface SidebarNavItem {
@@ -93,6 +97,7 @@ export function SidebarNav({
   bottomItems: SidebarNavItem[];
 }) {
   const pathname = usePathname();
+  const pending = useSyncExternalStore(subscribePending, getPendingState, getServerPendingState);
 
   const groupContainingActive = groups.find((g) => g.items.some((it) => pathname.startsWith(it.href)));
   const [openGroup, setOpenGroup] = useState<string | null>(groupContainingActive?.key ?? groups[0]?.key ?? null);
@@ -112,6 +117,14 @@ export function SidebarNav({
           >
             <Icon size={17} />
             {item.label}
+            {item.href === "/dashboard" && pending.menu && pending.count > 0 && (
+              <span
+                className="ml-auto min-w-5 rounded-full bg-rose-600 px-1.5 text-center text-[11px] font-bold leading-5 text-white"
+                aria-label={`${pending.count} persetujuan menunggu`}
+              >
+                {countLabel(pending.count)}
+              </span>
+            )}
           </Link>
         );
       })}

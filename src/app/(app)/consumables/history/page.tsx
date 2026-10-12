@@ -72,7 +72,7 @@ export default async function ConsumableHistoryPage({
             type="search"
             name="q"
             defaultValue={query}
-            placeholder={tab.type === "ISSUE" ? "Cari nama pengambil atau barang" : "Cari barang"}
+            placeholder={tab.type === "ISSUE" ? "Cari nama, NIP atau departemen pengambil, atau barang" : "Cari barang"}
             className="w-64 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs"
           />
           <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs">

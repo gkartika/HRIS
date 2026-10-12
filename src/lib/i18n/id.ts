@@ -251,6 +251,9 @@ export const strings = {
     DEVELOPMENT: "Penyesuaian perkembangan PT CBP",
   },
   shiftCode: {
+    SHIFT: "Shift",
+    NON_SHIFT: "Non Shift",
+    // Requests made before the field became "Shift" / "Non Shift".
     SHIFT_1: "Shift 1",
     SHIFT_2: "Shift 2",
     SHIFT_3: "Shift 3",

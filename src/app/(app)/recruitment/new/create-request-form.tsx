@@ -121,9 +121,12 @@ export function CreateRequestForm({
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.shiftCode")}</label>
           <select name="shiftCode" required defaultValue={initial?.shiftCode ?? ""} className={FIELD}>
             <option value="">— Pilih —</option>
-            <option value="SHIFT_1">{t("shiftCode.SHIFT_1")}</option>
-            <option value="SHIFT_2">{t("shiftCode.SHIFT_2")}</option>
-            <option value="SHIFT_3">{t("shiftCode.SHIFT_3")}</option>
+            <option value="SHIFT">{t("shiftCode.SHIFT")}</option>
+            <option value="NON_SHIFT">{t("shiftCode.NON_SHIFT")}</option>
+            {/* A request made before keeps the value it has when it is edited. */}
+            {initial?.shiftCode && initial.shiftCode !== "SHIFT" && initial.shiftCode !== "NON_SHIFT" && (
+              <option value={initial.shiftCode}>{t(`shiftCode.${initial.shiftCode}`)}</option>
+            )}
           </select>
         </div>
         <div>

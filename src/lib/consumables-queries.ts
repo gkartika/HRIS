@@ -79,6 +79,26 @@ export async function listItemsWithStock(opts: {
   });
 }
 
+// Barang Keluar: who took it. Every word typed must appear somewhere in the
+// taker's name as saved on the transaction, the employee's current name, their
+// NIP or the department it was issued to, so "santoso budi" finds "BUDI SANTOSO"
+// and a part of the NIP or department works too.
+function takerMatch(query: string): Prisma.ConsumableTransactionWhereInput[] {
+  const words = query.split(/\s+/).filter(Boolean);
+  return [
+    {
+      AND: words.map((word) => ({
+        OR: [
+          { recipientNameSnapshot: { contains: word, mode: "insensitive" as const } },
+          { departmentNameSnapshot: { contains: word, mode: "insensitive" as const } },
+          { employee: { fullLegalName: { contains: word, mode: "insensitive" as const } } },
+          { employee: { employeeNumber: { contains: word, mode: "insensitive" as const } } },
+        ],
+      })),
+    },
+  ];
+}
+
 // One filter for the Riwayat screen and its Excel export, so the export always
 // contains exactly the rows on screen. Barang Keluar searches the taker or the
 // item; Masuk/Penyesuaian have no taker, so they search the item only.
@@ -96,8 +116,7 @@ export function buildHistoryWhere(
       { item: { itemName: { contains: query, mode: "insensitive" } } },
       { item: { itemCode: { contains: query, mode: "insensitive" } } },
     ];
-    where.OR =
-      type === "ISSUE" ? [{ recipientNameSnapshot: { contains: query, mode: "insensitive" } }, ...itemMatch] : itemMatch;
+    where.OR = type === "ISSUE" ? [...takerMatch(query), ...itemMatch] : itemMatch;
   }
   return where;
 }

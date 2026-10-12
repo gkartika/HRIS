@@ -216,10 +216,14 @@ enum RecruitmentReasonCode {
 // Which shift the vacancy works — Shift 1/2/3 only. There is deliberately no
 // "non-shift" option here (attendance's own weekly "Libur" is a different
 // concept, see ShiftAssignmentType).
+// SHIFT and NON_SHIFT are what a new recruitment request offers (text info only);
+// SHIFT_1/2/3 stay for requests made before.
 enum ShiftCode {
   SHIFT_1
   SHIFT_2
   SHIFT_3
+  SHIFT
+  NON_SHIFT
 }
 
 enum EducationRequirementCode {

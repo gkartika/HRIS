@@ -119,3 +119,9 @@ export function suggestNextItemCode(category: ConsumableCategoryValue, existingC
   }
   return `${prefix}${String(max + 1).padStart(3, "0")}`;
 }
+
+// The words of a name search. Dots count as spaces, so "M Yusuf" and "yusuf m"
+// both find "M.YUSUF EFENDI"; the search then needs every word, in any order.
+export function nameSearchWords(query: string): string[] {
+  return query.split(/[\s.]+/).filter(Boolean);
+}

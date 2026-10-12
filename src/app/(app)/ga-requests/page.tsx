@@ -51,6 +51,7 @@ export default async function GaRequestsPage({
 }) {
   const session = await requireSession();
   const isGaAdminUser = canManageGaOperations(session);
+  const canSubmit = canSubmitGaRequest(session); // needs an employee-linked account
 
   if (!isGaAdminUser && !canSubmitGaRequest(session)) {
     return <AccessDenied />;
@@ -94,9 +95,11 @@ export default async function GaRequestsPage({
               Ekspor
             </a>
           )}
-          <Link href="/ga-requests/new" className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-            Buat Permintaan Baru
-          </Link>
+          {canSubmit && (
+            <Link href="/ga-requests/new" className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+              Buat Permintaan Baru
+            </Link>
+          )}
         </div>
       </div>
 
@@ -136,7 +139,7 @@ export default async function GaRequestsPage({
       </form>
 
       {requests.length === 0 ? (
-        <EmptyState message="Belum ada permintaan." action={{ href: "/ga-requests/new", label: "Buat Permintaan" }} />
+        <EmptyState message="Belum ada permintaan." action={canSubmit ? { href: "/ga-requests/new", label: "Buat Permintaan" } : undefined} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">

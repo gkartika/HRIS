@@ -6,6 +6,7 @@ import {
   cancelWouldGoNegative,
   evaluateIssueWarnings,
   issueDelta,
+  nameSearchWords,
   nextEligibleDate,
   parseCompanyDateInput,
   stockStatus,
@@ -155,5 +156,16 @@ describe("countByStatus", () => {
   it("counts each stock status and zero-fills the rest", () => {
     expect(countByStatus([{ status: "AMAN" }, { status: "HABIS" }, { status: "HABIS" }])).toEqual({ AMAN: 1, MENIPIS: 0, HABIS: 2 });
     expect(countByStatus([])).toEqual({ AMAN: 0, MENIPIS: 0, HABIS: 0 });
+  });
+});
+
+describe('nameSearchWords', () => {
+  it('splits on spaces and dots, in any order, and drops empties', () => {
+    expect(nameSearchWords('M Yusuf')).toEqual(['M', 'Yusuf']);
+    expect(nameSearchWords('  yusuf   m ')).toEqual(['yusuf', 'm']);
+    expect(nameSearchWords('M.YUSUF EFENDI')).toEqual(['M', 'YUSUF', 'EFENDI']);
+    expect(nameSearchWords('Moh.Nudin')).toEqual(['Moh', 'Nudin']);
+    expect(nameSearchWords('CBP-0080')).toEqual(['CBP-0080']);
+    expect(nameSearchWords('  ')).toEqual([]);
   });
 });

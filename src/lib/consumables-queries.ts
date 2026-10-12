@@ -4,7 +4,7 @@ import { activeAssignmentWhere } from "@/lib/active-assignments";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ConsumableCategory, ConsumableTxType } from "@/generated/prisma/enums";
-import { stockStatus, type ConsumableStatusValue } from "@/lib/consumables";
+import { nameSearchWords, stockStatus, type ConsumableStatusValue } from "@/lib/consumables";
 import { resolveOrgUnitAncestorChain } from "@/lib/level3-scope";
 import { buildMonthlyReportFromSums, bucketFromAggregates, type MonthlyIssueBucket, type MonthlyReportRow } from "@/lib/consumables-report";
 
@@ -84,7 +84,7 @@ export async function listItemsWithStock(opts: {
 // NIP or the department it was issued to, so "santoso budi" finds "BUDI SANTOSO"
 // and a part of the NIP or department works too.
 function takerMatch(query: string): Prisma.ConsumableTransactionWhereInput[] {
-  const words = query.split(/\s+/).filter(Boolean);
+  const words = nameSearchWords(query);
   return [
     {
       AND: words.map((word) => ({

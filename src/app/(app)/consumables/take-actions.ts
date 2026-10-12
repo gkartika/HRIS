@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageConsumables } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { evaluateIssueWarnings, isPositiveInteger, issueDelta, parseCompanyDateInput } from "@/lib/consumables";
+import { evaluateIssueWarnings, isPositiveInteger, nameSearchWords, issueDelta, parseCompanyDateInput } from "@/lib/consumables";
 import { getEmployeeOrgInfo, getLastIssueDates, getMovementTotals, stockFromTotals } from "@/lib/consumables-queries";
 
 export interface EmployeeSearchResult {
@@ -19,20 +19,24 @@ export interface EmployeeSearchResult {
 }
 
 // Type-ahead for the take screen: active employees only, matched on name or
-// employee number. GA Admin only, like every consumables read.
+// employee number (every typed word, any order). GA Admin only, like every consumables read.
 export async function searchConsumableEmployees(query: string): Promise<EmployeeSearchResult[]> {
   const session = await requireSession();
   if (!canManageConsumables(session)) return [];
-  const q = query.trim();
-  if (q.length < 2) return [];
+  if (query.trim().length < 2) return [];
+  // Every typed word must appear in the name or NIP, in any order, and dots
+  // count as spaces: "yusuf m" and "M Yusuf" both find "M.YUSUF EFENDI".
+  const words = nameSearchWords(query);
 
   const employees = await prisma.employee.findMany({
     where: {
       activeFlag: true,
-      OR: [
-        { fullLegalName: { contains: q, mode: "insensitive" } },
-        { employeeNumber: { contains: q, mode: "insensitive" } },
-      ],
+      AND: words.map((word) => ({
+        OR: [
+          { fullLegalName: { contains: word, mode: "insensitive" as const } },
+          { employeeNumber: { contains: word, mode: "insensitive" as const } },
+        ],
+      })),
     },
     orderBy: { fullLegalName: "asc" },
     take: 12,

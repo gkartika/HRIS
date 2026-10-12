@@ -40,6 +40,8 @@ export function TakeForm({ items, departments }: { items: TakeItem[]; department
   const [employee, setEmployee] = useState<EmployeeSearchResult | null>(null);
   const [empQuery, setEmpQuery] = useState("");
   const [empResults, setEmpResults] = useState<EmployeeSearchResult[]>([]);
+  const [empSearched, setEmpSearched] = useState(false); // the last typed query has been answered
+  const [empSearchFailed, setEmpSearchFailed] = useState(false);
   const [lastIssues, setLastIssues] = useState<Record<string, string>>({});
   const [deptId, setDeptId] = useState("");
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -58,6 +60,8 @@ export function TakeForm({ items, departments }: { items: TakeItem[]; department
 
   function onEmpQueryChange(value: string) {
     setEmpQuery(value);
+    setEmpSearched(false);
+    setEmpSearchFailed(false);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (value.trim().length < 2) {
       setEmpResults([]);
@@ -65,8 +69,14 @@ export function TakeForm({ items, departments }: { items: TakeItem[]; department
     }
     const seq = ++searchSeq.current;
     searchTimer.current = setTimeout(async () => {
-      const results = await searchConsumableEmployees(value);
-      if (seq === searchSeq.current) setEmpResults(results);
+      try {
+        const results = await searchConsumableEmployees(value);
+        if (seq !== searchSeq.current) return;
+        setEmpResults(results);
+        setEmpSearched(true);
+      } catch {
+        if (seq === searchSeq.current) setEmpSearchFailed(true);
+      }
     }, 250);
   }
 
@@ -227,7 +237,7 @@ export function TakeForm({ items, departments }: { items: TakeItem[]; department
               ) : (
                 <div className="relative">
                   <label className={LABEL}>Cari nama atau NIP karyawan</label>
-                  <input value={empQuery} onChange={(e) => onEmpQueryChange(e.target.value)} placeholder="mis. Rindi" className={INPUT} />
+                  <input value={empQuery} onChange={(e) => onEmpQueryChange(e.target.value)} placeholder="mis. Rindi, atau M Yusuf, atau NIP" className={INPUT} />
                   {empResults.length > 0 && (
                     <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
                       {empResults.map((e) => (
@@ -242,8 +252,11 @@ export function TakeForm({ items, departments }: { items: TakeItem[]; department
                       ))}
                     </ul>
                   )}
-                  {empQuery.trim().length >= 2 && empResults.length === 0 && (
-                    <p className="mt-1 text-[11.5px] text-slate-400">Tidak ada karyawan aktif yang cocok.</p>
+                  {empSearchFailed ? (
+                    <p className="mt-1 text-[11.5px] text-rose-600">Pencarian gagal. Muat ulang halaman lalu coba lagi.</p>
+                  ) : (
+                    empSearched &&
+                    empResults.length === 0 && <p className="mt-1 text-[11.5px] text-slate-400">Tidak ada karyawan aktif yang cocok.</p>
                   )}
                 </div>
               )}

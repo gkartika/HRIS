@@ -6,6 +6,15 @@ import { prisma } from "@/lib/db";
 import { resolveCutoffPeriod, previousCutoffPeriod, nextCutoffPeriod, formatCutoffParam, parseCutoffParam } from "@/lib/absence-cutoff";
 import { getUnresolvedDays, getAttendanceNotices } from "@/lib/attendance-reconciliation-queue";
 import { ClassifyRowForm } from "./classify-row-form";
+import { formatMinutesAsHours } from "@/lib/attendance-hours";
+import type { AutoDayVerdict } from "@/lib/attendance-auto-day";
+
+// What the automatic late / out-of-location rule made of a day, for the chip next to it.
+function verdictChip(v: AutoDayVerdict): { label: string; tone: string } {
+  if (v.decided) return { label: "Sudah ditentukan Admin SDM", tone: "bg-slate-100 text-slate-600" };
+  if (v.kind === "FULL") return { label: "Dihitung hari penuh (otomatis)", tone: "bg-emerald-100 text-emerald-800" };
+  return { label: "Setengah Hari (otomatis)", tone: "bg-amber-100 text-amber-800" };
+}
 
 function formatDayLabel(date: Date): string {
   return new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(date);
@@ -145,7 +154,7 @@ export default async function AttendanceReconciliationPage({
       <div className="mt-5 rounded-xl border border-slate-200 bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-900">Catatan Terlambat &amp; Di Luar Lokasi</p>
-          <p className="text-xs text-slate-400">Informasi saja — sudah lengkap check-in/check-out, tidak perlu diklasifikasikan</p>
+          <p className="text-xs text-slate-400">Ditentukan otomatis saat check-in: terlambat kurang dari separuh jadwal tetap hari penuh, terlambat separuh jadwal atau lebih (4 jam untuk jadwal 8 jam) menjadi Setengah Hari. Di luar lokasi hanya dicatat</p>
         </div>
         {attendanceNotices.length === 0 ? (
           <p className="text-sm text-slate-400">Tidak ada catatan untuk periode ini.</p>
@@ -163,6 +172,11 @@ export default async function AttendanceReconciliationPage({
                     Check-in <b className="text-slate-900">{n.checkInTime ?? "—"}</b> &middot; Check-out{" "}
                     <b className="text-slate-900">{n.checkOutTime ?? "—"}</b>
                   </span>
+                  {n.verdict.late && (
+                    <span className="text-slate-400">
+                      Terlambat {formatMinutesAsHours(n.verdict.lateMinutes)} dari jam mulai (Setengah Hari mulai {formatMinutesAsHours(n.verdict.halfDayAfterMinutes)})
+                    </span>
+                  )}
                   {n.locationNote && <span className="text-slate-400">{n.locationNote}</span>}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -176,6 +190,9 @@ export default async function AttendanceReconciliationPage({
                       ● Di Luar Lokasi
                     </span>
                   )}
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${verdictChip(n.verdict).tone}`}>
+                    {verdictChip(n.verdict).label}
+                  </span>
                 </div>
                 <div className="min-w-[200px] flex-grow rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
                   <span className="text-slate-400">Alasan: </span>

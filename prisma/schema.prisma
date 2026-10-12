@@ -798,6 +798,16 @@ model ShiftAssignment {
 // A missing (shiftType, dayOfWeek) row reads as 0 minutes (day off) —
 // only real working days need a row, same "absence of a row is the
 // default" convention as ShiftAssignment/DEFAULT_SHIFT_TYPE.
+// When each shift starts and the grace a check-in gets before it counts as
+// late. One row per shift; a null startTime means "not set", which is never late.
+model ShiftStartConfig {
+  id           String              @id @default(cuid())
+  shiftType    ShiftAssignmentType @unique
+  startTime    String? // "HH:MM", company (WIB) time
+  graceMinutes Int                 @default(10)
+  updatedAt    DateTime            @updatedAt
+}
+
 model WorkScheduleConfig {
   id        String              @id @default(cuid())
   shiftType ShiftAssignmentType

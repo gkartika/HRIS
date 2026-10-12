@@ -1,3 +1,4 @@
+import { autoReasonLabel } from "@/lib/attendance-auto-day";
 import { AccessDenied } from "@/components/access-denied";
 import { Fragment } from "react";
 import Link from "next/link";
@@ -406,7 +407,9 @@ export default async function AttendanceReconciliationGridPage({
                           href={cellHref(row.employeeId, dateParam)}
                           className={`block px-1 py-2 text-[11px] font-bold hover:bg-slate-50 ${tone}`}
                           title={
-                            d.presentOverride
+                            d.auto && !d.auto.decided && !d.fromLeaveRequest && !d.presentOverride
+                              ? `${autoReasonLabel(d.auto)}${d.auto.late ? ` ${formatMinutesAsHours(d.auto.lateMinutes)} dari jam mulai` : ""}, otomatis ${d.auto.kind === "HALF" ? "Setengah Hari (batas " + formatMinutesAsHours(d.auto.halfDayAfterMinutes) + ")" : "hari penuh"}`
+                              : d.presentOverride
                               ? "Masuk (Lupa Absen)"
                               : d.fromLeaveRequest
                                 ? `${d.absenceTypeLabel} (dari pengajuan yang disetujui)`

@@ -3,11 +3,9 @@ import { companyDateParts } from "@/lib/company-time";
 // imports — unit testable with plain values, same pattern as
 // offboarding.ts/contract-renewal.ts/work-calendar.ts.
 //
-// Per direct user request, there is no per-employee/admin-configurable work
-// schedule — every employee shares one fixed company default (checked in/out
-// is never gated by it, it only drives the isLateCheckIn check below).
-export const DEFAULT_GRACE_MINUTES = 10;
-export const DEFAULT_START_TIME = "07:30";
+// Check-in/out is never blocked by time or place. When a shift starts, and how
+// much grace a check-in gets, is set per shift in Pengaturan (ShiftStartConfig);
+// it only drives the late check below (isLateForShift).
 // End time differs Fri vs Mon-Thu but is purely informational — no exception
 // check ever compares against it (only late CHECK_IN and missing punches are
 // flagged), so it never needs to be day-aware in the exception logic itself.
@@ -69,14 +67,27 @@ export function defaultEndTimeLabel(date: Date): string {
   return isoWeekday(date) === 5 ? DEFAULT_END_TIME_FRIDAY : DEFAULT_END_TIME_MON_THU;
 }
 
-function parseTimeToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
+export interface ShiftStart {
+  /** "HH:MM" company (WIB) time, or null when the shift's start has not been set. */
+  startTime: string | null;
+  graceMinutes: number;
 }
 
-export function isLateCheckIn(checkInAt: Date): boolean {
+// "07:30" -> 450; anything that is not a valid HH:MM -> null.
+export function parseStartMinutes(hhmm: string | null | undefined): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  return h <= 23 && m <= 59 ? h * 60 + m : null;
+}
+
+// Late = checked in after the shift's start plus its grace. A shift with no
+// start time set is never late.
+export function isLateForShift(checkInAt: Date, start: ShiftStart | null | undefined): boolean {
+  const startMinutes = parseStartMinutes(start?.startTime);
+  if (startMinutes === null) return false;
   const { hour, minute } = companyDateParts(checkInAt);
-  const checkInMinutes = hour * 60 + minute;
-  return checkInMinutes > parseTimeToMinutes(DEFAULT_START_TIME) + DEFAULT_GRACE_MINUTES;
+  return hour * 60 + minute > startMinutes + (start?.graceMinutes ?? 0);
 }
 

@@ -4,7 +4,8 @@ import {
   isEventWithinAnyGeofence,
   isWorkingDay,
   defaultEndTimeLabel,
-  isLateCheckIn,
+  isLateForShift,
+  parseStartMinutes,
   DEFAULT_END_TIME_MON_THU,
   DEFAULT_END_TIME_FRIDAY,
 } from "./attendance";
@@ -69,12 +70,42 @@ describe("defaultEndTimeLabel", () => {
   });
 });
 
-describe("isLateCheckIn (07:30 start, 10 minute grace)", () => {
-  it("is not late within the grace window", () => {
-    expect(isLateCheckIn(new Date("2026-08-10T07:40:00"))).toBe(false);
+describe("parseStartMinutes", () => {
+  it("reads HH:MM as minutes after midnight", () => {
+    expect(parseStartMinutes("07:30")).toBe(450);
+    expect(parseStartMinutes("7:05")).toBe(425);
+    expect(parseStartMinutes("23:59")).toBe(1439);
   });
 
-  it("is late past the grace window", () => {
-    expect(isLateCheckIn(new Date("2026-08-10T07:41:00"))).toBe(true);
+  it("rejects anything that is not a time", () => {
+    expect(parseStartMinutes(null)).toBeNull();
+    expect(parseStartMinutes("")).toBeNull();
+    expect(parseStartMinutes("24:00")).toBeNull();
+    expect(parseStartMinutes("7.30")).toBeNull();
+  });
+});
+
+describe("isLateForShift", () => {
+  const shift1 = { startTime: "07:30", graceMinutes: 10 };
+  const shift2 = { startTime: "15:30", graceMinutes: 5 };
+
+  it("is not late up to the end of the grace window", () => {
+    expect(isLateForShift(new Date("2026-08-10T07:40:00"), shift1)).toBe(false);
+  });
+
+  it("is late one minute past the grace window", () => {
+    expect(isLateForShift(new Date("2026-08-10T07:41:00"), shift1)).toBe(true);
+  });
+
+  it("follows each shift's own start time", () => {
+    expect(isLateForShift(new Date("2026-08-10T15:34:00"), shift2)).toBe(false);
+    expect(isLateForShift(new Date("2026-08-10T15:36:00"), shift2)).toBe(true);
+    // The same clock time that is late for Shift 1 is early for Shift 2.
+    expect(isLateForShift(new Date("2026-08-10T08:00:00"), shift2)).toBe(false);
+  });
+
+  it("is never late when the shift has no start time set", () => {
+    expect(isLateForShift(new Date("2026-08-10T23:00:00"), { startTime: null, graceMinutes: 10 })).toBe(false);
+    expect(isLateForShift(new Date("2026-08-10T23:00:00"), undefined)).toBe(false);
   });
 });

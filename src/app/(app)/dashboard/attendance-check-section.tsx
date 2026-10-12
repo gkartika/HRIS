@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/db";
-import { startOfCompanyDay, DAY_MS } from "@/lib/company-time";
+import { startOfCompanyDay, companyToday, DAY_MS } from "@/lib/company-time";
 import { t } from "@/lib/i18n/id";
-import { DEFAULT_START_TIME, DEFAULT_GRACE_MINUTES, defaultEndTimeLabel } from "@/lib/attendance";
+import { DEFAULT_SHIFT_TYPE, normalizeWeekStart } from "@/lib/shift-assignment";
+import { buildShiftStartLookup } from "@/lib/attendance-auto-day-queries";
+
+const SHIFT_NAME: Record<string, string> = { SHIFT_1: "Shift 1", SHIFT_2: "Shift 2", SHIFT_3: "Shift 3", NON_SHIFT: "Libur" };
 import { MobileCheckForm } from "../attendance/mobile-check-form";
 
 function formatTime(date: Date): string {
@@ -84,6 +87,15 @@ export async function AttendanceCheckSection({ employeeId }: { employeeId: strin
         ])
       : [null, null];
 
+  // The shift this person is rostered on this week and when it starts, so the
+  // "Jadwal" line matches what counts as late.
+  const [assignedShift, shiftStarts] = await Promise.all([
+    prisma.shiftAssignment.findFirst({ where: { employeeId, weekStartDate: normalizeWeekStart(companyToday(now)) }, select: { shiftType: true } }),
+    prisma.shiftStartConfig.findMany(),
+  ]);
+  const shiftType = assignedShift?.shiftType ?? DEFAULT_SHIFT_TYPE;
+  const shiftStart = buildShiftStartLookup(shiftStarts)(shiftType);
+
   if (assignment.method === "FINGERPRINT") {
     return (
       <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -98,7 +110,8 @@ export async function AttendanceCheckSection({ employeeId }: { employeeId: strin
         <p>
           {t("attendance.todayTitle")} —{" "}
           {now.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", weekday: "long", day: "numeric", month: "long" })} · Jadwal:{" "}
-          {DEFAULT_START_TIME}–{defaultEndTimeLabel(now)} (toleransi {DEFAULT_GRACE_MINUTES} menit)
+          {SHIFT_NAME[shiftType] ?? shiftType}
+          {shiftStart?.startTime ? `, mulai ${shiftStart.startTime} (toleransi ${shiftStart.graceMinutes} menit)` : ""}
         </p>
         <div className="mx-auto max-w-xs">
           <AttendanceStepper checkInEvent={checkInEvent} checkOutEvent={checkOutEvent} />

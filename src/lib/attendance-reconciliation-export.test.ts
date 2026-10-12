@@ -19,6 +19,12 @@ function makeCell(overrides: Partial<GridDayCell> = {}): GridDayCell {
   };
 }
 
+describe("formatDayCode (automatic half day)", () => {
+  it("an automatic half day is the SH code with the shift digit", () => {
+    expect(formatDayCode(makeCell({ hasCheckIn: true, absenceTypeCode: "SH", assignedShiftType: "SHIFT_2" }))).toBe("SH2");
+  });
+});
+
 describe("formatDayCode", () => {
   it("combines the absence code with the shift digit, e.g. CT1", () => {
     expect(formatDayCode(makeCell({ absenceTypeCode: "CT", shiftType: "SHIFT_1" }))).toBe("CT1");

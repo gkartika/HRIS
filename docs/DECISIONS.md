@@ -2560,3 +2560,26 @@ brought up to the same rename/reorder/toggle pattern already used for Alasan
 Keluar and Pertanyaan Klirens Keluar (`level-manager.tsx`, `status-manager.tsx`).
 PTKP's code itself stays fixed once created (Employee.ptkpStatusCode points at
 it directly) — only its label is editable.
+
+### Late check-ins: per-shift start time, automatic Setengah Hari from the check-in time (2026-10-12)
+Per direct user request (first built to wait for the check-out, then changed the same day to "no need to wait for
+check out, just see the check-in time"). Before, "late" was a fixed rule (check-in after 07:40 for everyone) that
+only flagged a mobile check-in and only informed Admin SDM; a late day still counted as a full present day.
+Now:
+- **Start time per shift.** New table `ShiftStartConfig` (shift, "HH:MM", grace minutes), edited next to the
+  schedule minutes in Pengaturan > Pengaturan Absensi > Libur & Jadwal Kerja. Shift 1 starts at 07:30 with 10
+  minutes grace (the old rule); Shift 2 and Shift 3 start empty, and a shift with no start time is never late.
+  A person is judged against the shift rostered that week (Shift 1 when none). Fingerprint punches are
+  judged by the same rule; the "late" column stored on mobile events is no longer used for decisions.
+- **Automatic outcome from the first check-in** (`lib/attendance-auto-day.ts`, derived live, nothing stored, no
+  waiting for the check-out): late (after start plus grace) by less than half of the shift's scheduled minutes
+  stays a full day; late by half of it or more, measured from the start time (4 hours on an 8-hour shift, 3 hours
+  on a 6-hour shift), is a Setengah Hari (code SH: 0.5 hours, -1 point, counted in Mandays Lost like one entered by
+  hand). A half day decided this way is not asked about again in the unresolved queue even without a check-out.
+- **Out of location** (mobile check-in outside every registered location) is only flagged in "Catatan Terlambat &
+  Di Luar Lokasi" with the employee's reason; it never changes hours or points.
+- **Admin SDM always wins:** a day with an absence code, "Masuk" or a shift-only entry is never changed by the rule.
+- **Known limits:** an overnight shift's punches are grouped by calendar day, so a night shift's start time
+  should be set on the same day it is meant for; a day with a punch but no scheduled minutes (day off or public
+  holiday) is left alone. Jam Kerja Aktual still counts the scheduled hours for a punched day, as it did for any
+  SH entered by hand.

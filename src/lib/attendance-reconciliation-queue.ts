@@ -11,6 +11,8 @@ import {
 import { computeDayMinutes, computeActualDayMinutes } from "@/lib/attendance-hours";
 import { pickLeaveRequestForGridDay } from "@/lib/leave-on-grid";
 import { haversineDistanceMeters } from "@/lib/attendance";
+import type { AutoDayVerdict } from "@/lib/attendance-auto-day";
+import { loadAutoDayVerdicts } from "@/lib/attendance-auto-day-queries";
 
 // Real punches for these employees in [start, end), read straight from the
 // events so a check-in shows up the moment it is made (see punch-days.ts).
@@ -115,7 +117,15 @@ export async function getUnresolvedDays(period: CutoffPeriod): Promise<Unresolve
       : [];
   const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
 
-  return unresolved
+  // A day the automatic rule already made a Setengah Hari (checked in 4 hours or
+  // more late) is decided, even without a check-out, so it is not asked again.
+  const autoVerdicts = await loadAutoDayVerdicts({ start: period.start, end: queryEnd });
+  const stillUnresolved = unresolved.filter((r) => {
+    const v = autoVerdicts.get(punchDayKey(r.employeeId, r.attendanceDate));
+    return !(v && !v.decided && v.kind === "HALF");
+  });
+
+  return stillUnresolved
     .map((r) => {
       const { hasIn, hasOut } = punched(r);
       return {
@@ -153,6 +163,8 @@ export interface GridDayCell {
   minutes: number;
   /** "Jam Kerja Aktual" contribution for this single day, in minutes — see attendance-hours.ts's computeActualDayMinutes. */
   actualMinutes: number;
+  /** Late or out-of-location verdict for this day (attendance-auto-day.ts), when it was flagged. */
+  auto?: AutoDayVerdict;
 }
 
 export interface GridEmployeeRow {
@@ -188,7 +200,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
   const dates: Date[] = Array.from({ length: dayCount }, (_, i) => new Date(period.start.getTime() + i * 24 * 60 * 60 * 1000));
   const weekStarts = [...new Set(dates.map((d) => normalizeWeekStart(d).getTime()))].map((t) => new Date(t));
 
-  const [employees, records, absenceTypes, workSchedule, shiftAssignments, punchDays, approvedRequests, holidays] = await Promise.all([
+  const [employees, records, absenceTypes, workSchedule, shiftAssignments, punchDays, approvedRequests, holidays, autoVerdicts] = await Promise.all([
     prisma.employee.findMany({
       where: { id: { in: employeeIds } },
       select: {
@@ -234,6 +246,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
       where: { date: { gte: period.start, lt: queryEnd } },
       select: { date: true },
     }),
+    loadAutoDayVerdicts({ start: period.start, end: queryEnd, employeeIds }),
   ]);
 
   const labelByCode = new Map(absenceTypes.map((t) => [t.code, t.label]));
@@ -284,7 +297,11 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
         isScheduledToWork: isScheduledToWork(employee.id, date),
         requests: employeeRequests,
       });
-      const absenceTypeCode = record?.absenceTypeCode ?? leaveRequest?.absenceTypeCode ?? null;
+      // Checked in 4 hours (half the schedule) or more late: Setengah Hari (SH),
+      // decided at check-in. Never over a day somebody decided.
+      const auto = autoVerdicts.get(punchDayKey(employee.id, date));
+      const autoHalf = !!auto && !auto.decided && auto.kind === "HALF" && labelByCode.has("SH");
+      const absenceTypeCode = record?.absenceTypeCode ?? leaveRequest?.absenceTypeCode ?? (autoHalf ? "SH" : null);
       const hoursInput = {
         dayOfWeek: date.getUTCDay(),
         hasCheckIn,
@@ -292,7 +309,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
         // With no punch to say which schedule applies, a leave day is paid on
         // the shift the person is rostered for that week (the weekly shift
         // assignment, Shift 1 when none), unless a shift was entered for the day.
-        recordShiftType: record?.shiftType ?? (leaveRequest ? assignedShiftType : null),
+        recordShiftType: record?.shiftType ?? (leaveRequest ? assignedShiftType : autoHalf ? auto!.shiftType : null),
         assignedShiftType,
         absenceTypeCode,
         hoursMultiplier: absenceTypeCode ? (hoursMultiplierByCode.get(absenceTypeCode) ?? 0) : 0,
@@ -314,6 +331,7 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
         presentOverride: !!record?.presentOverride,
         minutes,
         actualMinutes,
+        auto,
       };
     });
 
@@ -345,14 +363,15 @@ export interface AttendanceNotice {
   /** Human-readable distance-from-site (or "within radius") note, for context — null when neither event captured a location at all. */
   locationNote: string | null;
   reason: string;
+  /** What the automatic rule made of the day: still a full day, or a half day. */
+  verdict: AutoDayVerdict;
 }
 
-// recordAttendanceEvent requires a reason whenever a punch is late or outside
-// every active geofence, but until now that reason — and the late/geofence
-// result itself — was only ever used to force the field, then discarded.
-// This surfaces it for HR. Read-only and separate from getUnresolvedDays:
-// these days already have a complete check-in/check-out, so unlike the
-// exception queue there's nothing here to classify.
+// A day is listed when the check-in was late for the person's shift or outside
+// every registered location. Informational: the outcome for hours and points
+// comes from the automatic rule (attendance-auto-day.ts), shown next to each
+// day. Lateness follows each shift's own start time and includes fingerprint
+// punches; location only applies to mobile check-ins and never changes hours.
 export async function getAttendanceNotices(period: CutoffPeriod): Promise<AttendanceNotice[]> {
   const now = new Date();
   const today = companyToday(now);
@@ -360,26 +379,15 @@ export async function getAttendanceNotices(period: CutoffPeriod): Promise<Attend
   const queryEnd = new Date(lastDayShown.getTime() + 24 * 60 * 60 * 1000);
   if (queryEnd <= period.start) return [];
 
-  const flaggedEvents = await prisma.attendanceEvent.findMany({
-    where: {
-      eventSource: "MOBILE",
-      eventAt: { gte: period.start, lt: queryEnd },
-      OR: [{ late: true }, { withinGeofence: false }],
-    },
-    select: { employeeId: true, eventAt: true },
-  });
-  if (flaggedEvents.length === 0) return [];
+  const verdicts = await loadAutoDayVerdicts({ start: period.start, end: queryEnd });
+  if (verdicts.size === 0) return [];
 
-  const dayKey = (employeeId: string, day: Date) => `${employeeId}|${day.getTime()}`;
-  const flaggedDayKeys = new Set(flaggedEvents.map((e) => dayKey(e.employeeId, companyToday(e.eventAt))));
-  const employeeIds = [...new Set(flaggedEvents.map((e) => e.employeeId))];
-
+  const employeeIds = [...new Set([...verdicts.values()].map((v) => v.employeeId))];
   const [dayEvents, employees, geofences] = await Promise.all([
-    // Every MOBILE event for the affected employees/period, not just the
-    // flagged ones — so a flagged check-in can still be shown next to its
-    // normal, unflagged check-out for context (and vice versa).
+    // Every punch for the affected employees/period, not just the flagged
+    // ones, so a flagged check-in is shown next to its normal check-out.
     prisma.attendanceEvent.findMany({
-      where: { employeeId: { in: employeeIds }, eventSource: "MOBILE", eventAt: { gte: period.start, lt: queryEnd } },
+      where: { employeeId: { in: employeeIds }, eventType: { in: ["CHECK_IN", "CHECK_OUT"] }, eventAt: { gte: startOfCompanyDay(period.start), lt: startOfCompanyDay(queryEnd) } },
       orderBy: { eventAt: "asc" },
     }),
     prisma.employee.findMany({
@@ -409,46 +417,40 @@ export async function getAttendanceNotices(period: CutoffPeriod): Promise<Attend
       : `${Math.round(nearestDistance)} m dari ${nearest.siteName}`;
   };
 
-  const byDay = new Map<string, { employeeId: string; date: Date; events: typeof dayEvents }>();
+  const byDay = new Map<string, typeof dayEvents>();
   for (const event of dayEvents) {
-    const date = companyToday(event.eventAt);
-    const key = dayKey(event.employeeId, date);
-    if (!flaggedDayKeys.has(key)) continue;
-    const entry = byDay.get(key) ?? { employeeId: event.employeeId, date, events: [] };
-    entry.events.push(event);
-    byDay.set(key, entry);
+    const key = punchDayKey(event.employeeId, companyToday(event.eventAt));
+    if (!verdicts.has(key)) continue;
+    byDay.set(key, [...(byDay.get(key) ?? []), event]);
   }
 
   const notices: AttendanceNotice[] = [];
-  for (const { employeeId, date, events } of byDay.values()) {
-    const employee = employeeById.get(employeeId);
+  for (const [key, events] of byDay) {
+    const verdict = verdicts.get(key)!;
+    const employee = employeeById.get(verdict.employeeId);
     if (!employee) continue;
     const checkIn = events.find((e) => e.eventType === "CHECK_IN") ?? null;
-    const checkOut = events.find((e) => e.eventType === "CHECK_OUT") ?? null;
-    const flagged = events.filter((e) => e.late || e.withinGeofence === false);
-    if (flagged.length === 0) continue;
-
-    const late = flagged.some((e) => e.late);
-    const outsideGeofence = flagged.some((e) => e.withinGeofence === false);
-    const locationNote = outsideGeofence
-      ? (nearestGeofenceNote(flagged.find((e) => e.withinGeofence === false)!.latitude, flagged.find((e) => e.withinGeofence === false)!.longitude) ??
-          "Di luar lokasi terdaftar")
+    const checkOut = [...events].reverse().find((e) => e.eventType === "CHECK_OUT") ?? null;
+    const outside = events.find((e) => e.withinGeofence === false);
+    const locationNote = outside
+      ? (nearestGeofenceNote(outside.latitude, outside.longitude) ?? "Di luar lokasi terdaftar")
       : events.some((e) => e.withinGeofence === true)
         ? "Dalam radius lokasi terdaftar"
         : null;
-    const reason = flagged.map((e) => e.reason).filter((r): r is string => !!r).join(" / ") || "—";
+    const reason = events.map((e) => e.reason).filter((r): r is string => !!r).join(" / ") || "—";
 
     notices.push({
-      employeeId,
+      employeeId: verdict.employeeId,
       employeeName: employee.fullLegalName,
       departmentName: employee.currentPosition?.orgUnit.unitName ?? "—",
-      date,
+      date: verdict.date,
       checkInTime: checkIn ? formatCompanyTime(checkIn.eventAt) : null,
       checkOutTime: checkOut ? formatCompanyTime(checkOut.eventAt) : null,
-      late,
-      outsideGeofence,
+      late: verdict.late,
+      outsideGeofence: verdict.outsideLocation,
       locationNote,
       reason,
+      verdict,
     });
   }
 

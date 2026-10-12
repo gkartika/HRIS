@@ -5,8 +5,10 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canRecordOwnAttendance } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
-import { startOfCompanyDay, DAY_MS } from "@/lib/company-time";
-import { isLateCheckIn, isEventWithinAnyGeofence } from "@/lib/attendance";
+import { startOfCompanyDay, companyToday, DAY_MS } from "@/lib/company-time";
+import { isLateForShift, isEventWithinAnyGeofence } from "@/lib/attendance";
+import { DEFAULT_SHIFT_TYPE, normalizeWeekStart } from "@/lib/shift-assignment";
+import { buildShiftStartLookup } from "@/lib/attendance-auto-day-queries";
 import type { AttendanceEventType } from "@/generated/prisma/enums";
 
 function todayRange(now: Date): { start: Date; end: Date } {
@@ -66,7 +68,15 @@ export async function recordAttendanceEvent(
   // but a reason is required when either is off, so HR can see why in Rekap
   // Absensi rather than just that it happened.
   const activeGeofences = await prisma.attendanceGeofence.findMany({ where: { activeFlag: true } });
-  const late = (eventType === "CHECK_IN" && isLateCheckIn(now)) || missingCheckInOnCheckOut;
+  // Late is judged against the start time of the shift this person is rostered
+  // on this week (Shift 1 when nothing was assigned); a shift with no start
+  // time set is never late.
+  const [assignedShift, shiftStarts] = await Promise.all([
+    prisma.shiftAssignment.findFirst({ where: { employeeId, weekStartDate: normalizeWeekStart(companyToday(now)) }, select: { shiftType: true } }),
+    prisma.shiftStartConfig.findMany(),
+  ]);
+  const shiftStart = buildShiftStartLookup(shiftStarts)(assignedShift?.shiftType ?? DEFAULT_SHIFT_TYPE);
+  const late = (eventType === "CHECK_IN" && isLateForShift(now, shiftStart)) || missingCheckInOnCheckOut;
   const withinGeofence = isEventWithinAnyGeofence({ latitude, longitude }, activeGeofences);
   const reason = (formData.get("reason") as string)?.trim() || null;
 

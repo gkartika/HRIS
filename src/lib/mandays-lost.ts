@@ -4,6 +4,7 @@ import { MONTH_LABELS_ID } from "@/lib/absence-cutoff";
 import { normalizeWeekStart, buildScheduleMinutesLookup, buildAssignedShiftLookup } from "@/lib/shift-assignment";
 import { resolveDepartmentId } from "@/lib/level3-scope";
 import type { ReportPeriod } from "@/lib/report-period";
+import { loadAutoDayVerdicts } from "@/lib/attendance-auto-day-queries";
 
 
 // "cycle" shows one bucket per week within the payroll period — the
@@ -229,12 +230,25 @@ export async function getMandaysLostReport(period: ReportPeriod, bucketBy: Bucke
     if (r.absenceTypeCode) addManday(r.employeeId, r.attendanceDate, r.absenceTypeCode);
   }
 
+  // Late or out-of-location days that the automatic rule made a half day (SH)
+  // count like a half day Admin SDM entered by hand, and an approved leave
+  // request does not count again on the same day.
+  const autoHalfKeys = new Set<string>();
+  if (typeByCode.has("SH")) {
+    const verdicts = await loadAutoDayVerdicts({ start: period.start, end: new Date(period.end.getTime() + DAY_MS) });
+    for (const v of verdicts.values()) {
+      if (v.kind !== "HALF" || v.decided) continue;
+      autoHalfKeys.add(`${v.employeeId}:${v.date.getTime()}`);
+      addManday(v.employeeId, v.date, "SH");
+    }
+  }
+
   for (const req of absenceRequests) {
     const rangeStart = req.startDate > period.start ? req.startDate : period.start;
     const rangeEnd = req.endDate < period.end ? req.endDate : period.end;
     for (let cursor = rangeStart; cursor <= rangeEnd; cursor = new Date(cursor.getTime() + DAY_MS)) {
       const key = `${req.employeeId}:${cursor.getTime()}`;
-      if (!explicitKeys.has(key)) addManday(req.employeeId, cursor, req.absenceTypeCode);
+      if (!explicitKeys.has(key) && !autoHalfKeys.has(key)) addManday(req.employeeId, cursor, req.absenceTypeCode);
     }
   }
 

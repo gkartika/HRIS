@@ -1,5 +1,6 @@
 "use server";
 
+import { parseStartMinutes } from "@/lib/attendance";
 import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
@@ -263,22 +264,45 @@ export async function updateWorkSchedule(
     minutesByDay.push(minutes);
   }
 
-  await prisma.$transaction(
-    minutesByDay.map((minutes, day) =>
+  // When the shift starts and how much grace a check-in gets (not for the day-off "shift").
+  let startTime: string | null = null;
+  let graceMinutes = 10;
+  if (validShiftType !== "NON_SHIFT") {
+    const rawStart = ((formData.get("startTime") as string) ?? "").trim();
+    if (rawStart) {
+      if (parseStartMinutes(rawStart) === null) return "Jam mulai harus berupa jam, mis. 07:30.";
+      startTime = rawStart;
+    }
+    const rawGrace = ((formData.get("graceMinutes") as string) ?? "").trim();
+    graceMinutes = rawGrace ? Number(rawGrace) : 10;
+    if (!Number.isInteger(graceMinutes) || graceMinutes < 0 || graceMinutes > 120) return "Toleransi wajib berupa menit (0 sampai 120).";
+  }
+
+  await prisma.$transaction([
+    ...minutesByDay.map((minutes, day) =>
       prisma.workScheduleConfig.upsert({
         where: { shiftType_dayOfWeek: { shiftType: validShiftType, dayOfWeek: day } },
         create: { shiftType: validShiftType, dayOfWeek: day, minutes },
         update: { minutes },
       })
-    )
-  );
+    ),
+    ...(validShiftType !== "NON_SHIFT"
+      ? [
+          prisma.shiftStartConfig.upsert({
+            where: { shiftType: validShiftType },
+            create: { shiftType: validShiftType, startTime, graceMinutes },
+            update: { startTime, graceMinutes },
+          }),
+        ]
+      : []),
+  ]);
 
   await logAudit({
     actorAccountId: session.user.id,
     action: "UPDATE",
     datasetName: "WorkScheduleConfig",
     recordId: shiftType,
-    reason: `Updated schedule for ${shiftType}: ${minutesByDay.join(",")} minutes (Sun..Sat)`,
+    reason: `Updated schedule for ${shiftType}: ${minutesByDay.join(",")} minutes (Sun..Sat); start ${startTime ?? "not set"}, grace ${graceMinutes} min`,
   });
 
   revalidatePath("/admin/absence-settings");

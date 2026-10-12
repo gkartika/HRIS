@@ -103,6 +103,17 @@ describe("buildAutoDayVerdicts", () => {
     expect(v?.halfDayAfterMinutes).toBe(180);
   });
 
+  it("uses the start time of that weekday, which can differ from day to day", () => {
+    const events = [checkIn("15:40")];
+    const startFor = (_shift: string, day: number) => (day === 1 ? { startTime: "15:00", graceMinutes: 10 } : { startTime: "14:00", graceMinutes: 10 });
+    // 2026-10-12 is a Monday: starts 15:00, 15:40 is 40 minutes late.
+    expect(buildAutoDayVerdicts(input({ events, startFor })).get(key)?.lateMinutes).toBe(40);
+    // On a weekday that starts at 14:00 the same check-in is 100 minutes late.
+    expect(buildAutoDayVerdicts(input({ events, startFor: () => ({ startTime: "14:00", graceMinutes: 10 }) })).get(key)?.lateMinutes).toBe(100);
+    // A weekday with no start time set is never late.
+    expect(buildAutoDayVerdicts(input({ events, startFor: (_s, day) => (day === 1 ? undefined : { startTime: "14:00", graceMinutes: 10 }) })).size).toBe(0);
+  });
+
   it("marks a day somebody already decided, so it is not changed again", () => {
     const events = [checkIn("12:00")];
     expect(buildAutoDayVerdicts(input({ events })).get(key)?.decided).toBe(false);

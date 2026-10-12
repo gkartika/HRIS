@@ -69,13 +69,14 @@ export async function recordAttendanceEvent(
   // Absensi rather than just that it happened.
   const activeGeofences = await prisma.attendanceGeofence.findMany({ where: { activeFlag: true } });
   // Late is judged against the start time of the shift this person is rostered
-  // on this week (Shift 1 when nothing was assigned); a shift with no start
-  // time set is never late.
-  const [assignedShift, shiftStarts] = await Promise.all([
+  // on this week (Shift 1 when nothing was assigned) and that weekday's start
+  // time; a day with no start time set is never late.
+  const [assignedShift, scheduleRows, graceRows] = await Promise.all([
     prisma.shiftAssignment.findFirst({ where: { employeeId, weekStartDate: normalizeWeekStart(companyToday(now)) }, select: { shiftType: true } }),
-    prisma.shiftStartConfig.findMany(),
+    prisma.workScheduleConfig.findMany({ select: { shiftType: true, dayOfWeek: true, startTime: true } }),
+    prisma.shiftStartConfig.findMany({ select: { shiftType: true, graceMinutes: true } }),
   ]);
-  const shiftStart = buildShiftStartLookup(shiftStarts)(assignedShift?.shiftType ?? DEFAULT_SHIFT_TYPE);
+  const shiftStart = buildShiftStartLookup(scheduleRows, graceRows)(assignedShift?.shiftType ?? DEFAULT_SHIFT_TYPE, companyToday(now).getUTCDay());
   const late = (eventType === "CHECK_IN" && isLateForShift(now, shiftStart)) || missingCheckInOnCheckOut;
   const withinGeofence = isEventWithinAnyGeofence({ latitude, longitude }, activeGeofences);
   const reason = (formData.get("reason") as string)?.trim() || null;

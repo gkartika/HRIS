@@ -6,6 +6,7 @@ import {
   defaultEndTimeLabel,
   isLateForShift,
   parseStartMinutes,
+  addMinutesToTime,
   DEFAULT_END_TIME_MON_THU,
   DEFAULT_END_TIME_FRIDAY,
 } from "./attendance";
@@ -107,5 +108,17 @@ describe("isLateForShift", () => {
   it("is never late when the shift has no start time set", () => {
     expect(isLateForShift(new Date("2026-08-10T23:00:00"), { startTime: null, graceMinutes: 10 })).toBe(false);
     expect(isLateForShift(new Date("2026-08-10T23:00:00"), undefined)).toBe(false);
+  });
+});
+
+describe("addMinutesToTime", () => {
+  it("adds minutes to a clock time", () => {
+    expect(addMinutesToTime("07:30", 10)).toBe("07:40");
+    expect(addMinutesToTime("14:00", 180)).toBe("17:00");
+  });
+
+  it("wraps past midnight and rejects a bad time", () => {
+    expect(addMinutesToTime("23:30", 60)).toBe("00:30");
+    expect(addMinutesToTime("", 10)).toBe("");
   });
 });

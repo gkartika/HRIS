@@ -2583,3 +2583,26 @@ Now:
   should be set on the same day it is meant for; a day with a punch but no scheduled minutes (day off or public
   holiday) is left alone. Jam Kerja Aktual still counts the scheduled hours for a punched day, as it did for any
   SH entered by hand.
+
+### A check-in alone counts the day as worked (2026-10-12)
+Per direct user request ("all days counted present from check-in, but hours counted by the shift, never more than the
+shift"). Before, the grid, the payroll Excel and the unresolved queue needed both a check-in and a check-out, so a day
+with only a check-in showed "?" and 0 hours until the check-out arrived. Now a check-in is enough: the day counts as
+present with the shift's scheduled minutes (Jam Kerja Gaji and Aktual, never more than the schedule), an approved
+leave request no longer covers a day with a check-in, and a day with a check-in is never in the unresolved queue. A
+check-out with no check-in is still unresolved. A person who forgets to check out is therefore paid the full shift
+until Admin SDM corrects the day (for example with a leave code or Setengah Hari).
+
+### Start time per weekday, and Tipe Absensi / Shift filters on the grid (2026-10-12)
+Per direct user request (Shift 2 and Shift 3 start at different times on different days; the grid should filter by
+absence type and by employee shift). Chosen from a mock-up:
+- **Start time per shift and weekday.** `WorkScheduleConfig.startTime` ("HH:MM", null = not set, never late). The
+  Jadwal Jam Kerja per Shift card is now a table per shift (day, working minutes, Jam masuk, "Terlambat setelah",
+  "Setengah Hari mulai"; the last two are worked out live). Grace stays one number per shift
+  (`ShiftStartConfig.graceMinutes`). `ShiftStartConfig.startTime` is no longer read; Shift 1's old 07:30 was copied
+  onto its working days by the migration. The Setengah Hari limit is half of that weekday's scheduled minutes after
+  its start time. A day with no working minutes has no start time.
+- **Grid filters** (`lib/attendance-grid-filter.ts`): "Shift karyawan" (Shift 1/2/3) and "Tipe Absensi" (Hadir, every
+  absence code, "?" unresolved, "L" day off; several can be chosen). An employee stays when, on the shown date range,
+  they had any chosen type and were on the chosen shift on any shown day (the shift can change week to week). Days of
+  the chosen types are marked, the rest fade. The Excel export applies the same filters over the whole period.

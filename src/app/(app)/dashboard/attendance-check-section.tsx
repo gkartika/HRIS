@@ -89,12 +89,13 @@ export async function AttendanceCheckSection({ employeeId }: { employeeId: strin
 
   // The shift this person is rostered on this week and when it starts, so the
   // "Jadwal" line matches what counts as late.
-  const [assignedShift, shiftStarts] = await Promise.all([
+  const [assignedShift, scheduleRows, graceRows] = await Promise.all([
     prisma.shiftAssignment.findFirst({ where: { employeeId, weekStartDate: normalizeWeekStart(companyToday(now)) }, select: { shiftType: true } }),
-    prisma.shiftStartConfig.findMany(),
+    prisma.workScheduleConfig.findMany({ select: { shiftType: true, dayOfWeek: true, startTime: true } }),
+    prisma.shiftStartConfig.findMany({ select: { shiftType: true, graceMinutes: true } }),
   ]);
   const shiftType = assignedShift?.shiftType ?? DEFAULT_SHIFT_TYPE;
-  const shiftStart = buildShiftStartLookup(shiftStarts)(shiftType);
+  const shiftStart = buildShiftStartLookup(scheduleRows, graceRows)(shiftType, companyToday(now).getUTCDay());
 
   if (assignment.method === "FINGERPRINT") {
     return (

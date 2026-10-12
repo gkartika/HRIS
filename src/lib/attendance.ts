@@ -82,6 +82,14 @@ export function parseStartMinutes(hhmm: string | null | undefined): number | nul
   return h <= 23 && m <= 59 ? h * 60 + m : null;
 }
 
+// "07:30" + 45 minutes -> "08:15"; wraps past midnight. "" when the time is not valid.
+export function addMinutesToTime(hhmm: string, addMinutes: number): string {
+  const base = parseStartMinutes(hhmm);
+  if (base === null) return "";
+  const total = (((base + addMinutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 // Late = checked in after the shift's start plus its grace. A shift with no
 // start time set is never late.
 export function isLateForShift(checkInAt: Date, start: ShiftStart | null | undefined): boolean {

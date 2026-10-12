@@ -9,9 +9,18 @@ import type { ShiftStart } from "@/lib/attendance";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function buildShiftStartLookup(rows: { shiftType: string; startTime: string | null; graceMinutes: number }[]): (shiftType: string) => ShiftStart | undefined {
-  const byShift = new Map(rows.map((r) => [r.shiftType, { startTime: r.startTime, graceMinutes: r.graceMinutes }]));
-  return (shiftType) => byShift.get(shiftType);
+// Start time per shift AND weekday (WorkScheduleConfig.startTime), grace per shift (ShiftStartConfig).
+// A weekday with no start time set is never late; a shift with no grace row gets 10 minutes.
+export function buildShiftStartLookup(
+  scheduleRows: { shiftType: string; dayOfWeek: number; startTime: string | null }[],
+  graceRows: { shiftType: string; graceMinutes: number }[]
+): (shiftType: string, dayOfWeek: number) => ShiftStart | undefined {
+  const startByDay = new Map(scheduleRows.map((r) => [`${r.shiftType}:${r.dayOfWeek}`, r.startTime]));
+  const graceByShift = new Map(graceRows.map((r) => [r.shiftType, r.graceMinutes]));
+  return (shiftType, dayOfWeek) => {
+    const startTime = startByDay.get(`${shiftType}:${dayOfWeek}`) ?? null;
+    return startTime ? { startTime, graceMinutes: graceByShift.get(shiftType) ?? 10 } : undefined;
+  };
 }
 
 // Verdicts for the days in [start, end) (both UTC-midnight dates). Without
@@ -53,7 +62,7 @@ export async function loadAutoDayVerdicts(args: { start: Date; end: Date; employ
     decidedDays,
     assignedShiftFor: buildAssignedShiftLookup(shiftAssignments),
     scheduleMinutesFor: buildScheduleMinutesLookup(workSchedule),
-    startFor: buildShiftStartLookup(startRows),
+    startFor: buildShiftStartLookup(workSchedule, startRows),
     holidayTimes: new Set(holidays.map((h) => h.date.getTime())),
   });
 }

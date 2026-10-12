@@ -13,6 +13,16 @@ import { formatDayCode } from "@/lib/attendance-reconciliation-export";
 import { companyToday } from "@/lib/company-time";
 import { formatRangeLabel, rangeShortcuts, resolveVisibleRange, sameRange } from "@/lib/grid-date-range";
 import { GridEditForm } from "../grid-edit-form";
+import {
+  dayTypeKey,
+  filterGridRows,
+  parseShiftParam,
+  parseTypesParam,
+  SHIFT_FILTER_VALUES,
+  TYPE_DAY_OFF,
+  TYPE_PRESENT,
+  TYPE_UNRESOLVED,
+} from "@/lib/attendance-grid-filter";
 
 const SHIFT_TONE: Record<string, string> = {
   SHIFT_1: "text-sky-700",
@@ -45,6 +55,8 @@ export default async function AttendanceReconciliationGridPage({
     q?: string;
     sortBy?: string;
     sortDir?: string;
+    shift?: string;
+    types?: string | string[];
     editEmployeeId?: string;
     editDate?: string;
   }>;
@@ -55,8 +67,11 @@ export default async function AttendanceReconciliationGridPage({
   }
 
 
-  const { cutoff, from: fromParam, to: toParam, orgUnitId, q, sortBy: sortByParam, sortDir: sortDirParam, editEmployeeId, editDate } = await searchParams;
+  const { cutoff, from: fromParam, to: toParam, orgUnitId, q, sortBy: sortByParam, sortDir: sortDirParam, shift: shiftParam, types: typesParam, editEmployeeId, editDate } = await searchParams;
   const search = q?.trim() ?? "";
+  // Show only employees who had one of these types and/or were on this shift on the shown days.
+  const typeFilter = parseTypesParam(typesParam);
+  const shiftFilter = parseShiftParam(shiftParam);
   const sortBy: SortKey = sortByParam === "points" ? "points" : "name";
   const sortDir: "asc" | "desc" = sortDirParam === "desc" ? "desc" : "asc";
   const referenceDate = parseCutoffParam(cutoff) ?? new Date();
@@ -128,6 +143,8 @@ export default async function AttendanceReconciliationGridPage({
     }
     if (orgUnitId) params.set("orgUnitId", orgUnitId);
     if (search) params.set("q", search);
+    if (shiftFilter) params.set("shift", shiftFilter);
+    for (const type of typeFilter) params.append("types", type);
     if (sortBy !== "name") params.set("sortBy", sortBy);
     if (sortDir !== "asc") params.set("sortDir", sortDir);
     for (const [k, v] of Object.entries(extra)) params.set(k, v);
@@ -168,6 +185,16 @@ export default async function AttendanceReconciliationGridPage({
   // The grid itself only runs up to today, so the counts below speak of the
   // days it actually has, not of the whole 30-day period.
   const availableDays = rows[0]?.days.length ?? 0;
+  // Filtered after everything else, so the cell editor above still finds any employee.
+  const shownRows = filterGridRows(rows, { types: typeFilter, shift: shiftFilter, inRange });
+  const filtering = typeFilter.length > 0 || !!shiftFilter;
+  const typeOptions = [
+    { key: TYPE_PRESENT, label: "Hadir", title: "Hadir (kode shift)" },
+    ...absenceTypes.map((a) => ({ key: a.code, label: a.code, title: a.label })),
+    { key: TYPE_UNRESOLVED, label: "?", title: "Belum diputuskan" },
+    { key: TYPE_DAY_OFF, label: "L", title: "Libur" },
+  ];
+  const SHIFT_NAMES: Record<string, string> = { SHIFT_1: "Shift 1", SHIFT_2: "Shift 2", SHIFT_3: "Shift 3" };
 
   return (
     <div>
@@ -224,6 +251,30 @@ export default async function AttendanceReconciliationGridPage({
             ))}
           </select>
         </div>
+        <div>
+          <label htmlFor="grid-shift" className="mb-1 block text-xs text-slate-500">Shift karyawan</label>
+          <select id="grid-shift" name="shift" defaultValue={shiftFilter ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">Semua shift</option>
+            {SHIFT_FILTER_VALUES.map((value) => (
+              <option key={value} value={value}>
+                {SHIFT_NAMES[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <fieldset>
+          <legend className="mb-1 block text-xs text-slate-500">Tipe Absensi (bisa pilih beberapa)</legend>
+          <div className="flex max-w-xl flex-wrap gap-1.5">
+            {typeOptions.map((o) => (
+              <label key={o.key} title={o.title} className="cursor-pointer">
+                <input type="checkbox" name="types" value={o.key} defaultChecked={typeFilter.includes(o.key)} className="peer sr-only" />
+                <span className="inline-block rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 peer-checked:border-brand peer-checked:bg-brand peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand">
+                  {o.label}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <div className="flex items-end gap-2 rounded-lg border border-brand/20 bg-brand-soft/60 p-2">
           <div>
             <label htmlFor="grid-from" className="mb-1 block text-xs text-slate-600">Dari tanggal</label>
@@ -253,7 +304,7 @@ export default async function AttendanceReconciliationGridPage({
         <button type="submit" className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">
           {t("common.applyFilter")}
         </button>
-        {(search || orgUnitId || !range.isFull) && (
+        {(search || orgUnitId || filtering || !range.isFull) && (
           <Link href={`/attendance/reconciliation/grid?cutoff=${formatCutoffParam(period.start)}`} className="px-2 py-2 text-sm text-slate-500 hover:text-slate-700">
             {t("common.resetFilter")}
           </Link>
@@ -276,6 +327,14 @@ export default async function AttendanceReconciliationGridPage({
       </div>
       {rangeError && <p className="mt-2 text-xs text-rose-600">{rangeError}</p>}
       </form>
+
+      {filtering && (
+        <p className="mt-3 text-xs text-slate-600">
+          Filter aktif: menampilkan <b>{shownRows.length}</b> dari {rows.length} karyawan
+          {shiftFilter ? ` · ${SHIFT_NAMES[shiftFilter]}` : ""}
+          {typeFilter.length > 0 ? ` · tipe ${typeFilter.map((v) => typeOptions.find((o) => o.key === v)?.label ?? v).join(", ")} (hari yang cocok disorot)` : ""}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
         <p>
@@ -367,7 +426,7 @@ export default async function AttendanceReconciliationGridPage({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {shownRows.map((row) => (
               <tr key={row.employeeId} className="border-t border-slate-100">
                 <td className="sticky left-0 z-10 bg-white px-3 py-2 text-xs font-semibold text-slate-900">
                   {row.employeeName}
@@ -390,19 +449,22 @@ export default async function AttendanceReconciliationGridPage({
                   const dateParam = formatCutoffParam(d.date);
                   const isSelected = editEmployeeId === row.employeeId && editDate === dateParam;
                   const label = formatDayCode(d);
+                  // With types chosen, the days of those types are marked and the rest fade.
+                  const typeHit = typeFilter.length > 0 && typeFilter.includes(dayTypeKey(d));
+                  const typeDim = typeFilter.length > 0 && !typeHit;
                   const effectiveShift = d.shiftType ?? d.assignedShiftType;
-                  // One punch but not the pair yet (e.g. checked in today, not out): not "missing", just incomplete.
-                  const halfPunched = !d.absenceTypeCode && !d.presentOverride && !d.shiftType && d.hasCheckIn !== d.hasCheckOut;
+                  // A check-out with no check-in is the only half-punched day left: a check-in alone already counts as present.
+                  const halfPunched = !d.absenceTypeCode && !d.presentOverride && !d.shiftType && !d.hasCheckIn && d.hasCheckOut;
                   const tone = d.absenceTypeCode
                     ? "text-amber-700"
-                    : d.presentOverride || d.shiftType || (d.hasCheckIn && d.hasCheckOut)
+                    : d.presentOverride || d.shiftType || d.hasCheckIn
                       ? (SHIFT_TONE[effectiveShift] ?? "text-slate-400")
                       : halfPunched
                         ? "text-amber-600"
                         : "text-rose-500";
                   return (
                     <Fragment key={dateParam}>
-                      <td className={`border-l border-slate-100 p-0 text-center ${isSelected ? "bg-brand-accent-soft" : ""}`}>
+                      <td className={`border-l border-slate-100 p-0 text-center ${isSelected ? "bg-brand-accent-soft" : typeHit ? "bg-brand-accent ring-1 ring-inset ring-brand" : ""} ${typeDim ? "opacity-40" : ""}`}>
                         <Link
                           href={cellHref(row.employeeId, dateParam)}
                           className={`block px-1 py-2 text-[11px] font-bold hover:bg-slate-50 ${tone}`}
@@ -413,7 +475,7 @@ export default async function AttendanceReconciliationGridPage({
                               ? "Masuk (Lupa Absen)"
                               : d.fromLeaveRequest
                                 ? `${d.absenceTypeLabel} (dari pengajuan yang disetujui)`
-                                : (d.absenceTypeLabel ?? (halfPunched ? (d.hasCheckIn ? "Sudah check-in, belum check-out" : "Check-out tercatat, belum ada check-in") : undefined))
+                                : (d.absenceTypeLabel ?? (halfPunched ? "Check-out tercatat, belum ada check-in" : undefined))
                           }
                         >
                           {label}
@@ -427,7 +489,7 @@ export default async function AttendanceReconciliationGridPage({
                 })}
               </tr>
             ))}
-            {rows.length === 0 && (
+            {shownRows.length === 0 && (
               <tr>
                 <td className="px-4 py-6 text-center text-sm text-slate-400" colSpan={64}>
                   Tidak ada karyawan yang cocok dengan filter ini.

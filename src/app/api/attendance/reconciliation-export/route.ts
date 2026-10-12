@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { resolveCutoffPeriod, parseCutoffParam, formatCutoffParam } from "@/lib/absence-cutoff";
 import { getReconciliationGrid } from "@/lib/attendance-reconciliation-queue";
+import { filterGridRows, parseShiftParam, parseTypesParam } from "@/lib/attendance-grid-filter";
 import { buildReconciliationExportSheet } from "@/lib/attendance-reconciliation-export";
 
 // Excel export for Rekonsiliasi Grid (Opsi B), per direct request — same
@@ -41,7 +42,13 @@ export async function GET(request: Request) {
     })
     .then((rows) => rows.map((r) => r.id));
 
-  const rows = await getReconciliationGrid(period, employeeIds);
+  // The same Tipe Absensi / Shift filters as the grid, judged over the whole period.
+  const allRows = await getReconciliationGrid(period, employeeIds);
+  const rows = filterGridRows(allRows, {
+    types: parseTypesParam(searchParams.getAll("types")),
+    shift: parseShiftParam(searchParams.get("shift") ?? undefined),
+    inRange: () => true,
+  });
   const sheet = buildReconciliationExportSheet(rows);
 
   const workbook = XLSX.utils.book_new();

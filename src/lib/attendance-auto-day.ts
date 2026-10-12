@@ -60,7 +60,8 @@ export interface AutoDayInput {
   decidedDays: DecidedDay[];
   assignedShiftFor: (employeeId: string, weekStart: Date) => string;
   scheduleMinutesFor: (shiftType: string, dayOfWeek: number) => number;
-  startFor: (shiftType: string) => ShiftStart | undefined;
+  /** When the shift starts on this weekday (0 = Sunday) and the grace it gets. */
+  startFor: (shiftType: string, dayOfWeek: number) => ShiftStart | undefined;
   /** UTC-midnight times of public holidays; those days are left alone. */
   holidayTimes: Set<number>;
 }
@@ -89,7 +90,7 @@ export function buildAutoDayVerdicts(input: AutoDayInput): Map<string, AutoDayVe
     if (scheduledMinutes <= 0) continue;
 
     const checkIns = events.filter((e) => e.eventType === "CHECK_IN");
-    const start = input.startFor(shiftType);
+    const start = input.startFor(shiftType, day.getUTCDay());
     const startMinutes = parseStartMinutes(start?.startTime);
     let lateMinutes = 0;
     let late = false;

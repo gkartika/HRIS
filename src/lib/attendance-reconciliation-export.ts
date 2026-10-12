@@ -24,7 +24,7 @@ export function formatDayCode(cell: GridDayCell): string {
   const effectiveShift = cell.shiftType ?? cell.assignedShiftType;
   const digit = SHIFT_DIGIT[effectiveShift] ?? "";
   if (cell.absenceTypeCode) return digit === "L" ? "L" : `${cell.absenceTypeCode}${digit}`;
-  if (cell.presentOverride || cell.shiftType || (cell.hasCheckIn && cell.hasCheckOut)) return digit;
+  if (cell.presentOverride || cell.shiftType || cell.hasCheckIn) return digit;
   return "?";
 }
 

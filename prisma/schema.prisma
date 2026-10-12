@@ -803,7 +803,7 @@ model ShiftAssignment {
 model ShiftStartConfig {
   id           String              @id @default(cuid())
   shiftType    ShiftAssignmentType @unique
-  startTime    String? // "HH:MM", company (WIB) time
+  startTime    String? // no longer read: the start time is per weekday now, in WorkScheduleConfig.startTime
   graceMinutes Int                 @default(10)
   updatedAt    DateTime            @updatedAt
 }
@@ -813,6 +813,8 @@ model WorkScheduleConfig {
   shiftType ShiftAssignmentType
   dayOfWeek Int
   minutes   Int                 @default(0)
+  // "HH:MM" company (WIB) time this shift starts on this weekday; null = not set, never late.
+  startTime String?
   updatedAt DateTime            @updatedAt
 
   @@unique([shiftType, dayOfWeek])

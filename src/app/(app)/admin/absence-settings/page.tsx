@@ -155,11 +155,12 @@ export default async function AbsenceSettingsPage({ searchParams }: { searchPara
   const SHIFT_LABELS: Record<string, string> = { SHIFT_1: "Shift 1", SHIFT_2: "Shift 2", SHIFT_3: "Shift 3", NON_SHIFT: "Libur" };
   const minutesByShiftDay = new Map(workSchedule.map((s) => [`${s.shiftType}:${s.dayOfWeek}`, s.minutes]));
   const startByShift = new Map(shiftStarts.map((s) => [s.shiftType, s]));
+  const startByShiftDay = new Map(workSchedule.map((s) => [`${s.shiftType}:${s.dayOfWeek}`, s.startTime]));
   const workScheduleRows = (["SHIFT_1", "SHIFT_2", "SHIFT_3", "NON_SHIFT"] as const).map((shiftType) => ({
     shiftType,
     shiftLabel: SHIFT_LABELS[shiftType],
     minutesByDay: Array.from({ length: 7 }, (_, day) => minutesByShiftDay.get(`${shiftType}:${day}`) ?? 0),
-    startTime: startByShift.get(shiftType)?.startTime ?? "",
+    startByDay: Array.from({ length: 7 }, (_, day) => startByShiftDay.get(`${shiftType}:${day}`) ?? ""),
     graceMinutes: startByShift.get(shiftType)?.graceMinutes ?? 10,
   }));
 
@@ -303,8 +304,8 @@ export default async function AbsenceSettingsPage({ searchParams }: { searchPara
           <h2 className="text-sm font-medium text-slate-900">Jadwal Jam Kerja per Shift</h2>
           <p className="mt-1 text-xs text-slate-500">
             Menit kerja terjadwal per hari, per Shift — sumber perhitungan Total Jam Kerja di Rekonsiliasi Absensi. 0 =
-            hari libur untuk Shift tersebut. Jam mulai dan toleransi menentukan kapan check-in dianggap terlambat; Shift
-            tanpa jam mulai tidak pernah dianggap terlambat. Check-in yang terlambat separuh jadwal atau lebih (4 jam untuk
+            hari libur untuk Shift tersebut. Jam masuk (per hari) dan toleransi (satu angka per Shift) menentukan kapan check-in dianggap terlambat; hari
+            tanpa jam masuk tidak pernah dianggap terlambat. Check-in yang terlambat separuh jadwal atau lebih (4 jam untuk
             jadwal 8 jam) otomatis menjadi Setengah Hari saat itu juga, tanpa menunggu check-out; terlambat kurang dari itu
             tetap hari penuh. Check-in di luar lokasi hanya dicatat dan tidak mengurangi jam atau poin.
           </p>

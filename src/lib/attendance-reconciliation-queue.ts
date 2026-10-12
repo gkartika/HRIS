@@ -67,7 +67,7 @@ export async function getUnresolvedDays(period: CutoffPeriod): Promise<Unresolve
         // setting NON_SHIFT) means someone already made the call for this
         // day — it isn't unresolved just because there's no punch.
         shiftType: null,
-        OR: [{ checkInEventId: null }, { checkOutEventId: null }],
+        checkInEventId: null,
         // An offboarded employee's old unpunched days aren't a real
         // exception needing HR's attention — exclude them, same active-only
         // scope as the grid's employee list.
@@ -98,15 +98,14 @@ export async function getUnresolvedDays(period: CutoffPeriod): Promise<Unresolve
     approvedAbsences.some((a) => a.employeeId === employeeId && a.startDate <= date && a.endDate >= date);
 
   // A day is only unresolved if neither the day's record NOR the live punch
-  // events show a complete check-in + check-out.
+  // events show a check-in (a check-in is enough, no check-out needed).
   const punchDays = await loadPunchDays([...new Set(records.map((r) => r.employeeId))], period.start, queryEnd);
   const punched = (r: (typeof records)[number]) => {
     const p = punchDays.get(punchDayKey(r.employeeId, r.attendanceDate));
     return { hasIn: !!r.checkInEventId || !!p?.hasCheckIn, hasOut: !!r.checkOutEventId || !!p?.hasCheckOut };
   };
   const unresolved = records.filter((r) => {
-    const { hasIn, hasOut } = punched(r);
-    return !(hasIn && hasOut) && !isCoveredByApprovedAbsence(r.employeeId, r.attendanceDate);
+    return !punched(r).hasIn && !isCoveredByApprovedAbsence(r.employeeId, r.attendanceDate);
   });
 
   const weekStarts = [...new Set(unresolved.map((r) => normalizeWeekStart(r.attendanceDate).getTime()))].map((t) => new Date(t));
@@ -117,15 +116,7 @@ export async function getUnresolvedDays(period: CutoffPeriod): Promise<Unresolve
       : [];
   const assignedShiftFor = buildAssignedShiftLookup(shiftAssignments);
 
-  // A day the automatic rule already made a Setengah Hari (checked in 4 hours or
-  // more late) is decided, even without a check-out, so it is not asked again.
-  const autoVerdicts = await loadAutoDayVerdicts({ start: period.start, end: queryEnd });
-  const stillUnresolved = unresolved.filter((r) => {
-    const v = autoVerdicts.get(punchDayKey(r.employeeId, r.attendanceDate));
-    return !(v && !v.decided && v.kind === "HALF");
-  });
-
-  return stillUnresolved
+  return unresolved
     .map((r) => {
       const { hasIn, hasOut } = punched(r);
       return {
@@ -137,9 +128,7 @@ export async function getUnresolvedDays(period: CutoffPeriod): Promise<Unresolve
         reason:
           !hasIn && !hasOut
             ? "Tidak ada check-in/check-out. Tidak ada Cuti/Izin disetujui untuk tanggal ini."
-            : !hasIn
-              ? "Check-out tercatat, tidak ada check-in. Tidak ada Cuti/Izin disetujui untuk tanggal ini."
-              : "Check-in tercatat, tidak ada check-out. Tidak ada Cuti/Izin disetujui untuk tanggal ini.",
+            : "Check-out tercatat, tidak ada check-in. Tidak ada Cuti/Izin disetujui untuk tanggal ini.",
         assignedShiftType: assignedShiftFor(r.employeeId, normalizeWeekStart(r.attendanceDate)),
       };
     })
@@ -293,7 +282,6 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
         hasExplicitAbsenceCode: !!record?.absenceTypeCode,
         presentOverride: !!record?.presentOverride,
         hasCheckIn,
-        hasCheckOut,
         isScheduledToWork: isScheduledToWork(employee.id, date),
         requests: employeeRequests,
       });
@@ -305,7 +293,6 @@ export async function getReconciliationGrid(period: CutoffPeriod, employeeIds: s
       const hoursInput = {
         dayOfWeek: date.getUTCDay(),
         hasCheckIn,
-        hasCheckOut,
         // With no punch to say which schedule applies, a leave day is paid on
         // the shift the person is rostered for that week (the weekly shift
         // assignment, Shift 1 when none), unless a shift was entered for the day.

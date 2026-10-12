@@ -13,8 +13,8 @@ export function formatMinutesAsHours(minutes: number): string {
 
 export interface DayHoursInput {
   dayOfWeek: number; // 0=Sunday..6=Saturday, matches Date.getUTCDay()
+  /** A check-in is enough to count the day as worked; no check-out is needed (decided 2026-10-12). */
   hasCheckIn: boolean;
-  hasCheckOut: boolean;
   /** Shift explicitly carried by this day's own classification entry, if any. */
   recordShiftType: string | null;
   /** This employee's normal weekly ShiftAssignment (or the app-wide default). */
@@ -27,12 +27,13 @@ export interface DayHoursInput {
 }
 
 // "Jam Kerja Aktual" — hours actually physically worked: a real check-in
-// AND check-out, or a "Masuk" presentOverride (HR's determination that they
+// (the check-out is not needed; the hours are the shift's scheduled minutes
+// and never more than that), or a "Masuk" presentOverride (HR's determination that they
 // were genuinely present despite no punch). Excludes paid-absence credit
 // entirely, unlike computeDayMinutes below — per direct request, this is
 // the "real working hours" figure, distinct from what payroll pays for.
 export function computeActualDayMinutes(input: DayHoursInput, scheduleMinutesFor: (shiftType: string, dayOfWeek: number) => number): number {
-  if (input.presentOverride || (input.hasCheckIn && input.hasCheckOut)) {
+  if (input.presentOverride || input.hasCheckIn) {
     const shift = input.recordShiftType ?? input.assignedShiftType;
     return scheduleMinutesFor(shift, input.dayOfWeek);
   }

@@ -9,7 +9,6 @@ const base = {
   hasExplicitAbsenceCode: false,
   presentOverride: false,
   hasCheckIn: false,
-  hasCheckOut: false,
   isScheduledToWork: true,
   requests: [cuti],
 };
@@ -31,10 +30,10 @@ describe("pickLeaveRequestForGridDay", () => {
     expect(pickLeaveRequestForGridDay({ ...base, presentOverride: true })).toBeUndefined();
   });
   it("does not cover a day the person actually worked", () => {
-    expect(pickLeaveRequestForGridDay({ ...base, hasCheckIn: true, hasCheckOut: true })).toBeUndefined();
+    expect(pickLeaveRequestForGridDay({ ...base, hasCheckIn: true })).toBeUndefined();
   });
-  it("still covers a day with only one punch", () => {
-    expect(pickLeaveRequestForGridDay({ ...base, hasCheckIn: true })).toBe(cuti);
+  it("still covers a day with no check-in", () => {
+    expect(pickLeaveRequestForGridDay({ ...base, hasCheckIn: false })).toBe(cuti);
   });
   it("does not cover a day off or a public holiday", () => {
     expect(pickLeaveRequestForGridDay({ ...base, isScheduledToWork: false })).toBeUndefined();
@@ -48,7 +47,6 @@ describe("paid leave from a request on the grid", () => {
       {
         dayOfWeek: 2,
         hasCheckIn: false,
-        hasCheckOut: false,
         recordShiftType: "SHIFT_1",
         assignedShiftType: "SHIFT_1",
         absenceTypeCode: "CT",
@@ -64,7 +62,6 @@ describe("paid leave from a request on the grid", () => {
       {
         dayOfWeek: 2,
         hasCheckIn: false,
-        hasCheckOut: false,
         recordShiftType: "SHIFT_1",
         assignedShiftType: "SHIFT_1",
         absenceTypeCode: "IZ",
@@ -74,5 +71,21 @@ describe("paid leave from a request on the grid", () => {
       minutesFor
     );
     expect(minutes).toBe(0);
+  });
+});
+
+describe("pickLeaveRequestForGridDay with only a check-in", () => {
+  it("a check-in alone means they came to work, so the leave does not cover the day", () => {
+    const date = new Date(Date.UTC(2026, 9, 12));
+    expect(
+      pickLeaveRequestForGridDay({
+        date,
+        hasExplicitAbsenceCode: false,
+        presentOverride: false,
+        hasCheckIn: true,
+        isScheduledToWork: true,
+        requests: [{ startDate: date, endDate: date, absenceTypeCode: "CT" }],
+      })
+    ).toBeUndefined();
   });
 });

@@ -264,14 +264,16 @@ export async function updateWorkSchedule(
     minutesByDay.push(minutes);
   }
 
-  // When the shift starts and how much grace a check-in gets (not for the day-off "shift").
-  let startTime: string | null = null;
+  // The start time of each weekday (empty = not set, never late) and the one
+  // grace the whole shift shares. Not for the day-off "shift".
+  const startByDay: (string | null)[] = [];
   let graceMinutes = 10;
   if (validShiftType !== "NON_SHIFT") {
-    const rawStart = ((formData.get("startTime") as string) ?? "").trim();
-    if (rawStart) {
-      if (parseStartMinutes(rawStart) === null) return "Jam mulai harus berupa jam, mis. 07:30.";
-      startTime = rawStart;
+    for (let day = 0; day <= 6; day++) {
+      const raw = ((formData.get(`start_${day}`) as string) ?? "").trim();
+      if (raw && parseStartMinutes(raw) === null) return "Jam masuk harus berupa jam, mis. 07:30.";
+      // A day with no working minutes has no start time.
+      startByDay.push(raw && minutesByDay[day] > 0 ? raw : null);
     }
     const rawGrace = ((formData.get("graceMinutes") as string) ?? "").trim();
     graceMinutes = rawGrace ? Number(rawGrace) : 10;
@@ -282,16 +284,16 @@ export async function updateWorkSchedule(
     ...minutesByDay.map((minutes, day) =>
       prisma.workScheduleConfig.upsert({
         where: { shiftType_dayOfWeek: { shiftType: validShiftType, dayOfWeek: day } },
-        create: { shiftType: validShiftType, dayOfWeek: day, minutes },
-        update: { minutes },
+        create: { shiftType: validShiftType, dayOfWeek: day, minutes, startTime: startByDay[day] ?? null },
+        update: { minutes, ...(validShiftType !== "NON_SHIFT" ? { startTime: startByDay[day] ?? null } : {}) },
       })
     ),
     ...(validShiftType !== "NON_SHIFT"
       ? [
           prisma.shiftStartConfig.upsert({
             where: { shiftType: validShiftType },
-            create: { shiftType: validShiftType, startTime, graceMinutes },
-            update: { startTime, graceMinutes },
+            create: { shiftType: validShiftType, startTime: null, graceMinutes },
+            update: { graceMinutes },
           }),
         ]
       : []),
@@ -302,7 +304,7 @@ export async function updateWorkSchedule(
     action: "UPDATE",
     datasetName: "WorkScheduleConfig",
     recordId: shiftType,
-    reason: `Updated schedule for ${shiftType}: ${minutesByDay.join(",")} minutes (Sun..Sat); start ${startTime ?? "not set"}, grace ${graceMinutes} min`,
+    reason: `Updated schedule for ${shiftType}: ${minutesByDay.join(",")} minutes (Sun..Sat); start ${startByDay.map((t) => t ?? "-").join(",")}; grace ${graceMinutes} min`,
   });
 
   revalidatePath("/admin/absence-settings");

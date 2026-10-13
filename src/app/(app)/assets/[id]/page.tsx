@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n/id";
 import { AssignForms } from "./assign-forms";
 import { CustodyActions } from "./custody-actions";
 import { MarkObsoleteForm } from "./mark-obsolete-form";
+import { EditAssetForm } from "./edit-asset-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 function custodyTargetLabel(c: {
@@ -107,6 +108,27 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
           </a>
         )}
       </div>
+
+      {canManage && (
+        <EditAssetForm
+          asset={{
+            id: asset.id,
+            assetCode: asset.assetCode,
+            assetName: asset.assetName,
+            category: asset.category ?? "",
+            assetNumber: asset.assetNumber ?? "",
+            modelBrand: asset.modelBrand ?? "",
+            specification: asset.specification ?? "",
+            trackingType: asset.trackingType,
+            totalQuantity: asset.totalQuantity !== null ? String(asset.totalQuantity) : "",
+            purchaseDate: asset.purchaseDate ? asset.purchaseDate.toISOString().slice(0, 10) : "",
+            purchaseCost: asset.purchaseCost !== null ? String(asset.purchaseCost) : "",
+            notes: asset.notes ?? "",
+            outNow: asset.trackingType === "QUANTITY_TRACKED" ? (asset.totalQuantity ?? 0) - (asset.availableQuantity ?? 0) : 0,
+            hasCustodyHistory: asset.custodies.length > 0,
+          }}
+        />
+      )}
 
       <h2 className="mt-6 text-sm font-medium text-slate-900">{t("asset.currentCustodyTitle")}</h2>
       {openCustodies.length === 0 ? (

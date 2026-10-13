@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, startTransition } from "react";
 import { createFixedAsset } from "./actions";
 import { t } from "@/lib/i18n/id";
 import { ASSET_CATEGORIES } from "@/lib/asset-categories";
@@ -10,7 +10,15 @@ export function CreateAssetForm() {
   const [trackingType, setTrackingType] = useState("INDIVIDUAL");
 
   return (
-    <form action={formAction} className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-5 md:grid-cols-4">
+    // onSubmit instead of the form action prop: React clears an action form after it runs, which would wipe
+    // everything typed whenever validation fails.
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const data = new FormData(e.currentTarget);
+        startTransition(() => formAction(data));
+      }}
+      className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-5 md:grid-cols-4">
       {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700 md:col-span-4">{error}</p>}
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.assetCode")}</label>

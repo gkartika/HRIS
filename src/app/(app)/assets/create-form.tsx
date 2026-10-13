@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createFixedAsset } from "./actions";
 import { t } from "@/lib/i18n/id";
+import { ASSET_CATEGORIES } from "@/lib/asset-categories";
 
 export function CreateAssetForm() {
   const [error, formAction, isPending] = useActionState(createFixedAsset, undefined);
@@ -21,7 +22,26 @@ export function CreateAssetForm() {
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.category")}</label>
-        <input name="category" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        <select name="category" defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <option value="">— Pilih —</option>
+          {ASSET_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">{t("asset.assetNumber")}</label>
+        <input name="assetNumber" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">{t("asset.modelBrand")}</label>
+        <input name="modelBrand" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      </div>
+      <div className="md:col-span-2">
+        <label className="mb-1 block text-xs text-slate-500">{t("asset.specification")}</label>
+        <input name="specification" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.trackingType")}</label>

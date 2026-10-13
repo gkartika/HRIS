@@ -2723,6 +2723,10 @@ model FixedAsset {
   assetCode          String            @unique
   assetName          String
   category           String?
+  // Free text, all optional: brand/model/type, specification, and the company's own asset number.
+  modelBrand         String?
+  specification      String?
+  assetNumber        String?
   trackingType       AssetTrackingType
   status             AssetStatus       @default(AVAILABLE)
   // Only meaningful for QUANTITY_TRACKED — null for INDIVIDUAL. Reduced

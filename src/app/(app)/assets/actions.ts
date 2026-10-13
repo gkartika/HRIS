@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageAssets } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
+import { ASSET_CATEGORIES, normalizeAssetCategory } from "@/lib/asset-categories";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 import {
@@ -25,7 +26,12 @@ export async function createFixedAsset(_prevState: string | undefined, formData:
 
   const assetCode = (formData.get("assetCode") as string)?.trim();
   const assetName = (formData.get("assetName") as string)?.trim();
-  const category = (formData.get("category") as string)?.trim() || null;
+  const categoryRaw = (formData.get("category") as string)?.trim();
+  const category = normalizeAssetCategory(categoryRaw);
+  if (categoryRaw && !category) return `Kategori harus salah satu dari: ${ASSET_CATEGORIES.join(", ")}.`;
+  const modelBrand = (formData.get("modelBrand") as string)?.trim() || null;
+  const specification = (formData.get("specification") as string)?.trim() || null;
+  const assetNumber = (formData.get("assetNumber") as string)?.trim() || null;
   const trackingTypeRaw = formData.get("trackingType") as string;
   if (!assetCode || !assetName) return "Kode aset dan nama aset wajib diisi.";
   if (!["INDIVIDUAL", "QUANTITY_TRACKED"].includes(trackingTypeRaw)) return "Tipe pelacakan tidak valid.";
@@ -52,6 +58,9 @@ export async function createFixedAsset(_prevState: string | undefined, formData:
       assetCode,
       assetName,
       category,
+      modelBrand,
+      specification,
+      assetNumber,
       trackingType,
       totalQuantity,
       availableQuantity: totalQuantity,

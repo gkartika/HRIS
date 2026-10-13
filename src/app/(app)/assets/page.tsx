@@ -11,18 +11,19 @@ import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import type { Prisma } from "@/generated/prisma/client";
 import { CreateAssetForm } from "./create-form";
+import { ASSET_CATEGORIES } from "@/lib/asset-categories";
 
 export default async function AssetsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; trackingType?: string; status?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; trackingType?: string; status?: string; category?: string }>;
 }) {
   const session = await requireSession();
   if (!canViewAssetMaster(session)) {
     return <AccessDenied />;
   }
 
-  const { q, trackingType, status, page: pageRaw } = await searchParams;
+  const { q, trackingType, status, category, page: pageRaw } = await searchParams;
 
   const where: Prisma.FixedAssetWhereInput = {};
   if (q?.trim()) {
@@ -31,8 +32,12 @@ export default async function AssetsPage({
       { assetCode: { contains: query, mode: "insensitive" } },
       { assetName: { contains: query, mode: "insensitive" } },
       { category: { contains: query, mode: "insensitive" } },
+      { modelBrand: { contains: query, mode: "insensitive" } },
+      { specification: { contains: query, mode: "insensitive" } },
+      { assetNumber: { contains: query, mode: "insensitive" } },
     ];
   }
+  if (category && (ASSET_CATEGORIES as readonly string[]).includes(category)) where.category = category;
   if (trackingType === "INDIVIDUAL" || trackingType === "QUANTITY_TRACKED") where.trackingType = trackingType;
   if (status === "AVAILABLE" || status === "IN_USE" || status === "UNDER_REPAIR" || status === "DISPOSED") {
     where.status = status;
@@ -92,9 +97,20 @@ export default async function AssetsPage({
             type="text"
             name="q"
             defaultValue={q ?? ""}
-            placeholder="Kode, nama, atau kategori"
+            placeholder="Kode, nama, no aset, model atau kategori"
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
           />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("asset.category")}</label>
+          <select name="category" defaultValue={category ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {ASSET_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("asset.trackingType")}</label>
@@ -135,7 +151,10 @@ export default async function AssetsPage({
             <thead className="bg-slate-50 text-left text-xs text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-medium">{t("asset.assetCode")}</th>
+                <th className="px-4 py-3 font-medium">{t("asset.assetNumber")}</th>
                 <th className="px-4 py-3 font-medium">{t("asset.assetName")}</th>
+                <th className="px-4 py-3 font-medium">{t("asset.modelBrand")}</th>
+                <th className="px-4 py-3 font-medium">{t("asset.category")}</th>
                 <th className="px-4 py-3 font-medium">{t("asset.trackingType")}</th>
                 <th className="px-4 py-3 font-medium">{t("asset.status")}</th>
                 <th className="px-4 py-3 font-medium">{t("asset.quantity")}</th>
@@ -150,7 +169,10 @@ export default async function AssetsPage({
                       {asset.assetCode}
                     </Link>
                   </td>
+                  <td className="px-4 py-3 text-xs text-slate-600">{asset.assetNumber ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-900">{asset.assetName}</td>
+                  <td className="px-4 py-3 text-xs text-slate-600">{asset.modelBrand ?? "—"}</td>
+                  <td className="px-4 py-3 text-xs text-slate-600">{asset.category ?? "—"}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">
                     {asset.trackingType === "INDIVIDUAL" ? t("asset.trackingTypeIndividual") : t("asset.trackingTypeQuantity")}
                   </td>
@@ -169,7 +191,7 @@ export default async function AssetsPage({
           </table>
         </div>
       )}
-      <Pager page={page} total={total} basePath="/assets" params={{ q, trackingType, status }} />
+      <Pager page={page} total={total} basePath="/assets" params={{ q, trackingType, status, category }} />
     </div>
   );
 }

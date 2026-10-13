@@ -57,7 +57,7 @@ export async function uploadAndPreviewImport(
     return "Pilih berkas terlebih dahulu.";
   }
 
-  const parsedRows = await fileToRows(file, { isoDates: dataset.startsWith("consumable-") });
+  const parsedRows = await fileToRows(file, { isoDates: dataset.startsWith("consumable-") || dataset === "asset-master" });
   if (parsedRows.length === 0) {
     return "Berkas kosong atau tidak dapat dibaca.";
   }

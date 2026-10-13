@@ -86,6 +86,18 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
             {asset.category ?? "—"} · {asset.trackingType === "INDIVIDUAL" ? t("asset.trackingTypeIndividual") : t("asset.trackingTypeQuantity")}
             {asset.trackingType === "QUANTITY_TRACKED" && ` (${asset.availableQuantity ?? 0}/${asset.totalQuantity ?? 0} tersedia)`}
           </p>
+          {(asset.assetNumber || asset.modelBrand) && (
+            <p className="mt-1 text-sm text-slate-500">
+              {[asset.assetNumber && `${t("asset.assetNumber")}: ${asset.assetNumber}`, asset.modelBrand && `${t("asset.modelBrand")}: ${asset.modelBrand}`]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+          {asset.specification && (
+            <p className="mt-1 text-sm text-slate-500">
+              {t("asset.specification")}: {asset.specification}
+            </p>
+          )}
           {asset.notes && <p className="mt-1 text-xs text-slate-500">{asset.notes}</p>}
         </div>
         {canManage && asset.status !== "RETIRED" && !openDisposalCase && <MarkObsoleteForm assetId={asset.id} />}

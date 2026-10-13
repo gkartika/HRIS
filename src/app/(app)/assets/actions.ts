@@ -17,6 +17,7 @@ import {
   isCustodyOpen,
   computeAssetStatusAfterReturn,
   computeAvailableQuantityAfterReturn,
+  validatePlacement,
 } from "@/lib/assets";
 import type { AssetCustodyTargetType, AssetInspectionResult, AssetTrackingType } from "@/generated/prisma/enums";
 
@@ -102,6 +103,8 @@ async function createCustody(
   formData: FormData
 ): Promise<string | undefined> {
   if (!canManageAssets(session)) return t("common.forbidden");
+  const placementError = validatePlacement(target.targetType, target.locationId);
+  if (placementError) return placementError;
 
   const asset = await prisma.fixedAsset.findUnique({ where: { id: assetId } });
   if (!asset) return "Aset tidak ditemukan.";
@@ -212,20 +215,13 @@ export async function assignAssetToDepartment(
   if (!orgUnitId) return "Departemen wajib dipilih.";
   const orgUnit = await prisma.orgUnit.findUnique({ where: { id: orgUnitId } });
   if (!orgUnit) return "Departemen tidak ditemukan.";
-  return createCustody(assetId, { targetType: "DEPARTMENT", orgUnitId }, session, formData);
-}
-
-export async function assignAssetToLocation(
-  assetId: string,
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
+  // A department placement always says where the asset is.
   const locationId = (formData.get("locationId") as string)?.trim();
-  if (!locationId) return "Lokasi wajib dipilih.";
+  const placementError = validatePlacement("DEPARTMENT", locationId);
+  if (placementError) return placementError;
   const location = await prisma.assetLocation.findUnique({ where: { id: locationId } });
   if (!location || !location.activeFlag) return "Lokasi tidak ditemukan atau tidak aktif.";
-  return createCustody(assetId, { targetType: "LOCATION", locationId }, session, formData);
+  return createCustody(assetId, { targetType: "DEPARTMENT", orgUnitId, locationId }, session, formData);
 }
 
 export async function returnAssetCustody(
@@ -333,7 +329,8 @@ export async function transferAssetCustody(
   if (!isCustodyOpen(custody.status)) return "Catatan penguasaan ini sudah dikembalikan.";
 
   const newTargetTypeRaw = formData.get("newTargetType") as string;
-  if (!["EMPLOYEE", "DEPARTMENT", "LOCATION"].includes(newTargetTypeRaw)) return "Tujuan pemindahan tidak valid.";
+  if (newTargetTypeRaw === "LOCATION") return validatePlacement("LOCATION", null) ?? undefined;
+  if (!["EMPLOYEE", "DEPARTMENT"].includes(newTargetTypeRaw)) return "Tujuan pemindahan tidak valid.";
   const newTargetType = newTargetTypeRaw as AssetCustodyTargetType;
   const conditionAtHandover = (formData.get("conditionAtHandover") as string)?.trim() || null;
 
@@ -348,9 +345,11 @@ export async function transferAssetCustody(
   } else if (newTargetType === "DEPARTMENT") {
     newOrgUnitId = (formData.get("orgUnitId") as string)?.trim() || null;
     if (!newOrgUnitId) return "Departemen tujuan wajib dipilih.";
-  } else {
     newLocationId = (formData.get("locationId") as string)?.trim() || null;
-    if (!newLocationId) return "Lokasi tujuan wajib dipilih.";
+    const placementError = validatePlacement("DEPARTMENT", newLocationId);
+    if (placementError) return placementError;
+    const location = await prisma.assetLocation.findUnique({ where: { id: newLocationId! } });
+    if (!location || !location.activeFlag) return "Lokasi tujuan tidak ditemukan atau tidak aktif.";
   }
 
   const result = await prisma.$transaction(async (tx) => {

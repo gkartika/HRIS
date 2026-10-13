@@ -12,6 +12,7 @@ const HEADERS = [
   "assetName",
   "targetType",
   "target",
+  "location",
   "quantity",
   "status",
   "assignedAt",
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
         c.targetType === "EMPLOYEE" && c.employee
           ? `${c.employee.employeeNumber} — ${c.employee.fullLegalName}`
           : (c.targetType === "DEPARTMENT" ? c.orgUnit?.unitName : c.location?.locationName) ?? "",
+      location: c.location?.locationName ?? "",
       quantity: String(c.quantity),
       status: c.status,
       assignedAt: c.assignedAt.toISOString().slice(0, 10),

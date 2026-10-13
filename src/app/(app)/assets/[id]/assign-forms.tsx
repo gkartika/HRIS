@@ -2,14 +2,14 @@
 
 import { DocumentFileInput } from "@/components/document-file-input";
 import { useActionState, useState } from "react";
-import { assignAssetToEmployee, assignAssetToDepartment, assignAssetToLocation } from "../actions";
+import { assignAssetToEmployee, assignAssetToDepartment } from "../actions";
 import { t } from "@/lib/i18n/id";
 
 interface Option {
   id: string;
 }
 
-type Tab = "EMPLOYEE" | "DEPARTMENT" | "LOCATION";
+type Tab = "EMPLOYEE" | "DEPARTMENT";
 
 function QuantityField({ trackingType, availableQuantity }: { trackingType: string; availableQuantity: number }) {
   if (trackingType !== "QUANTITY_TRACKED") return null;
@@ -82,11 +82,13 @@ function DepartmentForm({
   trackingType,
   availableQuantity,
   orgUnits,
+  locations,
 }: {
   assetId: string;
   trackingType: string;
   availableQuantity: number;
   orgUnits: (Option & { unitName: string })[];
+  locations: (Option & { locationName: string })[];
 }) {
   const [error, formAction, isPending] = useActionState(assignAssetToDepartment.bind(null, assetId), undefined);
   return (
@@ -103,43 +105,6 @@ function DepartmentForm({
           ))}
         </select>
       </div>
-      <QuantityField trackingType={trackingType} availableQuantity={availableQuantity} />
-      <div>
-        <label className="mb-1 block text-xs text-slate-500">{t("asset.conditionAtHandoverLabel")}</label>
-        <input name="conditionAtHandover" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs text-slate-500">{t("asset.handoverEvidenceLabel")}</label>
-        <DocumentFileInput name="handoverEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
-      </div>
-      <div className="flex items-end">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-        >
-          {isPending ? "Menyimpan..." : t("asset.assignButton")}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function LocationForm({
-  assetId,
-  trackingType,
-  availableQuantity,
-  locations,
-}: {
-  assetId: string;
-  trackingType: string;
-  availableQuantity: number;
-  locations: (Option & { locationName: string })[];
-}) {
-  const [error, formAction, isPending] = useActionState(assignAssetToLocation.bind(null, assetId), undefined);
-  return (
-    <form action={formAction} className="grid grid-cols-1 gap-3 md:grid-cols-4">
-      {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700 md:col-span-4">{error}</p>}
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.locationLabel")}</label>
         <select name="locationId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
@@ -192,7 +157,6 @@ export function AssignForms({
   const tabs: { key: Tab; label: string }[] = [
     { key: "EMPLOYEE", label: t("asset.assignToEmployeeTitle") },
     { key: "DEPARTMENT", label: t("asset.assignToDepartmentTitle") },
-    { key: "LOCATION", label: t("asset.assignToLocationTitle") },
   ];
 
   return (
@@ -215,10 +179,7 @@ export function AssignForms({
         <EmployeeForm assetId={assetId} trackingType={trackingType} availableQuantity={availableQuantity} employees={employees} />
       )}
       {tab === "DEPARTMENT" && (
-        <DepartmentForm assetId={assetId} trackingType={trackingType} availableQuantity={availableQuantity} orgUnits={orgUnits} />
-      )}
-      {tab === "LOCATION" && (
-        <LocationForm assetId={assetId} trackingType={trackingType} availableQuantity={availableQuantity} locations={locations} />
+        <DepartmentForm assetId={assetId} trackingType={trackingType} availableQuantity={availableQuantity} orgUnits={orgUnits} locations={locations} />
       )}
     </div>
   );

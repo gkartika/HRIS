@@ -19,7 +19,7 @@ function custodyTargetLabel(c: {
   location: { locationName: string } | null;
 }): string {
   if (c.targetType === "EMPLOYEE" && c.employee) return `${c.employee.employeeNumber} — ${c.employee.fullLegalName}`;
-  if (c.targetType === "DEPARTMENT" && c.orgUnit) return c.orgUnit.unitName;
+  if (c.targetType === "DEPARTMENT" && c.orgUnit) return c.location ? `${c.orgUnit.unitName} — ${c.location.locationName}` : c.orgUnit.unitName;
   if (c.targetType === "LOCATION" && c.location) return c.location.locationName;
   return "—";
 }

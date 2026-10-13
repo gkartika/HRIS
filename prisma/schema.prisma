@@ -2762,7 +2762,9 @@ model FixedAsset {
 // employeeId/orgUnitId/locationId is set, matching targetType — enforced in
 // lib/assets.ts, the same app-layer-invariant convention as every other
 // "exactly one of N" rule in this app (Prisma/SQLite has no polymorphic
-// association).
+// association). Since 2026-10-13 new placements are EMPLOYEE or DEPARTMENT only;
+// a DEPARTMENT row also carries locationId as the place the asset is at. Old
+// LOCATION rows are kept as history.
 model AssetCustody {
   id         String                 @id @default(cuid())
   assetId    String

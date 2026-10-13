@@ -6,6 +6,7 @@ import {
   computeAssetStatusAfterReturn,
   computeAvailableQuantityAfterReturn,
   blocksOffboarding,
+  validatePlacement,
 } from "./assets";
 
 describe("isCustodyOpen", () => {
@@ -58,5 +59,22 @@ describe("blocksOffboarding", () => {
     expect(blocksOffboarding("EMPLOYEE", "RETURNED")).toBe(false);
     expect(blocksOffboarding("DEPARTMENT", "ACTIVE")).toBe(false);
     expect(blocksOffboarding("LOCATION", "ACTIVE")).toBe(false);
+  });
+});
+
+describe("validatePlacement", () => {
+  it("allows an employee with or without a location", () => {
+    expect(validatePlacement("EMPLOYEE", null)).toBeNull();
+    expect(validatePlacement("EMPLOYEE", "loc-1")).toBeNull();
+  });
+
+  it("needs a location for a department", () => {
+    expect(validatePlacement("DEPARTMENT", "loc-1")).toBeNull();
+    expect(validatePlacement("DEPARTMENT", "")).toContain("Lokasi wajib");
+    expect(validatePlacement("DEPARTMENT", null)).toContain("Lokasi wajib");
+  });
+
+  it("refuses a placement straight to a location", () => {
+    expect(validatePlacement("LOCATION", "loc-1")).toContain("tidak diperbolehkan");
   });
 });

@@ -25,7 +25,7 @@ import {
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
-import { assignAssetToEmployee, assignAssetToDepartment, assignAssetToLocation } from "@/app/(app)/assets/actions";
+import { assignAssetToEmployee, assignAssetToDepartment } from "@/app/(app)/assets/actions";
 import { createDisposalCaseInternal } from "@/lib/disposal-create";
 import type { GaRequestType, GaRequestUrgency } from "@/generated/prisma/enums";
 
@@ -295,13 +295,11 @@ export async function processGaRequest(requestId: string, _prevState: string | u
   } else if (targetType === "DEPARTMENT") {
     const orgUnitId = (formData.get("orgUnitId") as string)?.trim();
     if (!orgUnitId) return "Departemen wajib dipilih.";
-    innerFormData.set("orgUnitId", orgUnitId);
-    assignError = await assignAssetToDepartment(assetId, undefined, innerFormData);
-  } else if (targetType === "LOCATION") {
     const locationId = (formData.get("locationId") as string)?.trim();
-    if (!locationId) return "Lokasi wajib dipilih.";
+    if (!locationId) return "Lokasi wajib dipilih untuk penempatan ke departemen.";
+    innerFormData.set("orgUnitId", orgUnitId);
     innerFormData.set("locationId", locationId);
-    assignError = await assignAssetToLocation(assetId, undefined, innerFormData);
+    assignError = await assignAssetToDepartment(assetId, undefined, innerFormData);
   } else {
     return "Tujuan alokasi tidak valid.";
   }

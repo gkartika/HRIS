@@ -69,7 +69,6 @@ function TransferForm({
         >
           <option value="EMPLOYEE">{t("assetCustodyTargetType.EMPLOYEE")}</option>
           <option value="DEPARTMENT">{t("assetCustodyTargetType.DEPARTMENT")}</option>
-          <option value="LOCATION">{t("assetCustodyTargetType.LOCATION")}</option>
         </select>
       </div>
       {newTargetType === "EMPLOYEE" && (
@@ -86,30 +85,30 @@ function TransferForm({
         </div>
       )}
       {newTargetType === "DEPARTMENT" && (
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("asset.departmentLabel")}</label>
-          <select name="orgUnitId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">— Pilih Departemen —</option>
-            {orgUnits.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.unitName}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      {newTargetType === "LOCATION" && (
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("asset.locationLabel")}</label>
-          <select name="locationId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">— Pilih Lokasi —</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.locationName}
-              </option>
-            ))}
-          </select>
-        </div>
+        <>
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">{t("asset.departmentLabel")}</label>
+            <select name="orgUnitId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <option value="">— Pilih Departemen —</option>
+              {orgUnits.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.unitName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">{t("asset.locationLabel")}</label>
+            <select name="locationId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <option value="">— Pilih Lokasi —</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.locationName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
       )}
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.conditionAtHandoverLabel")}</label>

@@ -103,6 +103,7 @@ export function ProcessForm({
   orgUnits,
   locations,
   defaultEmployeeId,
+  defaultLocationId,
 }: {
   requestId: string;
   assets: AssetOption[];
@@ -110,9 +111,11 @@ export function ProcessForm({
   orgUnits: EmployeeOption[];
   locations: EmployeeOption[];
   defaultEmployeeId: string;
+  /** The location the requester named on the request, offered as the default for a department placement. */
+  defaultLocationId: string;
 }) {
   const [mode, setMode] = useState<"ALLOCATE" | "PROCUREMENT">("ALLOCATE");
-  const [targetType, setTargetType] = useState<"EMPLOYEE" | "DEPARTMENT" | "LOCATION">("EMPLOYEE");
+  const [targetType, setTargetType] = useState<"EMPLOYEE" | "DEPARTMENT">("EMPLOYEE");
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [error, formAction, isPending] = useActionState(processGaRequest.bind(null, requestId), undefined);
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
@@ -163,14 +166,14 @@ export function ProcessForm({
           </div>
 
           <div className="flex gap-2">
-            {(["EMPLOYEE", "DEPARTMENT", "LOCATION"] as const).map((tt) => (
+            {(["EMPLOYEE", "DEPARTMENT"] as const).map((tt) => (
               <button
                 key={tt}
                 type="button"
                 onClick={() => setTargetType(tt)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-medium ${targetType === tt ? "bg-slate-700 text-white" : "border border-slate-200 text-slate-600"}`}
               >
-                {tt === "EMPLOYEE" ? "Karyawan" : tt === "DEPARTMENT" ? "Departemen" : "Lokasi"}
+                {tt === "EMPLOYEE" ? "Karyawan" : "Departemen"}
               </button>
             ))}
           </div>
@@ -190,30 +193,30 @@ export function ProcessForm({
             </div>
           )}
           {targetType === "DEPARTMENT" && (
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Departemen Tujuan</label>
-              <select name="orgUnitId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <option value="">— Pilih Departemen —</option>
-                {orgUnits.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {targetType === "LOCATION" && (
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Lokasi Tujuan</label>
-              <select name="locationId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <option value="">— Pilih Lokasi —</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Departemen Tujuan</label>
+                <select name="orgUnitId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                  <option value="">— Pilih Departemen —</option>
+                  {orgUnits.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-500">Lokasi (wajib untuk departemen)</label>
+                <select name="locationId" required defaultValue={defaultLocationId} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                  <option value="">— Pilih Lokasi —</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
 
           {selectedAsset?.trackingType === "QUANTITY_TRACKED" && (

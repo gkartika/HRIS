@@ -182,6 +182,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
                     orgUnits={processFormData.orgUnits}
                     locations={processFormData.locations}
                     defaultEmployeeId={request.requesterEmployeeId}
+                    defaultLocationId={request.locationId ?? ""}
                   />
                 )
               )}

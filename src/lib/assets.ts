@@ -51,6 +51,15 @@ export function computeAvailableQuantityAfterReturn(
   return currentAvailableQuantity + returnedQuantity;
 }
 
+// Where an asset may be placed: only to an employee or to a department. Placing
+// straight to a location is no longer allowed (old LOCATION records stay readable),
+// and a department placement must say which location the asset is at.
+export function validatePlacement(targetType: AssetCustodyTargetTypeValue, locationId: string | null | undefined): string | null {
+  if (targetType === "LOCATION") return "Penempatan langsung ke lokasi tidak diperbolehkan. Pilih karyawan atau departemen.";
+  if (targetType === "DEPARTMENT" && !locationId) return "Lokasi wajib dipilih untuk penempatan ke departemen.";
+  return null;
+}
+
 // Core control: "Only open Employee custody blocks offboarding;
 // Department/Location custody does not."
 export function blocksOffboarding(targetType: AssetCustodyTargetTypeValue, status: AssetCustodyStatusValue): boolean {

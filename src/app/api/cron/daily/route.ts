@@ -3,6 +3,7 @@ import { reconcileDueDailyAttendance } from "@/lib/attendance-reconciliation";
 import { runDueRenewalScan } from "@/lib/renewal-scan";
 import { runOffboardingDeactivations } from "@/lib/offboarding-deactivate";
 import { applyDuePlacementChanges } from "@/lib/placement-schedule";
+import { createDueMaintenanceWorkOrders } from "@/lib/maintenance-create";
 
 // Daily scheduled job (Vercel Cron, see vercel.json): the two things that used
 // to run — and write to the database — whenever someone opened the Kontrak or
@@ -23,11 +24,14 @@ export async function GET(request: Request) {
   // Future-dated moves whose start date has arrived: new placement becomes
   // ACTIVE, the old one ENDED, current position and seat status follow.
   const placements = await applyDuePlacementChanges();
+  // Preventive plans that are set to open their own work order and have come due.
+  const maintenance = await createDueMaintenanceWorkOrders();
   return NextResponse.json({
     ok: true,
     renewalCasesCreated: renewals.created,
     employeesDeactivated: offboarding.deactivated,
     loginsDisabled: offboarding.loginsDisabled,
     placementChangesApplied: placements.activated,
+    preventiveWorkOrdersCreated: maintenance.created,
   });
 }

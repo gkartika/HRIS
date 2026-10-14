@@ -6,6 +6,7 @@ const FILTERS: { key: TodoKind | "all"; label: string }[] = [
   { key: "all", label: "Semua" },
   { key: "ga", label: "Permintaan GA" },
   { key: "wo", label: "Work Order" },
+  { key: "pm", label: "Perawatan" },
   { key: "dp", label: "Disposal" },
   { key: "of", label: "Offboarding" },
   { key: "st", label: "Stok" },

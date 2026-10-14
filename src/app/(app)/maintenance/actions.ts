@@ -3,17 +3,16 @@
 import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
-import { companyYear } from "@/lib/company-time";
-import { nextSequence } from "@/lib/number-sequence";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
 import {
-  formatWorkOrderNumber,
   canExecuteMaintenanceWorkOrder,
   disposalReasonForMaintenanceOutcome,
   computeAssetStatusAfterMaintenanceOutcome,
+  computeNextPlanDue,
 } from "@/lib/ga-operations";
+import { createWorkOrderInternal } from "@/lib/maintenance-create";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
@@ -35,6 +34,11 @@ export async function createMaintenancePlan(_prevState: string | undefined, form
   const dueDateRaw = (formData.get("dueDate") as string)?.trim();
   const intervalDaysRaw = (formData.get("intervalDays") as string)?.trim();
   const intervalKmRaw = (formData.get("intervalKm") as string)?.trim();
+  const dueKmRaw = (formData.get("dueKm") as string)?.trim();
+  for (const [label, raw] of [["Interval hari", intervalDaysRaw], ["Interval km", intervalKmRaw], ["Jatuh tempo km", dueKmRaw]] as const) {
+    if (raw && !(Number.isInteger(Number(raw)) && Number(raw) > 0)) return `${label} harus berupa angka bulat lebih dari 0.`;
+  }
+  if ((formData.get("autoCreateWorkOrder") === "on") && !dueDateRaw) return "Work order otomatis butuh tanggal jatuh tempo.";
 
   const plan = await prisma.maintenancePlan.create({
     data: {
@@ -43,6 +47,8 @@ export async function createMaintenancePlan(_prevState: string | undefined, form
       dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
       intervalDays: intervalDaysRaw ? Number(intervalDaysRaw) : null,
       intervalKm: intervalKmRaw ? Number(intervalKmRaw) : null,
+      dueKm: dueKmRaw ? Number(dueKmRaw) : null,
+      autoCreateWorkOrder: formData.get("autoCreateWorkOrder") === "on",
       createdByAccountId: session.user.id,
     },
   });
@@ -97,29 +103,14 @@ async function createWorkOrder(params: {
   const workType = workTypeRaw as MaintenanceWorkType;
   const checklistNotes = (params.formData.get("checklistNotes") as string)?.trim() || null;
 
-  const year = companyYear();
-  const seq = await nextSequence(`WO-${year}`);
-  const workOrderNumber = formatWorkOrderNumber(seq, year);
-
-  const workOrder = await prisma.maintenanceWorkOrder.create({
-    data: {
-      workOrderNumber,
-      assetId: params.assetId,
-      sourceType: params.sourceType,
-      sourcePlanId: params.sourcePlanId ?? null,
-      sourceGaRequestId: params.sourceGaRequestId ?? null,
-      workType,
-      checklistNotes,
-      createdByAccountId: params.session.user.id,
-    },
-  });
-
-  await logAudit({
-    actorAccountId: params.session.user.id,
-    action: "CREATE",
-    datasetName: "MaintenanceWorkOrder",
-    recordId: workOrder.id,
-    reason: `${workOrderNumber} created (${params.sourceType.toLowerCase()})`,
+  const workOrder = await createWorkOrderInternal({
+    assetId: params.assetId,
+    sourceType: params.sourceType,
+    sourcePlanId: params.sourcePlanId,
+    sourceGaRequestId: params.sourceGaRequestId,
+    workType,
+    checklistNotes,
+    createdByAccountId: params.session.user.id,
   });
 
   return { id: workOrder.id };
@@ -139,44 +130,6 @@ export async function createWorkOrderFromPlan(planId: string, _prevState: string
   revalidatePath("/maintenance/work-orders");
   revalidatePath(`/maintenance/work-orders/${result.id}`);
   revalidatePath(`/assets/${plan.assetId}`);
-  return undefined;
-}
-
-// PDF: "Inspect asset and create corrective work order" — the second half
-// of a DAMAGE_OR_ABNORMAL_CONDITION request's routing (see
-// ga-requests/actions.ts's verifyGaRequest, which already moved the
-// request to WORK_ORDER_CREATED and the asset to UNDER_REPAIR).
-export async function createCorrectiveWorkOrderFromGaRequest(
-  requestId: string,
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canManageGaOperations(session)) return t("common.forbidden");
-
-  const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
-  if (!request) return "Permintaan tidak ditemukan.";
-  if (request.requestType !== "DAMAGE_OR_ABNORMAL_CONDITION" || request.status !== "WORK_ORDER_CREATED") {
-    return "Permintaan ini tidak berada pada tahap pembuatan work order.";
-  }
-  if (!request.assetId) return "Permintaan ini tidak memiliki aset terkait.";
-
-  const existing = await prisma.maintenanceWorkOrder.findFirst({ where: { sourceGaRequestId: requestId } });
-  if (existing) return `Work order untuk permintaan ini sudah dibuat (${existing.workOrderNumber}).`;
-
-  const result = await createWorkOrder({
-    assetId: request.assetId,
-    sourceType: "CORRECTIVE",
-    sourceGaRequestId: requestId,
-    session,
-    formData,
-  });
-  if (typeof result === "string") return result;
-
-  revalidatePath("/maintenance/work-orders");
-  revalidatePath(`/maintenance/work-orders/${result.id}`);
-  revalidatePath(`/ga-requests/${requestId}`);
-  revalidatePath(`/assets/${request.assetId}`);
   return undefined;
 }
 
@@ -240,6 +193,21 @@ export async function executeMaintenanceWorkOrder(
   const nextDueDate = nextDueDateRaw ? new Date(nextDueDateRaw) : null;
   const nextDueKm = nextDueKmRaw ? Number(nextDueKmRaw) : null;
 
+  // The plan comes due again one interval after this service, unless the dates were typed.
+  const plan = workOrder.sourcePlanId ? await prisma.maintenancePlan.findUnique({ where: { id: workOrder.sourcePlanId } }) : null;
+  const serviceDate = new Date(serviceDateRaw);
+  const odometerKm = odometerKmRaw ? Number(odometerKmRaw) : null;
+  const nextDue = plan
+    ? computeNextPlanDue({
+        serviceDate,
+        odometerKm,
+        intervalDays: plan.intervalDays,
+        intervalKm: plan.intervalKm,
+        enteredNextDueDate: nextDueDate,
+        enteredNextDueKm: nextDueKm,
+      })
+    : { dueDate: nextDueDate, dueKm: nextDueKm };
+
   await prisma.$transaction(async (tx) => {
     await tx.maintenanceWorkOrder.update({
       where: { id: workOrderId },
@@ -252,17 +220,25 @@ export async function executeMaintenanceWorkOrder(
         cost: costRaw ? Number(costRaw) : null,
         evidenceFileId,
         outcome,
-        nextDueDate,
-        nextDueKm,
+        nextDueDate: nextDue.dueDate,
+        nextDueKm: nextDue.dueKm,
         completedByAccountId: session.user.id,
         completedAt: new Date(),
       },
     });
     await tx.fixedAsset.update({ where: { id: workOrder.assetId }, data: { status: newAssetStatus } });
-    if (workOrder.sourcePlanId && (nextDueDate || nextDueKm !== null)) {
+    // Only an operational result rolls the plan forward; a beyond-repair asset is heading for disposal.
+    if (workOrder.sourcePlanId && outcome === "OPERATIONAL" && (nextDue.dueDate || nextDue.dueKm !== null)) {
       await tx.maintenancePlan.update({
         where: { id: workOrder.sourcePlanId },
-        data: { dueDate: nextDueDate ?? undefined, intervalKm: nextDueKm ?? undefined },
+        data: { dueDate: nextDue.dueDate ?? undefined, dueKm: nextDue.dueKm ?? undefined },
+      });
+    }
+    // The damage report behind a corrective work order closes with it.
+    if (workOrder.sourceGaRequestId) {
+      await tx.gaRequest.updateMany({
+        where: { id: workOrder.sourceGaRequestId, status: "WORK_ORDER_CREATED" },
+        data: { status: "COMPLETED" },
       });
     }
   });
@@ -291,5 +267,48 @@ export async function executeMaintenanceWorkOrder(
   revalidatePath(`/assets/${workOrder.assetId}`);
   if (workOrder.sourceGaRequestId) revalidatePath(`/ga-requests/${workOrder.sourceGaRequestId}`);
   if (disposalReason) revalidatePath("/disposal-cases");
+  return undefined;
+}
+
+// The start point for work that nobody reported: GA Admin saw a problem, or wants a one-off
+// service, and opens a work order straight from the Work Order Perawatan page.
+//   Perbaikan (corrective): the asset leaves circulation at once, like an accepted damage report.
+//   Perawatan rutin (preventive): the asset's status does not change.
+export async function createManualWorkOrder(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageGaOperations(session)) return t("common.forbidden");
+
+  const assetId = (formData.get("assetId") as string)?.trim();
+  if (!assetId) return "Aset wajib dipilih.";
+  const kind = formData.get("kind") as string;
+  if (!["CORRECTIVE", "PREVENTIVE"].includes(kind)) return "Jenis work order wajib dipilih.";
+  const workTypeRaw = formData.get("workType") as string;
+  if (!["INTERNAL", "VENDOR"].includes(workTypeRaw)) return "Internal atau vendor wajib dipilih.";
+  const checklistNotes = (formData.get("checklistNotes") as string)?.trim();
+  if (!checklistNotes) return "Keluhan atau pekerjaan yang akan dilakukan wajib diisi.";
+
+  const asset = await prisma.fixedAsset.findUnique({ where: { id: assetId } });
+  if (!asset || !asset.activeFlag) return "Aset tidak ditemukan atau tidak aktif.";
+  if (["RETIRED", "DISPOSED", "PENDING_DISPOSAL"].includes(asset.status)) return "Aset ini sudah atau sedang dalam proses disposal.";
+
+  const open = await prisma.maintenanceWorkOrder.findFirst({ where: { assetId, status: "OPEN" }, select: { workOrderNumber: true } });
+  if (open) return `Aset ini sudah punya work order terbuka (${open.workOrderNumber}).`;
+
+  const workOrder = await createWorkOrderInternal({
+    assetId,
+    sourceType: kind as "CORRECTIVE" | "PREVENTIVE",
+    workType: workTypeRaw as MaintenanceWorkType,
+    checklistNotes,
+    createdByAccountId: session.user.id,
+    auditNote: `${kind.toLowerCase()}, opened manually`,
+  });
+  if (kind === "CORRECTIVE") {
+    await prisma.fixedAsset.update({ where: { id: assetId }, data: { status: "UNDER_REPAIR" } });
+  }
+
+  revalidatePath("/maintenance/work-orders");
+  revalidatePath(`/assets/${assetId}`);
+  revalidatePath("/assets");
+  revalidatePath(`/maintenance/work-orders/${workOrder.id}`);
   return undefined;
 }

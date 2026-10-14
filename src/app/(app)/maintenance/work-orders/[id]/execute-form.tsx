@@ -38,16 +38,16 @@ export function ExecuteMaintenanceForm({ workOrderId }: { workOrderId: string })
         <label className="mb-1 block text-xs text-slate-500">Hasil</label>
         <select name="outcome" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
           <option value="OPERATIONAL">Operasional (kembali normal)</option>
-          <option value="BEYOND_REPAIR">Tidak Dapat Diperbaiki (disposal)</option>
+          <option value="BEYOND_REPAIR">Rusak berat (draf disposal dibuat otomatis)</option>
         </select>
       </div>
       <div />
       <div>
-        <label className="mb-1 block text-xs text-slate-500">Jatuh Tempo Berikutnya (opsional)</label>
+        <label className="mb-1 block text-xs text-slate-500">Jatuh Tempo Berikutnya (kosongkan: dihitung dari interval rencana)</label>
         <input name="nextDueDate" type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">KM Berikutnya (opsional)</label>
+        <label className="mb-1 block text-xs text-slate-500">KM Berikutnya (kosongkan: KM sekarang + interval KM)</label>
         <input name="nextDueKm" type="number" min={0} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div className="md:col-span-2">

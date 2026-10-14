@@ -23,6 +23,7 @@ const REQUEST_STATUSES: GaRequestStatus[] = [
   "LOSS_CONFIRMED",
   "LOSS_NOT_CONFIRMED",
   "CANCELLED",
+  "COMPLETED",
 ];
 
 const TYPE_LABEL: Record<GaRequestType, string> = {
@@ -42,6 +43,7 @@ const STATUS_TONE: Record<GaRequestStatus, string> = {
   LOSS_CONFIRMED: "bg-rose-50 text-rose-700",
   LOSS_NOT_CONFIRMED: "bg-slate-100 text-slate-500",
   CANCELLED: "bg-slate-100 text-slate-400",
+  COMPLETED: "bg-emerald-50 text-emerald-700",
 };
 
 export default async function GaRequestsPage({

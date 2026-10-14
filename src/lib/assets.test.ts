@@ -41,7 +41,7 @@ describe("computeAssetStatusAfterReturn", () => {
   it("maps each inspection result to its terminal/return status", () => {
     expect(computeAssetStatusAfterReturn("GOOD")).toBe("AVAILABLE");
     expect(computeAssetStatusAfterReturn("NEEDS_REPAIR")).toBe("UNDER_REPAIR");
-    expect(computeAssetStatusAfterReturn("LOST_OR_BEYOND_REPAIR")).toBe("DISPOSED");
+    expect(computeAssetStatusAfterReturn("LOST_OR_BEYOND_REPAIR")).toBe("PENDING_DISPOSAL");
   });
 });
 

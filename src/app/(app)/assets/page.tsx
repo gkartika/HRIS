@@ -39,7 +39,7 @@ export default async function AssetsPage({
   }
   if (category && (ASSET_CATEGORIES as readonly string[]).includes(category)) where.category = category;
   if (trackingType === "INDIVIDUAL" || trackingType === "QUANTITY_TRACKED") where.trackingType = trackingType;
-  if (status === "AVAILABLE" || status === "IN_USE" || status === "UNDER_REPAIR" || status === "DISPOSED") {
+  if (status === "AVAILABLE" || status === "IN_USE" || status === "UNDER_REPAIR" || status === "PENDING_DISPOSAL" || status === "RETIRED" || status === "DISPOSED") {
     where.status = status;
   }
 
@@ -124,7 +124,7 @@ export default async function AssetsPage({
           <label className="mb-1 block text-xs text-slate-500">{t("asset.status")}</label>
           <select name="status" defaultValue={status ?? ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="">{t("common.allOption")}</option>
-            {(["AVAILABLE", "IN_USE", "UNDER_REPAIR", "DISPOSED"] as const).map((s) => (
+            {(["AVAILABLE", "IN_USE", "UNDER_REPAIR", "PENDING_DISPOSAL", "RETIRED"] as const).map((s) => (
               <option key={s} value={s}>
                 {t(`assetStatus.${s}`)}
               </option>

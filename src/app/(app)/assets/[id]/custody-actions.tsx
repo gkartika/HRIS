@@ -18,8 +18,9 @@ function ReturnForm({ custodyId }: { custodyId: string }) {
         <label className="mb-1 block text-xs text-slate-500">{t("asset.inspectionResultLabel")}</label>
         <select name="inspectionResult" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
           <option value="GOOD">{t("assetInspectionResult.GOOD")}</option>
-          <option value="NEEDS_REPAIR">{t("assetInspectionResult.NEEDS_REPAIR")}</option>
-          <option value="LOST_OR_BEYOND_REPAIR">{t("assetInspectionResult.LOST_OR_BEYOND_REPAIR")}</option>
+          <option value="NEEDS_REPAIR">Perlu perbaikan (work order dibuat otomatis)</option>
+          <option value="BEYOND_REPAIR">Rusak berat (draf disposal dibuat otomatis)</option>
+          <option value="LOST">Hilang (draf disposal dibuat otomatis)</option>
         </select>
       </div>
       <div>

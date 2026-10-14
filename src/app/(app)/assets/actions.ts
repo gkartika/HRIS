@@ -9,13 +9,15 @@ import { requireSession } from "@/lib/require-session";
 import { canManageAssets } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { ASSET_CATEGORIES, normalizeAssetCategory } from "@/lib/asset-categories";
+import { parseExitReturnCondition } from "@/lib/offboarding";
+import { createDisposalCaseInternal } from "@/lib/disposal-create";
+import { openRepairForReturnedAsset } from "@/lib/maintenance-create";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 import {
   isAssetAvailableForIndividualAssignment,
   canAllocateQuantity,
   isCustodyOpen,
-  computeAssetStatusAfterReturn,
   computeAvailableQuantityAfterReturn,
   validatePlacement,
 } from "@/lib/assets";
@@ -236,11 +238,10 @@ export async function returnAssetCustody(
   if (!custody) return "Catatan penguasaan tidak ditemukan.";
   if (!isCustodyOpen(custody.status)) return "Catatan penguasaan ini sudah dikembalikan.";
 
-  const inspectionResultRaw = formData.get("inspectionResult") as string;
-  if (!["GOOD", "NEEDS_REPAIR", "LOST_OR_BEYOND_REPAIR"].includes(inspectionResultRaw)) {
-    return "Hasil pemeriksaan wajib dipilih.";
-  }
-  const inspectionResult = inspectionResultRaw as AssetInspectionResult;
+  // Good, needs repair, beyond repair or lost. The old combined value reads as beyond repair.
+  const outcome = parseExitReturnCondition(formData.get("inspectionResult") as string);
+  if (!outcome) return "Hasil pemeriksaan wajib dipilih.";
+  const inspectionResult: AssetInspectionResult = outcome.inspectionResult;
   const returnConditionNote = (formData.get("returnConditionNote") as string)?.trim() || null;
 
   let returnEvidenceFileId: string | null = null;
@@ -282,8 +283,30 @@ export async function returnAssetCustody(
   if (custody.asset.trackingType === "INDIVIDUAL") {
     await prisma.fixedAsset.update({
       where: { id: custody.assetId },
-      data: { status: computeAssetStatusAfterReturn(inspectionResult) },
+      data: { status: outcome.assetStatus },
     });
+    // Whatever comes back wrong gets its next record straight away, so nothing is left
+    // without an owner: a repair opens a work order, a loss or write-off opens a disposal draft.
+    if (outcome.condition === "NEEDS_REPAIR") {
+      await openRepairForReturnedAsset({
+        assetId: custody.assetId,
+        createdByAccountId: session.user.id,
+        note: returnConditionNote ?? "Dikembalikan dalam kondisi perlu perbaikan.",
+      });
+    } else if (outcome.disposalReason) {
+      const alreadyOpen = await prisma.disposalCase.findFirst({
+        where: { assetId: custody.assetId, status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } },
+        select: { id: true },
+      });
+      if (!alreadyOpen) {
+        await createDisposalCaseInternal({
+          assetId: custody.assetId,
+          reason: outcome.disposalReason,
+          createdByAccountId: session.user.id,
+          proposalNote: returnConditionNote ?? (outcome.condition === "LOST" ? "Dikembalikan dalam keadaan hilang." : "Dikembalikan dalam keadaan rusak berat."),
+        });
+      }
+    }
   } else {
     await prisma.fixedAsset.update({
       where: { id: custody.assetId },

@@ -9,6 +9,7 @@ export const ASSET_STATUS_TONE: Record<string, string> = {
   UNDER_REPAIR: "bg-amber-50 text-amber-700",
   DISPOSED: "bg-slate-100 text-slate-500",
   LOST_PENDING_REVIEW: "bg-rose-50 text-rose-700",
+  PENDING_DISPOSAL: "bg-rose-50 text-rose-700",
   RETIRED: "bg-slate-100 text-slate-500",
 };
 
@@ -26,9 +27,9 @@ export const CONSUMABLE_STATUS_TONE: Record<ConsumableStatusValue, string> = {
 export const DISPOSAL_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Draf",
   PENDING_APPROVAL: "Menunggu Persetujuan",
-  APPROVED: "Disetujui",
-  REJECTED: "Ditolak",
-  EXECUTED: "Dilaksanakan",
+  APPROVED: "Disetujui, belum keluar",
+  REJECTED: "Dibatalkan",
+  EXECUTED: "Disetujui, aset keluar",
 };
 
 export const DISPOSAL_STATUS_TONE: Record<string, string> = {
@@ -51,7 +52,8 @@ export const GA_REQUEST_STATUS_LABEL: Record<string, string> = {
   APPROVED: "Disetujui",
   REJECTED: "Ditolak",
   PROCESSED: "Diproses",
-  WORK_ORDER_CREATED: "Work Order Dibuat",
+  WORK_ORDER_CREATED: "Dalam Perbaikan",
+  COMPLETED: "Selesai",
   PENDING_LOSS_REVIEW: "Menunggu Peninjauan",
   LOSS_CONFIRMED: "Kehilangan Dikonfirmasi",
   LOSS_NOT_CONFIRMED: "Kehilangan Tidak Dikonfirmasi",

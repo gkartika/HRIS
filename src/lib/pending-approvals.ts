@@ -209,16 +209,18 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isGaAdminUser
       ? prisma.gaRequest.findMany({
-          where: { status: "PENDING_LOSS_REVIEW" },
+          // A loss report is decided straight from SUBMITTED now; PENDING_LOSS_REVIEW is the old waiting state.
+          where: { requestType: "LOSS", status: { in: ["SUBMITTED", "PENDING_LOSS_REVIEW"] } },
           include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
-          orderBy: { verifiedAt: "asc" },
+          orderBy: { submittedAt: "asc" },
         })
       : Promise.resolve([]),
     isGaAdminUser
       ? prisma.disposalCase.findMany({
-          where: { status: "PENDING_APPROVAL" },
+          // A disposal draft is approved (and the asset taken out) in one step now; PENDING_APPROVAL is the old waiting state.
+          where: { status: { in: ["DRAFT", "PENDING_APPROVAL"] } },
           include: { asset: { select: { assetCode: true, assetName: true } } },
-          orderBy: { submittedForApprovalAt: "asc" },
+          orderBy: { createdAt: "asc" },
         })
       : Promise.resolve([]),
   ]);

@@ -2,6 +2,7 @@ import { StatusChip } from "@/components/status-chip";
 import { ASSET_STATUS_TONE, CUSTODY_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canViewAssetMaster, canManageAssets } from "@/lib/permissions";
@@ -101,7 +102,17 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
           )}
           {asset.notes && <p className="mt-1 text-xs text-slate-500">{asset.notes}</p>}
         </div>
-        {canManage && asset.status !== "RETIRED" && !openDisposalCase && <MarkObsoleteForm assetId={asset.id} />}
+        <div className="flex flex-col items-end gap-2">
+          {canManage && !["RETIRED", "DISPOSED", "PENDING_DISPOSAL"].includes(asset.status) && (
+            <Link
+              href={`/maintenance/work-orders?newFor=${asset.id}`}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Buat Work Order
+            </Link>
+          )}
+          {canManage && asset.status !== "RETIRED" && !openDisposalCase && <MarkObsoleteForm assetId={asset.id} />}
+        </div>
         {openDisposalCase && (
           <a href={`/disposal-cases/${openDisposalCase.id}`} className="text-xs text-indigo-600 hover:underline">
             Kasus Disposal {openDisposalCase.caseNumber}

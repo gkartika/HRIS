@@ -899,6 +899,7 @@ export const strings = {
     UNDER_REPAIR: "Dalam Perbaikan",
     DISPOSED: "Dihapuskan",
     LOST_PENDING_REVIEW: "Hilang — Menunggu Peninjauan",
+    PENDING_DISPOSAL: "Menunggu Disposal",
     RETIRED: "Dipensiunkan",
   },
   assetCustodyStatus: {

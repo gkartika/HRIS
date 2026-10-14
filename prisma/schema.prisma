@@ -2681,6 +2681,8 @@ enum AssetStatus {
   DISPOSED
   LOST_PENDING_REVIEW
   RETIRED
+  // An open disposal case exists (beyond repair, confirmed loss or obsolete). Blocks placement.
+  PENDING_DISPOSAL
 }
 
 enum AssetCustodyTargetType {
@@ -2974,6 +2976,8 @@ enum GaRequestStatus {
   LOSS_CONFIRMED
   LOSS_NOT_CONFIRMED
   CANCELLED
+  // A damage request whose work order has been recorded.
+  COMPLETED
 }
 
 // PDF: "Submit new need, damage, loss or abnormal condition" -> "GA Admin
@@ -3060,11 +3064,17 @@ model MaintenancePlan {
   dueDate      DateTime?
   intervalDays Int?
   intervalKm   Int?
+  // Next due odometer, rolled forward when a work order is recorded (intervalKm is the step).
+  dueKm        Int?
+  // The daily job opens a preventive work order by itself once the plan is due.
+  autoCreateWorkOrder Boolean @default(false)
   activeFlag   Boolean    @default(true)
 
   createdByAccountId String
   createdByAccount   Account  @relation("MaintenancePlanCreatedBy", fields: [createdByAccountId], references: [id])
   createdAt          DateTime @default(now())
+
+  @@index([activeFlag, dueDate])
 }
 
 enum MaintenanceSourceType {
@@ -3126,6 +3136,9 @@ model MaintenanceWorkOrder {
   completedAt          DateTime?
 
   @@index([status])
+  @@index([assetId, status])
+  @@index([sourcePlanId, status])
+  @@index([sourceGaRequestId])
 }
 
 enum DisposalReason {
@@ -3192,6 +3205,7 @@ model DisposalCase {
   createdAt          DateTime @default(now())
 
   @@index([status])
+  @@index([assetId, status])
 }
 
 // One row per numbering series and year (key like "OFB-2026"). nextSequence()

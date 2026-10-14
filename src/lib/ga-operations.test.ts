@@ -11,14 +11,16 @@ import {
   canReviewGaRequestLoss,
   decideGaRequestLossStatus,
   canCancelGaRequestStatus,
-  computeAssetStatusAfterGaRequestVerification,
   computeAssetStatusAfterLossReview,
   computeAssetStatusAfterMaintenanceOutcome,
   computeAssetStatusAfterDisposalExecution,
   canExecuteMaintenanceWorkOrder,
-  canSubmitDisposalCaseForApproval,
-  canDecideDisposalCase,
-  decideDisposalCaseStatus,
+  canDecideDamageRequest,
+  assetStatusAfterLossDecision,
+  canCancelDisposalCase,
+  computeAssetStatusAfterDisposalCancel,
+  computeNextPlanDue,
+  planDueState,
   canExecuteDisposalCase,
   disposalReasonForMaintenanceOutcome,
   blocksOffboardingGaRequest,
@@ -74,7 +76,8 @@ describe("canProcessGaRequest", () => {
 describe("canReviewGaRequestLoss / decideGaRequestLossStatus", () => {
   it("only PENDING_LOSS_REVIEW can be reviewed, mapping to CONFIRMED/NOT_CONFIRMED", () => {
     expect(canReviewGaRequestLoss("PENDING_LOSS_REVIEW")).toBe(true);
-    expect(canReviewGaRequestLoss("SUBMITTED")).toBe(false);
+    expect(canReviewGaRequestLoss("SUBMITTED")).toBe(true);
+    expect(canReviewGaRequestLoss("LOSS_CONFIRMED")).toBe(false);
     expect(decideGaRequestLossStatus(true)).toBe("LOSS_CONFIRMED");
     expect(decideGaRequestLossStatus(false)).toBe("LOSS_NOT_CONFIRMED");
   });
@@ -87,14 +90,6 @@ describe("canCancelGaRequestStatus", () => {
     expect(canCancelGaRequestStatus("PENDING_LOSS_REVIEW")).toBe(true);
     expect(canCancelGaRequestStatus("APPROVED")).toBe(false);
     expect(canCancelGaRequestStatus("PROCESSED")).toBe(false);
-  });
-});
-
-describe("computeAssetStatusAfterGaRequestVerification", () => {
-  it("moves the asset out of circulation for damage/loss, leaves NEW_ASSET_NEED alone", () => {
-    expect(computeAssetStatusAfterGaRequestVerification("DAMAGE_OR_ABNORMAL_CONDITION")).toBe("UNDER_REPAIR");
-    expect(computeAssetStatusAfterGaRequestVerification("LOSS")).toBe("LOST_PENDING_REVIEW");
-    expect(computeAssetStatusAfterGaRequestVerification("NEW_ASSET_NEED")).toBe(null);
   });
 });
 
@@ -111,7 +106,7 @@ describe("computeAssetStatusAfterMaintenanceOutcome", () => {
   it("OPERATIONAL returns to circulation based on open custody, BEYOND_REPAIR stays blocked", () => {
     expect(computeAssetStatusAfterMaintenanceOutcome("OPERATIONAL", true)).toBe("IN_USE");
     expect(computeAssetStatusAfterMaintenanceOutcome("OPERATIONAL", false)).toBe("AVAILABLE");
-    expect(computeAssetStatusAfterMaintenanceOutcome("BEYOND_REPAIR", false)).toBe("UNDER_REPAIR");
+    expect(computeAssetStatusAfterMaintenanceOutcome("BEYOND_REPAIR", false)).toBe("PENDING_DISPOSAL");
   });
 });
 
@@ -129,14 +124,12 @@ describe("canExecuteMaintenanceWorkOrder", () => {
 });
 
 describe("DisposalCase status transitions", () => {
-  it("submit/decide/execute gate correctly, rejection returns to DRAFT", () => {
-    expect(canSubmitDisposalCaseForApproval("DRAFT")).toBe(true);
-    expect(canSubmitDisposalCaseForApproval("PENDING_APPROVAL")).toBe(false);
-    expect(canDecideDisposalCase("PENDING_APPROVAL")).toBe(true);
-    expect(decideDisposalCaseStatus(true)).toBe("APPROVED");
-    expect(decideDisposalCaseStatus(false)).toBe("DRAFT");
+  it("a case can be approved and carried out in one go until it is executed or cancelled", () => {
     expect(canExecuteDisposalCase("APPROVED")).toBe(true);
-    expect(canExecuteDisposalCase("DRAFT")).toBe(false);
+    expect(canExecuteDisposalCase("DRAFT")).toBe(true);
+    expect(canExecuteDisposalCase("PENDING_APPROVAL")).toBe(true);
+    expect(canExecuteDisposalCase("EXECUTED")).toBe(false);
+    expect(canExecuteDisposalCase("REJECTED")).toBe(false);
   });
 });
 
@@ -163,5 +156,62 @@ describe("blocksOffboardingGaRequest", () => {
     expect(blocksOffboardingGaRequest("LOSS", "PENDING_LOSS_REVIEW")).toBe(true);
     expect(blocksOffboardingGaRequest("LOSS", "LOSS_CONFIRMED")).toBe(false);
     expect(blocksOffboardingGaRequest("LOSS", "LOSS_NOT_CONFIRMED")).toBe(false);
+  });
+});
+
+describe("simplified flow helpers", () => {
+  it("accepts or turns down a damage report only while it is SUBMITTED", () => {
+    expect(canDecideDamageRequest("SUBMITTED")).toBe(true);
+    expect(canDecideDamageRequest("WORK_ORDER_CREATED")).toBe(false);
+  });
+
+  it("decides what a loss decision does to the asset", () => {
+    expect(assetStatusAfterLossDecision(true, "SUBMITTED", true)).toBe("PENDING_DISPOSAL");
+    expect(assetStatusAfterLossDecision(false, "SUBMITTED", true)).toBeNull();
+    expect(assetStatusAfterLossDecision(false, "PENDING_LOSS_REVIEW", true)).toBe("IN_USE");
+    expect(assetStatusAfterLossDecision(false, "PENDING_LOSS_REVIEW", false)).toBe("AVAILABLE");
+  });
+
+  it("lets a disposal case be cancelled until it is executed", () => {
+    expect(canCancelDisposalCase("DRAFT")).toBe(true);
+    expect(canCancelDisposalCase("APPROVED")).toBe(true);
+    expect(canCancelDisposalCase("EXECUTED")).toBe(false);
+    expect(canCancelDisposalCase("REJECTED")).toBe(false);
+    expect(computeAssetStatusAfterDisposalCancel(true)).toBe("IN_USE");
+    expect(computeAssetStatusAfterDisposalCancel(false)).toBe("AVAILABLE");
+  });
+});
+
+describe("computeNextPlanDue", () => {
+  const serviceDate = new Date("2026-10-10T00:00:00Z");
+  const base = { serviceDate, odometerKm: 52000, intervalDays: 180, intervalKm: 10000, enteredNextDueDate: null, enteredNextDueKm: null };
+
+  it("adds the interval to the service date and the odometer", () => {
+    const r = computeNextPlanDue(base);
+    expect(r.dueDate?.toISOString().slice(0, 10)).toBe("2027-04-08");
+    expect(r.dueKm).toBe(62000);
+  });
+
+  it("lets what was typed win", () => {
+    const typed = new Date("2026-12-01T00:00:00Z");
+    const r = computeNextPlanDue({ ...base, enteredNextDueDate: typed, enteredNextDueKm: 60000 });
+    expect(r.dueDate).toEqual(typed);
+    expect(r.dueKm).toBe(60000);
+  });
+
+  it("leaves a part alone when there is no interval or no odometer", () => {
+    expect(computeNextPlanDue({ ...base, intervalDays: null }).dueDate).toBeNull();
+    expect(computeNextPlanDue({ ...base, odometerKm: null }).dueKm).toBeNull();
+    expect(computeNextPlanDue({ ...base, intervalKm: null }).dueKm).toBeNull();
+  });
+});
+
+describe("planDueState", () => {
+  it("is amber within a week and red once late", () => {
+    expect(planDueState(null)).toBe("NONE");
+    expect(planDueState(-1)).toBe("OVERDUE");
+    expect(planDueState(0)).toBe("SOON");
+    expect(planDueState(7)).toBe("SOON");
+    expect(planDueState(8)).toBe("LATER");
   });
 });

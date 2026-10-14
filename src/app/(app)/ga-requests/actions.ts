@@ -17,9 +17,10 @@ import {
   decideGaRequestStatus,
   canProcessGaRequest,
   canReviewGaRequestLoss,
+  canDecideDamageRequest,
+  assetStatusAfterLossDecision,
   decideGaRequestLossStatus,
   canCancelGaRequestStatus,
-  computeAssetStatusAfterGaRequestVerification,
   computeAssetStatusAfterLossReview,
 } from "@/lib/ga-operations";
 import { logAudit } from "@/lib/audit";
@@ -27,6 +28,7 @@ import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
 import { validateDocumentFile } from "@/lib/validation/employee-fields";
 import { assignAssetToEmployee, assignAssetToDepartment } from "@/app/(app)/assets/actions";
 import { createDisposalCaseInternal } from "@/lib/disposal-create";
+import { createWorkOrderInternal } from "@/lib/maintenance-create";
 import type { GaRequestType, GaRequestUrgency } from "@/generated/prisma/enums";
 
 export async function submitGaRequest(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
@@ -122,6 +124,9 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
   if (!canVerifyGaRequest(request.status)) return "Permintaan ini sudah diverifikasi atau tidak lagi menunggu verifikasi.";
+  if (request.requestType !== "NEW_ASSET_NEED") {
+    return "Gunakan tombol Terima atau Tolak untuk laporan kerusakan, dan Konfirmasi hilang untuk laporan kehilangan.";
+  }
 
   const verificationNote = (formData.get("verificationNote") as string)?.trim() || null;
 
@@ -132,7 +137,6 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
   const approvalRequired: boolean | null = request.requestType === "NEW_ASSET_NEED" ? true : null;
 
   const newStatus = routeGaRequestAfterVerification(request.requestType, approvalRequired ?? false);
-  const assetStatus = computeAssetStatusAfterGaRequestVerification(request.requestType);
 
   // GA Admin may fill the evidence gap here if the requester didn't attach
   // one at submission ("Record loss incident and evidence" is a GA Admin
@@ -175,9 +179,6 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
         evidenceFileId: evidenceFileId ?? request.evidenceFileId,
       },
     });
-    if (assetStatus && request.assetId) {
-      await tx.fixedAsset.update({ where: { id: request.assetId }, data: { status: assetStatus } });
-    }
   });
 
   await logAudit({
@@ -339,6 +340,99 @@ export async function processGaRequest(requestId: string, _prevState: string | u
 // confirmed loss means the item is gone, so leaving custody ACTIVE would
 // keep blocking that employee's offboarding indefinitely with nothing left
 // to resolve it.
+// Damage report, one click: GA Admin accepts it and the corrective work order opens with it.
+// The asset leaves circulation at once (it cannot be placed while it is being fixed); if
+// someone still holds it, that placement stays open. The report closes itself when the
+// work order is recorded (see executeMaintenanceWorkOrder).
+export async function acceptDamageRequest(requestId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageGaOperations(session)) return t("common.forbidden");
+
+  const request = await prisma.gaRequest.findUnique({ where: { id: requestId }, include: { asset: true } });
+  if (!request) return "Permintaan tidak ditemukan.";
+  if (request.requestType !== "DAMAGE_OR_ABNORMAL_CONDITION") return "Tindakan ini hanya untuk laporan kerusakan.";
+  if (!canDecideDamageRequest(request.status)) return "Laporan ini sudah diterima atau tidak lagi menunggu.";
+  if (!request.assetId || !request.asset) return "Laporan ini tidak memiliki aset terkait.";
+  if (["RETIRED", "DISPOSED", "PENDING_DISPOSAL"].includes(request.asset.status)) {
+    return "Aset ini sudah atau sedang dalam proses disposal.";
+  }
+
+  const workTypeRaw = formData.get("workType") as string;
+  if (!["INTERNAL", "VENDOR"].includes(workTypeRaw)) return "Internal atau vendor wajib dipilih.";
+  const checklistNotes = (formData.get("checklistNotes") as string)?.trim() || null;
+  const verificationNote = (formData.get("verificationNote") as string)?.trim() || null;
+
+  const existing = await prisma.maintenanceWorkOrder.findFirst({ where: { sourceGaRequestId: requestId } });
+  if (existing) return `Work order untuk laporan ini sudah dibuat (${existing.workOrderNumber}).`;
+
+  const workOrder = await createWorkOrderInternal({
+    assetId: request.assetId,
+    sourceType: "CORRECTIVE",
+    sourceGaRequestId: requestId,
+    workType: workTypeRaw as "INTERNAL" | "VENDOR",
+    checklistNotes,
+    createdByAccountId: session.user.id,
+  });
+
+  await prisma.$transaction([
+    prisma.gaRequest.update({
+      where: { id: requestId },
+      data: {
+        status: "WORK_ORDER_CREATED",
+        verifiedAt: new Date(),
+        verifiedByAccountId: session.user.id,
+        verificationNote,
+      },
+    }),
+    prisma.fixedAsset.update({ where: { id: request.assetId }, data: { status: "UNDER_REPAIR" } }),
+  ]);
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "GaRequest",
+    recordId: requestId,
+    reason: `${request.requestNumber} accepted, work order ${workOrder.workOrderNumber} opened`,
+  });
+
+  revalidatePath(`/ga-requests/${requestId}`);
+  revalidatePath("/ga-requests");
+  revalidatePath("/maintenance/work-orders");
+  revalidatePath(`/assets/${request.assetId}`);
+  return undefined;
+}
+
+// Turning a damage report down needs a reason and leaves the asset as it is.
+export async function rejectDamageRequest(requestId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageGaOperations(session)) return t("common.forbidden");
+
+  const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
+  if (!request) return "Permintaan tidak ditemukan.";
+  if (request.requestType !== "DAMAGE_OR_ABNORMAL_CONDITION") return "Tindakan ini hanya untuk laporan kerusakan.";
+  if (!canDecideDamageRequest(request.status)) return "Laporan ini sudah diterima atau tidak lagi menunggu.";
+
+  const decisionNote = (formData.get("decisionNote") as string)?.trim();
+  if (!decisionNote) return "Alasan penolakan wajib diisi.";
+
+  await prisma.gaRequest.update({
+    where: { id: requestId },
+    data: { status: "REJECTED", decisionAt: new Date(), decisionByAccountId: session.user.id, decisionNote },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "REJECT",
+    datasetName: "GaRequest",
+    recordId: requestId,
+    reason: `${request.requestNumber} damage report turned down: ${decisionNote}`,
+  });
+
+  revalidatePath(`/ga-requests/${requestId}`);
+  revalidatePath("/ga-requests");
+  return undefined;
+}
+
 export async function reviewGaRequestLoss(
   requestId: string,
   decision: "CONFIRM" | "NOT_CONFIRM",
@@ -357,7 +451,34 @@ export async function reviewGaRequestLoss(
   const confirmed = decision === "CONFIRM";
 
   const openCustody = await prisma.assetCustody.findFirst({ where: { assetId: request.assetId, status: { not: "RETURNED" } } });
-  const newAssetStatus = computeAssetStatusAfterLossReview(confirmed, !!openCustody);
+  const newAssetStatus = assetStatusAfterLossDecision(confirmed, request.status, !!openCustody);
+
+  // GA Admin may attach the loss evidence here if the requester did not.
+  let evidenceFileId: string | undefined;
+  if (!request.evidenceFileId) {
+    const evidenceFile = formData.get("evidenceFile") as File | null;
+    if (evidenceFile && evidenceFile.size > 0) {
+      const validationError = validateDocumentFile({ name: evidenceFile.name, type: evidenceFile.type, size: evidenceFile.size });
+      if (validationError) return validationError;
+      const storageKey = randomStorageKey("ga-request", getExtension(evidenceFile.name));
+      const bytes = Buffer.from(await evidenceFile.arrayBuffer());
+      await savePrivateFile(storageKey, bytes);
+      const fileObject = await prisma.fileObject.create({
+        data: {
+          storageKey,
+          originalFileName: evidenceFile.name,
+          mimeType: evidenceFile.type,
+          sizeBytes: evidenceFile.size,
+          sensitivity: "RESTRICTED",
+          employeeId: request.requesterEmployeeId,
+          uploadedByAccountId: session.user.id,
+          category: "GA_REQUEST_EVIDENCE",
+          confidential: false,
+        },
+      });
+      evidenceFileId = fileObject.id;
+    }
+  }
 
   await prisma.$transaction([
     prisma.gaRequest.update({
@@ -367,9 +488,10 @@ export async function reviewGaRequestLoss(
         lossReviewedAt: new Date(),
         lossReviewedByAccountId: session.user.id,
         lossReviewNote,
+        ...(evidenceFileId ? { evidenceFileId } : {}),
       },
     }),
-    prisma.fixedAsset.update({ where: { id: request.assetId }, data: { status: newAssetStatus } }),
+    ...(newAssetStatus ? [prisma.fixedAsset.update({ where: { id: request.assetId }, data: { status: newAssetStatus } })] : []),
     ...(confirmed && openCustody
       ? [
           prisma.assetCustody.update({

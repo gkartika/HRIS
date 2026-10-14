@@ -5,9 +5,9 @@ import { formatDateLong } from "@/lib/format";
 import Link from "next/link";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
-import { canSubmitDisposalCaseForApproval, canDecideDisposalCase, canExecuteDisposalCase } from "@/lib/ga-operations";
+import { canExecuteDisposalCase, canCancelDisposalCase } from "@/lib/ga-operations";
 import { prisma } from "@/lib/db";
-import { SubmitForApprovalForm, DisposalDecisionButtons, ExecuteDisposalForm } from "./decision-forms";
+import { ExecuteDisposalForm, CancelDisposalForm } from "./decision-forms";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const REASON_LABEL: Record<string, string> = {
@@ -15,6 +15,9 @@ const REASON_LABEL: Record<string, string> = {
   OBSOLETE: "Obsolete",
   CONFIRMED_LOSS: "Kehilangan Dikonfirmasi",
 };
+
+// Two stages: Draf, then Disetujui. Approving a case and taking the asset out are one action.
+const STEPS = ["Draf", "Disetujui, aset keluar"];
 
 export default async function DisposalCaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -39,9 +42,10 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
     return <AccessDenied />;
   }
 
-  const canSubmit = isGaAdminUser && canSubmitDisposalCaseForApproval(disposalCase.status);
-  const canDecide = isGaAdminUser && canDecideDisposalCase(disposalCase.status);
-  const canExecute = isGaAdminUser && canExecuteDisposalCase(disposalCase.status);
+  const canExecute = canExecuteDisposalCase(disposalCase.status);
+  const canCancel = canCancelDisposalCase(disposalCase.status);
+  const done = disposalCase.status === "EXECUTED";
+  const cancelled = disposalCase.status === "REJECTED";
 
   return (
     <div className="space-y-6">
@@ -55,6 +59,31 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
           — {REASON_LABEL[disposalCase.reason]}
         </p>
       </div>
+
+      {cancelled ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6">
+          <p className="text-sm font-medium text-rose-800">Kasus dibatalkan, aset kembali ke peredaran</p>
+          <p className="mt-1 text-xs text-rose-700">
+            {formatDateLong(disposalCase.decisionAt)} — {disposalCase.decisionByAccount?.usernameOrEmail ?? "—"}
+            {disposalCase.decisionNote && `: ${disposalCase.decisionNote}`}
+          </p>
+        </div>
+      ) : (
+        <ol className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 text-sm">
+          {STEPS.map((label, i) => {
+            const complete = i === 0 ? true : done;
+            const active = i === (done ? 1 : 0);
+            return (
+              <li
+                key={label}
+                className={`px-4 py-2.5 ${complete ? "bg-emerald-50 text-emerald-700" : active ? "bg-indigo-50 font-medium text-indigo-700" : "bg-slate-50 text-slate-400"} ${i > 0 ? "border-l border-slate-200" : ""}`}
+              >
+                {i + 1}. {label}
+              </li>
+            );
+          })}
+        </ol>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="grid grid-cols-2 gap-4 text-sm">
@@ -81,58 +110,65 @@ export default async function DisposalCaseDetailPage({ params }: { params: Promi
             </div>
           )}
         </div>
-        {canSubmit && <SubmitForApprovalForm caseId={disposalCase.id} />}
       </div>
 
-      {(disposalCase.status !== "DRAFT" || disposalCase.decisionAt) && (
+      {canExecute && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <p className="text-sm font-medium text-slate-900">Persetujuan Akhir</p>
-          {disposalCase.decisionAt && (
-            <p className="mt-2 text-xs text-slate-500">
-              {formatDateLong(disposalCase.decisionAt)} — {disposalCase.decisionByAccount?.usernameOrEmail ?? "—"}
+          <p className="text-sm font-medium text-slate-900">
+            {disposalCase.status === "APPROVED" ? "Laksanakan Disposal" : "Setujui dan keluarkan aset"}
+          </p>
+          {disposalCase.status === "APPROVED" ? (
+            <p className="mt-1 text-xs text-slate-500">
+              Disetujui {formatDateLong(disposalCase.decisionAt)} — {disposalCase.decisionByAccount?.usernameOrEmail ?? "—"}
               {disposalCase.decisionNote && `: ${disposalCase.decisionNote}`}
             </p>
+          ) : (
+            <p className="mt-1 text-xs text-slate-500">
+              Satu langkah: begitu disimpan, kasus disetujui, aset berstatus Retired dan penguasaan yang masih terbuka ditutup. Metode, tanggal, dan bukti wajib.
+            </p>
           )}
-          {canDecide && <DisposalDecisionButtons caseId={disposalCase.id} />}
+          <ExecuteDisposalForm caseId={disposalCase.id} alreadyApproved={disposalCase.status === "APPROVED"} />
         </div>
       )}
 
-      {(disposalCase.status === "APPROVED" || disposalCase.status === "EXECUTED") && (
+      {disposalCase.status === "EXECUTED" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="text-sm font-medium text-slate-900">Pelaksanaan</p>
-          {disposalCase.status === "EXECUTED" ? (
-            <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-xs text-slate-500">Metode</p>
-                <p className="mt-1 text-slate-900">{disposalCase.executionMethod}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Tanggal</p>
-                <p className="mt-1 text-slate-900">{formatDateLong(disposalCase.executionDate)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Nilai</p>
-                <p className="mt-1 text-slate-900">{disposalCase.executionValue ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Referensi</p>
-                <p className="mt-1 text-slate-900">{disposalCase.executionReference ?? "—"}</p>
-              </div>
-              {disposalCase.executionEvidenceFile && (
-                <div className="col-span-2">
-                  <p className="text-xs text-slate-500">Bukti Pelaksanaan</p>
-                  <a href={`/api/files/${disposalCase.executionEvidenceFile.id}`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm text-indigo-600 hover:underline">
-                    {disposalCase.executionEvidenceFile.originalFileName}
-                  </a>
-                </div>
-              )}
-              <div className="col-span-2 text-xs text-slate-500">
-                Dilaksanakan oleh {disposalCase.executedByAccount?.usernameOrEmail ?? "—"}
-              </div>
+          <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-xs text-slate-500">Metode</p>
+              <p className="mt-1 text-slate-900">{disposalCase.executionMethod}</p>
             </div>
-          ) : (
-            canExecute && <ExecuteDisposalForm caseId={disposalCase.id} />
-          )}
+            <div>
+              <p className="text-xs text-slate-500">Tanggal</p>
+              <p className="mt-1 text-slate-900">{formatDateLong(disposalCase.executionDate)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Nilai</p>
+              <p className="mt-1 text-slate-900">{disposalCase.executionValue ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Referensi</p>
+              <p className="mt-1 text-slate-900">{disposalCase.executionReference ?? "—"}</p>
+            </div>
+            {disposalCase.executionEvidenceFile && (
+              <div className="col-span-2">
+                <p className="text-xs text-slate-500">Bukti Pelaksanaan</p>
+                <a href={`/api/files/${disposalCase.executionEvidenceFile.id}`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm text-indigo-600 hover:underline">
+                  {disposalCase.executionEvidenceFile.originalFileName}
+                </a>
+              </div>
+            )}
+            <div className="col-span-2 text-xs text-slate-500">
+              Dilaksanakan oleh {disposalCase.executedByAccount?.usernameOrEmail ?? "—"}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canCancel && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <CancelDisposalForm caseId={disposalCase.id} />
         </div>
       )}
     </div>

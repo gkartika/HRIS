@@ -11,9 +11,10 @@ import {
   canProcessGaRequest,
   canReviewGaRequestLoss,
   canCancelGaRequestStatus,
+  canDecideDamageRequest,
 } from "@/lib/ga-operations";
 import { prisma } from "@/lib/db";
-import { VerifyForm, ApproverDecisionButtons, ProcessForm, LossReviewButtons, CancelRequestForm } from "./decision-forms";
+import { VerifyForm, ApproverDecisionButtons, ProcessForm, LossReviewButtons, CancelRequestForm, DamageDecisionPanel } from "./decision-forms";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -47,7 +48,16 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
   }
 
   const isGaAdminUser = canManageGaOperations(session);
-  const canVerify = isGaAdminUser && canVerifyGaRequest(request.status);
+  // Only a new-asset need still goes through a separate verification step.
+  const canVerify = isGaAdminUser && canVerifyGaRequest(request.status) && request.requestType === "NEW_ASSET_NEED";
+  const canDecideDamage = isGaAdminUser && request.requestType === "DAMAGE_OR_ABNORMAL_CONDITION" && canDecideDamageRequest(request.status);
+  const workOrder =
+    request.requestType === "DAMAGE_OR_ABNORMAL_CONDITION"
+      ? await prisma.maintenanceWorkOrder.findFirst({
+          where: { sourceGaRequestId: request.id },
+          select: { id: true, workOrderNumber: true, status: true, outcome: true },
+        })
+      : null;
   const canDecideApprover = isGaAdminUser && canDecideGaRequest(request.status);
   const canProcess = isGaAdminUser && canProcessGaRequest(request.status);
   const canReviewLoss = isGaAdminUser && canReviewGaRequestLoss(request.status);
@@ -138,6 +148,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
         </div>
       </div>
 
+      {(request.requestType === "NEW_ASSET_NEED" || request.verifiedAt) && (
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <p className="text-sm font-medium text-slate-900">Verifikasi GA Admin</p>
         {request.verifiedAt && (
@@ -146,8 +157,9 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
             {request.verificationNote && `: ${request.verificationNote}`}
           </p>
         )}
-        {canVerify && <VerifyForm requestId={request.id} needsEvidence={request.requestType === "LOSS" && !request.evidenceFile} />}
+        {canVerify && <VerifyForm requestId={request.id} needsEvidence={false} />}
       </div>
+      )}
 
       {request.requestType === "NEW_ASSET_NEED" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -191,16 +203,33 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
         </div>
       )}
 
-      {request.requestType === "DAMAGE_OR_ABNORMAL_CONDITION" && request.status === "WORK_ORDER_CREATED" && (
+      {request.requestType === "DAMAGE_OR_ABNORMAL_CONDITION" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
-          <p className="text-sm font-medium text-slate-900">Work Order Perbaikan</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Lanjutkan ke{" "}
-            <Link href="/maintenance/work-orders" className="text-indigo-600 hover:underline">
-              Work Order Perawatan
-            </Link>{" "}
-            untuk membuat work order korektif dari permintaan ini.
-          </p>
+          <p className="text-sm font-medium text-slate-900">Perbaikan</p>
+          {canDecideDamage && <DamageDecisionPanel requestId={request.id} />}
+          {request.status === "REJECTED" && request.decisionNote && (
+            <p className="mt-2 text-xs text-slate-500">
+              Ditolak {formatDateLong(request.decisionAt)} — {request.decisionByAccount?.usernameOrEmail ?? "—"}: {request.decisionNote}
+            </p>
+          )}
+          {workOrder && (
+            <p className="mt-2 text-sm text-slate-700">
+              Work order{" "}
+              <Link href={`/maintenance/work-orders/${workOrder.id}`} className="text-indigo-600 hover:underline">
+                {workOrder.workOrderNumber}
+              </Link>{" "}
+              — {workOrder.status === "OPEN" ? "terbuka, menunggu hasil perbaikan" : workOrder.outcome === "BEYOND_REPAIR" ? "selesai, rusak berat (draf disposal dibuat)" : "selesai, aset berfungsi lagi"}
+            </p>
+          )}
+          {!workOrder && request.status === "WORK_ORDER_CREATED" && (
+            <p className="mt-1 text-xs text-slate-500">
+              Buat work order dari{" "}
+              <Link href="/maintenance/work-orders" className="text-indigo-600 hover:underline">
+                Work Order Perawatan
+              </Link>
+              .
+            </p>
+          )}
         </div>
       )}
 
@@ -222,7 +251,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
               .
             </p>
           )}
-          {canReviewLoss && <LossReviewButtons requestId={request.id} />}
+          {canReviewLoss && <LossReviewButtons requestId={request.id} needsEvidence={!request.evidenceFile} />}
         </div>
       )}
 

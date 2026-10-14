@@ -59,11 +59,11 @@ describe("parseExitReturnCondition", () => {
     expect(parseExitReturnCondition("LOST")).toMatchObject({
       inspectionResult: "LOST_OR_BEYOND_REPAIR",
       disposalReason: "CONFIRMED_LOSS",
-      assetStatus: "LOST_PENDING_REVIEW",
+      assetStatus: "PENDING_DISPOSAL",
     });
   });
   it("sends a beyond-repair asset to a disposal proposal, never straight to disposed", () => {
-    expect(parseExitReturnCondition("BEYOND_REPAIR")).toMatchObject({ disposalReason: "BEYOND_REPAIR", assetStatus: "UNDER_REPAIR" });
+    expect(parseExitReturnCondition("BEYOND_REPAIR")).toMatchObject({ disposalReason: "BEYOND_REPAIR", assetStatus: "PENDING_DISPOSAL" });
   });
   it("reads the old combined value as beyond repair", () => {
     expect(parseExitReturnCondition("LOST_OR_BEYOND_REPAIR")?.condition).toBe("BEYOND_REPAIR");

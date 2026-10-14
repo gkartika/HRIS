@@ -62,8 +62,28 @@ export function canProcessGaRequest(status: GaRequestStatus): boolean {
   return status === "APPROVED";
 }
 
+// A loss report is decided in one step straight from SUBMITTED. PENDING_LOSS_REVIEW is
+// the old waiting state, kept so a request left there can still be decided.
 export function canReviewGaRequestLoss(status: GaRequestStatus): boolean {
-  return status === "PENDING_LOSS_REVIEW";
+  return status === "SUBMITTED" || status === "PENDING_LOSS_REVIEW";
+}
+
+// A damage report is accepted (work order opened) or turned down while it is SUBMITTED.
+export function canDecideDamageRequest(status: GaRequestStatus): boolean {
+  return status === "SUBMITTED";
+}
+
+// What the asset becomes when a loss report is decided. A confirmed loss waits for its
+// disposal case. A report that is not confirmed leaves the asset alone, unless it was
+// blocked by the old verification step, in which case it goes back into circulation.
+export function assetStatusAfterLossDecision(
+  confirmed: boolean,
+  requestStatus: GaRequestStatus,
+  hasOpenCustody: boolean
+): AssetStatusValue | null {
+  if (confirmed) return "PENDING_DISPOSAL";
+  if (requestStatus === "PENDING_LOSS_REVIEW") return hasOpenCustody ? "IN_USE" : "AVAILABLE";
+  return null;
 }
 
 export function decideGaRequestLossStatus(confirmed: boolean): GaRequestStatus {
@@ -76,31 +96,19 @@ export function canCancelGaRequestStatus(status: GaRequestStatus): boolean {
 
 // ---------- Asset status side effects ----------
 
-// GA Admin verifying a DAMAGE_OR_ABNORMAL_CONDITION or LOSS request moves
-// the asset out of normal circulation immediately — reuses the existing
-// AssetStatus values so isAssetAvailableForIndividualAssignment (Phase 4A,
-// unchanged) already blocks new assignment with no extra code.
-export function computeAssetStatusAfterGaRequestVerification(
-  requestType: GaRequestType
-): AssetStatusValue | null {
-  if (requestType === "DAMAGE_OR_ABNORMAL_CONDITION") return "UNDER_REPAIR";
-  if (requestType === "LOSS") return "LOST_PENDING_REVIEW";
-  return null;
-}
-
 export function computeAssetStatusAfterLossReview(confirmed: boolean, hasOpenCustody: boolean): AssetStatusValue {
   if (confirmed) return "LOST_PENDING_REVIEW";
   return hasOpenCustody ? "IN_USE" : "AVAILABLE";
 }
 
-// OPERATIONAL returns the asset to normal circulation; BEYOND_REPAIR leaves
-// it UNDER_REPAIR (blocked from assignment) pending the auto-drafted
-// DisposalCase's outcome — it only becomes RETIRED once that case executes.
+// OPERATIONAL returns the asset to normal circulation; BEYOND_REPAIR makes it
+// PENDING_DISPOSAL (blocked from assignment) while the auto-drafted
+// DisposalCase is open — it only becomes RETIRED once that case executes.
 export function computeAssetStatusAfterMaintenanceOutcome(
   outcome: MaintenanceOutcome,
   hasOpenCustody: boolean
 ): AssetStatusValue {
-  if (outcome === "BEYOND_REPAIR") return "UNDER_REPAIR";
+  if (outcome === "BEYOND_REPAIR") return "PENDING_DISPOSAL";
   return hasOpenCustody ? "IN_USE" : "AVAILABLE";
 }
 
@@ -116,12 +124,14 @@ export function canExecuteMaintenanceWorkOrder(status: MaintenanceStatus): boole
 
 // ---------- DisposalCase ----------
 
-export function canSubmitDisposalCaseForApproval(status: DisposalStatus): boolean {
-  return status === "DRAFT";
+// A case that is not going ahead can be cancelled until it is executed; the asset goes
+// back into circulation.
+export function canCancelDisposalCase(status: DisposalStatus): boolean {
+  return status === "DRAFT" || status === "PENDING_APPROVAL" || status === "APPROVED";
 }
 
-export function canDecideDisposalCase(status: DisposalStatus): boolean {
-  return status === "PENDING_APPROVAL";
+export function computeAssetStatusAfterDisposalCancel(hasOpenCustody: boolean): AssetStatusValue {
+  return hasOpenCustody ? "IN_USE" : "AVAILABLE";
 }
 
 // PDF: "No: repair, storage or review" — a rejected proposal returns to
@@ -131,8 +141,10 @@ export function decideDisposalCaseStatus(approved: boolean): DisposalStatus {
   return approved ? "APPROVED" : "DRAFT";
 }
 
+// Approving a disposal and taking the asset out are one step: the form is open from DRAFT.
+// APPROVED and PENDING_APPROVAL are the old waiting states, kept so older cases can still be finished.
 export function canExecuteDisposalCase(status: DisposalStatus): boolean {
-  return status === "APPROVED";
+  return status === "DRAFT" || status === "PENDING_APPROVAL" || status === "APPROVED";
 }
 
 export function disposalReasonForMaintenanceOutcome(outcome: MaintenanceOutcome): DisposalReason | null {
@@ -152,4 +164,43 @@ export function blocksOffboardingGaRequest(requestType: GaRequestType, status: G
   if (requestType === "NEW_ASSET_NEED") return false;
   if (requestType === "DAMAGE_OR_ABNORMAL_CONDITION") return status === "SUBMITTED";
   return status === "SUBMITTED" || status === "PENDING_LOSS_REVIEW";
+}
+
+// ---------- Preventive plans ----------
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface NextPlanDueInput {
+  serviceDate: Date;
+  odometerKm: number | null;
+  intervalDays: number | null;
+  intervalKm: number | null;
+  /** Typed by GA Admin when recording the work; always wins over the computed value. */
+  enteredNextDueDate: Date | null;
+  enteredNextDueKm: number | null;
+}
+
+// When a work order from a plan is recorded, the plan comes due again one interval later:
+// service date plus the day interval, odometer plus the km interval. Whatever GA Admin typed
+// wins. Null means "leave that part of the plan alone".
+export function computeNextPlanDue(input: NextPlanDueInput): { dueDate: Date | null; dueKm: number | null } {
+  const dueDate =
+    input.enteredNextDueDate ??
+    (input.intervalDays && input.intervalDays > 0 ? new Date(input.serviceDate.getTime() + input.intervalDays * DAY_MS) : null);
+  const dueKm =
+    input.enteredNextDueKm ??
+    (input.intervalKm && input.intervalKm > 0 && input.odometerKm !== null ? input.odometerKm + input.intervalKm : null);
+  return { dueDate, dueKm };
+}
+
+export type PlanDueState = "NONE" | "LATER" | "SOON" | "OVERDUE";
+
+export const PLAN_DUE_SOON_DAYS = 7;
+
+// daysUntilDue is whole company days from today (negative once late), null when the plan has no date.
+export function planDueState(daysUntilDue: number | null): PlanDueState {
+  if (daysUntilDue === null) return "NONE";
+  if (daysUntilDue < 0) return "OVERDUE";
+  if (daysUntilDue <= PLAN_DUE_SOON_DAYS) return "SOON";
+  return "LATER";
 }

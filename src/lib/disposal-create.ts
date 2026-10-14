@@ -34,6 +34,12 @@ export async function createDisposalCaseInternal(params: {
     },
   });
 
+  // The asset waits for this case: blocked from placement, and clearly not "under repair".
+  await prisma.fixedAsset.updateMany({
+    where: { id: params.assetId, status: { notIn: ["RETIRED", "DISPOSED"] } },
+    data: { status: "PENDING_DISPOSAL" },
+  });
+
   await logAudit({
     actorAccountId: params.createdByAccountId,
     action: "CREATE",

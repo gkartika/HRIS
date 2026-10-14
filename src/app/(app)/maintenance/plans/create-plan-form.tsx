@@ -30,18 +30,25 @@ export function CreatePlanForm({ assets }: { assets: AssetOption[] }) {
         <input name="description" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">Jatuh Tempo</label>
+        <label className="mb-1 block text-xs text-slate-500">Jatuh Tempo Pertama</label>
         <input name="dueDate" type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">Interval (hari)</label>
+        <label className="mb-1 block text-xs text-slate-500">Ulangi setiap (hari)</label>
         <input name="intervalDays" type="number" min={1} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-slate-500">Interval (KM)</label>
+        <label className="mb-1 block text-xs text-slate-500">atau setiap (KM)</label>
         <input name="intervalKm" type="number" min={1} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
-      <div className="flex items-end md:col-span-2">
+      <div>
+        <label className="mb-1 block text-xs text-slate-500">Jatuh Tempo Pertama (KM)</label>
+        <input name="dueKm" type="number" min={1} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
+        <input name="autoCreateWorkOrder" type="checkbox" defaultChecked /> Buat work order otomatis saat jatuh tempo
+      </label>
+      <div className="flex items-end md:col-span-1">
         <button
           type="submit"
           disabled={isPending}

@@ -41,7 +41,7 @@ export function deadlineLabel(daysLeft: number): string {
   return `${daysLeft} hari lagi`;
 }
 
-export type TodoKind = "ga" | "wo" | "dp" | "of" | "st";
+export type TodoKind = "ga" | "wo" | "dp" | "of" | "st" | "pm";
 
 export interface TodoRow {
   kind: TodoKind;

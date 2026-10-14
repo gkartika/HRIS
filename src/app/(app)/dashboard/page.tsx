@@ -29,7 +29,6 @@ import {
   ApproverDecisionButtons as GaNewAssetDecisionButtons,
   LossReviewButtons as GaLossReviewButtons,
 } from "../ga-requests/[id]/decision-forms";
-import { DisposalDecisionButtons } from "../disposal-cases/[id]/decision-forms";
 import { Suspense } from "react";
 import { GaHome } from "./ga-home";
 import { HcHome } from "./hc-home";
@@ -262,7 +261,9 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
           ))}
           {pending.pendingGaDisposals.map((c) => (
             <ApprovalRow key={c.id} title={`Disposal — ${c.asset.assetName}`} subtitle={c.asset.assetCode} href={`/disposal-cases/${c.id}`}>
-              <DisposalDecisionButtons caseId={c.id} />
+              <Link href={`/disposal-cases/${c.id}`} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">
+                Setujui
+              </Link>
             </ApprovalRow>
           ))}
         </ApprovalCategory>

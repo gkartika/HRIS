@@ -63,7 +63,7 @@ export function parseExitReturnCondition(raw: string | null | undefined): ExitRe
         condition: "LOST",
         inspectionResult: "LOST_OR_BEYOND_REPAIR",
         disposalReason: "CONFIRMED_LOSS",
-        assetStatus: "LOST_PENDING_REVIEW",
+        assetStatus: "PENDING_DISPOSAL",
       };
     case "BEYOND_REPAIR":
     case "LOST_OR_BEYOND_REPAIR":
@@ -71,7 +71,7 @@ export function parseExitReturnCondition(raw: string | null | undefined): ExitRe
         condition: "BEYOND_REPAIR",
         inspectionResult: "LOST_OR_BEYOND_REPAIR",
         disposalReason: "BEYOND_REPAIR",
-        assetStatus: "UNDER_REPAIR",
+        assetStatus: "PENDING_DISPOSAL",
       };
     default:
       return null;

@@ -2,6 +2,7 @@
 // (the "status tiles") and one combined list of what is waiting for GA (the
 // "Perlu ditindak" list). Reads only; GA Admin gates the caller.
 import { prisma } from "@/lib/db";
+import { planDueState, PLAN_DUE_SOON_DAYS } from "@/lib/ga-operations";
 import { listItemsWithStock } from "@/lib/consumables-queries";
 import {
   countBy,
@@ -61,7 +62,8 @@ const GA_REQUEST_TYPE: Record<string, string> = {
 const dateFmt = new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short" });
 
 export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData> {
-  const [requests, workOrders, disposals, offboardingCases, assetCounts, items] = await Promise.all([
+  const dueBefore = new Date(now.getTime() + (PLAN_DUE_SOON_DAYS + 1) * 24 * 60 * 60 * 1000);
+  const [requests, workOrders, disposals, offboardingCases, assetCounts, items, duePlans] = await Promise.all([
     prisma.gaRequest.findMany({
       where: { status: { in: ["SUBMITTED", "PENDING_APPROVAL", "APPROVED", "PENDING_LOSS_REVIEW"] } },
       select: {
@@ -106,11 +108,24 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       prisma.fixedAsset.count({ where: { activeFlag: true, status: "IN_USE" } }),
       prisma.assetCustody.count({ where: { status: "ACTIVE" } }),
       prisma.fixedAsset.count({ where: { activeFlag: true, status: "UNDER_REPAIR" } }),
-      prisma.fixedAsset.count({ where: { activeFlag: true, status: "LOST_PENDING_REVIEW" } }),
+      prisma.fixedAsset.count({ where: { activeFlag: true, status: { in: ["PENDING_DISPOSAL", "LOST_PENDING_REVIEW"] } } }),
     ]),
     listItemsWithStock(),
+    // Active plans that are late or come due within the next week.
+    prisma.maintenancePlan.findMany({
+      where: { activeFlag: true, dueDate: { not: null, lt: dueBefore } },
+      select: { id: true, description: true, dueDate: true, autoCreateWorkOrder: true, asset: { select: { assetName: true, assetCode: true } } },
+      orderBy: { dueDate: "asc" },
+    }),
   ]);
   const [totalAssets, inUse, activeCustodies, underRepair, lostPending] = assetCounts;
+  const plansWithOpenOrder = duePlans.length
+    ? new Set(
+        (await prisma.maintenanceWorkOrder.findMany({ where: { sourcePlanId: { in: duePlans.map((p) => p.id) }, status: "OPEN" }, select: { sourcePlanId: true } })).map(
+          (w) => w.sourcePlanId
+        )
+      )
+    : new Set<string | null>();
 
   const caseEmployeeIds = offboardingCases.map((c) => c.employeeId);
   const openCustodyGroups = caseEmployeeIds.length
@@ -126,7 +141,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
 
   // ---- Permintaan GA ----
   const requestStatus = countBy(requests, (r) => r.status);
-  for (const r of requests.filter((x) => x.status === "SUBMITTED" || x.status === "APPROVED")) {
+  for (const r of requests.filter((x) => x.status === "SUBMITTED" || x.status === "APPROVED" || x.status === "PENDING_LOSS_REVIEW")) {
     const age = daysSince(r.submittedAt, now);
     const verifying = r.status === "SUBMITTED";
     todo.push({
@@ -134,11 +149,17 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       type: `Permintaan GA · ${GA_REQUEST_TYPE[r.requestType] ?? r.requestType}`,
       title: r.asset ? `${r.asset.assetName} (${r.asset.assetCode})` : r.requestNumber,
       who: `${r.requester.fullLegalName} · ${r.requestNumber}`,
-      statusLabel: verifying ? "Diajukan" : "Disetujui, belum diproses",
+      statusLabel: verifying ? "Diajukan" : r.status === "PENDING_LOSS_REVIEW" ? "Menunggu peninjauan" : "Disetujui, belum diproses",
       severity: waitingSeverity(age),
       urgency: age,
       timeLabel: waitingLabel(age),
-      actionLabel: verifying ? "Verifikasi" : "Proses",
+      actionLabel: r.requestType === "DAMAGE_OR_ABNORMAL_CONDITION" && verifying
+        ? "Terima"
+        : r.requestType === "LOSS"
+          ? "Konfirmasi"
+          : verifying
+            ? "Verifikasi"
+            : "Proses",
       href: `/ga-requests/${r.id}`,
     });
   }
@@ -160,9 +181,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
     });
   }
 
-  // ---- Disposal (Draf needs submitting, Disetujui needs carrying out;
-  // Menunggu Persetujuan is already in "Perlu Persetujuan") ----
-  for (const c of disposals.filter((x) => x.status === "DRAFT" || x.status === "APPROVED")) {
+  // ---- Disposal (Draf needs a decision, Disetujui needs carrying out) ----
+  for (const c of disposals.filter((x) => x.status === "DRAFT" || x.status === "PENDING_APPROVAL" || x.status === "APPROVED")) {
     const since = c.status === "APPROVED" ? (c.decisionAt ?? c.createdAt) : c.createdAt;
     const age = daysSince(since, now);
     todo.push({
@@ -174,8 +194,28 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       severity: waitingSeverity(age),
       urgency: age,
       timeLabel: waitingLabel(age),
-      actionLabel: c.status === "APPROVED" ? "Laksanakan" : "Ajukan",
+      actionLabel: c.status === "APPROVED" ? "Laksanakan" : "Setujui",
       href: `/disposal-cases/${c.id}`,
+    });
+  }
+
+  // ---- Perawatan preventif yang jatuh tempo (rencana dengan work order terbuka sudah tampil di Work Order) ----
+  const pmRows = duePlans
+    .filter((p) => p.dueDate && !plansWithOpenOrder.has(p.id))
+    .map((p) => ({ plan: p, days: daysUntil(p.dueDate!, now) }));
+  for (const { plan, days } of pmRows) {
+    const state = planDueState(days);
+    todo.push({
+      kind: "pm",
+      type: "Perawatan Preventif",
+      title: `${plan.asset.assetName} (${plan.asset.assetCode})`,
+      who: plan.description,
+      statusLabel: state === "OVERDUE" ? `Terlambat ${Math.abs(days)} hari` : days === 0 ? "Jatuh tempo hari ini" : `Jatuh tempo ${days} hari lagi`,
+      severity: state === "OVERDUE" ? "rose" : "amber",
+      urgency: 100 - days,
+      timeLabel: plan.autoCreateWorkOrder ? "work order dibuat otomatis" : "work order manual",
+      actionLabel: "Buat work order",
+      href: "/maintenance/plans",
     });
   }
 
@@ -230,6 +270,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
   const woBySource = countBy(workOrders, (w) => w.sourceType);
   const disposalOldest = oldestAge(disposals.map((c) => c.createdAt), now);
   const disposalStatus = countBy(disposals, (c) => c.status);
+  const pmOverdue = pmRows.filter((r) => r.days < 0).length;
+  const pmSoon = pmRows.length - pmOverdue;
   const nearest = offboardingCases[0];
   const nearestLeft = nearest ? daysUntil(nearest.clearanceDueDate, now) : null;
   const casesWithAssets = offboardingCases.filter((c) => (openCustodyByEmployee.get(c.employeeId) ?? 0) > 0).length;
@@ -242,7 +284,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Permintaan GA terbuka",
       total: requests.length,
       parts: [
-        { label: "Diajukan", count: requestStatus.SUBMITTED ?? 0, hint: "perlu verifikasi" },
+        { label: "Diajukan", count: requestStatus.SUBMITTED ?? 0, hint: "perlu diputuskan atau diverifikasi" },
         { label: "Menunggu Persetujuan", count: requestStatus.PENDING_APPROVAL ?? 0 },
         { label: "Menunggu Peninjauan", count: requestStatus.PENDING_LOSS_REVIEW ?? 0 },
         { label: "Disetujui", count: requestStatus.APPROVED ?? 0, hint: "belum diproses" },
@@ -264,11 +306,23 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       openHref: "/maintenance/work-orders",
     },
     {
+      filter: "pm",
+      title: "Perawatan jatuh tempo",
+      total: pmRows.length,
+      parts: [
+        { label: "Terlambat", count: pmOverdue },
+        { label: `Dalam ${PLAN_DUE_SOON_DAYS} hari`, count: pmSoon },
+      ],
+      note: pmOverdue > 0 ? `${pmOverdue} rencana belum punya work order` : null,
+      severity: pmOverdue > 0 ? "rose" : pmSoon > 0 ? "amber" : "slate",
+      openHref: "/maintenance/plans",
+    },
+    {
       filter: "dp",
       title: "Kasus Disposal aktif",
       total: disposals.length,
       parts: [
-        { label: "Draf", count: disposalStatus.DRAFT ?? 0 },
+        { label: "Draf", count: disposalStatus.DRAFT ?? 0, hint: "perlu disetujui" },
         { label: "Menunggu Persetujuan", count: disposalStatus.PENDING_APPROVAL ?? 0 },
         { label: "Disetujui", count: disposalStatus.APPROVED ?? 0, hint: "belum dilaksanakan" },
       ],
@@ -297,7 +351,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       total: underRepair + lostPending,
       parts: [
         { label: "Dalam Perbaikan", count: underRepair },
-        { label: "Hilang, menunggu peninjauan", count: lostPending },
+        { label: "Menunggu Disposal", count: lostPending },
       ],
       note: null,
       severity: lostPending > 0 ? "amber" : "slate",
@@ -318,7 +372,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
   ];
 
   const sorted = sortTodo(todo);
-  const todoCounts = { all: sorted.length, ga: 0, wo: 0, dp: 0, of: 0, st: 0 } as GaHomeData["todoCounts"];
+  const todoCounts = { all: sorted.length, ga: 0, wo: 0, dp: 0, of: 0, st: 0, pm: 0 } as GaHomeData["todoCounts"];
   for (const row of sorted) todoCounts[row.kind] += 1;
 
   return {

@@ -1,75 +1,13 @@
 "use client";
 
 import { DocumentFileInput } from "@/components/document-file-input";
-import { useActionState, useState } from "react";
-import { submitDisposalCaseForApproval, decideDisposalCase, executeDisposalCase } from "../actions";
+import { useActionState } from "react";
+import { executeDisposalCase, cancelDisposalCase } from "../actions";
+import { ReasonForm } from "@/components/reason-form";
 import { t } from "@/lib/i18n/id";
 
-export function SubmitForApprovalForm({ caseId }: { caseId: string }) {
-  const [error, formAction, isPending] = useActionState(submitDisposalCaseForApproval.bind(null, caseId), undefined);
-  return (
-    <form action={formAction} className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <label className="block text-xs text-slate-500">Catatan Proposal</label>
-      <textarea name="proposalNote" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-      <label className="block text-xs text-slate-500">Bukti Proposal</label>
-      <DocumentFileInput name="proposalEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
-      {error && <p className="text-xs text-rose-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-      >
-        {isPending ? t("common.loading") : "Ajukan untuk Persetujuan"}
-      </button>
-    </form>
-  );
-}
-
-export function DisposalDecisionButtons({ caseId }: { caseId: string }) {
-  const [decision, setDecision] = useState<"APPROVE" | "REJECT" | null>(null);
-  const action = decideDisposalCase.bind(null, caseId, decision ?? "APPROVE");
-  const [error, formAction, isPending] = useActionState(action, undefined);
-
-  if (!decision) {
-    return (
-      <div className="mt-3 flex gap-2">
-        <button onClick={() => setDecision("APPROVE")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
-          Setujui
-        </button>
-        <button
-          onClick={() => setDecision("REJECT")}
-          className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100"
-        >
-          Tolak
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <form action={formAction} className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <label className="block text-xs text-slate-500">Catatan {decision === "REJECT" && "(wajib)"}</label>
-      <textarea name="decisionNote" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-      {error && <p className="text-xs text-rose-600">{error}</p>}
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={isPending}
-          className={`rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60 ${
-            decision === "APPROVE" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-rose-600 text-white hover:bg-rose-700"
-          }`}
-        >
-          {isPending ? t("common.loading") : decision === "APPROVE" ? "Setujui" : "Tolak"}
-        </button>
-        <button type="button" onClick={() => setDecision(null)} className="rounded-lg px-4 py-2 text-sm text-slate-500">
-          {t("common.cancel")}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-export function ExecuteDisposalForm({ caseId }: { caseId: string }) {
+// One step: approving a disposal and taking the asset out are the same action.
+export function ExecuteDisposalForm({ caseId, alreadyApproved = false }: { caseId: string; alreadyApproved?: boolean }) {
   const [error, formAction, isPending] = useActionState(executeDisposalCase.bind(null, caseId), undefined);
   return (
     <form action={formAction} className="mt-3 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
@@ -94,6 +32,12 @@ export function ExecuteDisposalForm({ caseId }: { caseId: string }) {
         <label className="mb-1 block text-xs text-slate-500">Referensi (opsional)</label>
         <input name="executionReference" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
+      {!alreadyApproved && (
+        <div className="md:col-span-2">
+          <label className="mb-1 block text-xs text-slate-500">Catatan persetujuan (opsional)</label>
+          <input name="decisionNote" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        </div>
+      )}
       <div className="md:col-span-2">
         <label className="mb-1 block text-xs text-slate-500">Bukti Pelaksanaan (wajib)</label>
         <DocumentFileInput name="executionEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" required className="text-sm" />
@@ -104,9 +48,21 @@ export function ExecuteDisposalForm({ caseId }: { caseId: string }) {
           disabled={isPending}
           className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
         >
-          {isPending ? t("common.loading") : "Laksanakan Disposal"}
+          {isPending ? t("common.loading") : alreadyApproved ? "Laksanakan Disposal" : "Setujui dan keluarkan aset"}
         </button>
       </div>
     </form>
+  );
+}
+
+export function CancelDisposalForm({ caseId }: { caseId: string }) {
+  return (
+    <ReasonForm
+      action={cancelDisposalCase.bind(null, caseId)}
+      triggerLabel="Batalkan kasus, aset kembali dipakai"
+      reasonLabel="Alasan pembatalan"
+      fieldName="decisionNote"
+      required
+    />
   );
 }

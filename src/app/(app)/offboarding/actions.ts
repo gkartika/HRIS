@@ -26,6 +26,7 @@ import {
 import { companyToday } from "@/lib/company-time";
 import { deactivateEmployee } from "@/lib/offboarding-deactivate";
 import { createDisposalCaseInternal } from "@/lib/disposal-create";
+import { openRepairForReturnedAsset } from "@/lib/maintenance-create";
 import { blocksOffboarding, computeAvailableQuantityAfterReturn } from "@/lib/assets";
 import { blocksOffboardingGaRequest } from "@/lib/ga-operations";
 
@@ -361,6 +362,17 @@ export async function confirmGaAssetClearance(
     // disposal proposal (Draft) that goes through the normal approval, the
     // same as a confirmed GA loss or a work order that ends beyond repair.
     // Quantity-tracked items have no per-unit asset record to dispose of.
+    // An asset returned as needing repair gets its corrective work order straight away.
+    for (const custody of blockingCustodies) {
+      const outcome = outcomeByCustodyId.get(custody.id)!;
+      if (outcome.condition !== "NEEDS_REPAIR" || custody.asset.trackingType !== "INDIVIDUAL") continue;
+      await openRepairForReturnedAsset({
+        assetId: custody.assetId,
+        createdByAccountId: session.user.id,
+        note: `Dikembalikan perlu perbaikan saat klirens aset ${offboardingCase.caseNumber}.`,
+      });
+    }
+
     let disposalDrafts = 0;
     for (const custody of blockingCustodies) {
       const outcome = outcomeByCustodyId.get(custody.id)!;

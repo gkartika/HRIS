@@ -9,6 +9,8 @@ import {
   processGaRequest,
   reviewGaRequestLoss,
   cancelGaRequest,
+  acceptDamageRequest,
+  rejectDamageRequest,
 } from "../actions";
 import { t } from "@/lib/i18n/id";
 
@@ -257,7 +259,63 @@ export function ProcessForm({
   );
 }
 
-export function LossReviewButtons({ requestId }: { requestId: string }) {
+// Damage report: one click accepts it and opens the work order; turning it down needs a reason.
+export function DamageDecisionPanel({ requestId }: { requestId: string }) {
+  const [rejecting, setRejecting] = useState(false);
+  const [acceptError, acceptAction, accepting] = useActionState(acceptDamageRequest.bind(null, requestId), undefined);
+  const [rejectError, rejectAction, rejectingNow] = useActionState(rejectDamageRequest.bind(null, requestId), undefined);
+
+  if (rejecting) {
+    return (
+      <form action={rejectAction} className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <label className="block text-xs text-slate-500">Alasan penolakan (wajib)</label>
+        <textarea name="decisionNote" rows={2} required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        {rejectError && <p className="text-xs text-rose-600">{rejectError}</p>}
+        <div className="flex gap-2">
+          <button type="submit" disabled={rejectingNow} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60">
+            {rejectingNow ? t("common.loading") : "Tolak, bukan kerusakan"}
+          </button>
+          <button type="button" onClick={() => setRejecting(false)} className="rounded-lg px-4 py-2 text-sm text-slate-500">
+            {t("common.cancel")}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <form action={acceptAction} className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex gap-4 text-sm text-slate-700">
+        <label className="flex items-center gap-2">
+          <input type="radio" name="workType" value="INTERNAL" defaultChecked /> Internal
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="workType" value="VENDOR" /> Vendor
+        </label>
+      </div>
+      <div>
+        <label className="block text-xs text-slate-500">Catatan checklist</label>
+        <input name="checklistNotes" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="mis. cek kabel layar, driver grafis" />
+      </div>
+      <div>
+        <label className="block text-xs text-slate-500">Catatan verifikasi</label>
+        <input name="verificationNote" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      </div>
+      {acceptError && <p className="text-xs text-rose-600">{acceptError}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={accepting} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
+          {accepting ? t("common.loading") : "Terima dan buka work order"}
+        </button>
+        <button type="button" onClick={() => setRejecting(true)} className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100">
+          Tolak, bukan kerusakan
+        </button>
+      </div>
+      <p className="text-xs text-slate-500">Satu klik: aset langsung berstatus Dalam Perbaikan dan work order dibuat.</p>
+    </form>
+  );
+}
+
+export function LossReviewButtons({ requestId, needsEvidence = false }: { requestId: string; needsEvidence?: boolean }) {
   const [decision, setDecision] = useState<"CONFIRM" | "NOT_CONFIRM" | null>(null);
   const action = reviewGaRequestLoss.bind(null, requestId, decision ?? "CONFIRM");
   const [error, formAction, isPending] = useActionState(action, undefined);
@@ -269,13 +327,13 @@ export function LossReviewButtons({ requestId }: { requestId: string }) {
           onClick={() => setDecision("CONFIRM")}
           className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700"
         >
-          Konfirmasi Kehilangan
+          Konfirmasi hilang
         </button>
         <button
           onClick={() => setDecision("NOT_CONFIRM")}
           className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          Tidak Dikonfirmasi
+          Bukan hilang
         </button>
       </div>
     );
@@ -285,6 +343,15 @@ export function LossReviewButtons({ requestId }: { requestId: string }) {
     <form action={formAction} className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <label className="block text-xs text-slate-500">Catatan Peninjauan</label>
       <textarea name="lossReviewNote" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      {needsEvidence && (
+        <>
+          <label className="block text-xs text-slate-500">Bukti kehilangan (jika belum ada)</label>
+          <DocumentFileInput name="evidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
+        </>
+      )}
+      {decision === "CONFIRM" && (
+        <p className="text-xs text-slate-500">Penguasaan yang masih terbuka ditutup sebagai hilang dan draf disposal dibuat otomatis.</p>
+      )}
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <div className="flex gap-2">
         <button
@@ -292,7 +359,7 @@ export function LossReviewButtons({ requestId }: { requestId: string }) {
           disabled={isPending}
           className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60"
         >
-          {isPending ? t("common.loading") : decision === "CONFIRM" ? "Konfirmasi Kehilangan" : "Tidak Dikonfirmasi"}
+          {isPending ? t("common.loading") : decision === "CONFIRM" ? "Konfirmasi hilang" : "Bukan hilang"}
         </button>
         <button type="button" onClick={() => setDecision(null)} className="rounded-lg px-4 py-2 text-sm text-slate-500">
           {t("common.cancel")}

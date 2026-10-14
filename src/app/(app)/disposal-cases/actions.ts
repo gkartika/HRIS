@@ -8,11 +8,10 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { canManageGaOperations } from "@/lib/permissions";
 import {
-  canSubmitDisposalCaseForApproval,
-  canDecideDisposalCase,
-  decideDisposalCaseStatus,
   canExecuteDisposalCase,
   computeAssetStatusAfterDisposalExecution,
+  canCancelDisposalCase,
+  computeAssetStatusAfterDisposalCancel,
 } from "@/lib/ga-operations";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
@@ -49,119 +48,7 @@ export async function createObsoleteDisposalCase(
     proposalNote,
   });
 
-  // Same "not fit for use, pending decision" state maintenance BEYOND_REPAIR
-  // already leaves the asset in — blocks new assignment via the existing
-  // Phase 4A isAssetAvailableForIndividualAssignment allowlist.
-  await prisma.fixedAsset.update({ where: { id: assetId }, data: { status: "UNDER_REPAIR" } });
-
   revalidatePath(`/assets/${assetId}`);
-  revalidatePath("/disposal-cases");
-  return undefined;
-}
-
-export async function submitDisposalCaseForApproval(
-  caseId: string,
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canManageGaOperations(session)) return t("common.forbidden");
-
-  const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
-  if (!disposalCase) return "Kasus tidak ditemukan.";
-  if (!canSubmitDisposalCaseForApproval(disposalCase.status)) {
-    return "Kasus ini sudah diajukan atau tidak lagi dalam status Draft.";
-  }
-
-  const proposalNote = (formData.get("proposalNote") as string)?.trim() || null;
-
-  let proposalEvidenceFileId: string | undefined;
-  const evidenceFile = formData.get("proposalEvidenceFile") as File | null;
-  if (evidenceFile && evidenceFile.size > 0) {
-    const validationError = validateDocumentFile({ name: evidenceFile.name, type: evidenceFile.type, size: evidenceFile.size });
-    if (validationError) return validationError;
-    const storageKey = randomStorageKey("disposal-proposal", getExtension(evidenceFile.name));
-    const bytes = Buffer.from(await evidenceFile.arrayBuffer());
-    await savePrivateFile(storageKey, bytes);
-    const fileObject = await prisma.fileObject.create({
-      data: {
-        storageKey,
-        originalFileName: evidenceFile.name,
-        mimeType: evidenceFile.type,
-        sizeBytes: evidenceFile.size,
-        sensitivity: "RESTRICTED",
-        uploadedByAccountId: session.user.id,
-        category: "DISPOSAL_PROPOSAL_EVIDENCE",
-        confidential: false,
-      },
-    });
-    proposalEvidenceFileId = fileObject.id;
-  }
-
-  await prisma.disposalCase.update({
-    where: { id: caseId },
-    data: {
-      status: "PENDING_APPROVAL",
-      proposalNote: proposalNote ?? disposalCase.proposalNote,
-      proposalEvidenceFileId: proposalEvidenceFileId ?? disposalCase.proposalEvidenceFileId,
-      submittedForApprovalAt: new Date(),
-    },
-  });
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "UPDATE",
-    datasetName: "DisposalCase",
-    recordId: caseId,
-    reason: `${disposalCase.caseNumber} submitted for approval`,
-  });
-
-  revalidatePath(`/disposal-cases/${caseId}`);
-  revalidatePath("/disposal-cases");
-  return undefined;
-}
-
-// GA Admin gives final approval directly (no separate configurable
-// Position). A rejection returns the case to DRAFT ("No: repair, storage or
-// review") rather than closing it out — GA Admin can revise and resubmit;
-// immutable history, never deleted.
-export async function decideDisposalCase(
-  caseId: string,
-  decision: "APPROVE" | "REJECT",
-  _prevState: string | undefined,
-  formData: FormData
-): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canManageGaOperations(session)) return t("common.forbidden");
-
-  const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
-  if (!disposalCase) return "Kasus tidak ditemukan.";
-  if (!canDecideDisposalCase(disposalCase.status)) {
-    return "Kasus ini belum diajukan untuk persetujuan atau sudah diputuskan.";
-  }
-
-  const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;
-  if (decision === "REJECT" && !decisionNote) return "Alasan penolakan wajib diisi.";
-
-  await prisma.disposalCase.update({
-    where: { id: caseId },
-    data: {
-      status: decideDisposalCaseStatus(decision === "APPROVE"),
-      decisionAt: new Date(),
-      decisionByAccountId: session.user.id,
-      decisionNote,
-    },
-  });
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: decision === "APPROVE" ? "APPROVE" : "REJECT",
-    datasetName: "DisposalCase",
-    recordId: caseId,
-    reason: decisionNote ?? `${disposalCase.caseNumber} ${decision === "APPROVE" ? "approved" : "rejected"}`,
-  });
-
-  revalidatePath(`/disposal-cases/${caseId}`);
   revalidatePath("/disposal-cases");
   return undefined;
 }
@@ -176,7 +63,9 @@ export async function executeDisposalCase(
 
   const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
   if (!disposalCase) return "Kasus tidak ditemukan.";
-  if (!canExecuteDisposalCase(disposalCase.status)) return "Kasus ini belum disetujui.";
+  if (!canExecuteDisposalCase(disposalCase.status)) return "Kasus ini sudah dilaksanakan atau dibatalkan.";
+  // Approving and taking the asset out are one step. For a draft, the decision is recorded here.
+  const approvalNote = (formData.get("decisionNote") as string)?.trim() || null;
 
   const executionMethodRaw = formData.get("executionMethod") as string;
   if (!["RETIRE", "DISPOSE", "SELL_AS_SCRAP"].includes(executionMethodRaw)) return "Metode disposal wajib dipilih.";
@@ -225,6 +114,9 @@ export async function executeDisposalCase(
       where: { id: caseId },
       data: {
         status: "EXECUTED",
+        ...(disposalCase.decisionAt
+          ? {}
+          : { decisionAt: new Date(), decisionByAccountId: session.user.id, decisionNote: approvalNote }),
         executionMethod,
         executionDate: new Date(executionDateRaw),
         executionValue: executionValueRaw ? Number(executionValueRaw) : null,
@@ -258,7 +150,49 @@ export async function executeDisposalCase(
     action: "UPDATE",
     datasetName: "DisposalCase",
     recordId: caseId,
-    reason: `${disposalCase.caseNumber} executed (${executionMethod}) — asset retired`,
+    reason: `${disposalCase.caseNumber} approved and executed (${executionMethod}) — asset retired`,
+  });
+
+  revalidatePath(`/disposal-cases/${caseId}`);
+  revalidatePath("/disposal-cases");
+  revalidatePath(`/assets/${disposalCase.assetId}`);
+  revalidatePath("/assets");
+  return undefined;
+}
+
+// A case that is not going ahead (the asset turned out fine, or the loss was found) is
+// cancelled with a reason. Nothing is deleted: the case stays as history, and the asset
+// goes back into circulation.
+export async function cancelDisposalCase(caseId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageGaOperations(session)) return t("common.forbidden");
+
+  const disposalCase = await prisma.disposalCase.findUnique({ where: { id: caseId } });
+  if (!disposalCase) return "Kasus tidak ditemukan.";
+  if (!canCancelDisposalCase(disposalCase.status)) return "Kasus ini sudah dilaksanakan atau dibatalkan.";
+
+  const decisionNote = (formData.get("decisionNote") as string)?.trim();
+  if (!decisionNote) return "Alasan pembatalan wajib diisi.";
+
+  const openCustody = await prisma.assetCustody.findFirst({ where: { assetId: disposalCase.assetId, status: { not: "RETURNED" } } });
+
+  await prisma.$transaction([
+    prisma.disposalCase.update({
+      where: { id: caseId },
+      data: { status: "REJECTED", decisionAt: new Date(), decisionByAccountId: session.user.id, decisionNote },
+    }),
+    prisma.fixedAsset.update({
+      where: { id: disposalCase.assetId },
+      data: { status: computeAssetStatusAfterDisposalCancel(!!openCustody) },
+    }),
+  ]);
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "REJECT",
+    datasetName: "DisposalCase",
+    recordId: caseId,
+    reason: `${disposalCase.caseNumber} cancelled, asset back in circulation: ${decisionNote}`,
   });
 
   revalidatePath(`/disposal-cases/${caseId}`);

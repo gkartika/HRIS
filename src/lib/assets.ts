@@ -10,7 +10,8 @@ export type AssetStatusValue =
   | "UNDER_REPAIR"
   | "DISPOSED"
   | "LOST_PENDING_REVIEW"
-  | "RETIRED";
+  | "RETIRED"
+  | "PENDING_DISPOSAL";
 export type AssetCustodyStatusValue = "ACTIVE" | "RETURNED";
 export type AssetCustodyTargetTypeValue = "EMPLOYEE" | "DEPARTMENT" | "LOCATION";
 export type AssetInspectionResultValue = "GOOD" | "NEEDS_REPAIR" | "LOST_OR_BEYOND_REPAIR";
@@ -36,7 +37,8 @@ export function canAllocateQuantity(availableQuantity: number, requestedQuantity
 export function computeAssetStatusAfterReturn(inspectionResult: AssetInspectionResultValue): AssetStatusValue {
   if (inspectionResult === "GOOD") return "AVAILABLE";
   if (inspectionResult === "NEEDS_REPAIR") return "UNDER_REPAIR";
-  return "DISPOSED";
+  // Lost or beyond repair never skips the disposal case: the asset waits for it.
+  return "PENDING_DISPOSAL";
 }
 
 // A quantity-tracked return only rejoins the usable pool when it comes back

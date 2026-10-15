@@ -63,12 +63,16 @@ export async function listItemsWithStock(opts: {
   const where: Prisma.ConsumableItemWhereInput = {};
   if (!opts.includeArchived) where.archived = false;
   if (opts.category) where.category = opts.category;
-  if (opts.q?.trim()) {
-    const q = opts.q.trim();
-    where.OR = [
-      { itemCode: { contains: q, mode: "insensitive" } },
-      { itemName: { contains: q, mode: "insensitive" } },
-    ];
+  // Every typed word must be in the item name or code, in any order: "safety sepatu" finds
+  // "Sepatu Safety New 36".
+  const words = nameSearchWords(opts.q ?? "");
+  if (words.length > 0) {
+    where.AND = words.map((word) => ({
+      OR: [
+        { itemCode: { contains: word, mode: "insensitive" as const } },
+        { itemName: { contains: word, mode: "insensitive" as const } },
+      ],
+    }));
   }
   const items = await prisma.consumableItem.findMany({ where, orderBy: [{ category: "asc" }, { itemCode: "asc" }] });
   const totals = await getMovementTotals(prisma, items.map((i) => i.id));

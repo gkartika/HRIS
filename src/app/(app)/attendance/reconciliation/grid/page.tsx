@@ -367,26 +367,26 @@ export default async function AttendanceReconciliationGridPage({
         </div>
       )}
 
-      <div className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white">
+      <div className="mt-4 max-h-[calc(100vh-7rem)] overflow-auto rounded-xl border border-slate-200 bg-white">
         <table className="border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50">
-              <th rowSpan={2} className="sticky left-0 z-10 min-w-[190px] border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-500">
+              <th rowSpan={2} className="sticky left-0 top-0 z-30 min-w-[190px] border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-500">
                 <Link href={sortLink("name")} className="hover:underline">
                   Karyawan {sortBy === "name" && (sortDir === "asc" ? "↑" : "↓")}
                 </Link>
               </th>
-              <th rowSpan={2} className="sticky left-[190px] z-10 w-[64px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
+              <th rowSpan={2} className="sticky left-[190px] top-0 z-30 w-[64px] min-w-[64px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
                 <Link href={sortLink("points")} className="hover:underline">
                   Poin {sortBy === "points" && (sortDir === "asc" ? "↑" : "↓")}
                 </Link>
                 <span className="block text-[9px] font-normal text-slate-400">periode</span>
               </th>
-              <th rowSpan={2} className="sticky left-[254px] z-10 w-[76px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
+              <th rowSpan={2} className="sticky left-[254px] top-0 z-30 w-[76px] min-w-[76px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
                 Jam Kerja Gaji
                 <span className="block text-[9px] font-normal text-slate-400">periode</span>
               </th>
-              <th rowSpan={2} className="sticky left-[330px] z-10 w-[76px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
+              <th rowSpan={2} className="sticky left-[330px] top-0 z-30 w-[76px] min-w-[76px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-medium text-slate-500">
                 Jam Kerja Aktual
                 <span className="block text-[9px] font-normal text-slate-400">periode</span>
               </th>
@@ -397,7 +397,7 @@ export default async function AttendanceReconciliationGridPage({
                   <th
                     key={d.date.toISOString()}
                     colSpan={2}
-                    className={`border-b border-l border-slate-200 px-1 py-2 text-center text-[10px] font-semibold ${isToday ? "bg-brand-accent-soft text-brand-dark" : "text-slate-500"}`}
+                    className={`sticky top-0 z-20 h-[60px] border-b border-l border-slate-200 px-1 py-2 text-center text-[10px] font-semibold ${isToday ? "bg-brand-accent-soft text-brand-dark" : "bg-slate-50 text-slate-500"}`}
                   >
                     {top}
                     <br />
@@ -415,10 +415,10 @@ export default async function AttendanceReconciliationGridPage({
             <tr className="bg-slate-50">
               {headerDays.map((d) => (
                 <Fragment key={d.date.toISOString()}>
-                  <th className="w-[40px] border-b border-l border-slate-200 px-1 py-1 text-center text-[9px] font-medium text-slate-400">
+                  <th className="sticky top-[60px] z-20 w-[40px] border-b border-l border-slate-200 bg-slate-50 px-1 py-1 text-center text-[9px] font-medium text-slate-400">
                     Kode
                   </th>
-                  <th className="w-[40px] border-b border-slate-200 px-1 py-1 text-center text-[9px] font-medium text-slate-400">
+                  <th className="sticky top-[60px] z-20 w-[40px] border-b border-slate-200 bg-slate-50 px-1 py-1 text-center text-[9px] font-medium text-slate-400">
                     Jam
                   </th>
                 </Fragment>
@@ -433,16 +433,16 @@ export default async function AttendanceReconciliationGridPage({
                   <p className="text-[10px] font-normal text-slate-400">{row.departmentName}</p>
                 </td>
                 <td
-                  className={`sticky left-[190px] z-10 border-l border-slate-100 bg-white px-2 py-2 text-center text-xs font-bold ${
+                  className={`sticky left-[190px] z-10 min-w-[64px] border-l border-slate-100 bg-white px-2 py-2 text-center text-xs font-bold ${
                     row.points < 0 ? "text-rose-600" : "text-slate-400"
                   }`}
                 >
                   {row.points}
                 </td>
-                <td className="sticky left-[254px] z-10 border-l border-slate-100 bg-white px-2 py-2 text-center text-xs font-medium text-slate-700">
+                <td className="sticky left-[254px] z-10 min-w-[76px] border-l border-slate-100 bg-white px-2 py-2 text-center text-xs font-medium text-slate-700">
                   {formatMinutesAsHours(row.totalMinutes)}
                 </td>
-                <td className="sticky left-[330px] z-10 border-l border-slate-100 bg-white px-2 py-2 text-center text-xs font-medium text-slate-700">
+                <td className="sticky left-[330px] z-10 min-w-[76px] border-l border-slate-100 bg-white px-2 py-2 text-center text-xs font-medium text-slate-700">
                   {formatMinutesAsHours(row.totalActualMinutes)}
                 </td>
                 {row.days.filter((d) => inRange(d.date)).map((d) => {

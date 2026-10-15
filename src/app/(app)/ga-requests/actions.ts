@@ -3,14 +3,10 @@
 import { t } from "@/lib/i18n/id";
 import { revalidatePath } from "next/cache";
 import { getExtension } from "@/lib/validation/employee-fields";
-import { companyYear } from "@/lib/company-time";
-import { nextSequence } from "@/lib/number-sequence";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { canManageGaOperations, canSubmitGaRequest, canCancelGaRequest } from "@/lib/permissions";
+import { canManageGaOperations, canCancelGaRequest } from "@/lib/permissions";
 import {
-  formatGaRequestNumber,
   canVerifyGaRequest,
   routeGaRequestAfterVerification,
   canDecideGaRequest,
@@ -29,89 +25,6 @@ import { validateDocumentFile } from "@/lib/validation/employee-fields";
 import { assignAssetToEmployee, assignAssetToDepartment } from "@/app/(app)/assets/actions";
 import { createDisposalCaseInternal } from "@/lib/disposal-create";
 import { createWorkOrderInternal } from "@/lib/maintenance-create";
-import type { GaRequestType, GaRequestUrgency } from "@/generated/prisma/enums";
-
-export async function submitGaRequest(_prevState: string | undefined, formData: FormData): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canSubmitGaRequest(session)) return t("common.forbidden");
-
-  const requestTypeRaw = formData.get("requestType") as string;
-  if (!["NEW_ASSET_NEED", "DAMAGE_OR_ABNORMAL_CONDITION", "LOSS"].includes(requestTypeRaw)) {
-    return "Jenis permintaan wajib dipilih.";
-  }
-  const requestType = requestTypeRaw as GaRequestType;
-
-  const urgencyRaw = (formData.get("urgency") as string) || "MEDIUM";
-  if (!["LOW", "MEDIUM", "HIGH"].includes(urgencyRaw)) return "Urgensi tidak valid.";
-  const urgency = urgencyRaw as GaRequestUrgency;
-
-  const description = (formData.get("description") as string)?.trim();
-  if (!description) return "Deskripsi wajib diisi.";
-
-  const assetId = (formData.get("assetId") as string)?.trim() || null;
-  if ((requestType === "DAMAGE_OR_ABNORMAL_CONDITION" || requestType === "LOSS") && !assetId) {
-    return "Aset wajib dipilih untuk laporan kerusakan atau kehilangan.";
-  }
-  if (assetId) {
-    const asset = await prisma.fixedAsset.findUnique({ where: { id: assetId } });
-    if (!asset) return "Aset tidak ditemukan.";
-  }
-
-  const locationId = (formData.get("locationId") as string)?.trim() || null;
-
-  let evidenceFileId: string | undefined;
-  const evidenceFile = formData.get("evidenceFile") as File | null;
-  if (evidenceFile && evidenceFile.size > 0) {
-    const validationError = validateDocumentFile({ name: evidenceFile.name, type: evidenceFile.type, size: evidenceFile.size });
-    if (validationError) return validationError;
-    const storageKey = randomStorageKey("ga-request", getExtension(evidenceFile.name));
-    const bytes = Buffer.from(await evidenceFile.arrayBuffer());
-    await savePrivateFile(storageKey, bytes);
-    const fileObject = await prisma.fileObject.create({
-      data: {
-        storageKey,
-        originalFileName: evidenceFile.name,
-        mimeType: evidenceFile.type,
-        sizeBytes: evidenceFile.size,
-        sensitivity: "RESTRICTED",
-        employeeId: session.user.employeeId,
-        uploadedByAccountId: session.user.id,
-        category: "GA_REQUEST_EVIDENCE",
-        confidential: false,
-      },
-    });
-    evidenceFileId = fileObject.id;
-  }
-
-  const year = companyYear();
-  const seq = await nextSequence(`GAR-${year}`);
-  const requestNumber = formatGaRequestNumber(seq, year);
-
-  const created = await prisma.gaRequest.create({
-    data: {
-      requestNumber,
-      requestType,
-      urgency,
-      description,
-      requesterEmployeeId: session.user.employeeId!,
-      submittedByAccountId: session.user.id,
-      assetId,
-      locationId,
-      evidenceFileId,
-    },
-  });
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "CREATE",
-    datasetName: "GaRequest",
-    recordId: created.id,
-    reason: `Submitted ${requestType} request ${requestNumber}`,
-  });
-
-  revalidatePath("/ga-requests");
-  redirect(`/ga-requests/${created.id}`);
-}
 
 // PDF: "GA Admin verifies asset, location and urgency" then routes by
 // requestType. Immediately moves a damaged/lost asset out of normal
@@ -138,35 +51,6 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
 
   const newStatus = routeGaRequestAfterVerification(request.requestType, approvalRequired ?? false);
 
-  // GA Admin may fill the evidence gap here if the requester didn't attach
-  // one at submission ("Record loss incident and evidence" is a GA Admin
-  // step per the PDF, not necessarily the requester's).
-  let evidenceFileId: string | undefined;
-  if (!request.evidenceFileId) {
-    const evidenceFile = formData.get("evidenceFile") as File | null;
-    if (evidenceFile && evidenceFile.size > 0) {
-      const validationError = validateDocumentFile({ name: evidenceFile.name, type: evidenceFile.type, size: evidenceFile.size });
-      if (validationError) return validationError;
-      const storageKey = randomStorageKey("ga-request", getExtension(evidenceFile.name));
-      const bytes = Buffer.from(await evidenceFile.arrayBuffer());
-      await savePrivateFile(storageKey, bytes);
-      const fileObject = await prisma.fileObject.create({
-        data: {
-          storageKey,
-          originalFileName: evidenceFile.name,
-          mimeType: evidenceFile.type,
-          sizeBytes: evidenceFile.size,
-          sensitivity: "RESTRICTED",
-          employeeId: request.requesterEmployeeId,
-          uploadedByAccountId: session.user.id,
-          category: "GA_REQUEST_EVIDENCE",
-          confidential: false,
-        },
-      });
-      evidenceFileId = fileObject.id;
-    }
-  }
-
   await prisma.$transaction(async (tx) => {
     await tx.gaRequest.update({
       where: { id: requestId },
@@ -176,7 +60,6 @@ export async function verifyGaRequest(requestId: string, _prevState: string | un
         verifiedByAccountId: session.user.id,
         verificationNote,
         approvalRequired,
-        evidenceFileId: evidenceFileId ?? request.evidenceFileId,
       },
     });
   });

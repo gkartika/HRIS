@@ -902,8 +902,9 @@ export function canManageGaOperations(session: Session): boolean {
   return isGaAdmin(session);
 }
 
-// Consumables (APD/ATK) are purely a GA Admin back-office ledger: no
-// employee-facing view, and HR Admin has no access, same boundary as above.
+// Consumables (APD/ATK) are a GA Admin back-office ledger: only GA Admin records, edits or
+// reads the ledger, and HR Admin has no access, same boundary as above. The one employee-facing
+// view is on Perlengkapan Saya: each employee sees their own taken items, read-only, and nothing else.
 export function canManageConsumables(session: Session): boolean {
   return isGaAdmin(session);
 }

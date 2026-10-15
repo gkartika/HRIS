@@ -10,7 +10,6 @@ import {
   canManageAssets,
   canManageGaOperations,
   canManageConsumables,
-  canSubmitGaRequest,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
@@ -254,7 +253,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // requests" is enforced on the page itself. Maintenance and Disposal
   // Cases are GA-Admin-only mutation surfaces (HR Admin deliberately gets
   // no nav entry here, same access boundary as Asset Master above).
-  if (canManageGaOperations(session) || canSubmitGaRequest(session)) {
+  if (canManageGaOperations(session)) {
     buckets.asetGa.push({ href: "/ga-requests", label: t("gaRequest.navLabel"), icon: "Package" });
   }
   if (canManageGaOperations(session)) {
@@ -262,8 +261,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     buckets.asetGa.push({ href: "/maintenance/work-orders", label: t("maintenance.workOrdersNavLabel"), icon: "Wrench" });
     buckets.asetGa.push({ href: "/disposal-cases", label: t("disposalCase.navLabel"), icon: "Trash2" });
   }
-  // Consumables (APD/ATK): GA-Admin-only back-office ledger — no employee-
-  // facing entry anywhere, and HR Admin deliberately gets none either.
+  // Consumables (APD/ATK): GA-Admin-only back-office ledger. Employees see only their own
+  // taken items on Perlengkapan Saya (read-only); HR Admin deliberately gets nothing.
   if (canManageConsumables(session)) {
     buckets.asetGa.push({ href: "/consumables", label: t("consumable.navLabel"), icon: "Boxes" });
   }

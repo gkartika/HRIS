@@ -46,6 +46,20 @@ export const LIFECYCLE_STATUS_TONE: Record<string, string> = {
   OUT: "bg-rose-50 text-rose-700",
 };
 
+export const GA_REQUEST_STATUS_TONE: Record<string, string> = {
+  SUBMITTED: "bg-slate-100 text-slate-600",
+  PENDING_APPROVAL: "bg-amber-50 text-amber-700",
+  APPROVED: "bg-emerald-50 text-emerald-700",
+  REJECTED: "bg-rose-50 text-rose-700",
+  PROCESSED: "bg-indigo-50 text-indigo-700",
+  WORK_ORDER_CREATED: "bg-amber-50 text-amber-700",
+  PENDING_LOSS_REVIEW: "bg-amber-50 text-amber-700",
+  LOSS_CONFIRMED: "bg-rose-50 text-rose-700",
+  LOSS_NOT_CONFIRMED: "bg-slate-100 text-slate-500",
+  CANCELLED: "bg-slate-100 text-slate-400",
+  COMPLETED: "bg-emerald-50 text-emerald-700",
+};
+
 export const GA_REQUEST_STATUS_LABEL: Record<string, string> = {
   SUBMITTED: "Diajukan",
   PENDING_APPROVAL: "Menunggu Persetujuan",

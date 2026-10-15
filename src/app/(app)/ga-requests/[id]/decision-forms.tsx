@@ -14,18 +14,12 @@ import {
 } from "../actions";
 import { t } from "@/lib/i18n/id";
 
-export function VerifyForm({ requestId, needsEvidence }: { requestId: string; needsEvidence: boolean }) {
+export function VerifyForm({ requestId }: { requestId: string }) {
   const [error, formAction, isPending] = useActionState(verifyGaRequest.bind(null, requestId), undefined);
   return (
     <form action={formAction} className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <label className="block text-xs text-slate-500">Catatan Verifikasi</label>
       <textarea name="verificationNote" rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-      {needsEvidence && (
-        <>
-          <label className="block text-xs text-slate-500">Bukti Kehilangan (jika belum ada)</label>
-          <DocumentFileInput name="evidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
-        </>
-      )}
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <button
         type="submit"
@@ -105,7 +99,6 @@ export function ProcessForm({
   orgUnits,
   locations,
   defaultEmployeeId,
-  defaultLocationId,
 }: {
   requestId: string;
   assets: AssetOption[];
@@ -113,8 +106,6 @@ export function ProcessForm({
   orgUnits: EmployeeOption[];
   locations: EmployeeOption[];
   defaultEmployeeId: string;
-  /** The location the requester named on the request, offered as the default for a department placement. */
-  defaultLocationId: string;
 }) {
   const [mode, setMode] = useState<"ALLOCATE" | "PROCUREMENT">("ALLOCATE");
   const [targetType, setTargetType] = useState<"EMPLOYEE" | "DEPARTMENT">("EMPLOYEE");
@@ -209,7 +200,7 @@ export function ProcessForm({
               </div>
               <div>
                 <label className="mb-1 block text-xs text-slate-500">Lokasi (wajib untuk departemen)</label>
-                <select name="locationId" required defaultValue={defaultLocationId} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <select name="locationId" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
                   <option value="">— Pilih Lokasi —</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>

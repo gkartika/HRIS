@@ -3049,6 +3049,7 @@ model GaRequest {
 
   @@index([requesterEmployeeId])
   @@index([status])
+  @@index([assetId, status])
 }
 
 // GA-Admin-created preventive schedule for an asset. "Due" detection is

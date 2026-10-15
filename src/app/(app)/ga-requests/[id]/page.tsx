@@ -157,7 +157,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
             {request.verificationNote && `: ${request.verificationNote}`}
           </p>
         )}
-        {canVerify && <VerifyForm requestId={request.id} needsEvidence={false} />}
+        {canVerify && <VerifyForm requestId={request.id} />}
       </div>
       )}
 
@@ -194,7 +194,6 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
                     orgUnits={processFormData.orgUnits}
                     locations={processFormData.locations}
                     defaultEmployeeId={request.requesterEmployeeId}
-                    defaultLocationId={request.locationId ?? ""}
                   />
                 )
               )}

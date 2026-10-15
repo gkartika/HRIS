@@ -1,5 +1,5 @@
 import { StatusChip } from "@/components/status-chip";
-import { GA_REQUEST_STATUS_LABEL } from "@/lib/status-ui";
+import { GA_REQUEST_STATUS_LABEL, GA_REQUEST_STATUS_TONE } from "@/lib/status-ui";
 import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
@@ -32,19 +32,6 @@ const TYPE_LABEL: Record<GaRequestType, string> = {
   LOSS: "Kehilangan",
 };
 
-const STATUS_TONE: Record<GaRequestStatus, string> = {
-  SUBMITTED: "bg-slate-100 text-slate-600",
-  PENDING_APPROVAL: "bg-amber-50 text-amber-700",
-  APPROVED: "bg-emerald-50 text-emerald-700",
-  REJECTED: "bg-rose-50 text-rose-700",
-  PROCESSED: "bg-indigo-50 text-indigo-700",
-  WORK_ORDER_CREATED: "bg-amber-50 text-amber-700",
-  PENDING_LOSS_REVIEW: "bg-amber-50 text-amber-700",
-  LOSS_CONFIRMED: "bg-rose-50 text-rose-700",
-  LOSS_NOT_CONFIRMED: "bg-slate-100 text-slate-500",
-  CANCELLED: "bg-slate-100 text-slate-400",
-  COMPLETED: "bg-emerald-50 text-emerald-700",
-};
 
 export default async function GaRequestsPage({
   searchParams,
@@ -98,8 +85,8 @@ export default async function GaRequestsPage({
             </a>
           )}
           {canSubmit && (
-            <Link href="/ga-requests/new" className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-              Buat Permintaan Baru
+            <Link href="/my-assets" className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+              Buat Permintaan di Perlengkapan Saya
             </Link>
           )}
         </div>
@@ -141,7 +128,7 @@ export default async function GaRequestsPage({
       </form>
 
       {requests.length === 0 ? (
-        <EmptyState message="Belum ada permintaan." action={canSubmit ? { href: "/ga-requests/new", label: "Buat Permintaan" } : undefined} />
+        <EmptyState message="Belum ada permintaan." action={canSubmit ? { href: "/my-assets", label: "Buat Permintaan" } : undefined} />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-sm">
@@ -168,7 +155,7 @@ export default async function GaRequestsPage({
                   <td className="px-4 py-3 text-slate-600">{r.asset ? `${r.asset.assetName} (${r.asset.assetCode})` : "—"}</td>
                   <td className="px-4 py-3 text-slate-600">{r.urgency}</td>
                   <td className="px-4 py-3">
-                    <StatusChip tone={STATUS_TONE[r.status]}>{GA_REQUEST_STATUS_LABEL[r.status]}</StatusChip>
+                    <StatusChip tone={GA_REQUEST_STATUS_TONE[r.status]}>{GA_REQUEST_STATUS_LABEL[r.status]}</StatusChip>
                   </td>
                 </tr>
               ))}

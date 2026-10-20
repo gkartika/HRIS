@@ -2,7 +2,7 @@
 // friendly "no connection" page when a page cannot be loaded. It never stores
 // pages, API responses or employee data, so nothing sensitive is kept on the
 // device and every screen always comes live from the server.
-const CACHE = "hc-offline-v2";
+const CACHE = "sapa-offline-v1";
 const OFFLINE_URL = "/offline.html";
 const OFFLINE_ASSETS = [OFFLINE_URL, "/logo-cbp.png"];
 
@@ -21,6 +21,11 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+      // A new version of the app arrived: windows nobody is looking at (a forgotten tab, an installed app in the
+      // background) refresh themselves so they do not keep running the old version. A window someone is using is
+      // left alone; the page itself offers a "Muat ulang" notice (components/app-update-watcher.tsx).
+      .then(() => self.clients.matchAll({ type: "window" }))
+      .then((windows) => Promise.all(windows.filter((w) => w.visibilityState === "hidden").map((w) => w.navigate(w.url).catch(() => {}))))
   );
 });
 

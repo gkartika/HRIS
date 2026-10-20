@@ -37,8 +37,9 @@
 // added when those increments start.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -456,6 +457,8 @@ model Evaluation {
 
   @@index([employeeId])
   @@index([status])
+  @@index([p1EmployeeId])
+  @@index([p2EmployeeId])
 }
 
 model ContractRenewalCase {
@@ -535,6 +538,7 @@ model ContractRenewalCase {
   offboardingCase OffboardingCase?
 
   @@index([status])
+  @@index([employeeId])
 }
 
 enum OffboardingReason {
@@ -657,6 +661,7 @@ model ExitClearanceSubmission {
   submittedAt       DateTime        @default(now())
 
   answers ExitClearanceAnswer[]
+  @@index([employeeId])
 }
 
 model ExitClearanceAnswer {
@@ -668,6 +673,7 @@ model ExitClearanceAnswer {
   answerText   String?
 
   @@unique([submissionId, questionId])
+  @@index([questionId])
 }
 
 // ---------- Shift Assignment (new, per direct user request) ----------
@@ -1362,6 +1368,9 @@ model RecruitmentRequest {
   candidates      RecruitmentCandidate[]
 
   @@index([status])
+  @@index([departmentId])
+  @@index([jobId])
+  @@index([requesterEmployeeId])
 }
 
 // DM-23: supports multiple Employees per request, up to requestedHeadcount.
@@ -1378,6 +1387,7 @@ model RecruitmentRequestFulfillment {
   linkedAt             DateTime           @default(now())
   linkedByAccountId    String
   linkedByAccount      Account            @relation(fields: [linkedByAccountId], references: [id])
+  @@index([recruitmentRequestId])
 }
 
 // ---------- Phase 2: Movement Request (LIF-04) ----------
@@ -1503,6 +1513,7 @@ model MovementRequest {
 
   @@index([employeeId])
   @@index([status])
+  @@index([requesterEmployeeId])
 }
 
 // ---------- Phase 2: Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding") ----------
@@ -1554,7 +1565,6 @@ model OnboardingCase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([employeeId])
 }
 
 // ---------- Phase 2: Contract + renewal pipeline (WF-10, LIF-08..12) ----------
@@ -1818,6 +1828,7 @@ model AttendanceEvent {
 
   @@index([employeeId, eventAt])
   @@index([eventSource, eventAt])
+  @@index([attendanceAssignmentId])
 }
 
 // One row per employee per calendar day, produced by the idempotent daily
@@ -1886,6 +1897,7 @@ model AbsenceApproverConfig {
   approverPosition    Position @relation("AbsenceApproverPosition", fields: [approverPositionId], references: [id])
   requiresSecondStage Boolean  @default(false)
   updatedAt           DateTime @updatedAt
+  @@index([approverPositionId])
 }
 
 // HR-Admin-configured annual entitlement (days/year) per Absence type.
@@ -1964,6 +1976,7 @@ model AbsenceRequest {
 
   @@index([employeeId, status])
   @@index([status, startDate])
+  @@index([absenceTypeCode])
 }
 
 // HR-Admin-set per-employee exception to AbsenceEntitlementConfig's
@@ -2292,6 +2305,9 @@ model CompetencyAssessment {
 
   @@unique([cycleId, employeeId])
   @@index([employeeId])
+  @@index([p1EmployeeId])
+  @@index([p2EmployeeId])
+  @@index([positionId])
 }
 
 // Mandatory-reason, full-audit-trail HR Admin reassignment of P1 or P2
@@ -2310,6 +2326,7 @@ model CompetencyEvaluatorChange {
   changedByAccountId String
   changedByAccount   Account              @relation("CompetencyEvaluatorChangeBy", fields: [changedByAccountId], references: [id])
   changedAt          DateTime             @default(now())
+  @@index([assessmentId])
 }
 
 // Snapshotted at cycle-open from PositionCompetencyRequirement so a later
@@ -2331,6 +2348,7 @@ model CompetencyAssessmentItem {
   comment                String?
 
   @@unique([assessmentId, competencyDefinitionId])
+  @@index([competencyDefinitionId])
 }
 
 // Per-value result = average(P1,P2) × weight/100, summed for the Company
@@ -2351,6 +2369,7 @@ model CompanyValueAssessmentItem {
   p2Comment                String?
 
   @@unique([assessmentId, companyValueDefinitionId])
+  @@index([companyValueDefinitionId])
 }
 
 // Manually created by Training Admin (TRN-11) — creation alone enrolls no
@@ -2412,6 +2431,7 @@ model TrainingSession {
 
   requests            TrainingRequest[]
   learningAssignments LearningAssignment[]
+  @@index([courseId])
 }
 
 // Employee self-request or a Level-3 Position requesting for its own
@@ -2465,6 +2485,8 @@ model TrainingRequest {
 
   @@index([employeeId])
   @@index([status])
+  @@index([courseId])
+  @@index([sessionId])
 }
 
 // Created only from an approved TrainingRequest or an active
@@ -2525,6 +2547,7 @@ model LearningAssignment {
   @@index([employeeId, status])
   @@index([courseId, status])
   @@index([status, effectivenessRequiredSnapshot, effectivenessCompletedAt])
+  @@index([sessionId])
 }
 
 // Exactly five target types (TRN-13/DM-41): Employee, Department, Job,
@@ -2550,6 +2573,7 @@ model MandatoryTrainingRule {
   createdAt          DateTime            @default(now())
 
   learningAssignments LearningAssignment[]
+  @@index([courseId])
 }
 
 // Ordered content within a Published course (TRN-12) — PDF/DOCX/PPTX are
@@ -2571,6 +2595,7 @@ model CourseMaterial {
   createdAt    DateTime           @default(now())
 
   progress LearningAssignmentMaterialProgress[]
+  @@index([courseId])
 }
 
 model LearningAssignmentMaterialProgress {
@@ -2582,6 +2607,7 @@ model LearningAssignmentMaterialProgress {
   completedAt          DateTime           @default(now())
 
   @@unique([learningAssignmentId, materialId])
+  @@index([materialId])
 }
 
 // One Quiz per Course (TRN-12/COM-06 pattern reuse: configured once at
@@ -2610,6 +2636,7 @@ model QuizQuestion {
 
   options QuizOption[]
   answers QuizAttemptAnswer[]
+  @@index([quizId])
 }
 
 // TRUE_FALSE is modeled as exactly two options (no separate boolean field) —
@@ -2624,6 +2651,7 @@ model QuizOption {
   isCorrect    Boolean      @default(false)
 
   selectedIn QuizAttemptAnswer[]
+  @@index([questionId])
 }
 
 // One row per attempt, scored server-side and never recomputed client-side
@@ -2648,6 +2676,7 @@ model QuizAttempt {
   answers QuizAttemptAnswer[]
 
   @@unique([learningAssignmentId, attemptNumber])
+  @@index([quizId])
 }
 
 // One row per option the learner selected for a question on this attempt —
@@ -2663,6 +2692,8 @@ model QuizAttemptAnswer {
   option     QuizOption   @relation(fields: [optionId], references: [id])
 
   @@unique([attemptId, questionId, optionId])
+  @@index([questionId])
+  @@index([optionId])
 }
 
 // ---------- Phase 4A: Employee Assets ----------
@@ -2829,6 +2860,8 @@ model AssetCustody {
   @@index([employeeId, status])
   @@index([assetId])
   @@index([status])
+  @@index([orgUnitId])
+  @@index([locationId])
 }
 
 // ── Consumables (APD / ATK) ─────────────────────────────────────────────
@@ -2948,6 +2981,7 @@ model TaskForceMembership {
   addedByAccountId String
   addedByAccount   Account   @relation("TaskForceMembershipAddedBy", fields: [addedByAccountId], references: [id])
   createdAt        DateTime  @default(now())
+  @@index([employeeId])
 }
 
 // ==================== Phase 4B: GA Operations ====================
@@ -3071,6 +3105,7 @@ model GaRequest {
   @@index([requesterEmployeeId])
   @@index([status])
   @@index([assetId, status])
+  @@index([locationId])
 }
 
 // GA-Admin-created preventive schedule for an asset. "Due" detection is

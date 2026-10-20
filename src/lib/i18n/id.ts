@@ -4,13 +4,36 @@
 
 export const strings = {
   app: {
-    name: "Aplikasi HC",
+    name: "SAPA",
+    fullName: "Sistem Administrasi dan Pelayanan kAryawan",
+    slogan: "Hadir menyapa, siap melayani.",
+    update: {
+      message: "SAPA punya versi baru. Muat ulang supaya Anda memakai yang terbaru.",
+      button: "Muat ulang",
+    },
     company: "PT Cahaya Bukit Perunggu",
     tagline: "Manajemen Karyawan, Pengembangan Organisasi, dan Urusan Umum",
   },
   auth: {
-    loginTitle: "Masuk ke Aplikasi HC",
+    loginTitle: "Masuk ke SAPA",
+    welcome: "Selamat datang di SAPA",
     loginSubtitle: "Masuk menggunakan akun perusahaan Anda",
+    greeting: {
+      pagi: "Selamat pagi",
+      siang: "Selamat siang",
+      sore: "Selamat sore",
+      malam: "Selamat malam",
+    },
+    // What the mascot says on the pre-login pages; {sapaan} is the greeting for the time of day.
+    mascot: {
+      intro: "Halo! {sapaan}. Yuk, masuk dulu ya.",
+      introForgot: "{sapaan}. Lupa kata sandi? Tenang, kita atur ulang ya.",
+      introSet: "{sapaan}. Tinggal buat kata sandi baru, lalu masuk ya.",
+      loading: "Sebentar ya, saya cek dulu…",
+      loginError: "Hmm, coba cek lagi email dan kata sandinya ya.",
+      saved: "Siap! Kata sandi baru tersimpan. Silakan masuk.",
+      sent: "Sudah terkirim! Cek kotak masuk Anda ya.",
+    },
     usernameLabel: "Email",
     passwordLabel: "Kata Sandi",
     loginButton: "Masuk",
@@ -402,7 +425,6 @@ export const strings = {
     primaryAssignment: "Penempatan Utama",
     renewedFrom: "Perpanjangan Dari",
     renewedBy: "Diperpanjang Menjadi",
-    startReviewButton: "Mulai Tinjauan Perpanjangan",
     recommendationTitle: "Rekomendasi Atasan",
     recommendationByLabel: "Diberikan Oleh",
     recommendation: "Rekomendasi",

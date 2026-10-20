@@ -55,6 +55,7 @@ export async function getPendingApprovals(session: Session) {
     getActiveHrManagerPositions(session.user.employeeId),
     getDeptHeadDepartmentIds(session.user.employeeId),
     prisma.evaluation.findMany({
+      relationLoadStrategy: "join",
       where: {
         status: "RELEASED",
         OR: [
@@ -72,6 +73,7 @@ export async function getPendingApprovals(session: Session) {
     // rather than N one-off holder lookups (see Stage 2/3 below).
     isHrAdmin(session)
       ? prisma.absenceRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "PENDING_HR_ADMIN" },
           select: absenceRow,
           orderBy: { submittedAt: "asc" },
@@ -79,6 +81,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     myPositionId
       ? prisma.absenceRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "SUBMITTED", firstApproverPositionId: myPositionId },
           select: absenceRow,
           orderBy: { submittedAt: "asc" },
@@ -86,6 +89,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     myPositionId
       ? prisma.absenceRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "PENDING_SECOND_APPROVER", secondApproverPositionId: myPositionId },
           select: absenceRow,
           orderBy: { submittedAt: "asc" },
@@ -96,6 +100,7 @@ export async function getPendingApprovals(session: Session) {
     // not the evaluatee" shape as pendingOwnEvaluations above.
     session.user.employeeId
       ? prisma.competencyAssessment.findMany({
+          relationLoadStrategy: "join",
           where: { p1EmployeeId: session.user.employeeId, p1SubmittedAt: null },
           include: { employee: true, cycle: true },
           orderBy: { createdAt: "asc" },
@@ -106,6 +111,7 @@ export async function getPendingApprovals(session: Session) {
     // the table that holds the names, so each is one query plus one parallel step.
     session.user.employeeId
       ? prisma.recruitmentCandidateTest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "SUBMITTED", passed: null, reviewers: { some: { employeeId: session.user.employeeId } } },
           select: { id: true, testType: { select: { name: true } }, candidate: { select: { fullName: true } } },
           orderBy: { submittedAt: "asc" },
@@ -113,6 +119,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     session.user.employeeId
       ? prisma.recruitmentInterview.findMany({
+          relationLoadStrategy: "join",
           where: {
             interviewers: { some: { employeeId: session.user.employeeId, submittedAt: null } },
             candidate: { status: "INTERVIEWING", interviewDecision: null },
@@ -140,6 +147,7 @@ export async function getPendingApprovals(session: Session) {
   ] = await Promise.all([
     isHrManager
       ? prisma.recruitmentRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } },
           include: { department: true, job: true },
           orderBy: { submittedAt: "asc" },
@@ -147,6 +155,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isHrManager
       ? prisma.movementRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "SUBMITTED" },
           include: { employee: true, currentPosition: { include: { job: true } } },
           orderBy: { submittedAt: "asc" },
@@ -154,6 +163,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isDeptHead
       ? prisma.recruitmentRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "PENDING_DEPT_HEAD", departmentId: { in: deptHeadDepartmentIds } },
           include: { department: true, job: true },
           orderBy: { submittedAt: "asc" },
@@ -161,6 +171,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isDeptHead
       ? prisma.movementRequest.findMany({
+          relationLoadStrategy: "join",
           where: {
             status: "PENDING_DEPT_HEAD",
             currentPosition: {
@@ -173,6 +184,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isDeptHead
       ? prisma.contractRenewalCase.findMany({
+          relationLoadStrategy: "join",
           where: {
             status: "EVALUATION_SENT",
             evaluation: { status: "COMPLETED" },
@@ -186,6 +198,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isHrManager
       ? prisma.contractRenewalCase.findMany({
+          relationLoadStrategy: "join",
           where: { status: "PENDING_HR_MANAGER" },
           include: { employee: true },
           orderBy: { deptHeadRecommendedAt: "asc" },
@@ -193,6 +206,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isDeptHead
       ? prisma.trainingRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "SUBMITTED", departmentIdSnapshot: { in: deptHeadDepartmentIds } },
           include: { employee: true },
           orderBy: { createdAt: "asc" },
@@ -205,6 +219,7 @@ export async function getPendingApprovals(session: Session) {
     // candidate list.
     directReportIds.length
       ? prisma.learningAssignment.findMany({
+          relationLoadStrategy: "join",
           where: {
             employeeId: { in: directReportIds },
             ...EFFECTIVENESS_DUE_WHERE,
@@ -223,6 +238,7 @@ export async function getPendingApprovals(session: Session) {
   const [pendingGaNewAssetNeeds, pendingGaLossReviews, pendingGaDisposals] = await Promise.all([
     isGaAdminUser
       ? prisma.gaRequest.findMany({
+          relationLoadStrategy: "join",
           where: { status: "PENDING_APPROVAL" },
           include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
           orderBy: { verifiedAt: "asc" },
@@ -230,6 +246,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isGaAdminUser
       ? prisma.gaRequest.findMany({
+          relationLoadStrategy: "join",
           // A loss report is decided straight from SUBMITTED now; PENDING_LOSS_REVIEW is the old waiting state.
           where: { requestType: "LOSS", status: { in: ["SUBMITTED", "PENDING_LOSS_REVIEW"] } },
           include: { requester: true, asset: { select: { assetCode: true, assetName: true } } },
@@ -238,6 +255,7 @@ export async function getPendingApprovals(session: Session) {
       : Promise.resolve([]),
     isGaAdminUser
       ? prisma.disposalCase.findMany({
+          relationLoadStrategy: "join",
           // A disposal draft is approved (and the asset taken out) in one step now; PENDING_APPROVAL is the old waiting state.
           where: { status: { in: ["DRAFT", "PENDING_APPROVAL"] } },
           include: { asset: { select: { assetCode: true, assetName: true } } },

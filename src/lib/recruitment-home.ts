@@ -2,7 +2,7 @@
 // setup warnings. No Prisma/Next imports, so it is unit testable. Severity and the waiting wording are
 // shared with the Admin GA / Admin SDM Beranda (ga-home.ts).
 import { DAY_MS, WIB_OFFSET_MS } from "@/lib/company-time";
-import { daysSince, waitingLabel, waitingSeverity, type Severity } from "@/lib/ga-home";
+import { daysSince, SEVERITY_RANK, sortTodo, waitingLabel, waitingSeverity, type Severity } from "@/lib/ga-home";
 import { candidateNextStep, type CandidateProgress } from "@/lib/recruitment-candidates";
 import type { RecruitmentCandidateStatus } from "@/generated/prisma/enums";
 
@@ -43,12 +43,6 @@ export interface RecRow {
   timeLabel: string;
   actionLabel: string;
   href: string;
-}
-
-const SEVERITY_RANK: Record<Severity, number> = { rose: 0, amber: 1, slate: 2 };
-
-export function sortRecRows(rows: RecRow[]): RecRow[] {
-  return [...rows].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.urgency - a.urgency);
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -183,7 +177,7 @@ export function buildRecruitmentRows(candidates: HomeCandidate[], now: Date): Re
     }
   }
 
-  return sortRecRows(rows);
+  return sortTodo(rows);
 }
 
 // Rows the recruiter has to act on (a scheduled interview is only an FYI).
@@ -230,7 +224,7 @@ export interface LastMonth {
   avgDaysToHire: number | null;
 }
 
-const worst = (severities: Severity[]): Severity => (severities.sort((a, b) => SEVERITY_RANK[a] - SEVERITY_RANK[b])[0] ?? "slate");
+const worst = (severities: Severity[]): Severity => [...severities].sort((a, b) => SEVERITY_RANK[a] - SEVERITY_RANK[b])[0] ?? "slate";
 
 export function buildRecruitmentTiles(input: { candidates: HomeCandidate[]; rows: RecRow[]; vacancies: HomeVacancy[]; unopened: number; lastMonth: LastMonth; now: Date }): Tile[] {
   const { candidates, rows, vacancies, unopened, lastMonth, now } = input;

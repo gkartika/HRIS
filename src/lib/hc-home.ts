@@ -3,7 +3,7 @@
 // imports, so it is unit testable. Severity and the waiting/deadline wording
 // are shared with the Admin GA Beranda (ga-home.ts).
 import { DAY_MS } from "@/lib/company-time";
-import type { Severity } from "@/lib/ga-home";
+import { sortTodo, type Severity } from "@/lib/ga-home";
 
 export type HcKind = "rc" | "ob" | "ct" | "mv" | "ab" | "of";
 export type Horizon = "late" | "today" | "week" | "upcoming";
@@ -49,14 +49,6 @@ export const HORIZON_META: Record<Horizon, { label: string; hint: string }> = {
   upcoming: { label: "Menjelang", hint: "batasnya lebih dari seminggu lagi" },
 };
 
-const SEVERITY_RANK: Record<Severity, number> = { rose: 0, amber: 1, slate: 2 };
-
-// Rose first, then amber, then the rest; inside each, the one waiting longest
-// (or closest to its deadline) first.
-export function sortRows<T extends { severity: Severity; urgency: number }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.urgency - a.urgency);
-}
-
 export interface HcGroup {
   horizon: Horizon;
   label: string;
@@ -69,7 +61,7 @@ export function groupByHorizon(rows: HcTodoRow[]): HcGroup[] {
   return HORIZON_ORDER.map((horizon) => ({
     horizon,
     ...HORIZON_META[horizon],
-    rows: sortRows(rows.filter((r) => r.horizon === horizon)),
+    rows: sortTodo(rows.filter((r) => r.horizon === horizon)),
   })).filter((g) => g.rows.length > 0);
 }
 

@@ -34,20 +34,20 @@ describe("countLabel", () => {
 
 describe("titleWithCount", () => {
   it("puts the number in front when on and something is waiting", () => {
-    expect(titleWithCount("Aplikasi HC", 3, true)).toBe("(3) Aplikasi HC");
+    expect(titleWithCount("SAPA", 3, true)).toBe("(3) SAPA");
   });
 
   it("does not stack the number when applied twice", () => {
-    expect(titleWithCount(titleWithCount("Aplikasi HC", 3, true), 5, true)).toBe("(5) Aplikasi HC");
+    expect(titleWithCount(titleWithCount("SAPA", 3, true), 5, true)).toBe("(5) SAPA");
   });
 
   it("removes the number when off or when nothing is waiting", () => {
-    expect(titleWithCount("(3) Aplikasi HC", 3, false)).toBe("Aplikasi HC");
-    expect(titleWithCount("(3) Aplikasi HC", 0, true)).toBe("Aplikasi HC");
+    expect(titleWithCount("(3) SAPA", 3, false)).toBe("SAPA");
+    expect(titleWithCount("(3) SAPA", 0, true)).toBe("SAPA");
   });
 
   it("shows 99+ for large counts and strips it again", () => {
-    expect(titleWithCount("Aplikasi HC", 120, true)).toBe("(99+) Aplikasi HC");
-    expect(titleWithCount("(99+) Aplikasi HC", 0, true)).toBe("Aplikasi HC");
+    expect(titleWithCount("SAPA", 120, true)).toBe("(99+) SAPA");
+    expect(titleWithCount("(99+) SAPA", 0, true)).toBe("SAPA");
   });
 });

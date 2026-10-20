@@ -33,6 +33,7 @@ export async function getRecruitmentHomeData() {
     listCandidates({ status: { in: ACTIVE_CANDIDATE_STATUSES } }, 400),
     loadPlanContext(),
     prisma.recruitmentRequest.findMany({
+      relationLoadStrategy: "join",
       where: { status: { in: FULFILLABLE_STATUSES } },
       orderBy: { requestDate: "desc" },
       select: {

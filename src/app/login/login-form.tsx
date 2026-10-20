@@ -6,11 +6,22 @@ import Link from "next/link";
 import { t } from "@/lib/i18n/id";
 import { clearAppBadge } from "@/lib/app-badge";
 import { InstallAppButton } from "@/components/install-app-button";
-import { authButtonClass, authInputClass, authLabelClass, authLinkClass } from "@/components/auth-shell";
+import { authButtonClass, authInputClass, authLabelClass, authLinkClass } from "@/components/auth-styles";
+import { useAuthMood } from "@/components/auth-stage";
 
-export function LoginForm({ notice }: { notice?: string }) {
+export function LoginForm({ notice, saved = false }: { notice?: string; saved?: boolean }) {
   const [error, formAction, isPending] = useActionState(loginAction, undefined);
   const [showPassword, setShowPassword] = useState(false);
+  const { setMood } = useAuthMood();
+
+  // The mascot follows what is happening: thinking while signing in, worried after a wrong password,
+  // happy after a new password was saved.
+  useEffect(() => {
+    if (isPending) setMood("normal", t("auth.mascot.loading"));
+    else if (error) setMood("oops", t("auth.mascot.loginError"));
+    else if (saved) setMood("happy", t("auth.mascot.saved"));
+    else setMood("normal");
+  }, [isPending, error, saved, setMood]);
 
   // Nobody is signed in here, so no approvals can be waiting for them.
   useEffect(() => {
@@ -19,7 +30,7 @@ export function LoginForm({ notice }: { notice?: string }) {
 
   return (
     <div>
-      <h1 className="mt-6 text-3xl font-extrabold text-[#231a28]">Selamat datang</h1>
+      <h1 className="mt-1 text-3xl font-extrabold text-[#231a28]">{t("auth.welcome")}</h1>
       <p className="mt-1.5 text-[14.5px] text-[#6a5f72]">{t("auth.loginSubtitle")}</p>
 
       {notice && (

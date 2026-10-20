@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { PwaRegister } from "@/components/pwa-register";
+import { AppUpdateWatcher } from "@/components/app-update-watcher";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -14,10 +15,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aplikasi HC — PT Cahaya Bukit Perunggu",
-  description: "Manajemen Karyawan, Pengembangan Organisasi, dan Urusan Umum",
+  title: "SAPA — PT Cahaya Bukit Perunggu",
+  description: "SAPA: Sistem Administrasi dan Pelayanan kAryawan",
   // Icons come from src/app/favicon.ico, icon.png and apple-icon.png (company logo mark).
-  appleWebApp: { title: "Aplikasi HC" },
+  appleWebApp: { title: "SAPA" },
 };
 
 export const viewport: Viewport = {
@@ -31,12 +32,13 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="id"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}
         <PwaRegister />
+        <AppUpdateWatcher />
       </body>
     </html>
   );

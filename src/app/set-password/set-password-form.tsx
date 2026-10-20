@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { setPasswordWithToken } from "./actions";
 import { checkPassword } from "@/lib/password";
 import { FieldError, invalidClass } from "@/components/field-error";
-import { authButtonClass, authInputClass, authLabelClass } from "@/components/auth-shell";
+import { authButtonClass, authInputClass, authLabelClass } from "@/components/auth-styles";
 
 export function SetPasswordForm({ token, email }: { token: string; email: string }) {
   const [state, formAction, isPending] = useActionState(setPasswordWithToken.bind(null, token), undefined);
@@ -17,7 +17,7 @@ export function SetPasswordForm({ token, email }: { token: string; email: string
 
   return (
     <div>
-      <h1 className="mt-6 text-3xl font-extrabold text-[#231a28]">Buat kata sandi</h1>
+      <h1 className="mt-1 text-3xl font-extrabold text-[#231a28]">Buat kata sandi</h1>
       <p className="mt-1.5 text-[14.5px] text-[#6a5f72]">Untuk akun {email}</p>
       <form action={formAction} className="mt-5 space-y-4">
         <div>

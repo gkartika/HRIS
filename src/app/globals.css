@@ -62,3 +62,32 @@ main .overflow-hidden:has(> table) thead td {
 form[data-autofilter] button[type="submit"] {
   display: none;
 }
+
+/* SAPA mascot (login pages): it bobs gently, waves, and its speech bubble points at it. */
+.sapa-mascot {
+  animation: sapa-bob 3.2s ease-in-out infinite;
+}
+.sapa-wave {
+  animation: sapa-wave 2.6s ease-in-out infinite;
+}
+.sapa-bubble::after {
+  content: "";
+  position: absolute;
+  right: -9px;
+  bottom: 26px;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 11px solid #fff;
+}
+@keyframes sapa-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes sapa-wave {
+  0%, 55%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(-22deg); }
+  20%, 40% { transform: rotate(8deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sapa-mascot, .sapa-wave { animation: none; }
+}

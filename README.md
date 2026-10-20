@@ -1,4 +1,4 @@
-# Aplikasi HC — PT Cahaya Bukit Perunggu
+# SAPA (Sistem Administrasi dan Pelayanan kAryawan) — PT Cahaya Bukit Perunggu
 
 HR application covering Employee Management, Organizational Development, and
 General Affairs for an Indonesian manufacturing company (~160 employees). See

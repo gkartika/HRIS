@@ -105,8 +105,8 @@ export async function setTestReviewers(testId: string, employeeIds: string[], ac
   for (const employeeId of added) {
     const ok = await mailEmployee(
       employeeId,
-      "Tugas review jawaban tes (Aplikasi HC)",
-      `Anda diminta HR membaca dan menilai jawaban ${test.testType.name} dari pelamar ${test.candidate.fullName}. Buka Aplikasi HC, menu Tugas Rekrutmen.`,
+      "Tugas review jawaban tes (SAPA)",
+      `Anda diminta HR membaca dan menilai jawaban ${test.testType.name} dari pelamar ${test.candidate.fullName}. Buka SAPA, menu Tugas Rekrutmen.`,
       { url: `${appBaseUrl()}/recruitment/review/${testId}`, label: "Buka jawaban" }
     );
     if (ok) notified++;
@@ -213,8 +213,8 @@ export async function scheduleInterview(args: {
     const first = added.includes(employeeId);
     const ok = await mailEmployee(
       employeeId,
-      first ? "Anda ditunjuk sebagai pewawancara (Aplikasi HC)" : "Jadwal interview diperbarui (Aplikasi HC)",
-      `Interview ${candidate.fullName} untuk ${positionTitle}: ${vars.tanggal}, ${vars.jam}, ${location}. Isi penilaian Anda di Aplikasi HC setelah interview.`,
+      first ? "Anda ditunjuk sebagai pewawancara (SAPA)" : "Jadwal interview diperbarui (SAPA)",
+      `Interview ${candidate.fullName} untuk ${positionTitle}: ${vars.tanggal}, ${vars.jam}, ${location}. Isi penilaian Anda di SAPA setelah interview.`,
       { url: `${appBaseUrl()}/recruitment/interview/${interviewId}`, label: "Buka form penilaian" }
     );
     if (ok) emailedInterviewers++;
@@ -535,7 +535,7 @@ export async function notifyManagersOfInternalHire(args: { employeeId: string; o
   for (const m of managers) {
     await mailEmployee(
       m.id,
-      "Perubahan posisi karyawan (Aplikasi HC)",
+      "Perubahan posisi karyawan (SAPA)",
       `${employee.fullLegalName} resmi pindah dari ${oldPos?.job.jobTitle ?? "posisi lama"} ke ${newPos?.job.jobTitle ?? "posisi baru"} mulai ${when}, melalui lowongan internal.`
     );
   }

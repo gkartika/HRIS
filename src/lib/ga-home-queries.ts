@@ -65,6 +65,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
   const dueBefore = new Date(now.getTime() + (PLAN_DUE_SOON_DAYS + 1) * 24 * 60 * 60 * 1000);
   const [requests, workOrders, disposals, offboardingCases, assetCounts, items, duePlans] = await Promise.all([
     prisma.gaRequest.findMany({
+      relationLoadStrategy: "join",
       where: { status: { in: ["SUBMITTED", "PENDING_APPROVAL", "APPROVED", "PENDING_LOSS_REVIEW"] } },
       select: {
         id: true,
@@ -77,10 +78,12 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       },
     }),
     prisma.maintenanceWorkOrder.findMany({
+      relationLoadStrategy: "join",
       where: { status: "OPEN" },
       select: { id: true, workOrderNumber: true, sourceType: true, createdAt: true, asset: { select: { assetName: true, assetCode: true } } },
     }),
     prisma.disposalCase.findMany({
+      relationLoadStrategy: "join",
       where: { status: { in: ["DRAFT", "PENDING_APPROVAL", "APPROVED"] } },
       select: {
         id: true,
@@ -93,6 +96,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
     }),
     // Cases GA has not signed off yet — the same list as Klirens Aset Offboarding.
     prisma.offboardingCase.findMany({
+      relationLoadStrategy: "join",
       where: { status: "PENDING_CLEARANCE", gaAssetClearanceConfirmedAt: null },
       select: {
         id: true,
@@ -113,6 +117,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
     listItemsWithStock(),
     // Active plans that are late or come due within the next week.
     prisma.maintenancePlan.findMany({
+      relationLoadStrategy: "join",
       where: { activeFlag: true, dueDate: { not: null, lt: dueBefore } },
       select: { id: true, description: true, dueDate: true, autoCreateWorkOrder: true, asset: { select: { assetName: true, assetCode: true } } },
       orderBy: { dueDate: "asc" },
@@ -121,7 +126,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
   const [totalAssets, inUse, activeCustodies, underRepair, lostPending] = assetCounts;
   const plansWithOpenOrder = duePlans.length
     ? new Set(
-        (await prisma.maintenanceWorkOrder.findMany({ where: { sourcePlanId: { in: duePlans.map((p) => p.id) }, status: "OPEN" }, select: { sourcePlanId: true } })).map(
+        (await prisma.maintenanceWorkOrder.findMany({ relationLoadStrategy: "join", where: { sourcePlanId: { in: duePlans.map((p) => p.id) }, status: "OPEN" }, select: { sourcePlanId: true } })).map(
           (w) => w.sourcePlanId
         )
       )

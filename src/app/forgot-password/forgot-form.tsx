@@ -1,16 +1,24 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import Link from "next/link";
 import { requestPasswordResetAction } from "./actions";
-import { authButtonClass, authInputClass, authLabelClass, authLinkClass } from "@/components/auth-shell";
+import { authButtonClass, authInputClass, authLabelClass, authLinkClass } from "@/components/auth-styles";
+import { useAuthMood } from "@/components/auth-stage";
+import { t } from "@/lib/i18n/id";
 
 export function ForgotPasswordForm() {
   const [state, formAction, isPending] = useActionState(requestPasswordResetAction, undefined);
+  const { setMood } = useAuthMood();
+
+  useEffect(() => {
+    if (state === "sent") setMood("happy", t("auth.mascot.sent"));
+    else setMood("normal");
+  }, [state, setMood]);
 
   return (
     <div>
-      <h1 className="mt-6 text-3xl font-extrabold text-[#231a28]">Atur ulang kata sandi</h1>
+      <h1 className="mt-1 text-3xl font-extrabold text-[#231a28]">Atur ulang kata sandi</h1>
       <p className="mt-1.5 text-[14.5px] text-[#6a5f72]">
         Masukkan email Anda. Jika terdaftar, kami kirim tautan untuk membuat kata sandi baru.
       </p>

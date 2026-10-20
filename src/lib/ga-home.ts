@@ -57,11 +57,11 @@ export interface TodoRow {
   href: string;
 }
 
-const SEVERITY_RANK: Record<Severity, number> = { rose: 0, amber: 1, slate: 2 };
+export const SEVERITY_RANK: Record<Severity, number> = { rose: 0, amber: 1, slate: 2 };
 
 // Most urgent first: rose, then amber, then the rest; inside each, the one
-// waiting longest (or closest to its deadline) first.
-export function sortTodo(rows: TodoRow[]): TodoRow[] {
+// waiting longest (or closest to its deadline) first. Used by every admin Beranda list.
+export function sortTodo<T extends { severity: Severity; urgency: number }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.urgency - a.urgency);
 }
 

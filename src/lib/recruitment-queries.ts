@@ -52,6 +52,7 @@ export type CandidateRow = Prisma.RecruitmentCandidateGetPayload<{ select: typeo
 
 export async function listCandidates(where: Prisma.RecruitmentCandidateWhereInput, take = 400): Promise<CandidateRow[]> {
   return prisma.recruitmentCandidate.findMany({
+    relationLoadStrategy: "join",
     where,
     select: candidateRowSelect,
     orderBy: [{ statusChangedAt: "desc" }],
@@ -115,8 +116,8 @@ export function waitingApplicantGroups(rows: CandidateRow[]): WaitingGroup[] {
 export async function hasRecruitmentTasks(employeeId: string | null | undefined): Promise<boolean> {
   if (!employeeId) return false;
   const [review, interview] = await Promise.all([
-    prisma.recruitmentTestReviewer.findFirst({ where: { employeeId }, select: { id: true } }),
-    prisma.recruitmentInterviewer.findFirst({ where: { employeeId }, select: { id: true } }),
+    prisma.recruitmentTestReviewer.findFirst({ relationLoadStrategy: "join", where: { employeeId }, select: { id: true } }),
+    prisma.recruitmentInterviewer.findFirst({ relationLoadStrategy: "join", where: { employeeId }, select: { id: true } }),
   ]);
   return !!review || !!interview;
 }

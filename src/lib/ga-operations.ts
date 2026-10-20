@@ -134,13 +134,6 @@ export function computeAssetStatusAfterDisposalCancel(hasOpenCustody: boolean): 
   return hasOpenCustody ? "IN_USE" : "AVAILABLE";
 }
 
-// PDF: "No: repair, storage or review" — a rejected proposal returns to
-// DRAFT (GA Admin can revise and resubmit) rather than being closed out or
-// deleted; immutable history, never silently overwritten.
-export function decideDisposalCaseStatus(approved: boolean): DisposalStatus {
-  return approved ? "APPROVED" : "DRAFT";
-}
-
 // Approving a disposal and taking the asset out are one step: the form is open from DRAFT.
 // APPROVED and PENDING_APPROVAL are the old waiting states, kept so older cases can still be finished.
 export function canExecuteDisposalCase(status: DisposalStatus): boolean {

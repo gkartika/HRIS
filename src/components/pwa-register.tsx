@@ -13,6 +13,11 @@ export function PwaRegister() {
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then(async (registration) => {
+        // Look for a newer service worker whenever the app comes back to the front (it is otherwise checked
+        // only on a page load), so a new version is picked up without waiting a day.
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") void registration.update().catch(() => {});
+        });
         // Ask the browser to refresh the number on the app icon about twice a day
         // while the app is closed (installed apps only; others refuse quietly).
         const periodic = (registration as ServiceWorkerRegistration & {

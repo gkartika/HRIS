@@ -3,7 +3,7 @@
 export interface NotificationPrefs {
   icon: boolean; // on the installed app's icon
   menu: boolean; // next to Beranda in the side menu
-  tab: boolean; // in the browser tab title, e.g. "(3) Aplikasi HC"
+  tab: boolean; // in the browser tab title, e.g. "(3) SAPA"
 }
 
 export const DEFAULT_PREFS: NotificationPrefs = { icon: true, menu: true, tab: true };

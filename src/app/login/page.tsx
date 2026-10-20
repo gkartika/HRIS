@@ -6,7 +6,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const notice = done ? "Kata sandi tersimpan. Silakan masuk." : reason === "inactive" ? "Sesi Anda berakhir atau akun tidak aktif. Silakan masuk kembali." : undefined;
   return (
     <AuthShell>
-      <LoginForm notice={notice} />
+      <LoginForm notice={notice} saved={Boolean(done)} />
     </AuthShell>
   );
 }

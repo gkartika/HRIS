@@ -28,6 +28,7 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
 
   const [candidates, requests, departments] = await Promise.all([
     prisma.recruitmentCandidate.findMany({
+      relationLoadStrategy: "join",
       where: candidateWhere,
       select: {
         id: true,
@@ -44,11 +45,13 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
       },
     }),
     prisma.recruitmentRequest.findMany({
+      relationLoadStrategy: "join",
       where: { ...requestWhere, status: { notIn: ["DRAFT", "PENDING_DEPT_HEAD", "SUBMITTED", "UNDER_REVIEW", "REJECTED", "RETURNED"] } },
       select: { id: true, departmentId: true, status: true, approvedAt: true, fulfillments: { select: { linkedAt: true } } },
     }),
     // Departments to pick from: every one that has a request.
     prisma.orgUnit.findMany({
+      relationLoadStrategy: "join",
       where: { recruitmentRequests: { some: {} } },
       orderBy: { unitName: "asc" },
       select: { id: true, unitName: true },

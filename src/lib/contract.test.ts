@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   formatContractNumber,
   computeExpiryUrgency,
-  canStartContractReview,
   canSubmitContractRecommendation,
   canDecideContractRenewal,
   canCreateRenewalDraft,
@@ -48,9 +47,6 @@ describe("computeExpiryUrgency (LIF-10)", () => {
 
 describe("WF-10 status-transition eligibility", () => {
   it("each step only accepts its own predecessor status", () => {
-    expect(canStartContractReview("ACTIVE")).toBe(true);
-    expect(canStartContractReview("DRAFT")).toBe(false);
-
     expect(canSubmitContractRecommendation("REVIEW_REQUESTED")).toBe(true);
     expect(canSubmitContractRecommendation("ACTIVE")).toBe(false);
 

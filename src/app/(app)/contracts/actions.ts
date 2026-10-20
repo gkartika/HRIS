@@ -16,7 +16,6 @@ import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { isDirectManagerOfEmployee } from "@/lib/manager-scope";
 import { logAudit } from "@/lib/audit";
 import {
-  canStartContractReview,
   canSubmitContractRecommendation as canSubmitRecommendationStatus,
   canDecideContractRenewal as canDecideRenewalStatus,
   canCreateRenewalDraft,
@@ -90,31 +89,6 @@ export async function createContract(
   revalidatePath(`/contracts/${contract.id}`);
   revalidatePath("/contracts");
   redirect(`/contracts/${contract.id}`);
-}
-
-export async function startContractReview(contractId: string): Promise<string | undefined> {
-  const session = await requireSession();
-  if (!canManageContracts(session)) return t("common.forbidden");
-
-  const contract = await prisma.contract.findUnique({ where: { id: contractId } });
-  if (!contract) return "Kontrak tidak ditemukan.";
-  if (!canStartContractReview(contract.status)) return "Kontrak ini tidak dalam status Aktif.";
-
-  await prisma.contract.update({
-    where: { id: contractId },
-    data: { status: "REVIEW_REQUESTED", reviewRequestedAt: new Date() },
-  });
-
-  await logAudit({
-    actorAccountId: session.user.id,
-    action: "UPDATE",
-    datasetName: "Contract",
-    recordId: contractId,
-    reason: `Started renewal review for ${contract.contractNumber}`,
-  });
-
-  revalidatePath(`/contracts/${contractId}`);
-  revalidatePath("/contracts");
 }
 
 export async function submitContractRecommendation(

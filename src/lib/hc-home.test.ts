@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupByHorizon, horizonForDeadline, horizonForWaiting, payrollProgress, sortRows, type HcTodoRow } from "./hc-home";
+import { groupByHorizon, horizonForDeadline, horizonForWaiting, payrollProgress, type HcTodoRow } from "./hc-home";
 
 const row = (over: Partial<HcTodoRow>): HcTodoRow => ({
   kind: "ct",
@@ -32,18 +32,6 @@ describe("horizonForDeadline", () => {
     expect(horizonForDeadline(3)).toBe("week");
     expect(horizonForDeadline(7)).toBe("week");
     expect(horizonForDeadline(8)).toBe("upcoming");
-  });
-});
-
-describe("sortRows", () => {
-  it("orders by severity, then by urgency within a severity", () => {
-    const sorted = sortRows([
-      row({ title: "amber-old", severity: "amber", urgency: 9 }),
-      row({ title: "rose-new", severity: "rose", urgency: 1 }),
-      row({ title: "amber-new", severity: "amber", urgency: 2 }),
-      row({ title: "rose-old", severity: "rose", urgency: 5 }),
-    ]);
-    expect(sorted.map((r) => r.title)).toEqual(["rose-old", "rose-new", "amber-old", "amber-new"]);
   });
 });
 

@@ -27,7 +27,7 @@ export async function RecruitmentAdminHome({ filter }: { filter: RecKind | "all"
   return <RecruitmentHomeView data={await getRecruitmentHomeData()} filter={filter} />;
 }
 
-export function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filter: RecKind | "all" }) {
+function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filter: RecKind | "all" }) {
   const rows = filter === "all" ? data.rows : data.rows.filter((r) => r.kind === filter);
   const { summary } = data;
   const waiting = actionableCount(data.rows);

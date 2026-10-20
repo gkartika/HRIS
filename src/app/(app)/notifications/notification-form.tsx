@@ -12,7 +12,7 @@ const OPTIONS: { name: keyof NotificationPrefs; title: string; hint: string }[] 
     hint: "Untuk yang sudah memasang aplikasi. Angka muncul di ikon (taskbar, dock, atau layar utama) dan hilang sendiri saat semua sudah diputuskan.",
   },
   { name: "menu", title: "Angka di menu Beranda", hint: "Penanda merah di samping menu Beranda saat aplikasi dibuka." },
-  { name: "tab", title: "Angka di judul tab browser", hint: "Contoh: (3) Aplikasi HC. Berguna jika Anda membuka lewat browser tanpa memasang aplikasi." },
+  { name: "tab", title: "Angka di judul tab browser", hint: "Contoh: (3) SAPA. Berguna jika Anda membuka lewat browser tanpa memasang aplikasi." },
 ];
 
 export function NotificationForm({ initial }: { initial: NotificationPrefs }) {

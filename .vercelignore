@@ -6,6 +6,7 @@ dev.db
 dev.db-journal
 dev.db.bak-*
 dev.db.backup-*
+scripts/
 storage/
 .env
 .env.*

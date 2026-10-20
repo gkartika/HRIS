@@ -2,7 +2,6 @@
 
 import { useActionState, useState } from "react";
 import {
-  startContractReview,
   submitContractRecommendation,
   decideContractRenewal,
   createRenewalDraft,
@@ -51,15 +50,6 @@ function SimpleActionButton({
   );
 }
 
-export function StartReviewButton({ contractId }: { contractId: string }) {
-  return (
-    <SimpleActionButton
-      action={() => startContractReview(contractId)}
-      label={t("contract.startReviewButton")}
-      tone="border border-slate-200 text-slate-700 hover:bg-slate-50"
-    />
-  );
-}
 // Per direct user request: releasing a Draft now needs an active HR
 // Manager Position's approval (WF-02 evidence), so unlike the other simple
 // buttons on this page it's a form, not a zero-arg SimpleActionButton.

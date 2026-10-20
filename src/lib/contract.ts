@@ -36,9 +36,6 @@ export function computeExpiryUrgency(
 // WF-10: Active -> Review Requested -> Recommendation Submitted ->
 // Approved for Renewal/Not Renewed -> (new Contract) Draft -> Released ->
 // Signed -> Active, with Ended as the old contract's terminal state.
-export function canStartContractReview(status: ContractStatus): boolean {
-  return status === "ACTIVE";
-}
 export function canSubmitContractRecommendation(status: ContractStatus): boolean {
   return status === "REVIEW_REQUESTED";
 }

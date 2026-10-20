@@ -77,6 +77,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     activeCandidates,
   ] = await Promise.all([
     prisma.recruitmentRequest.findMany({
+      relationLoadStrategy: "join",
       where: { status: { in: ["APPROVED", "RECRUITMENT_IN_PROGRESS", "PARTIALLY_FILLED"] } },
       select: {
         id: true,
@@ -92,6 +93,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       },
     }),
     prisma.onboardingCase.findMany({
+      relationLoadStrategy: "join",
       where: { cancelledAt: null, completedAt: null },
       select: {
         id: true,
@@ -105,6 +107,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       },
     }),
     prisma.contract.findMany({
+      relationLoadStrategy: "join",
       where: {
         status: "ACTIVE",
         endDate: { not: null, lte: new Date(now.getTime() + 91 * DAY_MS) },
@@ -118,6 +121,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       },
     }),
     prisma.contractRenewalCase.findMany({
+      relationLoadStrategy: "join",
       where: { status: "TRIGGERED" },
       select: {
         caseNumber: true,
@@ -128,11 +132,13 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       },
     }),
     prisma.contract.findMany({
+      relationLoadStrategy: "join",
       where: { status: "SIGNED" },
       select: { id: true, contractNumber: true, startDate: true, updatedAt: true, employee: { select: { fullLegalName: true } } },
     }),
     // The HR Manager has decided; what is left for Admin SDM depends on the decision.
     prisma.contractRenewalCase.findMany({
+      relationLoadStrategy: "join",
       where: { status: "APPROVED" },
       select: {
         caseNumber: true,
@@ -146,6 +152,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       },
     }),
     prisma.movementRequest.findMany({
+      relationLoadStrategy: "join",
       where: { status: "APPROVED", implementedAt: null },
       select: {
         id: true,
@@ -157,6 +164,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       },
     }),
     prisma.offboardingCase.findMany({
+      relationLoadStrategy: "join",
       where: { status: "PENDING_CLEARANCE" },
       select: {
         id: true,
@@ -169,6 +177,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     }),
     // Needs a first approver but the unit has none configured, so nobody can ever decide it.
     prisma.absenceRequest.findMany({
+      relationLoadStrategy: "join",
       where: { status: "SUBMITTED", firstApproverPositionId: null },
       select: {
         submittedAt: true,

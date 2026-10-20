@@ -2688,3 +2688,11 @@ Logika Dasar 30 minutes.
 Owner: which tests apply must be settable when a new lowongan is opened, not only per job title.
 - Pelamar block of each request: "Tes untuk lowongan ini" (tick the tests, Ketelitian Set A+B is one tick, Cultural Fit always required). Starts from the job title tests (Pengaturan > Tes per jabatan); saving makes the vacancy keep its own pick (RecruitmentRequest.testsCustomized + testTypeIds); "Kembali ke tes bawaan jabatan" resets it.
 - Applicants who already applied keep the tests they were given; the pick only affects new applicants. Readiness (every possible test has questions), the public apply page and test planning all read the vacancy pick.
+
+### Dasbor Rekrutmen (2026-10-20)
+From the HC spec "recruitment-dashboard-spec.md". Page /recruitment/dashboard (menu: Dasbor Rekrutmen), read-only, no schema change.
+- **Access:** HR Admin and Admin Rekrutmen (canManageRecruitment), same as Pelamar. HR Manager does not see it (decided by the existing rule that applicant screens are HR Admin only; widen in permissions if wanted).
+- **Eksternal vs Internal** is included now (source filter + a small block), since the data is there.
+- **Filters:** department, level, applicant source, period (3/6/12 months, this year, all time, own dates; default 12 months, WIB days). Period is applied to the applying date for applicants/funnel/hiring rate; Time to Hire and Time to Fill are placed by the date of the hire / of the last seat filled, as the spec says. Time to Fill and the department filter use requests, so the source filter does not change Time to Fill.
+- **Derived dates (no new columns):** the applicant table has no passedAt/invitedAt/hiredAt. Passed = every test passed (date of the last test result); invited = interview created/invitation sent; interview finished = HR final decision made; offering = offer or movement exists; hired = the day the status became HIRED (final status). A request counts as filled on the day its last seat was linked (FILLED requests only). Funnel is cumulative: a later stage implies the earlier ones.
+- Pure rules in src/lib/recruitment-dashboard.ts (tested), queries in recruitment-dashboard-data.ts (3 parallel queries, no per-row lookups).

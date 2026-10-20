@@ -13,6 +13,7 @@ import { SimpleKaryawanHome } from "./simple-karyawan-home";
 import { ApprovalCategory } from "./approval-category";
 import { InternalJobsCard } from "./internal-jobs-card";
 import { RecruitmentAdminHome } from "./recruitment-admin-home";
+import type { RecKind } from "@/lib/recruitment-home";
 import { FirstApproverDecisionButtons, SecondApproverDecisionButtons, HrAdminDecisionButtons } from "../absences/[id]/decision-forms";
 import {
   MovementDecisionButtons,
@@ -366,11 +367,12 @@ async function StatCards({ session }: { session: Awaited<ReturnType<typeof requi
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ga?: string }>;
+  searchParams: Promise<{ ga?: string; rec?: string }>;
 }) {
   const session = await requireSession();
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
-  const { ga: gaParam } = await searchParams;
+  const { ga: gaParam, rec: recParam } = await searchParams;
+  const recFilter: RecKind | "all" = (["es", "iv", "of", "mv"] as const).find((k) => k === recParam) ?? "all";
   const gaFilter: TodoKind | "all" = (["ga", "wo", "dp", "of", "st"] as const).find((k) => k === gaParam) ?? "all";
 
   // Simple Karyawan home: decided from cheap, already-necessary checks only
@@ -439,7 +441,7 @@ export default async function DashboardPage({
 
       {isRecruitmentAdminUser && !isHrAdminUser && (
         <Suspense fallback={<SectionSkeleton rows={3} />}>
-          <RecruitmentAdminHome />
+          <RecruitmentAdminHome filter={recFilter} />
         </Suspense>
       )}
 

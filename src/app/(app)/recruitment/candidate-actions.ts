@@ -66,6 +66,29 @@ export async function regenerateAccessCodeAction(requestId: string): Promise<Res
   refresh(requestId);
 }
 
+// Which tests this vacancy uses. null = go back to the job title's own tests. Applicants who already
+// applied keep the tests they were given; the choice only applies to new applicants.
+export async function setRequestTestsAction(requestId: string, testTypeIds: string[] | null): Promise<Result> {
+  const auth = await hrAdminOr();
+  if ("error" in auth) return auth.error;
+  const request = await prisma.recruitmentRequest.findUnique({ where: { id: requestId }, select: { requestNumber: true } });
+  if (!request) return "Permintaan tidak ditemukan.";
+  const ids = testTypeIds === null ? [] : [...new Set(testTypeIds)];
+  if (ids.length) {
+    const valid = await prisma.recruitmentTestType.count({ where: { id: { in: ids }, isGate: false, active: true } });
+    if (valid !== ids.length) return "Ada tes yang tidak valid atau sudah nonaktif. Muat ulang halaman.";
+  }
+  await prisma.recruitmentRequest.update({ where: { id: requestId }, data: { testsCustomized: testTypeIds !== null, testTypeIds: ids } });
+  await logAudit({
+    actorAccountId: auth.session.user.id,
+    action: "UPDATE",
+    datasetName: "RecruitmentRequest",
+    recordId: requestId,
+    reason: testTypeIds === null ? `Tests: back to the job title's tests (${request.requestNumber})` : `Tests chosen for this vacancy: ${ids.length} extra (${request.requestNumber})`,
+  });
+  refresh(requestId);
+}
+
 // ---------- essay review ----------
 
 export async function setReviewersAction(candidateId: string, testId: string, employeeIds: string[]): Promise<Result> {

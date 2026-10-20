@@ -3,7 +3,7 @@
 import { startTransition, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmButton } from "@/components/confirm-button";
-import { setJobTestAction } from "./actions";
+import { setJobTestsAction } from "./actions";
 
 type FormAction = (prev: string | undefined, formData: FormData) => Promise<string | undefined>;
 
@@ -129,7 +129,7 @@ export function RunButton({ label, action, className = "text-xs text-indigo-600 
 }
 
 // Tick a test on or off for a job title; saves at once.
-export function JobTestToggle({ jobId, testTypeId, checked, label }: { jobId: string; testTypeId: string; checked: boolean; label: string }) {
+export function JobTestToggle({ jobId, testTypeIds, checked, label }: { jobId: string; testTypeIds: string[]; checked: boolean; label: string }) {
   const [value, setValue] = useState(checked);
   const [pending, run] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +145,7 @@ export function JobTestToggle({ jobId, testTypeId, checked, label }: { jobId: st
           setValue(next);
           setError(null);
           run(async () => {
-            const message = await setJobTestAction(jobId, testTypeId, next);
+            const message = await setJobTestsAction(jobId, testTypeIds, next);
             if (message) {
               setValue(!next);
               setError(message);

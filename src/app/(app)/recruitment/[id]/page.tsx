@@ -311,6 +311,8 @@ export default async function RecruitmentDetailPage({
             openFor: request.openFor,
             accessCode: request.accessCode,
             requestedHeadcount: request.requestedHeadcount,
+            testsCustomized: request.testsCustomized,
+            testTypeIds: request.testTypeIds,
           }}
           filledCount={counts.filledCount}
           stage={stage}

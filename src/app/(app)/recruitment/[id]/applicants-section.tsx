@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { appBaseUrl } from "@/lib/mailer";
-import { loadPlanContext, plannedTests, readinessProblems } from "@/lib/recruitment-service";
+import { loadPlanContext, possibleTests, readinessProblems } from "@/lib/recruitment-service";
 import { listCandidates, STAGE_FILTERS, statusesForStage } from "@/lib/recruitment-queries";
-import { TEST_FORM_LABEL } from "@/lib/recruitment-candidates";
+import { groupTestColumns, TEST_FORM_LABEL, testIdsForRequest } from "@/lib/recruitment-candidates";
 import { CandidateTable } from "../candidate-table";
-import { OpenForControl } from "../candidate-forms";
+import { OpenForControl, RequestTestsControl } from "../candidate-forms";
 import type { RecruitmentOpenFor, RecruitmentRequestStatus } from "@/generated/prisma/enums";
 
 // "Pelamar" block on a request's page (HR Admin only; the page checks that before
@@ -22,13 +22,19 @@ export async function ApplicantsSection({
     openFor: RecruitmentOpenFor;
     accessCode: string | null;
     requestedHeadcount: number;
+    testsCustomized: boolean;
+    testTypeIds: string[];
   };
   filledCount: number;
   stage: string | undefined;
 }) {
   const [ctx, all] = await Promise.all([loadPlanContext(), listCandidates({ requestId: request.id })]);
   const problems = readinessProblems(ctx, request, filledCount);
-  const planned = request.jobId ? plannedTests(ctx, request.jobId) : [];
+  const planned = request.jobId ? possibleTests(ctx, request) : [];
+  const columns = groupTestColumns(ctx.types.filter((t) => !t.isGate && t.active));
+  const keysOf = (ids: string[]) => columns.filter((c) => c.ids.some((id) => ids.includes(id))).map((c) => c.key);
+  const jobDefaultIds = request.jobId ? ctx.jobTestIds.get(request.jobId) ?? [] : [];
+  const currentKeys = keysOf(testIdsForRequest(request, jobDefaultIds));
   const wanted = statusesForStage(stage);
   const rows = wanted ? all.filter((c) => wanted.includes(c.status)) : all;
   const countOf = (statuses: string[]) => all.filter((c) => statuses.includes(c.status)).length;
@@ -43,16 +49,23 @@ export async function ApplicantsSection({
         </Link>
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+      <div className="mt-4 space-y-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+        <RequestTestsControl
+          key={`${request.testsCustomized}:${currentKeys.join(",")}`}
+          requestId={request.id}
+          columns={columns}
+          jobDefaultKeys={keysOf(jobDefaultIds)}
+          customized={request.testsCustomized}
+          selectedKeys={currentKeys}
+        />
         <OpenForControl requestId={request.id} openFor={request.openFor} accessCode={request.accessCode} publicUrl={publicUrl} />
         {planned.length > 0 && (
-          <p className="mt-3 text-xs text-slate-500">
-            Tes untuk lowongan ini: {planned.map((p) => `${p.name} (${TEST_FORM_LABEL[p.form]}, ${p.timeLimitMinutes} menit, ${p.activeQuestions} soal)`).join(" → ")}.{" "}
-            Tes per jabatan diatur di Pengaturan Rekrutmen.
+          <p className="text-xs text-slate-500">
+            Urutan tes pelamar: {planned.map((p) => `${p.name} (${TEST_FORM_LABEL[p.form]}, ${p.timeLimitMinutes} menit, ${p.activeQuestions} soal)`).join(" → ")}. Set alternatif dibagi bergantian ke tiap pelamar.
           </p>
         )}
         {request.openFor !== "NONE" && problems.length > 0 && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
             <p className="font-medium">Belum bisa menerima pelamar:</p>
             <ul className="mt-1 list-disc pl-4">
               {problems.map((p) => (
@@ -61,7 +74,7 @@ export async function ApplicantsSection({
             </ul>
           </div>
         )}
-        {request.openFor === "NONE" && <p className="mt-3 text-xs text-slate-500">Lowongan belum dipublikasikan. Pilih untuk siapa lowongan ini dibuka.</p>}
+        {request.openFor === "NONE" && <p className="text-xs text-slate-500">Lowongan belum dipublikasikan. Pilih untuk siapa lowongan ini dibuka.</p>}
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">

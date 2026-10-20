@@ -159,7 +159,7 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
           Soal {qi + 1} dari {active.questions.length} · salin dan tempel dinonaktifkan
         </p>
 
-        <p className="mt-4 select-none whitespace-pre-line text-[15px] font-semibold text-[#231a28]">{q.prompt}</p>
+        <p className={`mt-4 select-none text-[15px] font-semibold text-[#231a28] ${active.monospace ? "whitespace-pre-wrap break-all font-mono text-[14px] leading-7" : "whitespace-pre-line"}`}>{q.prompt}</p>
 
         {active.form === "SCALE" && (
           <div className="mt-4">
@@ -185,15 +185,15 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
 
         {active.form === "MULTIPLE_CHOICE" && (
           <div className="mt-4 space-y-2">
-            {q.options.map((opt, i) => (
+            {q.options.map((opt) => (
               <button
-                key={i}
+                key={opt.index}
                 type="button"
-                onClick={() => choose(q.id, i)}
-                aria-pressed={a.index === i}
-                className={`block w-full select-none rounded-lg border-2 px-4 py-3 text-left text-[15px] ${a.index === i ? "border-brand bg-[#f4eef5] font-semibold text-[#231a28]" : "border-[#cfc4d6] bg-white text-[#4a3e52] hover:border-brand"}`}
+                onClick={() => choose(q.id, opt.index)}
+                aria-pressed={a.index === opt.index}
+                className={`block w-full select-none rounded-lg border-2 px-4 py-3 text-left text-[15px] ${a.index === opt.index ? "border-brand bg-[#f4eef5] font-semibold text-[#231a28]" : "border-[#cfc4d6] bg-white text-[#4a3e52] hover:border-brand"}`}
               >
-                {opt}
+                {opt.text}
               </button>
             ))}
           </div>
@@ -273,6 +273,7 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
           <b>
             Tes {nextIndex + 1} dari {state.tests.length}: {next.name}
           </b>
+          {next.description && <p className="mt-1 whitespace-pre-line">{next.description}</p>}
           <p className="mt-1">
             Waktu {next.timeLimitMinutes} menit mulai berjalan begitu Anda menekan Mulai, dan tidak bisa dihentikan. Jawaban tersimpan otomatis. Jika waktu habis, jawaban terkirim sendiri.
           </p>

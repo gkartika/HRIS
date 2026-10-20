@@ -1,6 +1,6 @@
 // Reads for the HR Admin applicant screens (pipeline table, Pelamar page).
 import { prisma } from "@/lib/db";
-import { candidateNextStep, type CandidateProgress } from "@/lib/recruitment-candidates";
+import { candidateNextStep, isExcellent, type CandidateProgress } from "@/lib/recruitment-candidates";
 import { isMovementRequestOpen } from "@/lib/movement";
 import type { Prisma } from "@/generated/prisma/client";
 import type { RecruitmentCandidateStatus } from "@/generated/prisma/enums";
@@ -39,7 +39,7 @@ const candidateRowSelect = {
       status: true,
       passed: true,
       scorePercent: true,
-      testType: { select: { name: true, form: true } },
+      testType: { select: { name: true, form: true, excellentScore: true } },
       _count: { select: { reviewers: true } },
     },
   },
@@ -127,7 +127,7 @@ export function nextStepOf(c: CandidateRow) {
 
 // One-line summary of the tests, e.g. "Cultural Fit 82 lulus, Studi Kasus menunggu".
 export function testSummary(c: {
-  tests: { status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED"; passed: boolean | null; scorePercent: number | null; testType: { name: string } }[];
+  tests: { status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED"; passed: boolean | null; scorePercent: number | null; testType: { name: string; excellentScore?: number | null } }[];
 }): string {
   if (c.tests.length === 0) return "—";
   return c.tests
@@ -135,7 +135,8 @@ export function testSummary(c: {
       if (t.status !== "SUBMITTED") return `${t.testType.name}: ${t.status === "IN_PROGRESS" ? "berjalan" : "belum"}`;
       if (t.passed === null) return `${t.testType.name}: menunggu review`;
       const score = t.scorePercent !== null ? ` ${Math.round(t.scorePercent)}` : "";
-      return `${t.testType.name}${score}: ${t.passed ? "lulus" : "tidak lulus"}`;
+      const star = t.passed && isExcellent(t.scorePercent, t.testType.excellentScore) ? " (istimewa)" : "";
+      return `${t.testType.name}${score}: ${t.passed ? "lulus" : "tidak lulus"}${star}`;
     })
     .join(" · ");
 }

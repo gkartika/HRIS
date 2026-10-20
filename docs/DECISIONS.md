@@ -2661,3 +2661,30 @@ recruitment access.
 - The move is filed in the name of the vacancy's own requester (the login has no employee record), approvals stay
   Kepala Departemen and HR Manager, and Admin SDM still releases the evaluation that Perubahan Posisi needs.
 - After Buat Karyawan, Admin Rekrutmen returns to the request page (it cannot open employee pages).
+
+### Ketelitian Set A / Set B, Logika Dasar, "Istimewa" (2026-10-20)
+From the HC spec "recruitment-module-spec.md" and the question bank "Bank Soal v5". Owner's answers: Set A and Set B rotate
+automatically per applicant; applicants at 90% or more get an "Istimewa" label for HR; time limits Ketelitian 15 minutes,
+Logika Dasar 30 minutes.
+- **Alternative sets.** `RecruitmentTestType.variantGroup`: tests sharing a group are alternatives. A new applicant gets the one
+  handed out least so far (a coin toss when equal), so the two sets stay balanced. Applicants only see the group name
+  ("Ketelitian"); HR sees the real set on the applicant page. One tick in Tes per jabatan covers every set of the group, and every
+  set must have questions before a vacancy can open.
+- **Ketelitian.** Two tests ("Ketelitian Set A", "Ketelitian Set B"), 30 questions each (25 standard + 5 very hard, 10 points
+  each, so the score is correct answers / 30), pass 80% (240/300), Istimewa from 90% (270/300), question text "Teks A / Teks B"
+  with the answers SAMA or TIDAK. The 60 questions were loaded by migration 20261020030000 from the spec; every SAMA answer was
+  checked to be an identical pair and every TIDAK a different pair.
+- **Fixed-width font** (`monospace`): the questions are shown in a fixed-width font because several differ only by I / l / 1 or O / 0.
+- **Istimewa** (`excellentScore`): a small label next to a passed test result in the applicant table and the applicant page. It
+  changes nothing in the flow.
+- **Logika Dasar**: created (pass 80%, 30 minutes) with no questions yet; the 20 questions are not in Bank Soal v5 and still have to be sent.
+- Test instructions (the test's keterangan) are shown to the applicant before the test starts.
+- **Shuffled answer options** (`shuffleOptions`, multiple choice only; on for Logika Dasar, off for Ketelitian): each applicant sees the
+  options in their own order, the same order after a refresh (seeded by their test and the question), so "the key is always C" cannot be
+  passed around (Logika Dasar had 13 of 20 keys at C). Options like "Semua benar" / "Tidak bisa ditentukan" stay last. Answers are saved
+  and graded by the option's original number, so scoring did not change.
+
+### Tests chosen per vacancy (2026-10-20)
+Owner: which tests apply must be settable when a new lowongan is opened, not only per job title.
+- Pelamar block of each request: "Tes untuk lowongan ini" (tick the tests, Ketelitian Set A+B is one tick, Cultural Fit always required). Starts from the job title tests (Pengaturan > Tes per jabatan); saving makes the vacancy keep its own pick (RecruitmentRequest.testsCustomized + testTypeIds); "Kembali ke tes bawaan jabatan" resets it.
+- Applicants who already applied keep the tests they were given; the pick only affects new applicants. Readiness (every possible test has questions), the public apply page and test planning all read the vacancy pick.

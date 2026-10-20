@@ -240,12 +240,130 @@ export interface PlannableTest {
   isGate: boolean;
   sortOrder: number;
   active: boolean;
+  /** Tests sharing a group are alternatives: an applicant gets just one of them. */
+  variantGroup?: string | null;
 }
 
-// The tests an applicant takes: the gate first, then the job's own tests in catalog order.
-export function planTestsForJob<T extends PlannableTest>(allTypes: T[], jobTestTypeIds: string[]): T[] {
+// Every test an applicant could be given for a job (all alternatives included): the gate first, then
+// the job's own tests in catalog order. Used to check that each one has questions.
+export function possibleTestsForJob<T extends PlannableTest>(allTypes: T[], jobTestTypeIds: string[]): T[] {
   const wanted = allTypes.filter((t) => t.active && (t.isGate || jobTestTypeIds.includes(t.id)));
   return [...wanted].sort((a, b) => Number(b.isGate) - Number(a.isGate) || a.sortOrder - b.sortOrder);
+}
+
+// Which tests a vacancy uses: the ones picked on the vacancy itself, or else the job title's own.
+export function testIdsForRequest(request: { testsCustomized: boolean; testTypeIds: string[] }, jobDefault: string[]): string[] {
+  return request.testsCustomized ? request.testTypeIds : jobDefault;
+}
+
+// One column / tick per test, with the alternative sets of a group (Ketelitian Set A + B) sharing one.
+export function groupTestColumns(types: { id: string; name: string; variantGroup?: string | null }[]): { key: string; label: string; ids: string[] }[] {
+  const columns: { key: string; label: string; ids: string[] }[] = [];
+  for (const t of types) {
+    const group = t.variantGroup?.trim();
+    const key = group || t.id;
+    const col = columns.find((c) => c.key === key);
+    if (col) col.ids.push(t.id);
+    else columns.push({ key, label: group || t.name, ids: [t.id] });
+  }
+  return columns;
+}
+
+const groupOf = (t: PlannableTest) => t.variantGroup?.trim() || null;
+
+// From each group of alternatives keep the one handed out least so far (a coin toss between equals),
+// so Set A and Set B alternate and neither is seen more than the other. Tests outside a group stay.
+export function pickVariants<T extends PlannableTest>(possible: T[], usage: Map<string, number> = new Map(), random: () => number = Math.random): T[] {
+  const chosen = new Map<string, T>();
+  for (const t of possible) {
+    const g = groupOf(t);
+    if (g && !chosen.has(g)) {
+      const members = possible.filter((x) => groupOf(x) === g);
+      const least = Math.min(...members.map((m) => usage.get(m.id) ?? 0));
+      const ties = members.filter((m) => (usage.get(m.id) ?? 0) === least);
+      chosen.set(g, ties[Math.min(ties.length - 1, Math.floor(random() * ties.length))]);
+    }
+  }
+  return possible.filter((t) => {
+    const g = groupOf(t);
+    return g ? chosen.get(g) === t : true;
+  });
+}
+
+// The tests an applicant takes.
+export function planTestsForJob<T extends PlannableTest>(
+  allTypes: T[],
+  jobTestTypeIds: string[],
+  opts: { usage?: Map<string, number>; random?: () => number } = {}
+): T[] {
+  return pickVariants(possibleTestsForJob(allTypes, jobTestTypeIds), opts.usage, opts.random);
+}
+
+// What an applicant sees as the test's name: the group name when it is one of several alternatives.
+export function testDisplayName(t: { name: string; variantGroup?: string | null }): string {
+  return t.variantGroup?.trim() || t.name;
+}
+
+// "Ketelitian (salah satu dari 2 set)" style steps for the page that tells applicants what to expect.
+export function describeTestSteps<T extends PlannableTest & { name: string; timeLimitMinutes: number }>(possible: T[]): { label: string; timeLimitMinutes: number }[] {
+  const steps: { label: string; timeLimitMinutes: number; group: string | null }[] = [];
+  for (const t of possible) {
+    const g = groupOf(t);
+    const existing = g ? steps.find((s) => s.group === g) : undefined;
+    if (existing) existing.timeLimitMinutes = Math.max(existing.timeLimitMinutes, t.timeLimitMinutes);
+    else steps.push({ label: testDisplayName(t), timeLimitMinutes: t.timeLimitMinutes, group: g });
+  }
+  return steps.map(({ label, timeLimitMinutes }) => ({ label, timeLimitMinutes }));
+}
+
+// ---------- shuffled answer options ----------
+
+// Options that only make sense at the end of a list ("Semua benar", "Tidak bisa ditentukan" ...).
+const ANCHORED_OPTION = /^(semua(\s+jawaban)?\s+(di\s*atas\s+)?benar|tidak\s+ada(\s+(yang|jawaban))?\b|tidak\s+(dapat|bisa)\s+(disimpulkan|ditentukan|dipastikan)|salah\s+semua|jawaban\s+(a|b|c|d|e)\s+dan)/i;
+
+export function isAnchoredOption(text: string): boolean {
+  return ANCHORED_OPTION.test(text.trim());
+}
+
+function hashSeed(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function seededRandom(seed: string): () => number {
+  let a = hashSeed(seed);
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// The order an applicant sees the options in: a list of the ORIGINAL option numbers. The same seed
+// (the applicant's test and the question) always gives the same order, so a refresh changes nothing.
+// "Semua benar"-style options keep their place at the end.
+export function optionDisplayOrder(options: string[], seed: string, shuffle: boolean): number[] {
+  const all = options.map((_, i) => i);
+  if (!shuffle) return all;
+  const movable = all.filter((i) => !isAnchoredOption(options[i]));
+  const anchored = all.filter((i) => isAnchoredOption(options[i]));
+  const random = seededRandom(seed);
+  for (let i = movable.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [movable[i], movable[j]] = [movable[j], movable[i]];
+  }
+  return [...movable, ...anchored];
+}
+
+// "Istimewa" for HR: the test has a threshold and the score reached it.
+export function isExcellent(scorePercent: number | null, excellentScore: number | null | undefined): boolean {
+  return scorePercent !== null && excellentScore != null && scorePercent >= excellentScore;
 }
 
 // A test may start only when every earlier one is submitted and none failed.

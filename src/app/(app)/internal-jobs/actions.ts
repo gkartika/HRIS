@@ -42,6 +42,8 @@ export async function applyInternalAction(requestId: string): Promise<string | u
   const created = await createCandidate({
     requestId: request.id,
     jobId: request.jobId,
+    testsCustomized: request.testsCustomized,
+    testTypeIds: request.testTypeIds,
     source: "INTERNAL",
     employeeId,
     fullName: employee.fullLegalName,

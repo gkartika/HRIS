@@ -18,7 +18,16 @@ import {
   normalizeEmail,
   normalizeMobile,
   parseBulkQuestions,
+  describeTestSteps,
+  isAnchoredOption,
+  groupTestColumns,
+  isExcellent,
+  testIdsForRequest,
+  optionDisplayOrder,
+  pickVariants,
   planTestsForJob,
+  possibleTestsForJob,
+  testDisplayName,
   reapplyBlock,
   scoreTest,
   secondsLeft,
@@ -314,5 +323,130 @@ describe("pasting questions in bulk", () => {
     const res = parseBulkQuestions("SCALE", Array.from({ length: 300 }, (_, i) => `Soal ${i}`).join("\n"));
     expect(res.errors).toHaveLength(1);
     expect(res.questions).toHaveLength(0);
+  });
+});
+
+describe("alternative sets of one test (Ketelitian Set A / Set B)", () => {
+  const types = [
+    { id: "cf", isGate: true, sortOrder: 1, active: true, variantGroup: null, name: "Cultural Fit", timeLimitMinutes: 10 },
+    { id: "ka", isGate: false, sortOrder: 2, active: true, variantGroup: "Ketelitian", name: "Ketelitian Set A", timeLimitMinutes: 15 },
+    { id: "kb", isGate: false, sortOrder: 2, active: true, variantGroup: "Ketelitian", name: "Ketelitian Set B", timeLimitMinutes: 15 },
+    { id: "ld", isGate: false, sortOrder: 3, active: true, variantGroup: null, name: "Logika Dasar", timeLimitMinutes: 30 },
+  ];
+
+  it("gives an applicant only one of the alternatives", () => {
+    const plan = planTestsForJob(types, ["ka", "kb", "ld"]);
+    expect(plan.map((t) => t.id).filter((id) => id === "ka" || id === "kb")).toHaveLength(1);
+    expect(plan.map((t) => t.id)).toContain("cf");
+    expect(plan.map((t) => t.id)).toContain("ld");
+  });
+
+  it("hands out the set used least so far", () => {
+    expect(planTestsForJob(types, ["ka", "kb"], { usage: new Map([["ka", 5], ["kb", 2]]) }).map((t) => t.id)).toEqual(["cf", "kb"]);
+    expect(planTestsForJob(types, ["ka", "kb"], { usage: new Map([["ka", 1], ["kb", 4]]) }).map((t) => t.id)).toEqual(["cf", "ka"]);
+  });
+
+  it("flips a coin only between equals", () => {
+    expect(planTestsForJob(types, ["ka", "kb"], { random: () => 0 }).map((t) => t.id)).toEqual(["cf", "ka"]);
+    expect(planTestsForJob(types, ["ka", "kb"], { random: () => 0.99 }).map((t) => t.id)).toEqual(["cf", "kb"]);
+  });
+
+  it("keeps working when only one alternative is mapped or active", () => {
+    expect(planTestsForJob(types, ["kb"]).map((t) => t.id)).toEqual(["cf", "kb"]);
+    const oneOff = types.map((t) => (t.id === "ka" ? { ...t, active: false } : t));
+    expect(planTestsForJob(oneOff, ["ka", "kb"]).map((t) => t.id)).toEqual(["cf", "kb"]);
+  });
+
+  it("lists every alternative when checking that each has questions", () => {
+    expect(possibleTestsForJob(types, ["ka", "kb", "ld"]).map((t) => t.id)).toEqual(["cf", "ka", "kb", "ld"]);
+    expect(pickVariants(possibleTestsForJob(types, ["ka", "kb"]), new Map(), () => 0)).toHaveLength(2);
+  });
+
+  it("shows applicants the group name and one step for the group", () => {
+    expect(testDisplayName(types[1])).toBe("Ketelitian");
+    expect(testDisplayName(types[3])).toBe("Logika Dasar");
+    const steps = describeTestSteps(possibleTestsForJob(types, ["ka", "kb", "ld"]));
+    expect(steps).toEqual([
+      { label: "Cultural Fit", timeLimitMinutes: 10 },
+      { label: "Ketelitian", timeLimitMinutes: 15 },
+      { label: "Logika Dasar", timeLimitMinutes: 30 },
+    ]);
+  });
+});
+
+describe("istimewa", () => {
+  it("marks a score at or above the threshold only", () => {
+    expect(isExcellent(90, 90)).toBe(true);
+    expect(isExcellent(93.3, 90)).toBe(true);
+    expect(isExcellent(89.9, 90)).toBe(false);
+    expect(isExcellent(100, null)).toBe(false);
+    expect(isExcellent(null, 90)).toBe(false);
+  });
+});
+
+describe("shuffled answer options", () => {
+  const options = ["A", "B", "C", "D", "E"];
+
+  it("leaves the order alone when shuffling is off", () => {
+    expect(optionDisplayOrder(options, "any", false)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("is a permutation and gives the same order for the same seed", () => {
+    const order = optionDisplayOrder(options, "test1:q1", true);
+    expect([...order].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect(optionDisplayOrder(options, "test1:q1", true)).toEqual(order);
+  });
+
+  it("differs between applicants and spreads the correct position around", () => {
+    const orders = new Set<string>();
+    const positions = [0, 0, 0, 0, 0];
+    for (let i = 0; i < 500; i++) {
+      const order = optionDisplayOrder(options, "applicant-" + i + ":q", true);
+      orders.add(order.join(""));
+      positions[order.indexOf(2)]++; // where the originally-third option (the key) ends up
+    }
+    expect(orders.size).toBeGreaterThan(50);
+    for (const p of positions) expect(p).toBeGreaterThan(50); // each of A..E gets a fair share (expected 100)
+  });
+
+  it("keeps 'Semua benar' style options at the end", () => {
+    const opts = ["Mesin A", "Mesin B", "Mesin C", "Tidak bisa ditentukan", "Semua benar"];
+    for (let i = 0; i < 100; i++) {
+      const order = optionDisplayOrder(opts, "s" + i, true);
+      expect(order.slice(3)).toEqual([3, 4]);
+      expect(order.slice(0, 3).sort()).toEqual([0, 1, 2]);
+    }
+    expect(isAnchoredOption("Semua jawaban benar")).toBe(true);
+    expect(isAnchoredOption("Tidak ada yang benar")).toBe(true);
+    expect(isAnchoredOption("Mesin B")).toBe(false);
+    expect(isAnchoredOption("Tidak berhubungan sama sekali")).toBe(false);
+  });
+});
+
+describe("tests chosen per vacancy", () => {
+  it("uses the job title's tests until the vacancy has its own pick", () => {
+    expect(testIdsForRequest({ testsCustomized: false, testTypeIds: ["x"] }, ["ka", "kb"])).toEqual(["ka", "kb"]);
+    expect(testIdsForRequest({ testsCustomized: true, testTypeIds: ["ld"] }, ["ka", "kb"])).toEqual(["ld"]);
+  });
+
+  it("a customised vacancy with no extra tests only has the gate", () => {
+    const types = [
+      { id: "cf", isGate: true, sortOrder: 1, active: true },
+      { id: "ld", isGate: false, sortOrder: 5, active: true },
+    ];
+    const ids = testIdsForRequest({ testsCustomized: true, testTypeIds: [] }, ["ld"]);
+    expect(possibleTestsForJob(types, ids).map((t) => t.id)).toEqual(["cf"]);
+  });
+
+  it("puts alternative sets in one column", () => {
+    const cols = groupTestColumns([
+      { id: "ka", name: "Ketelitian Set A", variantGroup: "Ketelitian" },
+      { id: "kb", name: "Ketelitian Set B", variantGroup: "Ketelitian" },
+      { id: "ld", name: "Logika Dasar", variantGroup: null },
+    ]);
+    expect(cols).toEqual([
+      { key: "Ketelitian", label: "Ketelitian", ids: ["ka", "kb"] },
+      { key: "ld", label: "Logika Dasar", ids: ["ld"] },
+    ]);
   });
 });

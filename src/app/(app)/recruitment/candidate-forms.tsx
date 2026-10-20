@@ -12,6 +12,7 @@ import {
   scheduleInterviewAction,
   sendOfferAction,
   setOpenForAction,
+  setRequestTestsAction,
   regenerateAccessCodeAction,
   setReviewersAction,
   uploadOfferAction,
@@ -55,7 +56,86 @@ export function CopyButton({ text, labelText = "Salin" }: { text: string; labelT
   );
 }
 
-// ---------- the vacancy: who may apply, access code ----------
+// ---------- the vacancy: which tests, who may apply, access code ----------
+
+// Pick the tests for ONE vacancy. Starts from the job title's tests (Pengaturan Rekrutmen); once saved,
+// the vacancy keeps its own pick. Cultural Fit is always required.
+export function RequestTestsControl({
+  requestId,
+  columns,
+  jobDefaultKeys,
+  customized,
+  selectedKeys,
+}: {
+  requestId: string;
+  columns: { key: string; label: string; ids: string[] }[];
+  jobDefaultKeys: string[];
+  customized: boolean;
+  selectedKeys: string[];
+}) {
+  const [pending, run] = useTransition();
+  const [picked, setPicked] = useState<string[]>(selectedKeys);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const changed = picked.length !== selectedKeys.length || picked.some((k) => !selectedKeys.includes(k));
+
+  function save(keys: string[] | null) {
+    setError(null);
+    setSaved(false);
+    const ids = keys === null ? null : columns.filter((c) => keys.includes(c.key)).flatMap((c) => c.ids);
+    run(async () => {
+      const message = await setRequestTestsAction(requestId, ids);
+      if (message) setError(message);
+      else {
+        setSaved(true);
+        if (keys === null) setPicked(jobDefaultKeys);
+      }
+    });
+  }
+
+  return (
+    <div>
+      <p className={label}>Tes untuk lowongan ini</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="inline-flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked disabled aria-label="Cultural Fit (wajib)" /> Cultural Fit <span className="text-[11px] text-slate-400">(wajib)</span>
+        </span>
+        {columns.map((c) => (
+          <label key={c.key} className="inline-flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={picked.includes(c.key)}
+              disabled={pending}
+              onChange={(e) => {
+                setSaved(false);
+                setPicked((p) => (e.target.checked ? [...p, c.key] : p.filter((k) => k !== c.key)));
+              }}
+            />
+            {c.label}
+            {c.ids.length > 1 && <span className="text-[11px] text-slate-400">({c.ids.length} set bergantian)</span>}
+          </label>
+        ))}
+        {columns.length === 0 && <span className="text-xs text-slate-400">Belum ada tes tambahan aktif (buat di Pengaturan Rekrutmen).</span>}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" className={primary} disabled={pending || (!changed && customized)} onClick={() => save(picked)}>
+          {pending ? "Menyimpan..." : "Simpan pilihan tes"}
+        </button>
+        {customized && (
+          <button type="button" className={ghost} disabled={pending} onClick={() => save(null)}>
+            Kembali ke tes bawaan jabatan
+          </button>
+        )}
+        {saved && <span className="text-xs text-emerald-700">Tersimpan.</span>}
+      </div>
+      <p className="mt-1 text-[11px] text-slate-400">
+        {customized ? "Lowongan ini memakai pilihan sendiri." : "Saat ini mengikuti tes bawaan jabatan (Pengaturan Rekrutmen); simpan untuk menetapkan pilihan khusus lowongan ini."}{" "}
+        Pelamar yang sudah masuk tetap dengan tes yang sudah mereka dapat.
+      </p>
+      {error && <p className="mt-1 text-xs text-rose-600" role="alert">{error}</p>}
+    </div>
+  );
+}
 
 export function OpenForControl({
   requestId,

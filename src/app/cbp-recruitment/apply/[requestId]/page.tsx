@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { loadPlanContext, plannedTests, readinessProblems } from "@/lib/recruitment-service";
+import { loadPlanContext, possibleTests, readinessProblems } from "@/lib/recruitment-service";
+import { describeTestSteps } from "@/lib/recruitment-candidates";
 import { t } from "@/lib/i18n/id";
 import { ApplyForm } from "./apply-form";
 
@@ -34,7 +35,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ requestI
     );
   }
 
-  const steps = plannedTests(ctx, request.jobId);
+  const steps = describeTestSteps(possibleTests(ctx, request));
 
   return (
     <div>
@@ -51,9 +52,9 @@ export default async function ApplyPage({ params }: { params: Promise<{ requestI
         <p className="mt-1 text-sm text-[#4a3e52]">
           Setelah mengisi data, Anda langsung mengerjakan tes secara online:{" "}
           {steps.map((s, i) => (
-            <span key={s.id}>
+            <span key={s.label}>
               {i > 0 && ", "}
-              <b>{s.name}</b> ({s.timeLimitMinutes} menit)
+              <b>{s.label}</b> ({s.timeLimitMinutes} menit)
             </span>
           ))}
           . Waktu berjalan begitu tes dimulai dan tidak bisa dihentikan. Salin dan tempel dinonaktifkan. Siapkan sekitar{" "}

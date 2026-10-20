@@ -65,6 +65,8 @@ export async function applyExternalAction(
   const created = await createCandidate({
     requestId: request.id,
     jobId: request.jobId,
+    testsCustomized: request.testsCustomized,
+    testTypeIds: request.testTypeIds,
     source: "EXTERNAL",
     fullName,
     email,

@@ -1353,9 +1353,13 @@ model RecruitmentRequest {
 
   // Applicant pipeline. NONE = not published; the access code is what an external
   // applicant types on /cbp-recruitment (one code per request).
-  openFor    RecruitmentOpenFor     @default(NONE)
-  accessCode String?
-  candidates RecruitmentCandidate[]
+  openFor         RecruitmentOpenFor     @default(NONE)
+  accessCode      String?
+  // Tests chosen for this vacancy. Not customised = the job title's own tests from Pengaturan Rekrutmen
+  // apply; customised = exactly testTypeIds (Cultural Fit is always required on top, so it is not listed).
+  testsCustomized Boolean                @default(false)
+  testTypeIds     String[]               @default([])
+  candidates      RecruitmentCandidate[]
 
   @@index([status])
 }
@@ -3337,6 +3341,16 @@ model RecruitmentTestType {
   passScore        Int                 @default(70) // percent, ignored for ESSAY
   timeLimitMinutes Int                 @default(15)
   isGate           Boolean             @default(false)
+  // Tests with the same non-empty group are alternatives (e.g. Ketelitian Set A and Set B): each
+  // applicant gets ONE of them, the one handed out least so far. Applicants only see the group name.
+  variantGroup     String?
+  // Questions in a fixed-width font, so look-alike characters (I, l, 1, O, 0) can be told apart.
+  monospace        Boolean             @default(false)
+  // Multiple choice: every applicant sees the options in their own order (the same order on a refresh),
+  // so "the answer is always C" cannot be passed around. Options like "Semua benar" stay last.
+  shuffleOptions   Boolean             @default(false)
+  // From this percent the result is labelled "Istimewa" for HR (empty = no label).
+  excellentScore   Int?
   sortOrder        Int                 @default(0)
   active           Boolean             @default(true)
   createdAt        DateTime            @default(now())
@@ -3479,6 +3493,7 @@ model RecruitmentCandidateTest {
 
   @@unique([candidateId, testTypeId])
   @@index([status, deadlineAt])
+  @@index([testTypeId])
 }
 
 model RecruitmentCandidateAnswer {

@@ -16,8 +16,12 @@ import {
   fileExtension,
   isExpired,
   isPassing,
+  optionDisplayOrder,
   planTestsForJob,
+  possibleTestsForJob,
+  testIdsForRequest,
   scoreTest,
+  testDisplayName,
 } from "@/lib/recruitment-candidates";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
@@ -49,6 +53,10 @@ export interface PlanContext {
     passScore: number;
     timeLimitMinutes: number;
     isGate: boolean;
+    description: string | null;
+    variantGroup: string | null;
+    monospace: boolean;
+    excellentScore: number | null;
     sortOrder: number;
     active: boolean;
     activeQuestions: number;
@@ -74,6 +82,10 @@ export async function loadPlanContext(): Promise<PlanContext> {
       passScore: t.passScore,
       timeLimitMinutes: t.timeLimitMinutes,
       isGate: t.isGate,
+      description: t.description,
+      variantGroup: t.variantGroup,
+      monospace: t.monospace,
+      excellentScore: t.excellentScore,
       sortOrder: t.sortOrder,
       active: t.active,
       activeQuestions: t._count.questions,
@@ -82,14 +94,31 @@ export async function loadPlanContext(): Promise<PlanContext> {
   };
 }
 
-export function plannedTests(ctx: PlanContext, jobId: string) {
-  return planTestsForJob(ctx.types, ctx.jobTestIds.get(jobId) ?? []);
+// The part of a request that decides its tests: its own pick, or else the job title's.
+export interface RequestTestChoice {
+  jobId: string | null;
+  testsCustomized: boolean;
+  testTypeIds: string[];
+}
+
+function testIdsOf(ctx: PlanContext, request: RequestTestChoice): string[] {
+  return testIdsForRequest(request, request.jobId ? ctx.jobTestIds.get(request.jobId) ?? [] : []);
+}
+
+// The tests ONE applicant will take (one set from each group of alternatives).
+export function plannedTests(ctx: PlanContext, request: RequestTestChoice, usage?: Map<string, number>) {
+  return planTestsForJob(ctx.types, testIdsOf(ctx, request), { usage });
+}
+
+// Every test an applicant for this vacancy could be given, all alternatives included.
+export function possibleTests(ctx: PlanContext, request: RequestTestChoice) {
+  return possibleTestsForJob(ctx.types, testIdsOf(ctx, request));
 }
 
 // What stops a request from taking applicants right now (empty = ready).
 export function readinessProblems(
   ctx: PlanContext,
-  request: { jobId: string | null; status: RecruitmentRequestStatus; accessCode: string | null; requestedHeadcount: number; openFor: RecruitmentOpenFor },
+  request: RequestTestChoice & { status: RecruitmentRequestStatus; accessCode: string | null; requestedHeadcount: number; openFor: RecruitmentOpenFor },
   filled: number
 ): string[] {
   const problems: string[] = [];
@@ -98,7 +127,7 @@ export function readinessProblems(
   if (computeFulfillmentCounts(request.requestedHeadcount, filled).isFull) problems.push("Permintaan sudah terisi penuh.");
   if (!ctx.types.some((t) => t.isGate && t.active)) problems.push("Belum ada tes gerbang (Cultural Fit) yang aktif.");
   if (request.jobId) {
-    for (const t of plannedTests(ctx, request.jobId)) {
+    for (const t of possibleTests(ctx, request)) {
       if (t.activeQuestions === 0) problems.push(`Tes ${t.name} belum punya soal.`);
     }
   }
@@ -127,6 +156,8 @@ export async function listOpenVacancies(kind: "EXTERNAL" | "INTERNAL") {
 export interface NewCandidateInput {
   requestId: string;
   jobId: string;
+  testsCustomized: boolean;
+  testTypeIds: string[];
   source: RecruitmentCandidateSource;
   employeeId?: string | null;
   fullName: string;
@@ -139,7 +170,12 @@ export interface NewCandidateInput {
 // applicants get a private link token (returned once, only its hash is stored).
 export async function createCandidate(input: NewCandidateInput): Promise<{ id: string; rawToken: string | null }> {
   const ctx = await loadPlanContext();
-  const planned = plannedTests(ctx, input.jobId);
+  // How often each alternative set was handed out so far, so Set A and Set B stay balanced.
+  const alternativeIds = ctx.types.filter((t) => t.variantGroup).map((t) => t.id);
+  const handedOut = alternativeIds.length
+    ? await prisma.recruitmentCandidateTest.groupBy({ by: ["testTypeId"], where: { testTypeId: { in: alternativeIds } }, _count: { _all: true } })
+    : [];
+  const planned = plannedTests(ctx, { jobId: input.jobId, testsCustomized: input.testsCustomized, testTypeIds: input.testTypeIds }, new Map(handedOut.map((g) => [g.testTypeId, g._count._all])));
   const rawToken = input.source === "EXTERNAL" ? randomBytes(24).toString("base64url") : null;
   return prisma.$transaction(async (tx) => {
     let cvFileId: string | null = null;
@@ -363,6 +399,8 @@ export async function finalizeExpiredTests(candidateId?: string, now: Date = new
 export interface RunnerTest {
   id: string;
   name: string;
+  /** Instructions shown before the test starts. */
+  description: string | null;
   form: RecruitmentTestForm;
   timeLimitMinutes: number;
   status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED";
@@ -375,8 +413,11 @@ export interface RunnerState {
   active: {
     testId: string;
     form: RecruitmentTestForm;
+    monospace: boolean;
     deadlineAtMs: number;
-    questions: { id: string; prompt: string; options: string[] }[];
+    // Options come with their ORIGINAL number: that number is what an answer is saved and graded by,
+    // while the list is already in this applicant's own order.
+    questions: { id: string; prompt: string; options: { index: number; text: string }[] }[];
     answers: Record<string, { index?: number; text?: string }>;
   } | null;
 }
@@ -404,7 +445,8 @@ export async function loadRunnerState(candidateId: string, now: Date = new Date(
 
   const tests: RunnerTest[] = candidate.tests.map((t, i) => ({
     id: t.id,
-    name: t.testType.name,
+    name: testDisplayName(t.testType),
+    description: t.testType.description,
     form: t.testType.form,
     timeLimitMinutes: t.testType.timeLimitMinutes,
     status: t.status,
@@ -415,14 +457,20 @@ export async function loadRunnerState(candidateId: string, now: Date = new Date(
   let active: RunnerState["active"] = null;
   const running = candidate.tests.find((t) => t.status === "IN_PROGRESS");
   if (running && running.deadlineAt) {
-    const questions = await prisma.recruitmentTestQuestion.findMany({
+    const rows = await prisma.recruitmentTestQuestion.findMany({
       where: { testTypeId: running.testTypeId, active: true },
       orderBy: { sortOrder: "asc" },
       select: { id: true, prompt: true, options: true },
     });
+    const questions = rows.map((r) => ({
+      id: r.id,
+      prompt: r.prompt,
+      options: optionDisplayOrder(r.options, `${running.id}:${r.id}`, running.testType.shuffleOptions).map((index) => ({ index, text: r.options[index] })),
+    }));
     active = {
       testId: running.id,
       form: running.testType.form,
+      monospace: running.testType.monospace,
       deadlineAtMs: running.deadlineAt.getTime(),
       questions,
       answers: Object.fromEntries(

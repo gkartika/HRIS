@@ -5,7 +5,7 @@ import { StatusChip } from "@/components/status-chip";
 import { prisma } from "@/lib/db";
 import { canManageRecruitment } from "@/lib/permissions";
 import { requireSession } from "@/lib/require-session";
-import { TEMPLATE_PLACEHOLDERS, TEST_FORM_LABEL } from "@/lib/recruitment-candidates";
+import { groupTestColumns, TEMPLATE_PLACEHOLDERS, TEST_FORM_LABEL } from "@/lib/recruitment-candidates";
 import { getRecruitmentSettings } from "@/lib/recruitment-service";
 import {
   deleteAspectAction,
@@ -76,6 +76,9 @@ async function CatalogTab() {
               </h2>
               <p className="mt-0.5 text-xs text-slate-500">
                 {TEST_FORM_LABEL[t.form]} · {t.form === "ESSAY" ? "dinilai reviewer" : `lulus ${t.passScore}`} · {t.timeLimitMinutes} menit · {t._count.questions} soal aktif
+                {t.variantGroup && ` · set alternatif "${t.variantGroup}"`}
+                {t.excellentScore != null && ` · istimewa ${t.excellentScore}%`}
+                {t.shuffleOptions && " · pilihan jawaban diacak"}
                 {!t.isGate && ` · dipakai ${t._count.jobTests} jabatan`}
               </p>
               {t.description && <p className="mt-1 text-xs text-slate-400">{t.description}</p>}
@@ -112,6 +115,27 @@ async function CatalogTab() {
                     <input id={`o-${t.id}`} name="sortOrder" type="number" defaultValue={t.sortOrder} className={field} />
                   </div>
                 </div>
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div>
+                    <label className={lab} htmlFor={`x-${t.id}`}>Nilai istimewa (%), opsional</label>
+                    <input id={`x-${t.id}`} name="excellentScore" type="number" min={1} max={100} defaultValue={t.excellentScore ?? ""} className={field} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className={lab} htmlFor={`g-${t.id}`}>Kelompok set alternatif, opsional</label>
+                    <input id={`g-${t.id}`} name="variantGroup" defaultValue={t.variantGroup ?? ""} placeholder="mis. Ketelitian" className={field} />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400">Tes dengan nama kelompok yang sama saling menggantikan: tiap pelamar hanya mendapat satu, yang paling jarang dipakai. Pelamar hanya melihat nama kelompoknya.</p>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" name="monospace" defaultChecked={t.monospace} />
+                  Tampilkan soal dengan huruf lebar tetap (supaya I, l, 1 dan O, 0 mudah dibedakan)
+                </label>
+                {t.form === "MULTIPLE_CHOICE" && (
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" name="shuffleOptions" defaultChecked={t.shuffleOptions} />
+                    Acak urutan pilihan jawaban untuk tiap pelamar (pilihan seperti &quot;Semua benar&quot; tetap di akhir)
+                  </label>
+                )}
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input type="checkbox" name="active" defaultChecked={t.active} />
                   Aktif (tes nonaktif tidak diberikan ke pelamar baru)
@@ -165,6 +189,24 @@ async function CatalogTab() {
                 <input id="new-time" name="timeLimitMinutes" type="number" min={1} max={240} defaultValue={15} className={field} />
               </div>
             </div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div>
+                <label className={lab} htmlFor="new-x">Nilai istimewa (%), opsional</label>
+                <input id="new-x" name="excellentScore" type="number" min={1} max={100} className={field} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={lab} htmlFor="new-g">Kelompok set alternatif, opsional</label>
+                <input id="new-g" name="variantGroup" placeholder="mis. Ketelitian" className={field} />
+              </div>
+              <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
+                <input type="checkbox" name="monospace" />
+                Huruf lebar tetap
+              </label>
+              <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
+                <input type="checkbox" name="shuffleOptions" />
+                Acak pilihan jawaban
+              </label>
+            </div>
           </ActionForm>
         </div>
       </div>
@@ -181,15 +223,17 @@ async function JobTestsTab({ q }: { q: string }) {
       select: { id: true, jobTitle: true },
       take: 300,
     }),
-    prisma.recruitmentTestType.findMany({ where: { isGate: false, active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
+    prisma.recruitmentTestType.findMany({ where: { isGate: false, active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true, variantGroup: true } }),
     prisma.recruitmentJobTest.findMany({ select: { jobId: true, testTypeId: true } }),
   ]);
   const has = new Set(mapped.map((m) => `${m.jobId}:${m.testTypeId}`));
+  // Set A and Set B share one column: ticking it applies to both.
+  const columns = groupTestColumns(types);
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Cultural Fit wajib untuk semua jabatan. Centang tes tambahan untuk tiap jabatan; boleh lebih dari satu, boleh tidak ada. Berlaku untuk semua lowongan jabatan itu dan tersimpan langsung.
+        Cultural Fit wajib untuk semua jabatan. Centang tes tambahan untuk tiap jabatan; boleh lebih dari satu, boleh tidak ada. Ini pilihan awal untuk setiap lowongan jabatan itu dan tersimpan langsung; di halaman tiap lowongan (blok Pelamar) pilihan tes bisa diubah khusus untuk lowongan tersebut.
       </p>
       <form className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="min-w-[220px] flex-1">
@@ -209,8 +253,11 @@ async function JobTestsTab({ q }: { q: string }) {
               <tr>
                 <th className="px-4 py-3 font-medium">Jabatan</th>
                 <th className="px-3 py-3 font-medium">Cultural Fit</th>
-                {types.map((t) => (
-                  <th key={t.id} className="px-3 py-3 font-medium">{t.name}</th>
+                {columns.map((c) => (
+                  <th key={c.key} className="px-3 py-3 font-medium">
+                    {c.label}
+                    {c.ids.length > 1 && <span className="block text-[10px] font-normal text-slate-400">{c.ids.length} set bergantian</span>}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -219,16 +266,16 @@ async function JobTestsTab({ q }: { q: string }) {
                 <tr key={j.id} className="border-t border-slate-100">
                   <td className="px-4 py-2.5 text-slate-900">{j.jobTitle}</td>
                   <td className="px-3 py-2.5"><StatusChip tone="bg-emerald-50 text-emerald-700">Wajib</StatusChip></td>
-                  {types.map((t) => (
-                    <td key={t.id} className="px-3 py-2.5">
-                      <JobTestToggle jobId={j.id} testTypeId={t.id} checked={has.has(`${j.id}:${t.id}`)} label={`${j.jobTitle}: ${t.name}`} />
+                  {columns.map((c) => (
+                    <td key={c.key} className="px-3 py-2.5">
+                      <JobTestToggle jobId={j.id} testTypeIds={c.ids} checked={c.ids.every((id) => has.has(`${j.id}:${id}`))} label={`${j.jobTitle}: ${c.label}`} />
                     </td>
                   ))}
                 </tr>
               ))}
               {jobs.length === 0 && (
                 <tr>
-                  <td colSpan={types.length + 2} className="px-4 py-8 text-center text-sm text-slate-400">Tidak ada jabatan yang cocok.</td>
+                  <td colSpan={columns.length + 2} className="px-4 py-8 text-center text-sm text-slate-400">Tidak ada jabatan yang cocok.</td>
                 </tr>
               )}
             </tbody>

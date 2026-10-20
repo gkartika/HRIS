@@ -36,9 +36,18 @@ export async function saveTestTypeAction(testTypeId: string | null, _prev: Resul
   const timeLimitMinutes = intField(formData, "timeLimitMinutes");
   const sortOrder = intField(formData, "sortOrder") || 0;
   const active = formData.get("active") === "on";
+  const variantGroup = ((formData.get("variantGroup") as string) ?? "").trim() || null;
+  const monospace = formData.get("monospace") === "on";
+  const shuffleOptions = formData.get("shuffleOptions") === "on";
+  const excellentRaw = ((formData.get("excellentScore") as string) ?? "").trim();
+  const excellentScore = excellentRaw === "" ? null : Number(excellentRaw);
   if (!name || name.length > 80) return "Isi nama tes (maksimal 80 karakter).";
   if (!Number.isInteger(passScore) || passScore < 1 || passScore > 100) return "Nilai lulus harus 1 sampai 100.";
   if (!Number.isInteger(timeLimitMinutes) || timeLimitMinutes < 1 || timeLimitMinutes > 240) return "Waktu pengerjaan harus 1 sampai 240 menit.";
+  if (variantGroup && variantGroup.length > 60) return "Nama kelompok set maksimal 60 karakter.";
+  if (excellentScore !== null && (!Number.isInteger(excellentScore) || excellentScore < passScore || excellentScore > 100)) {
+    return "Nilai istimewa harus antara nilai lulus dan 100, atau kosongkan.";
+  }
 
   const duplicate = await prisma.recruitmentTestType.findFirst({ where: { name: { equals: name, mode: "insensitive" }, ...(testTypeId ? { id: { not: testTypeId } } : {}) } });
   if (duplicate) return "Sudah ada tes dengan nama itu.";
@@ -47,11 +56,11 @@ export async function saveTestTypeAction(testTypeId: string | null, _prev: Resul
     const current = await prisma.recruitmentTestType.findUnique({ where: { id: testTypeId } });
     if (!current) return "Tes tidak ditemukan.";
     if (current.isGate && !active) return "Tes gerbang (Cultural Fit) tidak boleh dinonaktifkan.";
-    await prisma.recruitmentTestType.update({ where: { id: testTypeId }, data: { name, description, passScore, timeLimitMinutes, sortOrder, active } });
+    await prisma.recruitmentTestType.update({ where: { id: testTypeId }, data: { name, description, passScore, timeLimitMinutes, sortOrder, active, variantGroup, monospace, shuffleOptions, excellentScore } });
   } else {
     const form = formData.get("form") as RecruitmentTestForm;
     if (!["SCALE", "MULTIPLE_CHOICE", "ESSAY"].includes(form)) return "Pilih bentuk soal.";
-    await prisma.recruitmentTestType.create({ data: { name, description, form, passScore, timeLimitMinutes, sortOrder, active: true } });
+    await prisma.recruitmentTestType.create({ data: { name, description, form, passScore, timeLimitMinutes, sortOrder, active: true, variantGroup, monospace, shuffleOptions, excellentScore } });
   }
   await logAudit({ actorAccountId: auth.id, action: testTypeId ? "UPDATE" : "CREATE", datasetName: "RecruitmentTestType", recordId: testTypeId, reason: name });
   done();
@@ -75,15 +84,16 @@ export async function deleteTestTypeAction(testTypeId: string): Promise<Result> 
 
 // ---------- tests per job title ----------
 
-export async function setJobTestAction(jobId: string, testTypeId: string, on: boolean): Promise<Result> {
+// One tick in the matrix covers every alternative of that test (Set A and Set B together).
+export async function setJobTestsAction(jobId: string, testTypeIds: string[], on: boolean): Promise<Result> {
   const auth = await adminId();
   if ("error" in auth) return auth.error;
-  const type = await prisma.recruitmentTestType.findUnique({ where: { id: testTypeId }, select: { isGate: true } });
-  if (!type || type.isGate) return "Tes ini tidak perlu dipetakan.";
+  const types = await prisma.recruitmentTestType.findMany({ where: { id: { in: testTypeIds } }, select: { id: true, isGate: true } });
+  if (types.length !== testTypeIds.length || types.some((t) => t.isGate)) return "Tes ini tidak perlu dipetakan.";
   if (on) {
-    await prisma.recruitmentJobTest.upsert({ where: { jobId_testTypeId: { jobId, testTypeId } }, update: {}, create: { jobId, testTypeId } });
+    await prisma.recruitmentJobTest.createMany({ data: testTypeIds.map((testTypeId) => ({ jobId, testTypeId })), skipDuplicates: true });
   } else {
-    await prisma.recruitmentJobTest.deleteMany({ where: { jobId, testTypeId } });
+    await prisma.recruitmentJobTest.deleteMany({ where: { jobId, testTypeId: { in: testTypeIds } } });
   }
   done();
 }

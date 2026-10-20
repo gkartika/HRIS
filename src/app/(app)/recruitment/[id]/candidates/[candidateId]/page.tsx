@@ -18,6 +18,7 @@ import {
   averageScore,
   candidateNextStep,
   isActiveCandidateStatus,
+  isExcellent,
   whatsappLink,
 } from "@/lib/recruitment-candidates";
 import { progressOf } from "@/lib/recruitment-queries";
@@ -100,7 +101,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
   const next = candidateNextStep(
     progressOf({
       ...candidate,
-      tests: candidate.tests.map((t) => ({ id: t.id, status: t.status, passed: t.passed, scorePercent: t.scorePercent, testType: { name: t.testType.name, form: t.testType.form }, _count: { reviewers: t.reviewers.length } })),
+      tests: candidate.tests.map((t) => ({ id: t.id, status: t.status, passed: t.passed, scorePercent: t.scorePercent, testType: { name: t.testType.name, form: t.testType.form, excellentScore: t.testType.excellentScore }, _count: { reviewers: t.reviewers.length } })),
       interview: candidate.interview ? { id: candidate.interview.id, scheduledAt: candidate.interview.scheduledAt, interviewers: candidate.interview.interviewers.map((i) => ({ submittedAt: i.submittedAt })) } : null,
       offer: candidate.offer ? { sentAt: candidate.offer.sentAt, response: candidate.offer.response } : null,
     })
@@ -209,6 +210,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
                   </p>
                   <div className="flex items-center gap-2">
                     {t.status === "SUBMITTED" && t.scorePercent !== null && <span className="text-xs text-slate-500">Skor {Math.round(t.scorePercent)} (lulus {t.passScoreSnapshot ?? t.testType.passScore})</span>}
+                    {t.passed && isExcellent(t.scorePercent, t.testType.excellentScore) && <StatusChip tone="bg-amber-100 text-amber-800">Istimewa</StatusChip>}
                     <StatusChip
                       tone={
                         t.status !== "SUBMITTED"

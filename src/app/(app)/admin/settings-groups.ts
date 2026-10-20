@@ -1,4 +1,4 @@
-import { Building2, User, Clock, LogOut, Award, type LucideIcon } from "lucide-react";
+import { Building2, User, Clock, LogOut, Award, ShieldCheck, type LucideIcon } from "lucide-react";
 
 export interface SettingsPage {
   href: string;
@@ -60,6 +60,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       { href: "/admin/offboarding-reasons", label: "Alasan Keluar" },
       { href: "/admin/exit-clearance-questions", label: "Pertanyaan Klirens Keluar" },
     ],
+  },
+  {
+    id: "akun-rekrutmen",
+    title: "Akun Admin Rekrutmen",
+    desc: "Login terpisah untuk orang yang menjalankan proses pelamar.",
+    icon: ShieldCheck,
+    pages: [{ href: "/admin/recruitment-admins", label: "Kelola Akun" }],
   },
   {
     id: "kompetensi",

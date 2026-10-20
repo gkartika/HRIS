@@ -15,6 +15,13 @@ export function hasRole(session: Session, role: string): boolean {
 export const isHrAdmin = (session: Session) => hasRole(session, "HR_ADMIN");
 export const isTrainingAdmin = (session: Session) => hasRole(session, "TRAINING_ADMIN");
 export const isGaAdmin = (session: Session) => hasRole(session, "GA_ADMIN");
+export const isRecruitmentAdmin = (session: Session) => hasRole(session, "RECRUITMENT_ADMIN");
+
+// The applicant pipeline (Pelamar, tests, question banks, interviews, offers, hiring an
+// applicant): Admin Rekrutmen, and Admin SDM who keeps the same access.
+export function canManageRecruitment(session: Session): boolean {
+  return isHrAdmin(session) || isRecruitmentAdmin(session);
+}
 
 // ACC-09: record-level scope. Phase 0 has no manager-vs-report relationship UI
 // yet (that's Phase 1's Assignment/org-chart work), so for now "can list all
@@ -99,7 +106,7 @@ export function canApproveRecruitmentRequestAsDeptHead(activeDeptHeadPositionIds
 // the request's status) and may also create an Employee directly with no
 // request at all (DEC-014, unrelated to this predicate).
 export function canCreateEmployeeFromRequest(session: Session): boolean {
-  return isHrAdmin(session);
+  return canManageRecruitment(session);
 }
 
 // DM-25/ACC-16: cancellation is the explicit exception to "HR Manager alone

@@ -8,13 +8,17 @@ import { computeFulfillmentCounts, canRequestAcceptFulfillment } from "@/lib/rec
 import { CreateEmployeeFromRequestForm } from "./create-employee-form";
 import { peekNextEmployeeNumber } from "@/lib/employee-number-allocate";
 import { findVacantPositionsInDepartment } from "@/lib/recruitment-seats";
+import { validateCandidateForHire } from "@/lib/recruitment-flow";
 
 export default async function CreateEmployeeFromRequestPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ candidateId?: string }>;
 }) {
   const { id } = await params;
+  const { candidateId } = await searchParams;
   const session = await requireSession();
   if (!canCreateEmployeeFromRequest(session)) {
     return <AccessDenied />;
@@ -39,6 +43,14 @@ export default async function CreateEmployeeFromRequestPage({
   // request passed through Approved, so jobId should always be set here.
   if (!request.jobId || !request.job) {
     return <p className="text-sm text-rose-600">{t("recruitment.jobNotSetOnApproval")}</p>;
+  }
+
+  // Coming from an applicant who accepted the offering letter: fill in what we already know.
+  let candidate: { id: string; fullName: string; mobileNumber: string | null } | null = null;
+  if (candidateId) {
+    const problem = await validateCandidateForHire(candidateId, request.id);
+    if (problem) return <p className="text-sm text-rose-600">{problem}</p>;
+    candidate = await prisma.recruitmentCandidate.findUnique({ where: { id: candidateId }, select: { id: true, fullName: true, mobileNumber: true } });
   }
 
   const [candidatePositions, educationLevels, ptkpStatuses, nextEmployeeNumber] = await Promise.all([
@@ -70,6 +82,7 @@ export default async function CreateEmployeeFromRequestPage({
           educationLevels={educationLevels}
           ptkpStatuses={ptkpStatuses}
           nextEmployeeNumber={nextEmployeeNumber}
+          candidate={candidate}
         />
       </div>
     </div>

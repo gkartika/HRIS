@@ -4,6 +4,7 @@ import { runDueRenewalScan } from "@/lib/renewal-scan";
 import { runOffboardingDeactivations } from "@/lib/offboarding-deactivate";
 import { applyDuePlacementChanges } from "@/lib/placement-schedule";
 import { createDueMaintenanceWorkOrders } from "@/lib/maintenance-create";
+import { finalizeExpiredTests } from "@/lib/recruitment-service";
 
 // Daily scheduled job (Vercel Cron, see vercel.json): the two things that used
 // to run — and write to the database — whenever someone opened the Kontrak or
@@ -26,8 +27,11 @@ export async function GET(request: Request) {
   const placements = await applyDuePlacementChanges();
   // Preventive plans that are set to open their own work order and have come due.
   const maintenance = await createDueMaintenanceWorkOrders();
+  // Applicants who left a test open: hand it in as it stands and grade it.
+  const expiredTests = await finalizeExpiredTests();
   return NextResponse.json({
     ok: true,
+    recruitmentTestsClosed: expiredTests,
     renewalCasesCreated: renewals.created,
     employeesDeactivated: offboarding.deactivated,
     loginsDisabled: offboarding.loginsDisabled,

@@ -10,10 +10,12 @@ import {
   canManageAssets,
   canManageGaOperations,
   canManageConsumables,
+  canManageRecruitment,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { getActiveAssignmentsOf } from "@/lib/active-assignments";
+import { hasRecruitmentTasks } from "@/lib/recruitment-queries";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { LogoutButton } from "./logout-button";
@@ -36,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   //   same as Perubahan Posisi.
   // - COM-10/COM-15: Director gap-report/P1 authority, resolved live from
   //   the org root Position's active Assignment.
-  const [hrManagerPositions, level3DepartmentIds, myAssignments, ownOffboardingCase] = await Promise.all([
+  const [hrManagerPositions, level3DepartmentIds, myAssignments, ownOffboardingCase, hasRecruitmentWork] = await Promise.all([
     getActiveHrManagerPositions(session.user.employeeId),
     getLevel3DepartmentIds(session.user.employeeId),
     getActiveAssignmentsOf(session.user.employeeId),
@@ -48,6 +50,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           select: { id: true },
         })
       : Promise.resolve(null),
+    // Reviewers and interviewers HR Admin picked get a "Tugas Rekrutmen" entry.
+    hasRecruitmentTasks(session.user.employeeId),
   ]);
   const isHrManagerNow = hrManagerPositions.length > 0;
   const isLevel3Anywhere = level3DepartmentIds.length > 0;
@@ -89,8 +93,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (isHrAdmin(session)) {
     buckets.karyawanOrg.push({ href: "/organization", label: t("nav.organization"), icon: "Building2" });
   }
-  if (canSubmitRecruitmentRequest(session)) {
+  if (canSubmitRecruitmentRequest(session) || canManageRecruitment(session)) {
     buckets.rekrutmenMutasi.push({ href: "/recruitment", label: t("recruitment.navLabel"), icon: "FileText" });
+  }
+  // Applicants across all requests (tests, interviews, offers) belong to HR Admin; anyone
+  // appointed as essay reviewer or interviewer sees their own task list.
+  if (canManageRecruitment(session)) {
+    buckets.rekrutmenMutasi.push({ href: "/recruitment/applicants", label: "Pelamar", icon: "Users" });
+  }
+  if (hasRecruitmentWork) {
+    buckets.rekrutmenMutasi.push({ href: "/recruitment/tasks", label: "Tugas Rekrutmen", icon: "ListChecks" });
   }
   // LIF-04: same broad visibility as Recruitment — any employee-linked
   // account can see the list (scoped to their own cases) or HR Admin (sees

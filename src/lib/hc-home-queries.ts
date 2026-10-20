@@ -11,6 +11,8 @@ import { formatCutoffParam, previousCutoffPeriod, resolveCutoffPeriod, type Cuto
 import { getUnresolvedDays } from "@/lib/attendance-reconciliation-queue";
 import { buildOrgUnitTree } from "@/lib/org-unit-tree";
 import { findVacantPositionsInDepartment } from "@/lib/recruitment-seats";
+import { listCandidates, waitingApplicantGroups } from "@/lib/recruitment-queries";
+import { ACTIVE_CANDIDATE_STATUSES } from "@/lib/recruitment-candidates";
 import { t } from "@/lib/i18n/id";
 
 export interface SetupWarning {
@@ -72,6 +74,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     orgUnits,
     holidayCounts,
     hrManagerSeats,
+    activeCandidates,
   ] = await Promise.all([
     prisma.recruitmentRequest.findMany({
       where: { status: { in: ["APPROVED", "RECRUITMENT_IN_PROGRESS", "PARTIALLY_FILLED"] } },
@@ -187,6 +190,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       prisma.companyHoliday.count({ where: { date: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } })
     )),
     prisma.position.count({ where: { archived: false, grantsHrManagerAccess: true } }),
+    listCandidates({ status: { in: ACTIVE_CANDIDATE_STATUSES } }, 400),
   ]);
 
   const todo: HcTodoRow[] = [];
@@ -210,6 +214,25 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: waitingLabel(age),
       actionLabel: filled > 0 ? "Buka" : "Buat Karyawan",
       href: `/recruitment/${r.id}`,
+      horizon: horizonForWaiting(age),
+    });
+  }
+
+  // ---- Pelamar: people waiting for Admin SDM (a reviewer to pick, an interview to set, an offer to send ...) ----
+  for (const w of waitingApplicantGroups(activeCandidates)) {
+    const requestId = w.requestId;
+    const age = daysSince(w.oldest, now);
+    todo.push({
+      kind: "rc",
+      type: "Pelamar",
+      title: `${w.count} pelamar menunggu tindakan: ${w.label}`,
+      who: w.requestNumber,
+      statusLabel: w.firstStep,
+      severity: waitingSeverity(age),
+      urgency: age,
+      timeLabel: waitingLabel(age),
+      actionLabel: "Buka",
+      href: `/recruitment/${requestId}`,
       horizon: horizonForWaiting(age),
     });
   }

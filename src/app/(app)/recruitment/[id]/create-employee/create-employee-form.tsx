@@ -14,8 +14,11 @@ export function CreateEmployeeFromRequestForm({
   educationLevels,
   ptkpStatuses,
   nextEmployeeNumber,
+  candidate,
 }: {
   requestId: string;
+  /** The applicant this employee is created from (name and WhatsApp number are filled in). */
+  candidate?: { id: string; fullName: string; mobileNumber: string | null } | null;
   candidatePositions: PositionOption[];
   educationLevels: EducationLevel[];
   ptkpStatuses: PtkpStatus[];
@@ -26,7 +29,9 @@ export function CreateEmployeeFromRequestForm({
 
   return (
     <form action={formAction} className="rounded-xl border border-slate-200 bg-white p-6">
+      {candidate && <input type="hidden" name="candidateId" value={candidate.id} />}
       <EmployeeCoreFields
+        fullLegalNameDefault={candidate?.fullName}
         nextEmployeeNumber={nextEmployeeNumber}
         hireDateHint="(opsional — kosong = hari ini)"
         hireDateDefault={new Date().toISOString().slice(0, 10)}
@@ -49,7 +54,12 @@ export function CreateEmployeeFromRequestForm({
           </div>
         }
       />
-      <EmployeeExtraFields educationLevels={educationLevels} ptkpStatuses={ptkpStatuses} withNationalId={false} />
+      <EmployeeExtraFields
+        educationLevels={educationLevels}
+        ptkpStatuses={ptkpStatuses}
+        withNationalId={false}
+        mobileNumberDefault={candidate?.mobileNumber ?? undefined}
+      />
 
       {error && <p className="mt-3 text-xs text-rose-600">{error}</p>}
       <div className="mt-4">

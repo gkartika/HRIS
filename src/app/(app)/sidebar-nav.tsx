@@ -99,14 +99,18 @@ export function SidebarNav({
   const pathname = usePathname();
   const pending = useSyncExternalStore(subscribePending, getPendingState, getServerPendingState);
 
-  const groupContainingActive = groups.find((g) => g.items.some((it) => pathname.startsWith(it.href)));
+  // The most specific menu entry wins: on /recruitment/applicants only "Pelamar" lights up,
+  // not "Rekrutmen" as well.
+  const allHrefs = [...topItems, ...groups.flatMap((g) => g.items), ...bottomItems].map((it) => it.href);
+  const isActive = (href: string) => pathname.startsWith(href) && !allHrefs.some((h) => h.length > href.length && pathname.startsWith(h));
+  const groupContainingActive = groups.find((g) => g.items.some((it) => isActive(it.href)));
   const [openGroup, setOpenGroup] = useState<string | null>(groupContainingActive?.key ?? groups[0]?.key ?? null);
 
   return (
     <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-3.5">
       {topItems.map((item) => {
         const Icon = ICONS[item.icon];
-        const active = pathname.startsWith(item.href);
+        const active = isActive(item.href);
         return (
           <Link
             key={item.href}
@@ -147,7 +151,7 @@ export function SidebarNav({
               <div className="flex flex-col gap-0.5 py-0.5">
                 {group.items.map((item) => {
                   const Icon = ICONS[item.icon];
-                  const active = pathname.startsWith(item.href);
+                  const active = isActive(item.href);
                   return (
                     <Link
                       key={item.href}
@@ -170,7 +174,7 @@ export function SidebarNav({
       {bottomItems.length > 0 && <div className="h-2" />}
       {bottomItems.map((item) => {
         const Icon = ICONS[item.icon];
-        const active = pathname.startsWith(item.href);
+        const active = isActive(item.href);
         return (
           <Link
             key={item.href}

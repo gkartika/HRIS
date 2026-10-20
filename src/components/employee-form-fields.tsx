@@ -14,11 +14,13 @@ export function EmployeeCoreFields({
   nextEmployeeNumber,
   hireDateHint = "(opsional)",
   hireDateDefault,
+  fullLegalNameDefault,
   leading,
 }: {
   nextEmployeeNumber: string;
   hireDateHint?: string;
   hireDateDefault?: string;
+  fullLegalNameDefault?: string;
   /** Extra field(s) shown first in the same grid (e.g. the position to fill). */
   leading?: ReactNode;
 }) {
@@ -34,7 +36,7 @@ export function EmployeeCoreFields({
       </div>
       <div>
         <label className={LABEL}>{t("employee.fullLegalName")}</label>
-        <input name="fullLegalName" required className={INPUT} />
+        <input name="fullLegalName" required defaultValue={fullLegalNameDefault} className={INPUT} />
       </div>
       <div>
         <label className={LABEL}>
@@ -60,9 +62,11 @@ export function EmployeeExtraFields({
   educationLevels,
   ptkpStatuses,
   withNationalId = true,
+  mobileNumberDefault,
 }: {
   educationLevels: EducationLevel[];
   ptkpStatuses: PtkpStatus[];
+  mobileNumberDefault?: string;
   /** The recruitment path never asked for the KTP number; direct creation does. */
   withNationalId?: boolean;
 }) {
@@ -84,7 +88,7 @@ export function EmployeeExtraFields({
         </div>
         <div>
           <label className={LABEL}>{t("employee.mobileNumber")}</label>
-          <input name="mobileNumber" className={INPUT} />
+          <input name="mobileNumber" defaultValue={mobileNumberDefault} className={INPUT} />
         </div>
         {withNationalId && (
           <div>

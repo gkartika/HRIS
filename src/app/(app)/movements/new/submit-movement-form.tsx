@@ -32,6 +32,7 @@ export function SubmitMovementForm({
   requesterCandidates,
   currentEmployeeId,
   isHrAdmin,
+  candidate,
 }: {
   employees: EmployeeOption[];
   defaultEmployeeId: string;
@@ -39,6 +40,8 @@ export function SubmitMovementForm({
   requesterCandidates: CandidateOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
+  /** Set when HR Admin opened this form from an internal applicant. */
+  candidate?: { id: string; label: string; requesterEmployeeId: string } | null;
 }) {
   const [error, formAction, isPending] = useActionState(submitMovementRequest, undefined);
   const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
@@ -51,13 +54,21 @@ export function SubmitMovementForm({
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-6 md:grid-cols-2">
+      {candidate && (
+        <>
+          <input type="hidden" name="candidateId" value={candidate.id} />
+          <p className="rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-900 md:col-span-2">
+            Dari lamaran internal: {candidate.label}. Pilih jenis perubahan dan posisi baru yang dilamar.
+          </p>
+        </>
+      )}
       {isHrAdmin ? (
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.submittedBy")}</label>
           <select
             name="requesterEmployeeId"
             required
-            defaultValue={currentEmployeeId ?? ""}
+            defaultValue={candidate?.requesterEmployeeId ?? currentEmployeeId ?? ""}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           >
             <option value="">— Pilih Karyawan —</option>
@@ -69,7 +80,7 @@ export function SubmitMovementForm({
           </select>
         </div>
       ) : (
-        <input type="hidden" name="requesterEmployeeId" value={currentEmployeeId ?? ""} />
+        <input type="hidden" name="requesterEmployeeId" value={candidate?.requesterEmployeeId ?? currentEmployeeId ?? ""} />
       )}
 
       <div className="md:col-span-2">

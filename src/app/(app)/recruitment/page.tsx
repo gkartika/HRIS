@@ -3,7 +3,7 @@ import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
 import { FilePlus } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
-import { canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
+import { canManageRecruitment, canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
@@ -33,7 +33,7 @@ export default async function RecruitmentListPage({
   const session = await requireSession();
   const { status, departmentId, page: pageRaw } = await searchParams;
 
-  const where: Prisma.RecruitmentRequestWhereInput = isHrAdmin(session)
+  const where: Prisma.RecruitmentRequestWhereInput = canManageRecruitment(session)
     ? {}
     : { requesterEmployeeId: session.user.employeeId ?? "__none__" };
   if (status) where.status = status as RecruitmentRequestStatus;

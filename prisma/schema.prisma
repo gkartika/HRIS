@@ -76,6 +76,10 @@ enum AppRole {
   TRAINING_ADMIN
   GA_ADMIN
   EMPLOYEE
+  // Stand-alone login (no employee record, like the Admin SDM login) for the person who runs
+  // the applicant pipeline. Created by Admin SDM under Pengaturan > Akun Admin Rekrutmen;
+  // Admin SDM keeps the same access.
+  RECRUITMENT_ADMIN
 }
 
 enum Gender {
@@ -1031,6 +1035,9 @@ model Employee {
   recruitmentRequestsSubmitted   RecruitmentRequest[]           @relation("RecruitmentRequester")
   recruitmentFulfillment         RecruitmentRequestFulfillment?
   recruitmentRequestsCancelled   RecruitmentRequest[]           @relation("RecruitmentCancelledByEmployee")
+  recruitmentCandidates          RecruitmentCandidate[]         @relation("RecruitmentCandidateEmployee")
+  recruitmentTestReviews         RecruitmentTestReviewer[]      @relation("RecruitmentTestReviewerEmployee")
+  recruitmentInterviews          RecruitmentInterviewer[]       @relation("RecruitmentInterviewerEmployee")
   movementRequests               MovementRequest[]              @relation("MovementEmployee")
   movementRequestsSubmitted      MovementRequest[]              @relation("MovementRequester")
   movementRequestsCancelled      MovementRequest[]              @relation("MovementCancelledByEmployee")
@@ -1146,6 +1153,7 @@ model Job {
 
   positions           Position[]
   recruitmentRequests RecruitmentRequest[]
+  recruitmentJobTests RecruitmentJobTest[]
 
   competencyRequirements       PositionCompetencyRequirement[]
   competencyAssessments        CompetencyAssessment[]          @relation("CompetencyAssessmentJob")
@@ -1343,6 +1351,12 @@ model RecruitmentRequest {
 
   fulfillments RecruitmentRequestFulfillment[]
 
+  // Applicant pipeline. NONE = not published; the access code is what an external
+  // applicant types on /cbp-recruitment (one code per request).
+  openFor    RecruitmentOpenFor     @default(NONE)
+  accessCode String?
+  candidates RecruitmentCandidate[]
+
   @@index([status])
 }
 
@@ -1479,6 +1493,9 @@ model MovementRequest {
   // workflow (Mutasi/Demosi outcome) — reverse of ContractRenewalCase's
   // linkedMovementRequestId.
   renewalCase ContractRenewalCase? @relation("RenewalLinkedMovement")
+
+  // Set when HR Admin opened this request from an internal applicant.
+  recruitmentCandidate RecruitmentCandidate? @relation("RecruitmentCandidateMovement")
 
   @@index([employeeId])
   @@index([status])
@@ -3058,18 +3075,18 @@ model GaRequest {
 // fields GA Admin uses to decide the next dueDate manually, not a fully
 // automatic interval-rollover engine (documented simplification).
 model MaintenancePlan {
-  id           String     @id @default(cuid())
-  assetId      String
-  asset        FixedAsset @relation(fields: [assetId], references: [id])
-  description  String
-  dueDate      DateTime?
-  intervalDays Int?
-  intervalKm   Int?
+  id                  String     @id @default(cuid())
+  assetId             String
+  asset               FixedAsset @relation(fields: [assetId], references: [id])
+  description         String
+  dueDate             DateTime?
+  intervalDays        Int?
+  intervalKm          Int?
   // Next due odometer, rolled forward when a work order is recorded (intervalKm is the step).
-  dueKm        Int?
+  dueKm               Int?
   // The daily job opens a preventive work order by itself once the plan is due.
-  autoCreateWorkOrder Boolean @default(false)
-  activeFlag   Boolean    @default(true)
+  autoCreateWorkOrder Boolean    @default(false)
+  activeFlag          Boolean    @default(true)
 
   createdByAccountId String
   createdByAccount   Account  @relation("MaintenancePlanCreatedBy", fields: [createdByAccountId], references: [id])
@@ -3246,4 +3263,319 @@ model FileBlob {
   storageKey String   @id
   data       Bytes
   createdAt  DateTime @default(now())
+}
+
+// ---------- Recruitment pipeline: applicants, tests, interviews, offers ----------
+// Applicants sit under a RecruitmentRequest. External applicants use the public
+// page /cbp-recruitment (no login, a per-request access code); internal ones are
+// employees who apply while signed in. All tests, questions, interview aspects and
+// message templates below are edited by HR Admin in the app (Pengaturan Rekrutmen).
+
+// Who may apply for a request. NONE = not published anywhere (the default).
+enum RecruitmentOpenFor {
+  NONE
+  EXTERNAL
+  INTERNAL
+  BOTH
+}
+
+enum RecruitmentCandidateSource {
+  EXTERNAL
+  INTERNAL
+}
+
+enum RecruitmentCandidateStatus {
+  TESTING // still has tests to take
+  AWAITING_REVIEW // all tests taken, an essay waits for a reviewer
+  TEST_PASSED // every required test passed, ready for an interview invitation
+  TEST_FAILED
+  INTERVIEWING // invited / interviewed, waiting for the final decision
+  OFFERING // external: offering letter stage
+  MOVEMENT // internal: Perubahan Posisi (Promosi/Mutasi) stage
+  HIRED // employee created (external) or movement implemented (internal)
+  REJECTED
+  OFFER_DECLINED
+  NOT_SELECTED // the request got filled by someone else
+}
+
+enum RecruitmentTestForm {
+  SCALE // statements answered 1-5, scored automatically
+  MULTIPLE_CHOICE // one correct option, scored automatically
+  ESSAY // read and judged by a reviewer HR Admin picks
+}
+
+enum RecruitmentCandidateTestStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+}
+
+enum RecruitmentInterviewDecision {
+  ACCEPTED
+  CONSIDERED
+  REJECTED
+}
+
+enum RecruitmentInterviewMode {
+  OFFLINE
+  ONLINE
+}
+
+enum RecruitmentOfferResponse {
+  ACCEPTED
+  DECLINED
+}
+
+// One row per kind of test (Cultural Fit, Ketelitian, Studi Kasus ...). The gate
+// test (Cultural Fit) is taken first by every applicant; other tests are attached
+// to a job title through RecruitmentJobTest.
+model RecruitmentTestType {
+  id               String              @id @default(cuid())
+  name             String              @unique
+  description      String?
+  form             RecruitmentTestForm
+  passScore        Int                 @default(70) // percent, ignored for ESSAY
+  timeLimitMinutes Int                 @default(15)
+  isGate           Boolean             @default(false)
+  sortOrder        Int                 @default(0)
+  active           Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  questions      RecruitmentTestQuestion[]
+  jobTests       RecruitmentJobTest[]
+  candidateTests RecruitmentCandidateTest[]
+}
+
+model RecruitmentTestQuestion {
+  id            String              @id @default(cuid())
+  testTypeId    String
+  testType      RecruitmentTestType @relation(fields: [testTypeId], references: [id])
+  sortOrder     Int                 @default(0)
+  prompt        String
+  // MULTIPLE_CHOICE only: the options and which one is right.
+  options       String[]
+  correctIndex  Int?
+  // SCALE only: a statement worded the other way round is scored 6 - answer.
+  reverseScored Boolean             @default(false)
+  active        Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+
+  answers RecruitmentCandidateAnswer[]
+
+  @@index([testTypeId, active])
+}
+
+// Which extra tests a job title needs (Cultural Fit is always required on top).
+model RecruitmentJobTest {
+  jobId      String
+  job        Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  testTypeId String
+  testType   RecruitmentTestType @relation(fields: [testTypeId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, testTypeId])
+}
+
+// What each interviewer scores 1-5; HR Admin edits this list.
+model RecruitmentInterviewAspect {
+  id        String  @id @default(cuid())
+  label     String
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  scores RecruitmentInterviewScore[]
+}
+
+// Single settings row (id "default").
+model RecruitmentSetting {
+  id                      String   @id @default("default")
+  defaultInterviewers     Int      @default(1)
+  maxInterviewers         Int      @default(4)
+  retakeDays              Int      @default(30)
+  retentionDays           Int      @default(30)
+  invitationEmailTemplate String   @default("Yth. {nama}, kami mengundang Anda interview untuk posisi {posisi} pada {tanggal} pukul {jam} di {lokasi}. Mohon konfirmasi kehadiran dengan membalas pesan ini.")
+  invitationWaTemplate    String   @default("Halo {nama}, ini HR PT CBP. Interview untuk posisi {posisi}: {tanggal}, pukul {jam}, di {lokasi}. Mohon balas pesan ini untuk konfirmasi.")
+  updatedAt               DateTime @updatedAt
+}
+
+// A CV or an offering letter. Bytes live in FileBlob under storageKey, like every
+// other upload; downloads go only through /api/recruitment/files/[id] (HR Admin,
+// or the interviewer/reviewer assigned to that applicant) or the offer link.
+model RecruitmentFile {
+  id         String   @id @default(cuid())
+  storageKey String   @unique
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+
+  candidatesWithCv RecruitmentCandidate[] @relation("RecruitmentCandidateCv")
+  offers           RecruitmentOffer[]
+}
+
+model RecruitmentCandidate {
+  id                 String                        @id @default(cuid())
+  requestId          String
+  request            RecruitmentRequest            @relation(fields: [requestId], references: [id])
+  source             RecruitmentCandidateSource
+  // Internal applicants: the employee. External: set once they are hired.
+  employeeId         String?
+  employee           Employee?                     @relation("RecruitmentCandidateEmployee", fields: [employeeId], references: [id])
+  fullName           String
+  email              String // always lowercase
+  mobileNumber       String?
+  cvFileId           String?
+  cvFile             RecruitmentFile?              @relation("RecruitmentCandidateCv", fields: [cvFileId], references: [id])
+  status             RecruitmentCandidateStatus    @default(TESTING)
+  statusChangedAt    DateTime                      @default(now())
+  // SHA-256 of the private test link (external applicants). Internal applicants
+  // take tests while signed in, so they have none.
+  tokenHash          String?                       @unique
+  interviewDecision  RecruitmentInterviewDecision?
+  decisionNote       String?
+  decidedAt          DateTime?
+  decidedByAccountId String?
+  // Set when the applicant leaves the pipeline without being hired. Drives the
+  // re-apply waiting time and the clean-up of old data.
+  closedAt           DateTime?
+  closeReason        String?
+  movementRequestId  String?                       @unique
+  movementRequest    MovementRequest?              @relation("RecruitmentCandidateMovement", fields: [movementRequestId], references: [id])
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  tests     RecruitmentCandidateTest[]
+  interview RecruitmentInterview?
+  offer     RecruitmentOffer?
+
+  @@index([requestId, status])
+  @@index([email])
+  @@index([status, closedAt])
+  @@index([employeeId])
+}
+
+model RecruitmentCandidateTest {
+  id                   String                         @id @default(cuid())
+  candidateId          String
+  candidate            RecruitmentCandidate           @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  testTypeId           String
+  testType             RecruitmentTestType            @relation(fields: [testTypeId], references: [id])
+  sortOrder            Int                            @default(0)
+  status               RecruitmentCandidateTestStatus @default(NOT_STARTED)
+  startedAt            DateTime?
+  deadlineAt           DateTime?
+  submittedAt          DateTime?
+  autoSubmitted        Boolean                        @default(false)
+  scorePercent         Float?
+  // null = not graded yet (essay waiting for a reviewer)
+  passed               Boolean?
+  passScoreSnapshot    Int?
+  reviewNote           String?
+  reviewedAt           DateTime?
+  reviewedByEmployeeId String?
+
+  answers   RecruitmentCandidateAnswer[]
+  reviewers RecruitmentTestReviewer[]
+
+  @@unique([candidateId, testTypeId])
+  @@index([status, deadlineAt])
+}
+
+model RecruitmentCandidateAnswer {
+  id              String                   @id @default(cuid())
+  candidateTestId String
+  candidateTest   RecruitmentCandidateTest @relation(fields: [candidateTestId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        RecruitmentTestQuestion  @relation(fields: [questionId], references: [id])
+  answerIndex     Int? // option index (multiple choice) or 1-5 (scale)
+  answerText      String? // essay
+  updatedAt       DateTime                 @updatedAt
+
+  @@unique([candidateTestId, questionId])
+}
+
+// Who HR Admin let read (and judge) one essay test.
+model RecruitmentTestReviewer {
+  id                 String                   @id @default(cuid())
+  candidateTestId    String
+  candidateTest      RecruitmentCandidateTest @relation(fields: [candidateTestId], references: [id], onDelete: Cascade)
+  employeeId         String
+  employee           Employee                 @relation("RecruitmentTestReviewerEmployee", fields: [employeeId], references: [id])
+  grantedByAccountId String
+  createdAt          DateTime                 @default(now())
+
+  @@unique([candidateTestId, employeeId])
+  @@index([employeeId])
+}
+
+model RecruitmentInterview {
+  id                 String                   @id @default(cuid())
+  candidateId        String                   @unique
+  candidate          RecruitmentCandidate     @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  scheduledAt        DateTime
+  mode               RecruitmentInterviewMode
+  location           String // room, address or meeting link
+  invitationSentAt   DateTime?
+  // The administrative part HR Admin fills in.
+  hrAttendanceNote   String?
+  hrDocumentsNote    String?
+  hrProcessNote      String?
+  createdByAccountId String
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  interviewers RecruitmentInterviewer[]
+}
+
+model RecruitmentInterviewer {
+  id             String                        @id @default(cuid())
+  interviewId    String
+  interview      RecruitmentInterview          @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee                      @relation("RecruitmentInterviewerEmployee", fields: [employeeId], references: [id])
+  recommendation RecruitmentInterviewDecision?
+  note           String?
+  submittedAt    DateTime?
+  createdAt      DateTime                      @default(now())
+
+  scores RecruitmentInterviewScore[]
+
+  @@unique([interviewId, employeeId])
+  @@index([employeeId, submittedAt])
+}
+
+model RecruitmentInterviewScore {
+  id            String                     @id @default(cuid())
+  interviewerId String
+  interviewer   RecruitmentInterviewer     @relation(fields: [interviewerId], references: [id], onDelete: Cascade)
+  aspectId      String
+  aspect        RecruitmentInterviewAspect @relation(fields: [aspectId], references: [id])
+  aspectLabel   String // label when scored, so a later rename does not rewrite history
+  score         Int // 1-5
+
+  @@unique([interviewerId, aspectId])
+}
+
+// Offering letter for an external applicant: HR Admin uploads the PDF and signs
+// for the company on screen, the applicant opens a one-time link, signs on screen
+// and accepts or declines.
+model RecruitmentOffer {
+  id                       String                    @id @default(cuid())
+  candidateId              String                    @unique
+  candidate                RecruitmentCandidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileId                   String
+  file                     RecruitmentFile           @relation(fields: [fileId], references: [id])
+  companySignature         String // PNG data URL drawn on screen
+  companySignedAt          DateTime
+  companySignedByAccountId String
+  tokenHash                String?                   @unique
+  tokenExpiresAt           DateTime?
+  sentAt                   DateTime?
+  response                 RecruitmentOfferResponse?
+  respondedAt              DateTime?
+  candidateSignature       String?
+  // true when HR Admin recorded the answer (e.g. given by phone) instead of the link
+  recordedByHr             Boolean                   @default(false)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 }

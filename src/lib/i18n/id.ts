@@ -38,6 +38,7 @@ export const strings = {
     HR_ADMIN: "Admin SDM",
     TRAINING_ADMIN: "Admin Pelatihan & Kompetensi",
     GA_ADMIN: "Admin GA & Aset",
+    RECRUITMENT_ADMIN: "Admin Rekrutmen",
     EMPLOYEE: "Karyawan",
     MANAGER: "Atasan/Manajer",
     HR_MANAGER: "HR Manager",

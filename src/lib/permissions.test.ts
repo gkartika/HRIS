@@ -5,6 +5,9 @@ import {
   isHrAdmin,
   isTrainingAdmin,
   isGaAdmin,
+  isRecruitmentAdmin,
+  canManageRecruitment,
+  canCreateEmployeeFromRequest,
   isHrManager,
   canApproveRecruitmentRequest,
   canApproveRecruitmentRequestAsDeptHead,
@@ -676,5 +679,29 @@ describe("Phase 4B GA Operations permissions — GA Admin only, never HR Admin",
     expect(canCancelGaRequest(mockSession({ employeeId: "emp-1" }), "emp-1")).toBe(true);
     expect(canCancelGaRequest(mockSession({ employeeId: "emp-2" }), "emp-1")).toBe(false);
     expect(canCancelGaRequest(mockSession({ roles: ["HR_ADMIN"] }), "emp-1")).toBe(false);
+  });
+});
+
+describe("Admin Rekrutmen", () => {
+  it("is its own role", () => {
+    expect(isRecruitmentAdmin(mockSession({ roles: ["RECRUITMENT_ADMIN"] }))).toBe(true);
+    expect(isRecruitmentAdmin(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
+  });
+
+  it("runs the applicant pipeline, as Admin SDM does too", () => {
+    expect(canManageRecruitment(mockSession({ roles: ["RECRUITMENT_ADMIN"] }))).toBe(true);
+    expect(canManageRecruitment(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    expect(canCreateEmployeeFromRequest(mockSession({ roles: ["RECRUITMENT_ADMIN"] }))).toBe(true);
+  });
+
+  it("is not granted to other admins or plain employees", () => {
+    for (const role of ["TRAINING_ADMIN", "GA_ADMIN", "EMPLOYEE"]) {
+      expect(canManageRecruitment(mockSession({ roles: [role] }))).toBe(false);
+      expect(canCreateEmployeeFromRequest(mockSession({ roles: [role] }))).toBe(false);
+    }
+  });
+
+  it("does not make someone Admin SDM", () => {
+    expect(isHrAdmin(mockSession({ roles: ["RECRUITMENT_ADMIN"] }))).toBe(false);
   });
 });

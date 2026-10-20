@@ -49,6 +49,8 @@ export async function getPendingApprovals(session: Session) {
     pendingAbsenceSecondApprover,
     pendingCompetencyAssessments,
     directReportIds,
+    pendingRecruitmentReviews,
+    pendingRecruitmentInterviews,
   ] = await Promise.all([
     getActiveHrManagerPositions(session.user.employeeId),
     getDeptHeadDepartmentIds(session.user.employeeId),
@@ -100,6 +102,25 @@ export async function getPendingApprovals(session: Session) {
         })
       : Promise.resolve([]),
     getDirectReportEmployeeIds(session.user.employeeId),
+    // Rekrutmen: an essay HR Admin asked me to judge, or an interview I must score. Both start at
+    // the table that holds the names, so each is one query plus one parallel step.
+    session.user.employeeId
+      ? prisma.recruitmentCandidateTest.findMany({
+          where: { status: "SUBMITTED", passed: null, reviewers: { some: { employeeId: session.user.employeeId } } },
+          select: { id: true, testType: { select: { name: true } }, candidate: { select: { fullName: true } } },
+          orderBy: { submittedAt: "asc" },
+        })
+      : Promise.resolve([]),
+    session.user.employeeId
+      ? prisma.recruitmentInterview.findMany({
+          where: {
+            interviewers: { some: { employeeId: session.user.employeeId, submittedAt: null } },
+            candidate: { status: "INTERVIEWING", interviewDecision: null },
+          },
+          select: { id: true, scheduledAt: true, candidate: { select: { fullName: true } } },
+          orderBy: { scheduledAt: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   const isHrManager = hrManagerPositions.length > 0;
@@ -246,6 +267,8 @@ export async function getPendingApprovals(session: Session) {
     pendingAbsenceSecondApprover,
     pendingCompetencyAssessments,
     pendingEffectivenessTasks,
+    pendingRecruitmentReviews,
+    pendingRecruitmentInterviews,
   };
 }
 
@@ -269,6 +292,8 @@ export function countPendingApprovals(p: PendingApprovals): number {
     p.pendingAbsenceFirstApprover.length +
     p.pendingAbsenceSecondApprover.length +
     p.pendingCompetencyAssessments.length +
-    p.pendingEffectivenessTasks.length
+    p.pendingEffectivenessTasks.length +
+    p.pendingRecruitmentReviews.length +
+    p.pendingRecruitmentInterviews.length
   );
 }

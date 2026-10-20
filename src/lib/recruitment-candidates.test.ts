@@ -1,0 +1,318 @@
+import { describe, expect, it } from "vitest";
+import {
+  accessCodeMatches,
+  averageScore,
+  candidateNextStep,
+  canStartTest,
+  countDecisions,
+  deriveStatusFromTests,
+  fillTemplate,
+  formatClock,
+  generateAccessCode,
+  isExpired,
+  isPassing,
+  isValidEmail,
+  isValidMobile,
+  isValidSignatureDataUrl,
+  normalizeAccessCode,
+  normalizeEmail,
+  normalizeMobile,
+  parseBulkQuestions,
+  planTestsForJob,
+  reapplyBlock,
+  scoreTest,
+  secondsLeft,
+  validateCvFile,
+  validateOfferFile,
+  whatsappLink,
+  type CandidateProgress,
+} from "./recruitment-candidates";
+
+const NOW = new Date("2026-10-19T03:00:00Z");
+const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
+
+describe("applicant contact details", () => {
+  it("lowercases and trims emails and checks their shape", () => {
+    expect(normalizeEmail("  Rina.M@Mail.COM ")).toBe("rina.m@mail.com");
+    expect(isValidEmail("rina@mail.com")).toBe(true);
+    expect(isValidEmail("rina@mail")).toBe(false);
+    expect(isValidEmail("rina mail@x.com")).toBe(false);
+  });
+
+  it("turns Indonesian numbers into the international form", () => {
+    expect(normalizeMobile("0812-3456-7890")).toBe("6281234567890");
+    expect(normalizeMobile("+62 812 3456 7890")).toBe("6281234567890");
+    expect(normalizeMobile("81234567890")).toBe("6281234567890");
+    expect(isValidMobile("08123")).toBe(false);
+    expect(isValidMobile("081234567890")).toBe(true);
+  });
+
+  it("builds a WhatsApp link with the message encoded", () => {
+    expect(whatsappLink("0812 3456 7890", "Halo & selamat")).toBe("https://wa.me/6281234567890?text=Halo%20%26%20selamat");
+  });
+});
+
+describe("access codes", () => {
+  it("generates codes in the CBP-XXXX-XXXX shape without look-alike characters", () => {
+    for (let i = 0; i < 50; i++) {
+      const code = generateAccessCode();
+      expect(code).toMatch(/^CBP-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
+    }
+    expect(generateAccessCode()).not.toBe(generateAccessCode());
+  });
+
+  it("accepts the code in any case with stray spaces, and refuses anything else", () => {
+    expect(normalizeAccessCode(" cbp-ab12 -cd34 ")).toBe("CBP-AB12-CD34");
+    expect(accessCodeMatches("CBP-AB12-CD34", " cbp-ab12-cd34 ")).toBe(true);
+    expect(accessCodeMatches("CBP-AB12-CD34", "CBP-AB12-CD35")).toBe(false);
+    expect(accessCodeMatches("CBP-AB12-CD34", "")).toBe(false);
+    expect(accessCodeMatches(null, "CBP-AB12-CD34")).toBe(false);
+  });
+});
+
+describe("re-applying", () => {
+  it("blocks a second live application for the same vacancy only", () => {
+    const prior = [{ requestId: "r1", status: "TESTING" as const, closedAt: null }];
+    expect(reapplyBlock(prior, "r1", NOW, 30).blocked).toBe(true);
+    expect(reapplyBlock(prior, "r2", NOW, 30).blocked).toBe(false);
+  });
+
+  it("makes someone wait after failing the tests or being rejected, on any vacancy", () => {
+    const failed = [{ requestId: "r1", status: "TEST_FAILED" as const, closedAt: daysAgo(10) }];
+    const res = reapplyBlock(failed, "r2", NOW, 30);
+    expect(res.blocked).toBe(true);
+    expect(reapplyBlock(failed, "r2", NOW, 5).blocked).toBe(false);
+    const rejected = [{ requestId: "r1", status: "REJECTED" as const, closedAt: daysAgo(31) }];
+    expect(reapplyBlock(rejected, "r1", NOW, 30).blocked).toBe(false);
+  });
+
+  it("does not make anyone wait after declining an offer or losing out to someone else", () => {
+    const prior = [
+      { requestId: "r1", status: "OFFER_DECLINED" as const, closedAt: daysAgo(1) },
+      { requestId: "r1", status: "NOT_SELECTED" as const, closedAt: daysAgo(1) },
+    ];
+    expect(reapplyBlock(prior, "r1", NOW, 30).blocked).toBe(false);
+  });
+
+  it("uses the longest remaining wait when there are several", () => {
+    const prior = [
+      { requestId: "r1", status: "TEST_FAILED" as const, closedAt: daysAgo(25) },
+      { requestId: "r2", status: "REJECTED" as const, closedAt: daysAgo(2) },
+    ];
+    const res = reapplyBlock(prior, "r3", NOW, 30);
+    expect(res.blocked).toBe(true);
+    if (res.blocked) expect(res.message).toContain("November 2026");
+  });
+});
+
+describe("scoring", () => {
+  const mc = [
+    { id: "a", correctIndex: 1, reverseScored: false },
+    { id: "b", correctIndex: 0, reverseScored: false },
+    { id: "c", correctIndex: 2, reverseScored: false },
+    { id: "d", correctIndex: 3, reverseScored: false },
+  ];
+
+  it("scores multiple choice as the share of correct answers", () => {
+    const answers = new Map<string, number | null>([["a", 1], ["b", 0], ["c", 0], ["d", null]]);
+    expect(scoreTest("MULTIPLE_CHOICE", mc, answers)).toBe(50);
+    expect(scoreTest("MULTIPLE_CHOICE", mc, new Map())).toBe(0);
+  });
+
+  it("scores scale answers from 0 (all 1s) to 100 (all 5s)", () => {
+    const qs = [
+      { id: "a", correctIndex: null, reverseScored: false },
+      { id: "b", correctIndex: null, reverseScored: false },
+    ];
+    expect(scoreTest("SCALE", qs, new Map([["a", 5], ["b", 5]]))).toBe(100);
+    expect(scoreTest("SCALE", qs, new Map([["a", 1], ["b", 1]]))).toBe(0);
+    expect(scoreTest("SCALE", qs, new Map([["a", 3], ["b", 5]]))).toBe(75);
+  });
+
+  it("flips reverse-worded statements and counts blanks as the lowest answer", () => {
+    const qs = [
+      { id: "a", correctIndex: null, reverseScored: false },
+      { id: "b", correctIndex: null, reverseScored: true },
+    ];
+    expect(scoreTest("SCALE", qs, new Map([["a", 5], ["b", 1]]))).toBe(100);
+    expect(scoreTest("SCALE", qs, new Map([["a", 5]]))).toBe(50);
+  });
+
+  it("returns 0 for an essay or an empty bank", () => {
+    expect(scoreTest("ESSAY", mc, new Map())).toBe(0);
+    expect(scoreTest("SCALE", [], new Map())).toBe(0);
+  });
+
+  it("passes at or above the pass mark", () => {
+    expect(isPassing(70, 70)).toBe(true);
+    expect(isPassing(69.9, 70)).toBe(false);
+  });
+});
+
+describe("overall test status", () => {
+  const done = (passed: boolean | null) => ({ status: "SUBMITTED" as const, passed });
+  const waiting = { status: "NOT_STARTED" as const, passed: null };
+
+  it("fails as soon as any test failed, even if others are unfinished", () => {
+    expect(deriveStatusFromTests([done(false), waiting])).toBe("TEST_FAILED");
+  });
+  it("stays TESTING while a test is not submitted", () => {
+    expect(deriveStatusFromTests([done(true), { status: "IN_PROGRESS", passed: null }])).toBe("TESTING");
+  });
+  it("waits for review when only an essay is ungraded", () => {
+    expect(deriveStatusFromTests([done(true), done(null)])).toBe("AWAITING_REVIEW");
+  });
+  it("passes when everything is submitted and passed", () => {
+    expect(deriveStatusFromTests([done(true), done(true)])).toBe("TEST_PASSED");
+  });
+});
+
+describe("planning and ordering tests", () => {
+  const types = [
+    { id: "kt", isGate: false, sortOrder: 2, active: true },
+    { id: "cf", isGate: true, sortOrder: 1, active: true },
+    { id: "sk", isGate: false, sortOrder: 3, active: true },
+    { id: "old", isGate: false, sortOrder: 4, active: false },
+  ];
+  it("puts the gate first and keeps only the job's tests", () => {
+    expect(planTestsForJob(types, ["sk", "kt"]).map((t) => t.id)).toEqual(["cf", "kt", "sk"]);
+    expect(planTestsForJob(types, []).map((t) => t.id)).toEqual(["cf"]);
+    expect(planTestsForJob(types, ["old"]).map((t) => t.id)).toEqual(["cf"]);
+  });
+  it("allows a test only after the earlier ones are submitted and not failed", () => {
+    const t = [
+      { status: "SUBMITTED" as const, passed: true },
+      { status: "NOT_STARTED" as const, passed: null },
+      { status: "NOT_STARTED" as const, passed: null },
+    ];
+    expect(canStartTest(t, 1)).toBe(true);
+    expect(canStartTest(t, 2)).toBe(false);
+    expect(canStartTest(t, 0)).toBe(false);
+    expect(canStartTest([{ status: "SUBMITTED", passed: false }, t[1]], 1)).toBe(false);
+  });
+});
+
+describe("clock", () => {
+  it("never goes below zero and formats mm:ss", () => {
+    const deadline = new Date("2026-10-19T03:10:00Z");
+    expect(secondsLeft(deadline, NOW)).toBe(600);
+    expect(secondsLeft(deadline, new Date("2026-10-19T03:11:00Z"))).toBe(0);
+    expect(formatClock(605)).toBe("10:05");
+  });
+  it("gives a few seconds of grace before a test counts as expired", () => {
+    const deadline = new Date("2026-10-19T03:00:00Z");
+    expect(isExpired(deadline, new Date("2026-10-19T03:00:03Z"))).toBe(false);
+    expect(isExpired(deadline, new Date("2026-10-19T03:00:06Z"))).toBe(true);
+    expect(isExpired(null, NOW)).toBe(false);
+  });
+});
+
+describe("message templates", () => {
+  it("fills the known placeholders and leaves unknown text alone", () => {
+    const out = fillTemplate("Yth. {nama}, {POSISI} pada {tanggal} {jam} di {lokasi} {lain}", {
+      nama: "Rina",
+      posisi: "Operator",
+      tanggal: "Senin, 26 Oktober 2026",
+      jam: "09.00",
+      lokasi: "Ruang HR",
+    });
+    expect(out).toBe("Yth. Rina, Operator pada Senin, 26 Oktober 2026 09.00 di Ruang HR {lain}");
+  });
+});
+
+describe("what HR Admin does next", () => {
+  const base: CandidateProgress = {
+    status: "TESTING",
+    hasReviewer: false,
+    hasInterview: false,
+    interviewersTotal: 0,
+    interviewersSubmitted: 0,
+    hasOffer: false,
+    offerSent: false,
+    offerAccepted: false,
+    hasMovement: false,
+    movementOpen: false,
+  };
+  it("asks for a reviewer only while an essay has none", () => {
+    expect(candidateNextStep({ ...base, status: "AWAITING_REVIEW" }).needsAction).toBe(true);
+    expect(candidateNextStep({ ...base, status: "AWAITING_REVIEW", hasReviewer: true }).needsAction).toBe(false);
+  });
+  it("walks through the interview", () => {
+    expect(candidateNextStep({ ...base, status: "TEST_PASSED" }).label).toBe("Undang interview");
+    expect(candidateNextStep({ ...base, status: "INTERVIEWING" }).label).toBe("Jadwalkan interview");
+    const mid = candidateNextStep({ ...base, status: "INTERVIEWING", hasInterview: true, interviewersTotal: 3, interviewersSubmitted: 2 });
+    expect(mid).toEqual({ label: "Menunggu penilaian (2 dari 3)", needsAction: false });
+    expect(candidateNextStep({ ...base, status: "INTERVIEWING", hasInterview: true, interviewersTotal: 3, interviewersSubmitted: 3 }).label).toBe("Tetapkan hasil akhir");
+  });
+  it("walks through the offer", () => {
+    expect(candidateNextStep({ ...base, status: "OFFERING" }).label).toBe("Unggah offering letter");
+    expect(candidateNextStep({ ...base, status: "OFFERING", hasOffer: true }).label).toBe("Kirim offering ke kandidat");
+    expect(candidateNextStep({ ...base, status: "OFFERING", hasOffer: true, offerSent: true }).needsAction).toBe(false);
+    expect(candidateNextStep({ ...base, status: "OFFERING", hasOffer: true, offerSent: true, offerAccepted: true }).label).toBe("Buat karyawan dari kandidat");
+  });
+  it("walks through an internal move", () => {
+    expect(candidateNextStep({ ...base, status: "MOVEMENT" }).label).toBe("Buat Perubahan Posisi");
+    expect(candidateNextStep({ ...base, status: "MOVEMENT", hasMovement: true, movementOpen: true }).needsAction).toBe(false);
+    expect(candidateNextStep({ ...base, status: "MOVEMENT", hasMovement: true, movementOpen: false }).needsAction).toBe(true);
+  });
+  it("needs nothing once finished", () => {
+    expect(candidateNextStep({ ...base, status: "REJECTED" }).needsAction).toBe(false);
+  });
+});
+
+describe("interview results", () => {
+  it("averages and counts", () => {
+    expect(averageScore([5, 4, 4, 4, 4])).toBe(4.2);
+    expect(averageScore([])).toBeNull();
+    expect(countDecisions(["ACCEPTED", "ACCEPTED", "CONSIDERED", null])).toEqual({ ACCEPTED: 2, CONSIDERED: 1, REJECTED: 0 });
+  });
+});
+
+describe("uploads", () => {
+  it("accepts a normal CV and refuses wrong or oversized ones", () => {
+    expect(validateCvFile({ name: "cv.pdf", size: 1000, type: "application/pdf" })).toBeNull();
+    expect(validateCvFile({ name: "foto.JPG", size: 1000, type: "image/jpeg" })).toBeNull();
+    expect(validateCvFile({ name: "cv.exe", size: 1000, type: "application/octet-stream" })).not.toBeNull();
+    expect(validateCvFile({ name: "cv.pdf", size: 5 * 1024 * 1024, type: "application/pdf" })).not.toBeNull();
+    expect(validateCvFile({ name: "cv.pdf", size: 0, type: "application/pdf" })).not.toBeNull();
+    expect(validateCvFile({ name: "cv.pdf", size: 1000, type: "image/png" })).not.toBeNull();
+  });
+  it("accepts only a PDF for the offering letter", () => {
+    expect(validateOfferFile({ name: "offer.pdf", size: 1000, type: "application/pdf" })).toBeNull();
+    expect(validateOfferFile({ name: "offer.docx", size: 1000, type: "application/pdf" })).not.toBeNull();
+  });
+  it("accepts a drawn signature but not arbitrary text", () => {
+    expect(isValidSignatureDataUrl(`data:image/png;base64,${"A".repeat(500)}`)).toBe(true);
+    expect(isValidSignatureDataUrl("data:image/png;base64,AAAA")).toBe(false);
+    expect(isValidSignatureDataUrl("<script>alert(1)</script>")).toBe(false);
+  });
+});
+
+describe("pasting questions in bulk", () => {
+  it("takes one scale or essay question per non-empty line", () => {
+    const res = parseBulkQuestions("SCALE", "Saya suka bekerja dalam tim.\n\n  Saya cepat belajar.  \n");
+    expect(res.errors).toEqual([]);
+    expect(res.questions.map((q) => q.prompt)).toEqual(["Saya suka bekerja dalam tim.", "Saya cepat belajar."]);
+  });
+
+  it("reads multiple choice as question | options | correct number", () => {
+    const res = parseBulkQuestions("MULTIPLE_CHOICE", "Berapa 2 + 3? | 4; 5; 6 | 2\nIbu kota Indonesia? | Bandung; Jakarta | 2");
+    expect(res.errors).toEqual([]);
+    expect(res.questions[0]).toEqual({ prompt: "Berapa 2 + 3?", options: ["4", "5", "6"], correctIndex: 1 });
+    expect(res.questions[1].correctIndex).toBe(1);
+  });
+
+  it("names the line of every mistake and keeps the good ones", () => {
+    const res = parseBulkQuestions("MULTIPLE_CHOICE", "Tanpa pemisah\nSoal | cuma satu | 1\nSoal | a; b | 3\nBaik | a; b | 1");
+    expect(res.errors).toHaveLength(3);
+    expect(res.errors[0]).toContain("Baris 1");
+    expect(res.errors[2]).toContain("Baris 3");
+    expect(res.questions).toHaveLength(1);
+  });
+
+  it("refuses a huge paste", () => {
+    const res = parseBulkQuestions("SCALE", Array.from({ length: 300 }, (_, i) => `Soal ${i}`).join("\n"));
+    expect(res.errors).toHaveLength(1);
+    expect(res.questions).toHaveLength(0);
+  });
+});

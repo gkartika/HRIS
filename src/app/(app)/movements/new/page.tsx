@@ -1,6 +1,6 @@
 import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin } from "@/lib/permissions";
+import { canManageRecruitment, isHrAdmin } from "@/lib/permissions";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
@@ -9,9 +9,9 @@ import { SubmitMovementForm } from "./submit-movement-form";
 export default async function NewMovementRequestPage({
   searchParams,
 }: {
-  searchParams: Promise<{ employeeId?: string }>;
+  searchParams: Promise<{ employeeId?: string; candidateId?: string }>;
 }) {
-  const { employeeId: preselectedEmployeeId } = await searchParams;
+  const { employeeId: preselectedEmployeeId, candidateId } = await searchParams;
   const session = await requireSession();
 
   // Single-page flow: "which employee" is just the first field of this
@@ -21,13 +21,41 @@ export default async function NewMovementRequestPage({
   // in.
   const isHrAdminUser = isHrAdmin(session);
   const level3DepartmentIds = isHrAdminUser ? [] : await getLevel3DepartmentIds(session.user.employeeId);
-  if (!isHrAdminUser && level3DepartmentIds.length === 0) {
+
+  // Opened from an internal applicant's page by Admin SDM or Admin Rekrutmen. Admin Rekrutmen
+  // gets this form for that one applicant only, nobody else's record.
+  let candidateRow: {
+    id: string;
+    employeeId: string;
+    label: string;
+    requesterEmployeeId: string;
+    jobId: string | null;
+  } | null = null;
+  if (candidateId && canManageRecruitment(session)) {
+    const c = await prisma.recruitmentCandidate.findUnique({
+      where: { id: candidateId },
+      select: { id: true, source: true, employeeId: true, status: true, fullName: true, request: { select: { requestNumber: true, requesterEmployeeId: true, jobId: true, job: { select: { jobTitle: true } } } } },
+    });
+    if (c && c.source === "INTERNAL" && c.status === "MOVEMENT" && c.employeeId) {
+      candidateRow = {
+        id: c.id,
+        employeeId: c.employeeId,
+        requesterEmployeeId: c.request.requesterEmployeeId,
+        jobId: c.request.jobId,
+        label: `${c.fullName}, ${c.request.job?.jobTitle ?? "lowongan"} (${c.request.requestNumber})`,
+      };
+    }
+  }
+  const viaCandidateOnly = !isHrAdminUser && level3DepartmentIds.length === 0 && !!candidateRow;
+  if (!isHrAdminUser && level3DepartmentIds.length === 0 && !viaCandidateOnly) {
     return <AccessDenied />;
   }
 
   const [eligibleEmployees, positions, requesterCandidates] = await Promise.all([
     prisma.employee.findMany({
-      where: isHrAdminUser
+      where: viaCandidateOnly
+        ? { id: candidateRow!.employeeId }
+        : isHrAdminUser
         ? {}
         : {
             currentPosition: {
@@ -46,7 +74,7 @@ export default async function NewMovementRequestPage({
       orderBy: { fullLegalName: "asc" },
     }),
     prisma.position.findMany({
-      where: { archived: false },
+      where: viaCandidateOnly ? { archived: false, positionStatus: "VACANT", jobId: candidateRow!.jobId ?? "__none__" } : { archived: false },
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),
@@ -60,10 +88,12 @@ export default async function NewMovementRequestPage({
   // Arriving from a specific Employee's own detail page pre-selects them —
   // if they're not actually eligible (stale link, access changed), just
   // fall back to no pre-selection instead of a hard 404.
-  const defaultEmployeeId =
-    preselectedEmployeeId && eligibleEmployees.some((e) => e.id === preselectedEmployeeId)
-      ? preselectedEmployeeId
-      : "";
+  const wantedEmployeeId = candidateRow?.employeeId ?? preselectedEmployeeId;
+  const defaultEmployeeId = wantedEmployeeId && eligibleEmployees.some((e) => e.id === wantedEmployeeId) ? wantedEmployeeId : "";
+  const candidate =
+    candidateRow && defaultEmployeeId === candidateRow.employeeId
+      ? { id: candidateRow.id, label: candidateRow.label, requesterEmployeeId: candidateRow.requesterEmployeeId }
+      : null;
 
   return (
     <div>
@@ -76,6 +106,7 @@ export default async function NewMovementRequestPage({
           requesterCandidates={requesterCandidates}
           currentEmployeeId={session.user.employeeId}
           isHrAdmin={isHrAdminUser}
+          candidate={candidate}
         />
       </div>
     </div>

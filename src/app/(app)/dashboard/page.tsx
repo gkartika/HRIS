@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin, isTrainingAdmin, isGaAdmin, canListEmployees } from "@/lib/permissions";
+import { isHrAdmin, isTrainingAdmin, isGaAdmin, isRecruitmentAdmin, canListEmployees } from "@/lib/permissions";
 import { scheduledDayCountsForRequests } from "@/lib/leave-days";
 import { isManagerOfAnyPosition } from "@/lib/manager-scope";
 import { getActiveDeptHeadPositions, getDeptHeadDepartmentIds } from "@/lib/dept-head";
@@ -11,6 +11,8 @@ import { t } from "@/lib/i18n/id";
 import { AttendanceCheckSection } from "./attendance-check-section";
 import { SimpleKaryawanHome } from "./simple-karyawan-home";
 import { ApprovalCategory } from "./approval-category";
+import { InternalJobsCard } from "./internal-jobs-card";
+import { RecruitmentAdminHome } from "./recruitment-admin-home";
 import { FirstApproverDecisionButtons, SecondApproverDecisionButtons, HrAdminDecisionButtons } from "../absences/[id]/decision-forms";
 import {
   MovementDecisionButtons,
@@ -163,7 +165,9 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
             pending.pendingMovements.length +
             pending.pendingDeptHeadMovements.length +
             pending.pendingRequests.length +
-            pending.pendingDeptHeadRequests.length
+            pending.pendingDeptHeadRequests.length +
+            pending.pendingRecruitmentReviews.length +
+            pending.pendingRecruitmentInterviews.length
           }
         >
           {pending.pendingMovements.map((m) => (
@@ -184,6 +188,30 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
           {pending.pendingDeptHeadRequests.map((r) => (
             <ApprovalRow key={r.id} title={`Rekrutmen — ${r.job?.jobTitle ?? r.department.unitName}`} subtitle={`${r.requestNumber} (Kepala Departemen)`} href={`/recruitment/${r.id}`}>
               <RecruitmentDeptHeadDecisionButtons requestId={r.id} positions={deptHeadPositions} />
+            </ApprovalRow>
+          ))}
+          {pending.pendingRecruitmentReviews.map((r) => (
+            <ApprovalRow
+              key={r.id}
+              title={`Nilai ${r.testType.name} — ${r.candidate.fullName}`}
+              subtitle="Jawaban tes menunggu penilaian Anda"
+              href={`/recruitment/review/${r.id}`}
+            >
+              <Link href={`/recruitment/review/${r.id}`} className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">
+                Baca dan nilai
+              </Link>
+            </ApprovalRow>
+          ))}
+          {pending.pendingRecruitmentInterviews.map((i) => (
+            <ApprovalRow
+              key={i.id}
+              title={`Interview — ${i.candidate.fullName}`}
+              subtitle={`${i.scheduledAt.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" })} WIB, penilaian Anda belum diisi`}
+              href={`/recruitment/interview/${i.id}`}
+            >
+              <Link href={`/recruitment/interview/${i.id}`} className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark">
+                Isi penilaian
+              </Link>
             </ApprovalRow>
           ))}
         </ApprovalCategory>
@@ -313,6 +341,8 @@ async function StatCards({ session }: { session: Awaited<ReturnType<typeof requi
   // Admin SDM has the HcHome board and Admin GA has GaHome; the generic number
   // cards remain only for a Training-Admin account without either.
   if (isHrAdmin(session) || (isGaAdminUser && !isTrainingAdminUser)) return null;
+  // Admin Rekrutmen has its own Pelamar block instead of the generic number cards.
+  if (isRecruitmentAdmin(session) && !isTrainingAdminUser && !isGaAdminUser) return null;
 
   const [employeeCount, filledPositions] = await Promise.all([
     canListEmployees(session) ? prisma.employee.count({ where: { activeFlag: true } }) : Promise.resolve(null),
@@ -349,8 +379,9 @@ export default async function DashboardPage({
   const isHrAdminUser = isHrAdmin(session);
   const isTrainingAdminUser = isTrainingAdmin(session);
   const isGaAdminUser = isGaAdmin(session);
+  const isRecruitmentAdminUser = isRecruitmentAdmin(session);
 
-  if (!isHrAdminUser && !isTrainingAdminUser && !isGaAdminUser && !isManagerNow) {
+  if (!isHrAdminUser && !isTrainingAdminUser && !isGaAdminUser && !isRecruitmentAdminUser && !isManagerNow) {
     const [hrManagerPositions, deptHeadDepartmentIds] = await Promise.all([
       getActiveHrManagerPositions(session.user.employeeId),
       getDeptHeadDepartmentIds(session.user.employeeId),
@@ -384,6 +415,12 @@ export default async function DashboardPage({
         </Suspense>
       )}
 
+      {session.user.employeeId && (
+        <Suspense fallback={null}>
+          <InternalJobsCard employeeId={session.user.employeeId} />
+        </Suspense>
+      )}
+
       <Suspense fallback={<SectionSkeleton />}>
         <ApprovalsLoader session={session} />
       </Suspense>
@@ -397,6 +434,12 @@ export default async function DashboardPage({
       {isHrAdminUser && (
         <Suspense fallback={<SectionSkeleton rows={4} />}>
           <HcHome />
+        </Suspense>
+      )}
+
+      {isRecruitmentAdminUser && !isHrAdminUser && (
+        <Suspense fallback={<SectionSkeleton rows={3} />}>
+          <RecruitmentAdminHome />
         </Suspense>
       )}
 

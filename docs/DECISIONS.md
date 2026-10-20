@@ -2606,3 +2606,58 @@ absence type and by employee shift). Chosen from a mock-up:
   absence code, "?" unresolved, "L" day off; several can be chosen). An employee stays when, on the shown date range,
   they had any chosen type and were on the chosen shift on any shown day (the shift can change week to week). Days of
   the chosen types are marked, the rest fade. The Excel export applies the same filters over the whole period.
+
+### Recruitment pipeline: applicants, tests, interviews, offers (2026-10-19)
+Per direct user request, from the workflow draft "Rancangan Alur Kerja Recruitment" (revisi ke-4) and a clickable
+mock-up. Choices: Pelamar table with stage filter + a Pelamar menu across all requests; tests one question per screen;
+applicant gives name, email and WhatsApp (all required) and may upload a CV; the applicant sees only a thank you after
+the tests (results come from HR); internal vacancies are a card on Beranda (not a sidebar item); essays are judged
+Lulus / Tidak Lulus with a note; interviewers score 1-5 per aspect plus a recommendation and note; HR Admin sees the
+results side by side; the offering letter is answered through a one-time link with an on-screen signature; tests are
+chosen once per job title.
+- **Who may apply.** Each request has `openFor` (Belum dibuka / Eksternal / Internal / Keduanya; default Belum dibuka,
+  so nothing is public by accident) and, for external, an access code (`CBP-XXXX-XXXX`, new one on demand). Public page:
+  `/cbp-recruitment` (lowongan), `/cbp-recruitment/apply/[requestId]`, `/cbp-recruitment/tes/[token]`,
+  `/cbp-recruitment/offer/[token]`. No sign-in; the proxy lets `/cbp-recruitment` through. A vacancy only accepts
+  applicants when the request is Disetujui / Berjalan / Terisi Sebagian, has a job, is not full, every required test
+  has questions, and (external) has a code.
+- **Tests.** `RecruitmentTestType` catalog (Cultural Fit is the gate, taken first by everyone; Ketelitian; Studi Kasus;
+  more can be added in the app). Forms: scale 1-5 and multiple choice are graded at once (pass mark per test, scale
+  statements can be reverse-scored), essay waits for reviewers HR Admin picks. Time limit per test is enforced by the
+  server (deadline saved when the test starts); a test left open is closed by the nightly job. Copy/paste is blocked in
+  the page (a deterrent only). Question banks start empty: HR Admin writes them in Pengaturan Rekrutmen (one by one or
+  pasted). A question already answered can only be deactivated.
+- **Tests per job title.** `RecruitmentJobTest`; Cultural Fit is always on top.
+- **Re-applying.** The same email cannot have two live applications for one vacancy; after failing the tests or being
+  rejected it must wait `retakeDays` (30) before applying to any vacancy. Declining an offer or losing out to someone
+  else does not make anyone wait.
+- **Data kept.** Applicants who left without a hire are kept `retentionDays` (30), then HR Admin can delete them with one
+  button on the Pelamar page after seeing the list (answers, interview notes, offer and CV go too). Never automatic;
+  applicants who became employees are never deleted.
+- **Interview.** HR Admin picks 1 to 4 interviewers (any employee with a login); the aspects they score are a list HR
+  Admin edits. Each interviewer submits once. HR Admin fills the administrative part and sets the final decision by hand
+  (no vote counting). Accepted / Dipertimbangkan continue; Ditolak ends the applicant.
+- **Offer (external).** HR Admin uploads the PDF and signs for the company on screen, sends a one-time 7-day link (email
+  plus a copyable link and WhatsApp button), the applicant signs and accepts or declines. HR Admin can also record an
+  answer given by phone. A decline closes the applicant only; the request stays open. "Buat Karyawan dari Kandidat"
+  opens the existing create-employee form with the applicant's name, mobile and email filled in.
+- **Internal.** An employee applies from Lowongan Internal (card on Beranda) and takes the same tests. After the
+  interview HR Admin opens Perubahan Posisi from the applicant; carrying out that move finishes the applicant, counts
+  as a hire for the request, and emails the managers of the old and the new seat. The manager is not told earlier.
+- **Full request.** When a request reaches its headcount (by Buat Karyawan or an internal move) everyone still in the
+  pipeline becomes Tidak Terpilih.
+- Every hire still goes through the existing Employee / Perubahan Posisi / Kontrak code; nothing there was replaced.
+
+### Admin Rekrutmen: a separate login for the applicant pipeline (2026-10-19)
+Per direct user request ("literally separate login like Admin SDM, access to move employees for internal
+recruitment but that's it"). New role `RECRUITMENT_ADMIN` on a stand-alone `ADMIN` account with no employee record
+(like the Admin SDM login). Admin SDM creates it under Pengaturan > Akun Admin Rekrutmen (email, then the person sets
+their own password from the emailed link; can resend the link, hold and reactivate). Admin SDM keeps the same
+recruitment access.
+- **Can:** Pelamar menu and applicant pages, tests and question banks, interviews, offers, open or close a vacancy and
+  its access code, Buat Karyawan dari Kandidat, and for an internal applicant: open Perubahan Posisi for that one
+  employee and carry out the approved move (button on the applicant page). They see every request.
+- **Cannot:** employee pages and lists, any other Perubahan Posisi, approvals, evaluations, other modules.
+- The move is filed in the name of the vacancy's own requester (the login has no employee record), approvals stay
+  Kepala Departemen and HR Manager, and Admin SDM still releases the evaluation that Perubahan Posisi needs.
+- After Buat Karyawan, Admin Rekrutmen returns to the request page (it cannot open employee pages).

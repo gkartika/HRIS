@@ -35,6 +35,7 @@ import { buildOrgUnitTree } from "@/lib/org-unit-tree";
 import { createOnboardingCase } from "@/lib/onboarding-create";
 import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
+import { closeRemainingCandidates, markCandidateHired, validateCandidateForHire } from "@/lib/recruitment-flow";
 import { validateNoKk } from "@/lib/validation/employee-fields";
 import type {
   RecruitmentReasonCode,
@@ -535,6 +536,8 @@ export async function createEmployeeFromRecruitmentRequest(
   const namaIbuKandung = (formData.get("namaIbuKandung") as string)?.trim() || null;
   const educationLevelId = (formData.get("educationLevelId") as string) || null;
   const ptkpStatusCode = (formData.get("ptkpStatusCode") as string) || null;
+  // Set when the employee is created from an applicant who accepted the offering letter.
+  const candidateId = (formData.get("candidateId") as string) || null;
 
   if (!fullLegalName || !employmentStatus || !positionId) {
     return "Nama lengkap, tanggal bergabung, status kepegawaian, dan posisi wajib diisi.";
@@ -544,6 +547,14 @@ export async function createEmployeeFromRecruitmentRequest(
   if (noKk) {
     const noKkError = validateNoKk(noKk);
     if (noKkError) return noKkError;
+  }
+
+  const candidate = candidateId
+    ? await prisma.recruitmentCandidate.findUnique({ where: { id: candidateId }, select: { email: true } })
+    : null;
+  if (candidateId) {
+    const problem = await validateCandidateForHire(candidateId, requestId);
+    if (problem) return problem;
   }
 
   // Prevent duplicate Employees (DEC-013/WF-14 acceptance criteria).
@@ -585,6 +596,8 @@ export async function createEmployeeFromRecruitmentRequest(
         fullLegalName,
         gender: gender ? (gender as Gender) : null,
         mobileNumber,
+        // The applicant's email becomes the address the login invitation is sent to.
+        personalEmail: candidate?.email ?? null,
         hireDate: hireDateObj,
         employmentStatus,
         noKk,
@@ -618,6 +631,13 @@ export async function createEmployeeFromRecruitmentRequest(
     const newFilledCount = request.fulfillments.length + 1;
     const newStatus = nextStatusAfterFulfillment(request.requestedHeadcount, newFilledCount);
     await tx.recruitmentRequest.update({ where: { id: requestId }, data: { status: newStatus } });
+
+    // The applicant is done; if the request is now full everyone else still in the pipeline is closed.
+    if (candidateId) {
+      await markCandidateHired(tx, { candidateId, employeeId: employee.id, requestId, requestIsFull: newStatus === "FILLED" });
+    } else if (newStatus === "FILLED") {
+      await closeRemainingCandidates(tx, requestId, null);
+    }
 
     if (position.positionStatus === "VACANT" || position.positionStatus === "FILLED") {
       await tx.position.update({ where: { id: positionId }, data: { positionStatus: "FILLED" } });
@@ -656,5 +676,7 @@ export async function createEmployeeFromRecruitmentRequest(
   revalidatePath("/employees");
   revalidatePath("/organization");
   revalidatePath("/onboarding");
-  redirect(`/employees/${result.employee.id}`);
+  revalidatePath("/recruitment/applicants");
+  // Only Admin SDM may open employee pages; Admin Rekrutmen goes back to the request.
+  redirect(isHrAdmin(session) ? `/employees/${result.employee.id}` : `/recruitment/${requestId}`);
 }

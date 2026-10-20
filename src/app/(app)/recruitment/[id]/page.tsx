@@ -9,6 +9,7 @@ import {
   canCreateEmployeeFromRequest,
   canCancelRecruitmentRequest,
   isHrAdmin,
+  canManageRecruitment,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
@@ -30,9 +31,17 @@ import {
   CloseRequestForm,
 } from "./decision-forms";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { ApplicantsSection } from "./applicants-section";
 
-export default async function RecruitmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RecruitmentDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ stage?: string }>;
+}) {
   const { id } = await params;
+  const { stage } = await searchParams;
   const session = await requireSession();
 
   const request = await prisma.recruitmentRequest.findUnique({
@@ -65,7 +74,7 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
   const activeDeptHeadPositionIds = deptHeadPositions.map((p) => p.positionId);
   const isDeptHeadNow = activeDeptHeadPositionIds.length > 0;
 
-  if (!isHrAdmin(session) && !isHrManagerNow && !isDeptHeadNow && !isOwnRequest) {
+  if (!canManageRecruitment(session) && !isHrManagerNow && !isDeptHeadNow && !isOwnRequest) {
     return <AccessDenied />;
   }
 
@@ -291,6 +300,21 @@ export default async function RecruitmentDetailPage({ params }: { params: Promis
           <p className="mb-3 text-sm font-medium text-slate-900">{t("recruitment.cancelRequestButton")}</p>
           <CancelRequestForm requestId={request.id} />
         </div>
+      )}
+
+      {canManageRecruitment(session) && (
+        <ApplicantsSection
+          request={{
+            id: request.id,
+            jobId: request.jobId,
+            status: request.status,
+            openFor: request.openFor,
+            accessCode: request.accessCode,
+            requestedHeadcount: request.requestedHeadcount,
+          }}
+          filledCount={counts.filledCount}
+          stage={stage}
+        />
       )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">

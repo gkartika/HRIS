@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { startOfCompanyDay, DAY_MS } from "@/lib/company-time";
 import { prisma } from "@/lib/db";
+import { Suspense } from "react";
 import { AttendanceCheckSection } from "./attendance-check-section";
+import { InternalJobsCard, RecruitmentTasksCard } from "./internal-jobs-card";
 
 function TodayIcon() {
   return (
@@ -72,6 +74,14 @@ export async function SimpleKaryawanHome({ employeeId, userName }: { employeeId:
       </div>
 
       <AttendanceCheckSection employeeId={employeeId} />
+
+      <Suspense fallback={null}>
+        <RecruitmentTasksCard employeeId={employeeId} />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <InternalJobsCard employeeId={employeeId} />
+      </Suspense>
 
       {tasks.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6">

@@ -12,6 +12,7 @@ import {
   canSubmitMovementRequest,
   canExecuteMovementRequest,
   canCancelMovementRequest,
+  isHrAdmin,
   isHrManager,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -32,6 +33,8 @@ import {
 } from "@/lib/movement";
 import { requiresEvaluationForMovementType, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/lib/evaluation-create";
+import { completeInternalHire, notifyManagersOfInternalHire } from "@/lib/recruitment-flow";
+import { canManageRecruitment } from "@/lib/permissions";
 import type { MovementType, EmploymentStatus } from "@/generated/prisma/enums";
 
 export async function submitMovementRequest(
@@ -47,8 +50,15 @@ export async function submitMovementRequest(
   const proposedEmploymentStatus = (formData.get("proposedEmploymentStatus") as string) || null;
   const proposedEffectiveDate = formData.get("proposedEffectiveDate") as string;
   const requestReason = (formData.get("requestReason") as string)?.trim();
-  const requesterEmployeeId = (formData.get("requesterEmployeeId") as string) || session.user.employeeId;
+  let requesterEmployeeId = (formData.get("requesterEmployeeId") as string) || session.user.employeeId;
   const performanceEvaluationRef = (formData.get("performanceEvaluationRef") as string)?.trim() || null;
+  // Set when HR Admin opened this form from an internal applicant (Rekrutmen).
+  const candidateId = (formData.get("candidateId") as string) || null;
+  // Admin Rekrutmen has no employee record, so the vacancy's own requester files the move.
+  if (candidateId && canManageRecruitment(session) && !isHrAdmin(session)) {
+    const c = await prisma.recruitmentCandidate.findUnique({ where: { id: candidateId }, select: { request: { select: { requesterEmployeeId: true } } } });
+    if (c) requesterEmployeeId = c.request.requesterEmployeeId;
+  }
 
   if (
     !employeeId ||
@@ -100,7 +110,8 @@ export async function submitMovementRequest(
   }
 
   const eligible = await isLevel3ForEmployeeDepartment(session.user.employeeId, employeeId);
-  if (!canSubmitMovementRequest(session, eligible)) {
+  // Admin Rekrutmen may submit only for an internal applicant (checked against the applicant below).
+  if (!canSubmitMovementRequest(session, eligible) && !(candidateId && canManageRecruitment(session))) {
     return "Anda tidak memiliki akses. Hanya pemegang Posisi Level 3 (3A/3B) di department karyawan ini yang dapat mengajukan.";
   }
 
@@ -139,6 +150,16 @@ export async function submitMovementRequest(
 
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
   if (!requester) return "Karyawan pengaju tidak ditemukan.";
+
+  if (candidateId) {
+    const candidate = await prisma.recruitmentCandidate.findUnique({
+      where: { id: candidateId },
+      select: { source: true, status: true, employeeId: true, requestId: true },
+    });
+    if (!canManageRecruitment(session) || !candidate || candidate.source !== "INTERNAL" || candidate.status !== "MOVEMENT" || candidate.employeeId !== employeeId) {
+      return "Lamaran internal ini tidak bisa dihubungkan ke Perubahan Posisi.";
+    }
+  }
 
   // A move already scheduled for the future is still pending on the old
   // placement; a new request now would target a placement that is about to end.
@@ -192,6 +213,12 @@ export async function submitMovementRequest(
     },
   });
 
+  // The applicant's page follows this request from now on.
+  if (candidateId) {
+    await prisma.recruitmentCandidate.update({ where: { id: candidateId }, data: { movementRequestId: request.id } });
+    revalidatePath("/recruitment/applicants");
+  }
+
   await logAudit({
     actorAccountId: session.user.id,
     action: "CREATE",
@@ -203,6 +230,11 @@ export async function submitMovementRequest(
   revalidatePath("/movements");
   revalidatePath(`/employees/${employeeId}`);
   revalidatePath("/evaluations");
+  // Admin Rekrutmen cannot open the movement page; they go back to the applicant.
+  if (candidateId && !eligible && !isHrAdmin(session)) {
+    const back = await prisma.recruitmentCandidate.findUnique({ where: { id: candidateId }, select: { requestId: true } });
+    if (back) redirect(`/recruitment/${back.requestId}/candidates/${candidateId}`);
+  }
   redirect(`/movements/${request.id}`);
 }
 
@@ -398,10 +430,17 @@ export async function updateMovementHrFields(
 // action's pre-conditions (approval status vs. none) independently clear.
 export async function executeMovementRequest(requestId: string): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canExecuteMovementRequest(session)) return t("common.forbidden");
 
   const request = await prisma.movementRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
+  // Admin SDM may carry out any approved move; Admin Rekrutmen only one opened from an
+  // internal applicant (the applicant's own Perubahan Posisi).
+  if (!canExecuteMovementRequest(session)) {
+    const linked = canManageRecruitment(session)
+      ? await prisma.recruitmentCandidate.findUnique({ where: { movementRequestId: requestId }, select: { id: true } })
+      : null;
+    if (!linked) return t("common.forbidden");
+  }
   if (!canExecuteMovementRequestStatus(request.status)) {
     return "Permintaan ini belum disetujui atau sudah dilaksanakan.";
   }
@@ -490,8 +529,28 @@ export async function executeMovementRequest(requestId: string): Promise<string 
       },
     });
 
-    return { newAssignmentId };
+    // An internal applicant's move is done: they are finished, and the seat counts for the request.
+    const hired = await completeInternalHire(tx, {
+      movementRequestId: requestId,
+      employeeId: request.employeeId,
+      assignmentId: newAssignmentId,
+      accountId: session.user.id,
+    });
+
+    return { newAssignmentId, hired };
   });
+
+  if (result.hired) {
+    await notifyManagersOfInternalHire({
+      employeeId: request.employeeId,
+      oldPositionId: request.currentPositionId,
+      newPositionId: request.proposedPositionId,
+      effectiveDate: request.proposedEffectiveDate,
+    });
+    revalidatePath(`/recruitment/${result.hired.requestId}`);
+    revalidatePath(`/recruitment/${result.hired.requestId}/candidates/${result.hired.candidateId}`);
+    revalidatePath("/recruitment/applicants");
+  }
 
   await logAudit({
     actorAccountId: session.user.id,

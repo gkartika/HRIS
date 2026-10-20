@@ -5,6 +5,12 @@ import { COMPANY_TIME_ZONE } from "@/lib/company-time";
 const long = new Intl.DateTimeFormat("id-ID", { timeZone: COMPANY_TIME_ZONE, dateStyle: "long" });
 const medium = new Intl.DateTimeFormat("id-ID", { timeZone: COMPANY_TIME_ZONE, dateStyle: "medium" });
 
+const dateTime = new Intl.DateTimeFormat("id-ID", { timeZone: COMPANY_TIME_ZONE, dateStyle: "medium", timeStyle: "short" });
+
+export function formatDateTimeMedium(date: Date | null | undefined): string {
+  return date ? dateTime.format(new Date(date)) : "—";
+}
+
 export function formatDateLong(date: Date | null | undefined): string {
   return date ? long.format(new Date(date)) : "—";
 }

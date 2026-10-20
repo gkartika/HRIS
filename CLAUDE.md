@@ -128,6 +128,18 @@ section disagree, this section wins.
   are decided. Still open from that review: see the artifact (contracts, evaluations, training,
   GA, cross-module items).
 
+- Recruitment pipeline (2026-10-19, built and tested statically, see docs/DECISIONS.md): applicants, tests,
+  interviews, offering letter. New tables `Recruitment*` (migration 20261019020000 applied to the shared DB, additive,
+  seeds three test kinds with EMPTY question banks, five interview aspects and the settings row). Public pages live
+  outside `(app)` under `src/app/cbp-recruitment/` (no login; `/cbp-recruitment` is allowed in `auth.config.ts`).
+  Logic: `src/lib/recruitment-candidates.ts` (pure, tested), `recruitment-service.ts` (tests engine, applicants),
+  `recruitment-flow.ts` (review, interview, offer, hire hooks), `recruitment-queries.ts`. HR screens:
+  `/recruitment/applicants` (Pelamar), the Pelamar block on `/recruitment/[id]`, applicant page, `/recruitment/tasks`,
+  `/recruitment/settings`. Employee side: `/internal-jobs` and the Beranda card. The nightly job also closes tests
+  whose time ran out. Admin Rekrutmen: separate stand-alone login (role `RECRUITMENT_ADMIN`, no employee
+  record) created by Admin SDM at `/admin/recruitment-admins`; runs the pipeline and the internal applicant's move.
+  Migrations 20261019020000 and 20261019040000 are applied.
+
 ### Current data and open items
 - Production data: 185 employees (CBP-0001 ...) and 185 positions imported; 3 admin
   logins: Admin SDM `humancapital@ptcbp.com`, Admin GA `cahayabp.ga@gmail.com` (changed
@@ -286,6 +298,8 @@ English.
 - `src/lib/org-chart.ts` — as-of-date occupancy reconstruction and
   `computeStructureWarnings()` (Director-root / Department-Head-hierarchy
   validation, ORG-15), unit tested.
+- `src/lib/recruitment-candidates.ts`, `recruitment-service.ts`, `recruitment-flow.ts` — the applicant pipeline
+  (see the 2026-10-19 entry in docs/DECISIONS.md).
 - `src/lib/recruitment.ts` — pure Recruitment Request logic (fulfillment
   counts, status transitions, cancellation-status eligibility, request-number
   formatting), unit tested. See `src/lib/position-occupancy.ts` — shared

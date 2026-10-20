@@ -59,9 +59,10 @@ export const authConfig = {
     },
     authorized: ({ auth, request }) => {
       const isLoggedIn = !!auth?.user;
-      // Pages an employee must reach before they have a session.
+      // Pages an employee must reach before they have a session, plus the public
+      // recruitment pages (applicants have no account; those pages check access themselves).
       const { pathname } = request.nextUrl;
-      if (["/login", "/forgot-password", "/set-password"].some((p) => pathname.startsWith(p))) return true;
+      if (["/login", "/forgot-password", "/set-password", "/cbp-recruitment"].some((p) => pathname.startsWith(p))) return true;
       return isLoggedIn;
     },
   },

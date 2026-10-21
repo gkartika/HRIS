@@ -3496,6 +3496,7 @@ model RecruitmentCandidate {
   tests     RecruitmentCandidateTest[]
   interview RecruitmentInterview?
   offer     RecruitmentOffer?
+  assessment RecruitmentAssessmentSubmission?
 
   @@index([requestId, status])
   @@index([email])
@@ -3628,4 +3629,213 @@ model RecruitmentOffer {
   recordedByHr             Boolean                   @default(false)
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
+}
+
+// ---------- Recruitment assessment "Tes Situasi Kerja" (behavioral risk screening) ----------
+// The question bank of one assessment version is fixed once imported; what HR reviews and
+// approves is a RUBRIC (observation + risk signal per answer option). An approved rubric is
+// locked: a change is a new rubric version. A candidate's result keeps a snapshot of every
+// interpretation used, so approving a later rubric never changes a past score.
+
+enum AssessmentRubricStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  ARCHIVED
+}
+
+enum AssessmentSubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+}
+
+enum AssessmentScreeningStatus {
+  INCOMPLETE
+  NO_AGGREGATE_CONCERN
+  INTERVIEW_ATTENTION
+  PRIORITY_REVIEW
+}
+
+model RecruitmentAssessmentVersion {
+  id                 String   @id @default(cuid())
+  versionLabel       String   @unique // "V3.2"
+  name               String
+  organization       String
+  language           String
+  instructions       String[]
+  closingText        String
+  estimatedMinMin    Int
+  estimatedMinMax    Int
+  // SHA-256 of the imported question bank file, so the text can be traced to its source.
+  sourceSha256       String
+  createdByAccountId String
+  createdAt          DateTime @default(now())
+
+  questions   RecruitmentAssessmentQuestion[]
+  rubrics     RecruitmentAssessmentRubric[]
+  submissions RecruitmentAssessmentSubmission[]
+}
+
+model RecruitmentAssessmentQuestion {
+  id           String                       @id @default(cuid())
+  versionId    String
+  version      RecruitmentAssessmentVersion @relation(fields: [versionId], references: [id])
+  questionNo   Int // 1..20, also the approved display sequence
+  questionCode String // "Q01"
+  scenario     String
+  prompt       String
+
+  options RecruitmentAssessmentOption[]
+  answers RecruitmentAssessmentAnswer[]
+
+  @@unique([versionId, questionNo])
+}
+
+model RecruitmentAssessmentOption {
+  id         String                        @id @default(cuid())
+  questionId String
+  question   RecruitmentAssessmentQuestion @relation(fields: [questionId], references: [id])
+  optionKey  String // "A".."D"
+  text       String
+
+  interpretations RecruitmentAssessmentInterpretation[]
+  answers         RecruitmentAssessmentAnswer[]
+
+  @@unique([questionId, optionKey])
+}
+
+model RecruitmentAssessmentRubric {
+  id                   String                       @id @default(cuid())
+  versionId            String
+  version              RecruitmentAssessmentVersion @relation(fields: [versionId], references: [id])
+  rubricLabel          String // "V3.2-R1"
+  status               AssessmentRubricStatus       @default(DRAFT)
+  // Copied from the source package: legend and the screening thresholds.
+  riskSignalLegend     Json
+  thresholds           Json
+  sourceNote           String?
+  sourceSha256         String?
+  basedOnRubricId      String? // a revision starts from a copy of this rubric
+  submittedAt          DateTime?
+  submittedByAccountId String?
+  decidedAt            DateTime? // approved or returned
+  decidedByAccountId   String?
+  decisionNote         String?
+  approvedAt           DateTime?
+  approvedByAccountId  String?
+  activatedAt          DateTime?
+  activatedByAccountId String?
+  archivedAt           DateTime?
+  createdByAccountId   String
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+
+  interpretations RecruitmentAssessmentInterpretation[]
+  events          RecruitmentAssessmentRubricEvent[]
+  submissions     RecruitmentAssessmentSubmission[]
+  resultItems     RecruitmentAssessmentResultItem[]
+
+  @@unique([versionId, rubricLabel])
+  @@index([versionId, status])
+}
+
+model RecruitmentAssessmentInterpretation {
+  id                    String                      @id @default(cuid())
+  rubricId              String
+  rubric                RecruitmentAssessmentRubric @relation(fields: [rubricId], references: [id])
+  optionId              String
+  option                RecruitmentAssessmentOption @relation(fields: [optionId], references: [id])
+  questionNo            Int
+  optionKey             String
+  assessmentType        String // RISK or PREFERENCE (from the source package)
+  primaryDimension      String
+  observation           String
+  riskSignal            Int // 0, -1 or -2
+  requiresControlReview Boolean                     @default(false)
+  updatedAt             DateTime                    @updatedAt
+
+  resultItems RecruitmentAssessmentResultItem[]
+
+  @@unique([rubricId, optionId])
+  @@index([rubricId, questionNo])
+}
+
+// Append-only history of a rubric: created, edited, submitted, returned, approved, activated, archived.
+model RecruitmentAssessmentRubricEvent {
+  id             String                      @id @default(cuid())
+  rubricId       String
+  rubric         RecruitmentAssessmentRubric @relation(fields: [rubricId], references: [id])
+  action         String
+  actorAccountId String
+  note           String?
+  createdAt      DateTime                    @default(now())
+
+  @@index([rubricId, createdAt])
+}
+
+model RecruitmentAssessmentSubmission {
+  id              String                       @id @default(cuid())
+  candidateId     String                       @unique
+  candidate       RecruitmentCandidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  versionId       String
+  version         RecruitmentAssessmentVersion @relation(fields: [versionId], references: [id])
+  // The ACTIVE rubric when the candidate started; the final score is calculated with it.
+  rubricId        String
+  rubric          RecruitmentAssessmentRubric  @relation(fields: [rubricId], references: [id])
+  status          AssessmentSubmissionStatus   @default(IN_PROGRESS)
+  startedAt       DateTime                     @default(now())
+  submittedAt     DateTime?
+  scoredAt        DateTime?
+  totalScore      Int?
+  screeningStatus AssessmentScreeningStatus?
+  engineVersion   String?
+  updatedAt       DateTime                     @updatedAt
+
+  answers RecruitmentAssessmentAnswer[]
+  items   RecruitmentAssessmentResultItem[]
+
+  @@index([status])
+  @@index([versionId])
+  @@index([rubricId])
+}
+
+model RecruitmentAssessmentAnswer {
+  id           String                          @id @default(cuid())
+  submissionId String
+  submission   RecruitmentAssessmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     RecruitmentAssessmentQuestion   @relation(fields: [questionId], references: [id])
+  optionId     String
+  option       RecruitmentAssessmentOption     @relation(fields: [optionId], references: [id])
+  updatedAt    DateTime                        @updatedAt
+
+  @@unique([submissionId, questionId])
+  @@index([questionId])
+  @@index([optionId])
+}
+
+// What HR sees for one answered question: written once at scoring, never updated.
+model RecruitmentAssessmentResultItem {
+  id                    String                              @id @default(cuid())
+  submissionId          String
+  submission            RecruitmentAssessmentSubmission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionNo            Int
+  rubricId              String
+  rubric                RecruitmentAssessmentRubric         @relation(fields: [rubricId], references: [id])
+  interpretationId      String
+  interpretation        RecruitmentAssessmentInterpretation @relation(fields: [interpretationId], references: [id])
+  optionKey             String
+  // Snapshots, so the record reads the same whatever happens to the master data later.
+  questionText          String
+  optionText            String
+  primaryDimension      String
+  observation           String
+  riskSignal            Int
+  assessmentType        String
+  requiresControlReview Boolean
+
+  @@unique([submissionId, questionNo])
+  @@index([rubricId])
+  @@index([interpretationId])
 }

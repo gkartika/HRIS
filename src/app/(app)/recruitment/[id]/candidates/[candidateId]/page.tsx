@@ -6,7 +6,7 @@ import { ReasonForm } from "@/components/reason-form";
 import { StatusChip } from "@/components/status-chip";
 import { prisma } from "@/lib/db";
 import { formatDateLong, formatDateTimeMedium } from "@/lib/format";
-import { canManageRecruitment, isHrAdmin } from "@/lib/permissions";
+import { canManageAssessmentRubric, canManageRecruitment, isHrAdmin } from "@/lib/permissions";
 import { requireSession } from "@/lib/require-session";
 import { isMovementRequestOpen } from "@/lib/movement";
 import {
@@ -196,6 +196,14 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
           </div>
         )}
       </div>
+
+      {canManageAssessmentRubric(session) && (
+        <p className="text-sm">
+          <Link href={`/recruitment/assessment/results/${candidate.id}`} className="font-medium text-indigo-600 hover:underline">
+            Lihat hasil Tes Situasi Kerja
+          </Link>
+        </p>
+      )}
 
       <Section title="Tes" hint="Cultural Fit dikerjakan pertama. Tes pilihan ganda dan skala dinilai otomatis begitu dikirim atau waktu habis.">
         {candidate.tests.length === 0 && <p className="text-sm text-slate-400">Tidak ada tes.</p>}

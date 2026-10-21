@@ -23,6 +23,26 @@ export function canManageRecruitment(session: Session): boolean {
   return isHrAdmin(session) || isRecruitmentAdmin(session);
 }
 
+// Recruitment assessment "Tes Situasi Kerja" (behavioral risk screening). Admin Rekrutmen prepares the
+// rubric, submits it and reads the scoring; Admin SDM (HR_ADMIN) has no access to this part. Only the
+// employee on an active HR Manager Position approves the rubric (same live rule as ACC-14); that person
+// may also read the rubric and the results.
+export function canManageAssessmentRubric(session: Session): boolean {
+  return isRecruitmentAdmin(session);
+}
+
+export function canApproveAssessmentRubric(activeHrManagerPositionIds: string[]): boolean {
+  return isHrManager(activeHrManagerPositionIds);
+}
+
+export function canViewAssessmentRubric(session: Session, activeHrManagerPositionIds: string[]): boolean {
+  return isRecruitmentAdmin(session) || isHrManager(activeHrManagerPositionIds);
+}
+
+export function canViewAssessmentResults(session: Session, activeHrManagerPositionIds: string[]): boolean {
+  return isRecruitmentAdmin(session) || isHrManager(activeHrManagerPositionIds);
+}
+
 // ACC-09: record-level scope. Phase 0 has no manager-vs-report relationship UI
 // yet (that's Phase 1's Assignment/org-chart work), so for now "can list all
 // employees" is an HR/Training/GA admin capability; a plain employee account

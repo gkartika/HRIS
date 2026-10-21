@@ -1,0 +1,749 @@
+{
+  "assessmentVersion": "V3.2",
+  "rubricVersion": "V3.2-R1",
+  "publicationStatus": "DRAFT_PENDING_HR_APPROVAL",
+  "approvalNote": "Master data dari percakapan untuk ditinjau dan disetujui HR Manager. Jangan tandai APPROVED/ACTIVE sebelum persetujuan tercatat di HRIS.",
+  "riskSignalLegend": {
+    "0": "No identifiable concern in selected action",
+    "-1": "Possible concern requiring contextual review",
+    "-2": "Material issue requiring HR verification"
+  },
+  "thresholds": {
+    "completeResponsesRequired": 20,
+    "noAggregateConcern": {
+      "min": -2,
+      "max": 0
+    },
+    "interviewAttention": {
+      "min": -5,
+      "max": -3
+    },
+    "priorityReview": {
+      "maximum": -6
+    },
+    "pilotOnly": true,
+    "automaticRejectionAllowed": false
+  },
+  "interpretations": [
+    {
+      "questionId": 1,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Passive Dependency",
+      "behavioralObservation": "Menghubungi PIC dan mencari penyelesaian bertahap",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 1,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Passive Dependency",
+      "behavioralObservation": "Meminta koordinasi prioritas melalui atasan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 1,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Passive Dependency",
+      "behavioralObservation": "Menyelesaikan pekerjaan parsial dan menginformasikan risiko",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 1,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Passive Dependency",
+      "behavioralObservation": "Mengalihkan pekerjaan dan menunggu kelengkapan data",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 2,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Menginformasikan kesalahan sambil memperbaikinya",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 2,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Memverifikasi dampak sebelum rapat",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 2,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Berkonsultasi dengan atasan sebelum menginformasikan kesalahan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 2,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Mengganti file tanpa pemberitahuan koreksi",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 3,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Courage",
+      "behavioralObservation": "Menyampaikan kekhawatiran sebelum keputusan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 3,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Courage",
+      "behavioralObservation": "Memilih diskusi pribadi sebelum keputusan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 3,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Courage",
+      "behavioralObservation": "Mengusulkan percobaan terbatas",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 3,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Courage",
+      "behavioralObservation": "Menunda penyampaian kekhawatiran sampai pelaksanaan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 4,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning approach",
+      "behavioralObservation": "Belajar melalui demonstrasi dan praktik",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 4,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning approach",
+      "behavioralObservation": "Belajar mandiri sebelum meminta bantuan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 4,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning approach",
+      "behavioralObservation": "Belajar dengan menyesuaikan contoh kerja",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 4,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning approach",
+      "behavioralObservation": "Menggunakan bantuan ahli pada bagian sulit",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 5,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Melaporkan angka terverifikasi dan selisih",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 5,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Menyelidiki penyebab selisih",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 5,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Mengonfirmasi angka bersama penanggung jawab",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 5,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Memilih angka berdasarkan pola sebelumnya tanpa mengungkap ketidakpastian",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 6,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Conflict-resolution style",
+      "behavioralObservation": "Membahas masalah langsung dengan rekan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 6,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Conflict-resolution style",
+      "behavioralObservation": "Mengusulkan mekanisme koordinasi",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 6,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Conflict-resolution style",
+      "behavioralObservation": "Menambahkan waktu cadangan untuk perubahan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 6,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Conflict-resolution style",
+      "behavioralObservation": "Membawa masalah ke forum koordinasi",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 7,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Support and boundaries",
+      "behavioralObservation": "Menghubungkan rekan dengan bantuan lain",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 7,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Support and boundaries",
+      "behavioralObservation": "Membimbing rekan melakukan pekerjaan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 7,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Support and boundaries",
+      "behavioralObservation": "Membantu mengerjakan bagian sulit",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 7,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Support and boundaries",
+      "behavioralObservation": "Menyelesaikan prioritas sendiri terlebih dahulu",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 8,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Mencoba kembali dengan tugas sederhana",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 8,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Meminta bantuan belajar dari rekan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 8,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Menunggu pembelajaran terstruktur",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 8,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Mengandalkan cara lama dan bantuan migrasi setelah kewajiban berlaku",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 9,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Mengomunikasikan risiko sejak awal",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 9,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Berusaha menyelesaikan sebelum memberi peringatan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 9,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Menyampaikan risiko melalui atasan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 9,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Mengklarifikasi kebutuhan waktu tim penerima",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 10,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Recognition and fairness",
+      "behavioralObservation": "Mengakui kontribusi langsung",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 10,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Recognition and fairness",
+      "behavioralObservation": "Mendokumentasikan kontribusi setelah rapat",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 10,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Recognition and fairness",
+      "behavioralObservation": "Mengklarifikasi peran sebelum penugasan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 10,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Recognition and fairness",
+      "behavioralObservation": "Menerima penugasan dan melibatkan rekan saat pelaksanaan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 11,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Melanjutkan proses dengan identifikasi belum pasti",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 11,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Memisahkan produk dan meminta verifikasi",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 11,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Meminta keputusan tanpa menyebut pengendalian produk terdampak",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 11,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Menunda pelepasan sampai pemeriksaan selesai",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 12,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Menggunakan angka lama tanpa mengungkap selisih",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 12,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Mengungkap ketidakpastian dan tindak lanjut",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 12,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Menunda bagian belum terverifikasi",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 12,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Transparency",
+      "behavioralObservation": "Meminta atasan memilih angka sebelum verifikasi",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 13,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional decision approach",
+      "behavioralObservation": "Meninjau alternatif bersama PIC terkait",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 13,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional decision approach",
+      "behavioralObservation": "Menggunakan kapasitas Production sebagai dasar negosiasi",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 13,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional decision approach",
+      "behavioralObservation": "Meminta pimpinan menentukan prioritas",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 13,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional decision approach",
+      "behavioralObservation": "Mengklarifikasi kebutuhan pelanggan terlebih dahulu",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 14,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Meminta persetujuan tertulis untuk perubahan pemeriksaan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 14,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Mengurangi pemeriksaan wajib tanpa pengecualian",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 14,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Mempertahankan pemeriksaan dan mempercepat proses lain",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 14,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Menahan tahap terkait dan mencari penyelesaian sesuai prosedur",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 15,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Memperbarui estimasi sebelum menginformasikan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 15,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Memberikan peringatan dan pembaruan kepada pihak terkait",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 15,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Menunggu arahan atasan untuk komunikasi perubahan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 15,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Accountability",
+      "behavioralObservation": "Menyampaikan perubahan tanpa mengungkap kesalahan estimasi awal",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 16,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning and resourcefulness",
+      "behavioralObservation": "Memanfaatkan ahli untuk pekerjaan kompleks",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 16,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning and resourcefulness",
+      "behavioralObservation": "Belajar melalui demonstrasi dan praktik",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 16,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning and resourcefulness",
+      "behavioralObservation": "Mencoba mandiri kemudian berkonsultasi",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 16,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Learning and resourcefulness",
+      "behavioralObservation": "Menggunakan contoh lengkap sebagai acuan kerja",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 17,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Memeriksa masukan dan menyesuaikan metode bila perlu",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 17,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Mendalami kondisi yang menimbulkan masalah",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 17,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Meminta atasan memilih metode sebelum menelaah perbedaan",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 17,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Resistance to Growth",
+      "behavioralObservation": "Menunda penelaahan masukan sampai pekerjaan selesai",
+      "riskSignal": -1,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 18,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Constructive challenge",
+      "behavioralObservation": "Menyampaikan informasi dengan keterbatasannya",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 18,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Constructive challenge",
+      "behavioralObservation": "Berdiskusi pribadi sebelum keputusan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 18,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Constructive challenge",
+      "behavioralObservation": "Mengusulkan keputusan bersyarat",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 18,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Constructive challenge",
+      "behavioralObservation": "Meminta verifikasi cepat dari pemilik data",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 19,
+      "optionKey": "A",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Mengganti pemeriksaan aktual dengan hasil sebelumnya",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 19,
+      "optionKey": "B",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Menggunakan pemeriksa lain yang berwenang",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 19,
+      "optionKey": "C",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Menunda dan mengomunikasikan perubahan jadwal",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 19,
+      "optionKey": "D",
+      "assessmentType": "RISK",
+      "primaryDimension": "Integrity",
+      "behavioralObservation": "Meminta pelepasan berdasarkan riwayat tanpa pemeriksaan",
+      "riskSignal": -2,
+      "requiresControlReview": true
+    },
+    {
+      "questionId": 20,
+      "optionKey": "A",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional ownership",
+      "behavioralObservation": "Menyamakan data dan memperjelas pemilik keputusan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 20,
+      "optionKey": "B",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional ownership",
+      "behavioralObservation": "Memberikan estimasi konservatif sementara",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 20,
+      "optionKey": "C",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional ownership",
+      "behavioralObservation": "Meminta pimpinan memilih dasar keputusan",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    },
+    {
+      "questionId": 20,
+      "optionKey": "D",
+      "assessmentType": "PREFERENCE",
+      "primaryDimension": "Cross-functional ownership",
+      "behavioralObservation": "Menentukan pemilik perhitungan akhir",
+      "riskSignal": 0,
+      "requiresControlReview": false
+    }
+  ]
+}

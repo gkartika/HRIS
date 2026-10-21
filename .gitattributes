@@ -1,0 +1,3 @@
+# The assessment master data is hashed (SHA-256) to prove the text is exactly the approved source:
+# git must never change its line endings.
+src/lib/recruitment-assessment-data/* -text

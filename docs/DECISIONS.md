@@ -2705,7 +2705,7 @@ Owner: the Admin Rekrutmen home must look like Admin GA / Admin SDM. UI mock-up 
 - Admin SDM keeps its own Beranda; an account that is both only gets the Admin SDM one.
 
 ### The app is now called SAPA, with a new login page and mascot (2026-10-20)
-Owner: rename "Aplikasi HC" to SAPA = Sistem Administrasi dan Pelayanan kAryawan (from "menyapa", to greet), slogan "Hadir menyapa, siap melayani.", new login UI/UX. UI mock-ups first; the owner picked the "Helm Pabrik" mascot on the "Fajar" (sunrise) background.
+Owner: rename "Aplikasi HC" to SAPA = Sistem Administrasi dan Pelayanan kAryawan (from "menyapa", to greet), slogan "Hadir menyapa, siap mendukung." (changed from "siap melayani" on 2026-10-21), new login UI/UX. UI mock-ups first; the owner picked the "Helm Pabrik" mascot on the "Fajar" (sunrise) background.
 - Name: strings in i18n (app.name / fullName / slogan), browser tab title, installed-app name (manifest short name SAPA), sidebar, offline page, README, the invitation / password-reset emails and the messages to reviewers and interviewers. Company name and CBP logo unchanged.
 - Login, forgot-password and set-password share one frame (AuthShell + client AuthStage): SAPA panel with the mascot on the left, form on the right; on a phone the panel is a header and the form a card over it.
 - The mascot (SapaMascot, a speech bubble in a safety helmet) says a line in a bubble: greeting by company (WIB) time of day (04-11 pagi, 11-15 siang, 15-18 sore, otherwise malam; src/lib/greeting.ts), and reacts to the form: thinking while signing in, worried after a wrong password, happy after a new password was saved or a reset link was sent. Forms drive it with useAuthMood(). Motion stops for people who prefer reduced motion.

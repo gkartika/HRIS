@@ -6,7 +6,7 @@ export const strings = {
   app: {
     name: "SAPA",
     fullName: "Sistem Administrasi dan Pelayanan kAryawan",
-    slogan: "Hadir menyapa, siap melayani.",
+    slogan: "Hadir menyapa, siap mendukung.",
     update: {
       message: "SAPA punya versi baru. Muat ulang supaya Anda memakai yang terbaru.",
       button: "Muat ulang",

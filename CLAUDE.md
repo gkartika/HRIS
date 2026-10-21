@@ -13,6 +13,11 @@ what is true now, where things are hosted, and the rules the owner (Gayatri, HR 
 PT Cahaya Bukit Perunggu) expects in every session. Where this section and an older
 section disagree, this section wins.
 
+### Two sessions (since 2026-10-21): FIX and BUILD
+Fixes and feedback are handled in the FIX session (this folder, `main`, the only one that deploys); new modules are built
+in the BUILD session (`..claude-build`, branch `build`, never deploys). Rules, routines and the two opening messages are
+in [docs/SESSIONS.md](docs/SESSIONS.md). If you are unsure which session you are, run `git branch --show-current`.
+
 ### Where things live
 - **Code:** the real folder is `C:\Users\gayatri\Desktop\claude`. The copy under
   `OneDrive\Desktop\claude` is an old leftover; do not work there (no current `.env`,

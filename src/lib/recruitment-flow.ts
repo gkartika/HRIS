@@ -7,6 +7,7 @@ import { hashToken } from "@/lib/account-tokens";
 import { appBaseUrl, sendMail } from "@/lib/mailer";
 import { randomStorageKey } from "@/lib/file-storage";
 import { nextStatusAfterFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
+import { HELD_MESSAGE } from "@/lib/recruitment-request-changes";
 import { fillTemplate, isValidSignatureDataUrl, fileExtension, validateOfferFile } from "@/lib/recruitment-candidates";
 import { FULFILLABLE_STATUSES, getRecruitmentSettings, refreshCandidateStatus, setCandidateStatus, type EngineResult } from "@/lib/recruitment-service";
 import type { Prisma } from "@/generated/prisma/client";
@@ -38,7 +39,7 @@ function htmlBody(text: string, link?: { url: string; label: string }): string {
 
 // Sending can fail (no mail account configured, bad address). That must never undo the
 // step that was just saved, so callers get true/false and tell the user.
-async function trySend(to: string | null | undefined, subject: string, text: string, link?: { url: string; label: string }): Promise<boolean> {
+export async function trySend(to: string | null | undefined, subject: string, text: string, link?: { url: string; label: string }): Promise<boolean> {
   if (!to) return false;
   try {
     await sendMail({ to, subject, text: link ? `${text}\n\n${link.url}` : text, html: htmlBody(text, link) });
@@ -169,11 +170,12 @@ export async function scheduleInterview(args: {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: args.candidateId },
     include: {
-      request: { select: { job: { select: { jobTitle: true } } } },
+      request: { select: { heldAt: true, job: { select: { jobTitle: true } } } },
       interview: { include: { interviewers: true } },
     },
   });
   if (!candidate) return { ok: false, error: "Pelamar tidak ditemukan." };
+  if (candidate.request.heldAt) return { ok: false, error: HELD_MESSAGE };
   if (candidate.status !== "TEST_PASSED" && !(candidate.status === "INTERVIEWING" && !candidate.interviewDecision)) {
     return { ok: false, error: "Pelamar ini belum bisa dijadwalkan interview." };
   }
@@ -265,9 +267,10 @@ export async function decideCandidate(args: {
 }): Promise<EngineResult> {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: args.candidateId },
-    include: { interview: { include: { interviewers: true } } },
+    include: { interview: { include: { interviewers: true } }, request: { select: { heldAt: true } } },
   });
   if (!candidate || candidate.status !== "INTERVIEWING" || !candidate.interview) return { ok: false, error: "Pelamar ini tidak sedang dalam tahap interview." };
+  if (candidate.request.heldAt && args.decision !== "REJECTED") return { ok: false, error: HELD_MESSAGE };
   if (!candidate.interview.interviewers.some((i) => i.submittedAt)) {
     return { ok: false, error: "Belum ada pewawancara yang mengisi penilaian." };
   }
@@ -333,9 +336,10 @@ export async function createOffer(args: {
   if (!isValidSignatureDataUrl(args.signature)) return { ok: false, error: "Tanda tangan perusahaan belum digambar." };
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: args.candidateId },
-    include: { offer: { include: { file: true } } },
+    include: { offer: { include: { file: true } }, request: { select: { heldAt: true } } },
   });
   if (!candidate || candidate.status !== "OFFERING" || candidate.source !== "EXTERNAL") return { ok: false, error: "Pelamar ini tidak sedang di tahap offering." };
+  if (candidate.request.heldAt) return { ok: false, error: HELD_MESSAGE };
   if (candidate.offer?.response) return { ok: false, error: "Offering ini sudah dijawab kandidat." };
 
   await prisma.$transaction(async (tx) => {
@@ -369,9 +373,10 @@ export async function sendOfferLink(candidateId: string): Promise<
 > {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: candidateId },
-    include: { offer: true, request: { select: { job: { select: { jobTitle: true } } } } },
+    include: { offer: true, request: { select: { heldAt: true, job: { select: { jobTitle: true } } } } },
   });
   if (!candidate || candidate.status !== "OFFERING" || !candidate.offer) return { ok: false, error: "Unggah offering letter dulu." };
+  if (candidate.request.heldAt) return { ok: false, error: HELD_MESSAGE };
   if (candidate.offer.response) return { ok: false, error: "Offering ini sudah dijawab kandidat." };
   const raw = randomBytes(24).toString("base64url");
   await prisma.recruitmentOffer.update({
@@ -440,9 +445,10 @@ export async function recordOfferResponseByHr(candidateId: string, response: Rec
 export async function validateCandidateForHire(candidateId: string, requestId: string): Promise<string | null> {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: candidateId },
-    select: { requestId: true, source: true, status: true, offer: { select: { response: true } } },
+    select: { requestId: true, source: true, status: true, offer: { select: { response: true } }, request: { select: { heldAt: true } } },
   });
   if (!candidate || candidate.requestId !== requestId) return "Pelamar tidak ditemukan pada permintaan ini.";
+  if (candidate.request.heldAt) return HELD_MESSAGE;
   if (candidate.source !== "EXTERNAL") return "Pelamar internal diproses lewat Perubahan Posisi, bukan Buat Karyawan.";
   if (candidate.status !== "OFFERING" || candidate.offer?.response !== "ACCEPTED") return "Pelamar ini belum menerima offering letter.";
   return null;
@@ -479,24 +485,33 @@ export async function markCandidateHired(
   if (args.requestIsFull) await closeRemainingCandidates(tx, args.requestId, args.candidateId);
 }
 
-// An internal applicant's Perubahan Posisi was carried out: they are done, the seat counts
-// toward the request when possible, and the line managers can be told afterwards.
+// A Perubahan Posisi that belongs to a recruitment request was carried out, either an internal applicant's move
+// or a Mutasi Admin SDM filed to fill the request ("Isi dengan Mutasi"): the employee is done as an applicant (if
+// they were one), the seat counts toward the request when possible, and the line managers can be told afterwards.
 export async function completeInternalHire(
   tx: Prisma.TransactionClient,
   args: { movementRequestId: string; employeeId: string; assignmentId: string | null; accountId: string }
-): Promise<{ candidateId: string; requestId: string } | null> {
+): Promise<{ candidateId: string | null; requestId: string } | null> {
   const candidate = await tx.recruitmentCandidate.findUnique({
     where: { movementRequestId: args.movementRequestId },
     include: { request: { include: { _count: { select: { fulfillments: true } } } } },
   });
-  if (!candidate || candidate.status !== "MOVEMENT") return null;
+  if (candidate && candidate.status !== "MOVEMENT") return null;
 
-  await tx.recruitmentCandidate.update({
-    where: { id: candidate.id },
-    data: { status: "HIRED", statusChangedAt: new Date() },
-  });
-
-  const request = candidate.request;
+  let request: NonNullable<typeof candidate>["request"];
+  if (candidate) {
+    await tx.recruitmentCandidate.update({
+      where: { id: candidate.id },
+      data: { status: "HIRED", statusChangedAt: new Date() },
+    });
+    request = candidate.request;
+  } else {
+    const movement = await tx.movementRequest.findUnique({ where: { id: args.movementRequestId }, select: { recruitmentRequestId: true } });
+    if (!movement?.recruitmentRequestId) return null;
+    const direct = await tx.recruitmentRequest.findUnique({ where: { id: movement.recruitmentRequestId }, include: { _count: { select: { fulfillments: true } } } });
+    if (!direct) return null;
+    request = direct;
+  }
   let filled = request._count.fulfillments;
   if (args.assignmentId && FULFILLABLE_STATUSES.includes(request.status)) {
     const already = await tx.recruitmentRequestFulfillment.findUnique({ where: { employeeId: args.employeeId } });
@@ -512,9 +527,9 @@ export async function completeInternalHire(
     }
   }
   if (computeFulfillmentCounts(request.requestedHeadcount, filled).isFull) {
-    await closeRemainingCandidates(tx, request.id, candidate.id);
+    await closeRemainingCandidates(tx, request.id, candidate?.id ?? null);
   }
-  return { candidateId: candidate.id, requestId: request.id };
+  return { candidateId: candidate?.id ?? null, requestId: request.id };
 }
 
 // After the internal move is done: tell the managers of the old and the new seat.
@@ -536,7 +551,7 @@ export async function notifyManagersOfInternalHire(args: { employeeId: string; o
     await mailEmployee(
       m.id,
       "Perubahan posisi karyawan (SAPA)",
-      `${employee.fullLegalName} resmi pindah dari ${oldPos?.job.jobTitle ?? "posisi lama"} ke ${newPos?.job.jobTitle ?? "posisi baru"} mulai ${when}, melalui lowongan internal.`
+      `${employee.fullLegalName} resmi pindah dari ${oldPos?.job.jobTitle ?? "posisi lama"} ke ${newPos?.job.jobTitle ?? "posisi baru"} mulai ${when}, melalui permintaan tenaga kerja.`
     );
   }
 }

@@ -91,14 +91,13 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
     : [];
 
   const needsRenewalPositions = pending.pendingDeptHeadRenewals.length > 0 || pending.pendingHrManagerRenewals.length > 0;
-  const needsJobs = pending.pendingRequests.length > 0;
   const absenceRequests = [
     ...pending.pendingAbsenceHrAdmin,
     ...pending.pendingAbsenceSecondApprover,
     ...pending.pendingAbsenceFirstApprover,
   ];
   const absenceWorkingDays = await scheduledDayCountsForRequests(absenceRequests);
-  const [renewalPositions, jobs] = await Promise.all([
+  const [renewalPositions] = await Promise.all([
     needsRenewalPositions
       ? prisma.position.findMany({
           where: { archived: false },
@@ -106,7 +105,6 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
           orderBy: { positionCode: "asc" },
         })
       : Promise.resolve([]),
-    needsJobs ? prisma.job.findMany({ orderBy: { jobTitle: "asc" } }) : Promise.resolve([]),
   ]);
 
   return (
@@ -182,12 +180,16 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
             </ApprovalRow>
           ))}
           {pending.pendingRequests.map((r) => (
-            <ApprovalRow key={r.id} title={`Rekrutmen — ${r.job?.jobTitle ?? r.department.unitName}`} subtitle={r.requestNumber} href={`/recruitment/${r.id}`}>
-              <RecruitmentDecisionButtons requestId={r.id} positions={pending.hrManagerPositions} jobs={jobs} defaultJobId={r.jobId} />
+            <ApprovalRow key={r.id} title={`Rekrutmen — ${r.job?.jobTitle ?? r.requestedJobText ?? r.department.unitName}`} subtitle={r.requestNumber} href={`/recruitment/${r.id}`}>
+              <RecruitmentDecisionButtons
+                requestId={r.id}
+                positions={pending.hrManagerPositions}
+                approveBlockedReason={r.jobId ? undefined : "Menunggu Admin SDM / Admin Rekrutmen menetapkan jabatan standar."}
+              />
             </ApprovalRow>
           ))}
           {pending.pendingDeptHeadRequests.map((r) => (
-            <ApprovalRow key={r.id} title={`Rekrutmen — ${r.job?.jobTitle ?? r.department.unitName}`} subtitle={`${r.requestNumber} (Kepala Departemen)`} href={`/recruitment/${r.id}`}>
+            <ApprovalRow key={r.id} title={`Rekrutmen — ${r.job?.jobTitle ?? r.requestedJobText ?? r.department.unitName}`} subtitle={`${r.requestNumber} (Kepala Departemen)`} href={`/recruitment/${r.id}`}>
               <RecruitmentDeptHeadDecisionButtons requestId={r.id} positions={deptHeadPositions} />
             </ApprovalRow>
           ))}

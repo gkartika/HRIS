@@ -443,6 +443,11 @@ model Evaluation {
   p2Scores      Json?
   p2Total       Int?
 
+  // The criteria (and their names) this evaluation was released with, so later changes to the matrix in
+  // Pengaturan Evaluasi never alter an evaluation already under way. null = released before the matrix
+  // became editable (the original criteria apply).
+  matrixSnapshot Json?
+
   completedAt DateTime?
   cancelledAt DateTime?
   notes       String?
@@ -459,6 +464,35 @@ model Evaluation {
   @@index([status])
   @@index([p1EmployeeId])
   @@index([p2EmployeeId])
+}
+
+// The criteria of the evaluation matrix, edited by Admin SDM in Pengaturan Evaluasi (names, order, on/off; the
+// grades of each section are fixed in code). Criteria are never deleted: an old evaluation keeps its own copy of
+// the criteria (Evaluation.matrixSnapshot) and `key` is what a saved grade is stored under.
+enum EvaluationSection {
+  PERFORMANCE
+  TATA_NILAI
+}
+
+model EvaluationCriterion {
+  id        String            @id @default(cuid())
+  section   EvaluationSection
+  key       String            @unique
+  label     String
+  sortOrder Int               @default(0)
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([section, sortOrder])
+}
+
+// One row ("default"): the PDF guideline evaluators can open from the form.
+model EvaluationSetting {
+  id              String      @id @default("default")
+  guidelineFileId String?     @unique
+  guidelineFile   FileObject? @relation("EvaluationGuidelineFile", fields: [guidelineFileId], references: [id], onDelete: SetNull)
+  updatedAt       DateTime    @updatedAt
 }
 
 model ContractRenewalCase {
@@ -889,6 +923,7 @@ model Account {
   recruitmentFulfillmentsLinked               RecruitmentRequestFulfillment[]
   recruitmentRequestsCancelledBy              RecruitmentRequest[]            @relation("RecruitmentCancelledByAccount")
   recruitmentRequestsClosedBy                 RecruitmentRequest[]            @relation("RecruitmentClosedByAccount")
+  recruitmentRequestEvents                    RecruitmentRequestEvent[]
   onboardingCasesCancelledBy                  OnboardingCase[]                @relation("OnboardingCancelledBy")
   movementRequestsSubmittedBy                 MovementRequest[]               @relation("MovementSubmittedBy")
   movementRequestsDecidedBy                   MovementRequest[]               @relation("MovementDecisionBy")
@@ -1294,9 +1329,16 @@ model RecruitmentRequest {
   workExperienceBand       WorkExperienceBand
   ageBand                  AgeBand
   genderRequirement        Gender?
-  requestedJobLevel        RequestedJobLevel
+  // The Jabatan name the requester typed (free text): the standard Jabatan (jobId) is chosen or created
+  // by Admin SDM / Admin Rekrutmen. Level is set by them too, so it is empty until then.
+  requestedJobText         String?
+  requestedJobLevel        RequestedJobLevel?
   specialCriteria          String?
   status                   RecruitmentRequestStatus @default(DRAFT)
+
+  // "Tahan": recruiting is paused while heldAt is set; the real status above is not touched.
+  heldAt     DateTime?
+  heldReason String?
 
   requesterEmployeeId String
   requesterEmployee   Employee  @relation("RecruitmentRequester", fields: [requesterEmployeeId], references: [id])
@@ -1356,6 +1398,9 @@ model RecruitmentRequest {
   updatedAt DateTime @updatedAt
 
   fulfillments RecruitmentRequestFulfillment[]
+  // Mutasi filed to fill this request (see MovementRequest.recruitmentRequestId)
+  movementRequests MovementRequest[] @relation("RecruitmentRequestMovements")
+  events           RecruitmentRequestEvent[]
 
   // Applicant pipeline. NONE = not published; the access code is what an external
   // applicant types on /cbp-recruitment (one code per request).
@@ -1511,9 +1556,15 @@ model MovementRequest {
   // Set when HR Admin opened this request from an internal applicant.
   recruitmentCandidate RecruitmentCandidate? @relation("RecruitmentCandidateMovement")
 
+  // Set when Admin SDM files this Mutasi to FILL a recruitment request ("Isi dengan Mutasi"): once the move is
+  // carried out the employee counts as one of the request's fulfilments, like a new hire would.
+  recruitmentRequestId String?
+  recruitmentRequest   RecruitmentRequest? @relation("RecruitmentRequestMovements", fields: [recruitmentRequestId], references: [id])
+
   @@index([employeeId])
   @@index([status])
   @@index([requesterEmployeeId])
+  @@index([recruitmentRequestId])
 }
 
 // ---------- Phase 2: Onboarding Case (LIF-03, Data Fields Blueprint "12 Onboarding") ----------
@@ -1730,6 +1781,7 @@ model FileObject {
   confidential        Boolean     @default(true)
   createdAt           DateTime    @default(now())
 
+  evaluationSettingOf                    EvaluationSetting?    @relation("EvaluationGuidelineFile")
   employeeBpjsTkOf                       Employee?             @relation("EmployeeBpjsTkFile")
   employeeBpjsKesehatanOf                Employee?             @relation("EmployeeBpjsKesehatanFile")
   absenceRequestAttachmentOf             AbsenceRequest?       @relation("AbsenceRequestAttachment")
@@ -3628,4 +3680,30 @@ model RecruitmentOffer {
   recordedByHr             Boolean                   @default(false)
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
+}
+
+// What changed on a recruitment request after it was filed: held / resumed, headcount reduced,
+// Jabatan set or changed. Shown as the request's "Riwayat".
+enum RecruitmentRequestEventKind {
+  HELD
+  RESUMED
+  HEADCOUNT_REDUCED
+  JOB_SET
+  JOB_CHANGED
+}
+
+model RecruitmentRequestEvent {
+  id             String                      @id @default(cuid())
+  requestId      String
+  request        RecruitmentRequest          @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  kind           RecruitmentRequestEventKind
+  fromValue      String?
+  toValue        String?
+  note           String?
+  actorAccountId String
+  actorAccount   Account                     @relation(fields: [actorAccountId], references: [id])
+  actorLabel     String
+  createdAt      DateTime                    @default(now())
+
+  @@index([requestId, createdAt])
 }

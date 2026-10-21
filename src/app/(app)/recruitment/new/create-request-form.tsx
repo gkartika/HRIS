@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { submitRecruitmentRequest, resubmitRecruitmentRequest } from "../actions";
 import { t } from "@/lib/i18n/id";
-import type { OrgUnit, Job, Employee } from "@/generated/prisma/client";
+import type { OrgUnit, Employee } from "@/generated/prisma/client";
 type EmployeeOption = Pick<Employee, "id" | "fullLegalName" | "employeeNumber">;
 
 // Values of an existing request, used to pre-fill the form when a returned
@@ -12,7 +12,7 @@ export interface RequestFormInitial {
   requestDate: string;
   reasonCode: string;
   departmentId: string;
-  jobId: string | null;
+  requestedJobText: string;
   shiftCode: string;
   requestedHeadcount: number;
   jobDescriptionSnapshot: string;
@@ -20,7 +20,6 @@ export interface RequestFormInitial {
   workExperienceBand: string;
   ageBand: string;
   genderRequirement: string | null;
-  requestedJobLevel: string;
   specialCriteria: string | null;
 }
 
@@ -32,7 +31,6 @@ const FIELD = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 
 export function CreateRequestForm({
   departments,
-  jobs,
   employees,
   currentEmployeeId,
   isHrAdmin,
@@ -40,7 +38,6 @@ export function CreateRequestForm({
   initial,
 }: {
   departments: OrgUnit[];
-  jobs: Job[];
   employees: EmployeeOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
@@ -108,14 +105,16 @@ export function CreateRequestForm({
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.requestedPosition")}</label>
-          <select name="jobId" defaultValue={initial?.jobId ?? ""} className={FIELD}>
-            <option value="">— Belum ada jabatan spesifik —</option>
-            {jobs.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.jobCode} {j.jobTitle}
-              </option>
-            ))}
-          </select>
+          <input
+            name="requestedJobText"
+            type="text"
+            required
+            maxLength={120}
+            defaultValue={initial?.requestedJobText ?? ""}
+            placeholder="Contoh: Operator Crusher"
+            className={FIELD}
+          />
+          <p className="mt-1 text-xs text-slate-500">{t("recruitment.requestedPositionHint")}</p>
         </div>
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.shiftCode")}</label>
@@ -200,22 +199,6 @@ export function CreateRequestForm({
               <option value="">— Tidak ditentukan —</option>
               <option value="MALE">{t("gender.MALE")}</option>
               <option value="FEMALE">{t("gender.FEMALE")}</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">{t("recruitment.requestedJobLevel")}</label>
-            <select
-              name="requestedJobLevel"
-              required
-              defaultValue={initial?.requestedJobLevel ?? ""}
-              className={FIELD}
-            >
-              <option value="">— Pilih —</option>
-              <option value="DEPARTMENT_HEAD">{t("requestedJobLevel.DEPARTMENT_HEAD")}</option>
-              <option value="SECTION_HEAD">{t("requestedJobLevel.SECTION_HEAD")}</option>
-              <option value="SUPERVISOR">{t("requestedJobLevel.SUPERVISOR")}</option>
-              <option value="STAFF_OPERATOR">{t("requestedJobLevel.STAFF_OPERATOR")}</option>
-              <option value="HARIAN_LEPAS">{t("requestedJobLevel.HARIAN_LEPAS")}</option>
             </select>
           </div>
         </div>

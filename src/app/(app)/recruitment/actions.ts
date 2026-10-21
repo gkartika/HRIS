@@ -32,6 +32,7 @@ import {
   statusAfterResubmit,
 } from "@/lib/recruitment";
 import { buildOrgUnitTree } from "@/lib/org-unit-tree";
+import { HELD_MESSAGE } from "@/lib/recruitment-request-changes";
 import { createOnboardingCase } from "@/lib/onboarding-create";
 import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
@@ -43,7 +44,6 @@ import type {
   EducationRequirementCode,
   WorkExperienceBand,
   AgeBand,
-  RequestedJobLevel,
   Gender,
   EmploymentStatus,
 } from "@/generated/prisma/enums";
@@ -54,7 +54,7 @@ type RequestFields = {
   requestDate: string;
   reasonCode: RecruitmentReasonCode;
   departmentId: string;
-  jobId: string | null;
+  requestedJobText: string;
   shiftCode: ShiftCode;
   requestedHeadcount: number;
   jobDescriptionSnapshot: string;
@@ -62,7 +62,6 @@ type RequestFields = {
   workExperienceBand: WorkExperienceBand;
   ageBand: AgeBand;
   genderRequirement: Gender | null;
-  requestedJobLevel: RequestedJobLevel;
   specialCriteria: string | null;
 };
 
@@ -70,7 +69,7 @@ function readRequestFields(formData: FormData): { fields: RequestFields } | { er
   const requestDate = formData.get("requestDate") as string;
   const reasonCode = formData.get("reasonCode") as RecruitmentReasonCode;
   const departmentId = formData.get("departmentId") as string;
-  const jobId = (formData.get("jobId") as string) || null;
+  const requestedJobText = ((formData.get("requestedJobText") as string) ?? "").trim().replace(/\s+/g, " ");
   const shiftCode = formData.get("shiftCode") as ShiftCode;
   const requestedHeadcount = Number(formData.get("requestedHeadcount"));
   const jobDescriptionSnapshot = (formData.get("jobDescriptionSnapshot") as string)?.trim();
@@ -78,7 +77,6 @@ function readRequestFields(formData: FormData): { fields: RequestFields } | { er
   const workExperienceBand = formData.get("workExperienceBand") as WorkExperienceBand;
   const ageBand = formData.get("ageBand") as AgeBand;
   const genderRequirement = (formData.get("genderRequirement") as string) || null;
-  const requestedJobLevel = formData.get("requestedJobLevel") as RequestedJobLevel;
   const specialCriteria = (formData.get("specialCriteria") as string)?.trim() || null;
 
   if (
@@ -91,10 +89,11 @@ function readRequestFields(formData: FormData): { fields: RequestFields } | { er
     !educationRequirementCode ||
     !workExperienceBand ||
     !ageBand ||
-    !requestedJobLevel
+    !requestedJobText
   ) {
-    return { error: "Semua field wajib (kecuali Posisi yang Dituju, Jenis Kelamin, dan Kriteria Khusus) harus diisi." };
+    return { error: "Semua field wajib (kecuali Jenis Kelamin dan Kriteria Khusus) harus diisi." };
   }
+  if (requestedJobText.length > 120) return { error: "Nama jabatan maksimal 120 huruf." };
   if (requestedHeadcount < 1) return { error: "Jumlah harus minimal 1." };
   if (Number.isNaN(Date.parse(requestDate))) return { error: "Tanggal permintaan tidak valid." };
 
@@ -103,7 +102,7 @@ function readRequestFields(formData: FormData): { fields: RequestFields } | { er
       requestDate,
       reasonCode,
       departmentId,
-      jobId,
+      requestedJobText,
       shiftCode,
       requestedHeadcount,
       jobDescriptionSnapshot,
@@ -111,7 +110,6 @@ function readRequestFields(formData: FormData): { fields: RequestFields } | { er
       workExperienceBand,
       ageBand,
       genderRequirement: genderRequirement ? (genderRequirement as Gender) : null,
-      requestedJobLevel,
       specialCriteria,
     },
   };
@@ -155,7 +153,7 @@ export async function submitRecruitmentRequest(
       requestDate: new Date(f.requestDate),
       reasonCode: f.reasonCode,
       departmentId: f.departmentId,
-      jobId: f.jobId,
+      requestedJobText: f.requestedJobText,
       shiftCode: f.shiftCode,
       requestedHeadcount: f.requestedHeadcount,
       jobDescriptionSnapshot: f.jobDescriptionSnapshot,
@@ -163,7 +161,6 @@ export async function submitRecruitmentRequest(
       workExperienceBand: f.workExperienceBand,
       ageBand: f.ageBand,
       genderRequirement: f.genderRequirement,
-      requestedJobLevel: f.requestedJobLevel,
       specialCriteria: f.specialCriteria,
       status: initialStatus,
       requesterEmployeeId,
@@ -237,7 +234,7 @@ export async function resubmitRecruitmentRequest(
       requestDate: new Date(f.requestDate),
       reasonCode: f.reasonCode,
       departmentId: f.departmentId,
-      jobId: f.jobId,
+      requestedJobText: f.requestedJobText,
       shiftCode: f.shiftCode,
       requestedHeadcount: f.requestedHeadcount,
       jobDescriptionSnapshot: f.jobDescriptionSnapshot,
@@ -245,7 +242,6 @@ export async function resubmitRecruitmentRequest(
       workExperienceBand: f.workExperienceBand,
       ageBand: f.ageBand,
       genderRequirement: f.genderRequirement,
-      requestedJobLevel: f.requestedJobLevel,
       specialCriteria: f.specialCriteria,
       status: nextStatus,
       // Whoever sent it back no longer has a pending decision on record.
@@ -374,13 +370,11 @@ export async function decideRecruitmentRequest(
     return "Catatan keputusan wajib diisi untuk Tolak/Kembalikan.";
   }
 
-  // The requester may already set Jabatan Standar on submit; the HR Manager
-  // can confirm or override it here as part of Approve, since
-  // createEmployeeFromRecruitmentRequest still needs it to filter candidate
-  // Positions. Not required for Reject/Return.
-  const jobId = (formData.get("jobId") as string) || request.jobId;
+  // The standard Jabatan is set by Admin SDM / Admin Rekrutmen before this step (the requester only types a
+  // name), since hiring needs it to filter the seats. Not required for Reject/Return.
+  const jobId = request.jobId;
   if (decision === "APPROVED" && !jobId) {
-    return "Jabatan wajib dipilih sebelum menyetujui permintaan ini.";
+    return "Menunggu Admin SDM / Admin Rekrutmen menetapkan jabatan standar sebelum permintaan ini bisa disetujui.";
   }
 
   await prisma.recruitmentRequest.update({
@@ -520,6 +514,7 @@ export async function createEmployeeFromRecruitmentRequest(
     include: { fulfillments: true },
   });
   if (!request) return "Permintaan tidak ditemukan.";
+  if (request.heldAt) return HELD_MESSAGE;
   if (!canRequestAcceptFulfillment(request.status)) {
     return "Permintaan ini belum dapat diproses menjadi karyawan (status saat ini belum Disetujui).";
   }
@@ -560,7 +555,7 @@ export async function createEmployeeFromRecruitmentRequest(
   // Prevent duplicate Employees (DEC-013/WF-14 acceptance criteria).
 
   if (!request.jobId) {
-    return "Jabatan pada permintaan ini belum ditentukan oleh HR Manager saat persetujuan.";
+    return "Jabatan pada permintaan ini belum ditetapkan oleh Admin SDM / Admin Rekrutmen.";
   }
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";

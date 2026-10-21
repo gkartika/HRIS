@@ -26,8 +26,10 @@ export default async function ApplyPage({ params }: { params: Promise<{ requestI
   if (!open || !request.jobId) {
     return (
       <div className="rounded-xl border border-[#e6dcea] bg-white p-6">
-        <h1 className="text-lg font-bold text-[#231a28]">Lowongan tidak tersedia</h1>
-        <p className="mt-1 text-sm text-[#6a5f72]">Lowongan ini sudah ditutup atau belum dibuka.</p>
+        <h1 className="text-lg font-bold text-[#231a28]">{request?.heldAt ? "Lowongan dihentikan sementara" : "Lowongan tidak tersedia"}</h1>
+        <p className="mt-1 text-sm text-[#6a5f72]">
+          {request?.heldAt ? "Lowongan ini sedang dihentikan sementara. Silakan cek lagi nanti." : "Lowongan ini sudah ditutup atau belum dibuka."}
+        </p>
         <Link href="/cbp-recruitment" className="mt-4 inline-block text-sm font-semibold text-brand hover:underline">
           Lihat lowongan lain
         </Link>

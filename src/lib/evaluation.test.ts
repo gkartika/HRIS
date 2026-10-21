@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
-  PERFORMANCE_CRITERIA,
-  PERFORMANCE_MAX_TOTAL,
-  TATA_NILAI_CRITERIA,
+  DEFAULT_MATRIX,
+  buildMatrixDefinition,
+  matrixDefinitionOf,
+  performanceMaxTotal,
+  type MatrixDefinition,
   isMatrixScores,
   parseEvaluationMatrix,
   performanceField,
@@ -46,75 +48,115 @@ describe("canSubmitEvaluationSlot", () => {
 });
 
 describe("evaluation matrix (performance 2/4/6/8, tata nilai 0/25/50/75/100)", () => {
+  const def = DEFAULT_MATRIX;
   const form = (perf: number, tata: number) => {
     const fields: Record<string, string> = {};
-    for (const k of PERFORMANCE_CRITERIA) fields[performanceField(k)] = String(perf);
-    for (const k of TATA_NILAI_CRITERIA) fields[tataNilaiField(k)] = String(tata);
+    for (const c of def.performance) fields[performanceField(c.key)] = String(perf);
+    for (const c of def.tataNilai) fields[tataNilaiField(c.key)] = String(tata);
     return fields;
   };
   const reader = (fields: Record<string, string>) => (name: string) => fields[name];
 
-  it("has six performance criteria and five tata nilai", () => {
-    expect(PERFORMANCE_CRITERIA).toHaveLength(6);
-    expect(TATA_NILAI_CRITERIA).toHaveLength(5);
-    expect(PERFORMANCE_MAX_TOTAL).toBe(48);
+  it("starts with six performance criteria and five tata nilai", () => {
+    expect(def.performance).toHaveLength(6);
+    expect(def.tataNilai).toHaveLength(5);
+    expect(def.performance[1].label).toBe("Komunikasi & Kolaborasi");
+    expect(performanceMaxTotal(def)).toBe(48);
   });
 
   it("reads a complete form and works out the two results", () => {
     const fields = form(6, 75);
     fields[performanceField("kepemimpinan")] = "8";
     fields[tataNilaiField("legenda")] = "100";
-    const parsed = parseEvaluationMatrix(reader(fields));
+    const parsed = parseEvaluationMatrix(def, reader(fields));
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.scores.version).toBe(2);
     expect(isMatrixScores(parsed.scores)).toBe(true);
     expect(parsed.performanceTotal).toBe(5 * 6 + 8);
-    expect(performanceSummary(parsed.scores)).toEqual({ total: 38, max: 48, percent: 79.2 });
-    expect(tataNilaiAverage(parsed.scores)).toBe(80);
+    expect(performanceSummary(parsed.scores, def)).toEqual({ total: 38, max: 48, percent: 79.2 });
+    expect(tataNilaiAverage(parsed.scores, def)).toBe(80);
   });
 
   it("accepts the lowest and the highest grades", () => {
-    const low = parseEvaluationMatrix(reader(form(2, 0)));
-    const high = parseEvaluationMatrix(reader(form(8, 100)));
-    expect(low.ok && performanceSummary(low.scores).percent).toBe(25);
-    expect(high.ok && performanceSummary(high.scores).percent).toBe(100);
-    expect(low.ok && tataNilaiAverage(low.scores)).toBe(0);
+    const low = parseEvaluationMatrix(def, reader(form(2, 0)));
+    const high = parseEvaluationMatrix(def, reader(form(8, 100)));
+    expect(low.ok && performanceSummary(low.scores, def).percent).toBe(25);
+    expect(high.ok && performanceSummary(high.scores, def).percent).toBe(100);
+    expect(low.ok && tataNilaiAverage(low.scores, def)).toBe(0);
   });
 
   it("refuses a missing grade or a grade that is not on the scale", () => {
     const missing = form(4, 50);
     delete missing[performanceField("komunikasi")];
-    expect(parseEvaluationMatrix(reader(missing)).ok).toBe(false);
-    expect(parseEvaluationMatrix(reader({ ...form(4, 50), [performanceField("komunikasi")]: "5" })).ok).toBe(false);
-    expect(parseEvaluationMatrix(reader({ ...form(4, 50), [tataNilaiField("jujur")]: "60" })).ok).toBe(false);
-    expect(parseEvaluationMatrix(reader({ ...form(4, 50), [tataNilaiField("jujur")]: "" })).ok).toBe(false);
+    expect(parseEvaluationMatrix(def, reader(missing)).ok).toBe(false);
+    expect(parseEvaluationMatrix(def, reader({ ...form(4, 50), [performanceField("komunikasi")]: "5" })).ok).toBe(false);
+    expect(parseEvaluationMatrix(def, reader({ ...form(4, 50), [tataNilaiField("jujur")]: "60" })).ok).toBe(false);
+    expect(parseEvaluationMatrix(def, reader({ ...form(4, 50), [tataNilaiField("jujur")]: "" })).ok).toBe(false);
     // 100 is a tata nilai grade only; 0 is not a performance grade
-    expect(parseEvaluationMatrix(reader({ ...form(4, 50), [performanceField("komunikasi")]: "0" })).ok).toBe(false);
+    expect(parseEvaluationMatrix(def, reader({ ...form(4, 50), [performanceField("komunikasi")]: "0" })).ok).toBe(false);
+  });
+
+  it("works with whatever criteria an evaluation was released with", () => {
+    const custom: MatrixDefinition = {
+      performance: [{ key: "a", label: "A" }, { key: "c_new1", label: "Inisiatif" }],
+      tataNilai: [{ key: "x", label: "X" }],
+    };
+    const fields = { [performanceField("a")]: "8", [performanceField("c_new1")]: "4", [tataNilaiField("x")]: "50" };
+    const parsed = parseEvaluationMatrix(custom, reader(fields));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(performanceSummary(parsed.scores, custom)).toEqual({ total: 12, max: 16, percent: 75 });
+    expect(tataNilaiAverage(parsed.scores, custom)).toBe(50);
+    // a grade for a criterion the evaluation does not have is not required
+    expect(parseEvaluationMatrix(custom, reader({ ...fields, [performanceField(def.performance[0].key)]: "6" })).ok).toBe(true);
+    // but a missing one is
+    expect(parseEvaluationMatrix(custom, reader({ [performanceField("a")]: "8", [tataNilaiField("x")]: "50" })).ok).toBe(false);
   });
 
   it("averages two evaluators criterion by criterion (and one evaluator stays as is)", () => {
     const make = (perf: number[], tata: number[]) =>
-      parseEvaluationMatrix((f) => {
+      parseEvaluationMatrix(def, (f) => {
         const m: Record<string, string> = {};
-        PERFORMANCE_CRITERIA.forEach((k, i) => (m[performanceField(k)] = String(perf[i])));
-        TATA_NILAI_CRITERIA.forEach((k, i) => (m[tataNilaiField(k)] = String(tata[i])));
+        def.performance.forEach((c, i) => (m[performanceField(c.key)] = String(perf[i])));
+        def.tataNilai.forEach((c, i) => (m[tataNilaiField(c.key)] = String(tata[i])));
         return m[f];
       });
     const a = make([6, 8, 6, 4, 6, 8], [75, 100, 75, 75, 75]);
     const b = make([8, 8, 6, 6, 6, 8], [100, 75, 75, 50, 75]);
     expect(a.ok && b.ok).toBe(true);
     if (!a.ok || !b.ok) return;
-    const avg = averageMatrixScores([a.scores, b.scores]);
-    expect(avg && performanceSummary(avg)).toEqual({ total: 40, max: 48, percent: 83.3 });
-    expect(avg && tataNilaiAverage(avg)).toBe(77.5);
-    expect(averageMatrixScores([a.scores])).toEqual(a.scores);
-    expect(averageMatrixScores([])).toBeNull();
+    const avg = averageMatrixScores([a.scores, b.scores], def);
+    expect(avg && performanceSummary(avg, def)).toEqual({ total: 40, max: 48, percent: 83.3 });
+    expect(avg && tataNilaiAverage(avg, def)).toBe(77.5);
+    expect(averageMatrixScores([a.scores], def)).toEqual(a.scores);
+    expect(averageMatrixScores([], def)).toBeNull();
   });
 
   it("does not mistake the older form for the new matrix", () => {
     expect(isMatrixScores({ qualityOrientation: 6, companyValues: [2, 4] })).toBe(false);
     expect(isMatrixScores(null)).toBe(false);
+  });
+});
+
+describe("the criteria an evaluation is released with", () => {
+  const rows = [
+    { section: "PERFORMANCE" as const, key: "b", label: "B", sortOrder: 1, active: true },
+    { section: "PERFORMANCE" as const, key: "a", label: "A", sortOrder: 0, active: true },
+    { section: "PERFORMANCE" as const, key: "off", label: "Old", sortOrder: 2, active: false },
+    { section: "TATA_NILAI" as const, key: "t", label: "T", sortOrder: 0, active: true },
+  ];
+
+  it("keeps the active criteria, in their order, per section", () => {
+    expect(buildMatrixDefinition(rows)).toEqual({ performance: [{ key: "a", label: "A" }, { key: "b", label: "B" }], tataNilai: [{ key: "t", label: "T" }] });
+  });
+
+  it("reads a saved copy back, and falls back to the original criteria when there is none", () => {
+    const saved = buildMatrixDefinition(rows);
+    expect(matrixDefinitionOf(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
+    expect(matrixDefinitionOf(null)).toBe(DEFAULT_MATRIX);
+    expect(matrixDefinitionOf({ performance: [], tataNilai: [] })).toBe(DEFAULT_MATRIX);
+    expect(matrixDefinitionOf({ performance: "x" })).toBe(DEFAULT_MATRIX);
   });
 });
 
@@ -196,10 +238,13 @@ describe("computeEvaluationTotal", () => {
 });
 
 describe("requiresEvaluationForMovementType (DM-27/WF-17/LIF-14)", () => {
-  it("true for all three Perubahan Posisi types", () => {
+  it("true for Promosi and Demosi", () => {
     expect(requiresEvaluationForMovementType("PROMOTION")).toBe(true);
-    expect(requiresEvaluationForMovementType("MUTATION")).toBe(true);
     expect(requiresEvaluationForMovementType("DEMOTION")).toBe(true);
+  });
+
+  it("false for Mutasi: it needs no evaluation", () => {
+    expect(requiresEvaluationForMovementType("MUTATION")).toBe(false);
   });
 
   it("false for the legacy Rotasi and Perubahan Status types", () => {

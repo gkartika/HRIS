@@ -4,14 +4,17 @@ import { canManageRecruitment, isHrAdmin } from "@/lib/permissions";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
+import { canRequestAcceptFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
+import { OPEN_MOVEMENT_STATUSES } from "@/lib/movement";
+import Link from "next/link";
 import { SubmitMovementForm } from "./submit-movement-form";
 
 export default async function NewMovementRequestPage({
   searchParams,
 }: {
-  searchParams: Promise<{ employeeId?: string; candidateId?: string }>;
+  searchParams: Promise<{ employeeId?: string; candidateId?: string; recruitmentRequestId?: string }>;
 }) {
-  const { employeeId: preselectedEmployeeId, candidateId } = await searchParams;
+  const { employeeId: preselectedEmployeeId, candidateId, recruitmentRequestId } = await searchParams;
   const session = await requireSession();
 
   // Single-page flow: "which employee" is just the first field of this
@@ -46,6 +49,31 @@ export default async function NewMovementRequestPage({
       };
     }
   }
+  // Opened from a recruitment request by Admin SDM ("Isi dengan Mutasi"): a Mutasi into one of its vacant seats.
+  let fillRow: { id: string; label: string; requesterEmployeeId: string; jobId: string } | null = null;
+  if (recruitmentRequestId && isHrAdminUser) {
+    const r = await prisma.recruitmentRequest.findUnique({
+      where: { id: recruitmentRequestId },
+      select: {
+        id: true, requestNumber: true, requesterEmployeeId: true, jobId: true, status: true, requestedHeadcount: true, heldAt: true,
+        job: { select: { jobTitle: true } },
+        _count: { select: { fulfillments: true } },
+      },
+    });
+    if (r) {
+      const mutationsUnderway = await prisma.movementRequest.count({ where: { recruitmentRequestId: r.id, status: { in: OPEN_MOVEMENT_STATUSES } } });
+      const open = r.jobId && !r.heldAt && canRequestAcceptFulfillment(r.status) && !computeFulfillmentCounts(r.requestedHeadcount, r._count.fulfillments).isFull && r._count.fulfillments + mutationsUnderway < r.requestedHeadcount;
+      if (!open) {
+        return (
+          <div className="max-w-2xl rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            Permintaan {r.requestNumber} tidak bisa diisi dengan Mutasi sekarang: belum disetujui, sedang ditahan, sudah terisi penuh, atau semua kursinya sedang diisi Mutasi lain.{" "}
+            <Link href={`/recruitment/${r.id}`} className="font-medium underline">Kembali ke permintaan</Link>
+          </div>
+        );
+      }
+      fillRow = { id: r.id, label: `${r.job?.jobTitle ?? "permintaan"} (${r.requestNumber})`, requesterEmployeeId: r.requesterEmployeeId, jobId: r.jobId! };
+    }
+  }
   const viaCandidateOnly = !isHrAdminUser && level3DepartmentIds.length === 0 && !!candidateRow;
   if (!isHrAdminUser && level3DepartmentIds.length === 0 && !viaCandidateOnly) {
     return <AccessDenied />;
@@ -74,7 +102,11 @@ export default async function NewMovementRequestPage({
       orderBy: { fullLegalName: "asc" },
     }),
     prisma.position.findMany({
-      where: viaCandidateOnly ? { archived: false, positionStatus: "VACANT", jobId: candidateRow!.jobId ?? "__none__" } : { archived: false },
+      where: fillRow
+        ? { archived: false, positionStatus: "VACANT", jobId: fillRow.jobId }
+        : viaCandidateOnly
+        ? { archived: false, positionStatus: "VACANT", jobId: candidateRow!.jobId ?? "__none__" }
+        : { archived: false },
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),
@@ -107,6 +139,7 @@ export default async function NewMovementRequestPage({
           currentEmployeeId={session.user.employeeId}
           isHrAdmin={isHrAdminUser}
           candidate={candidate}
+          fillRequest={fillRow}
         />
       </div>
     </div>

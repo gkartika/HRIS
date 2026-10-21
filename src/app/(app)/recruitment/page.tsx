@@ -36,7 +36,9 @@ export default async function RecruitmentListPage({
   const where: Prisma.RecruitmentRequestWhereInput = canManageRecruitment(session)
     ? {}
     : { requesterEmployeeId: session.user.employeeId ?? "__none__" };
-  if (status) where.status = status as RecruitmentRequestStatus;
+  // "HELD" is not a status: a held request keeps its real status and only has heldAt set.
+  if (status === "HELD") where.heldAt = { not: null };
+  else if (status) where.status = status as RecruitmentRequestStatus;
   if (departmentId) where.departmentId = departmentId;
 
   const { page, skip, take } = pageParams(pageRaw);
@@ -95,6 +97,7 @@ export default async function RecruitmentListPage({
                 {t(`recruitmentStatus.${s}`)}
               </option>
             ))}
+            <option value="HELD">Ditahan</option>
           </select>
         </div>
         <div>
@@ -145,14 +148,14 @@ export default async function RecruitmentListPage({
               {requests.map((r) => {
                 const counts = computeFulfillmentCounts(r.requestedHeadcount, r.fulfillments.length);
                 return (
-                  <tr key={r.id} className="border-t border-slate-100">
+                  <tr key={r.id} className={`border-t border-slate-100 ${r.heldAt ? "bg-amber-50/50" : ""}`}>
                     <td className="px-4 py-3">
                       <Link href={`/recruitment/${r.id}`} className="font-mono text-xs text-indigo-600 hover:underline">
                         {r.requestNumber}
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{r.department.unitName}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.job?.jobTitle ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">{r.job?.jobTitle ?? r.requestedJobText ?? "—"}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {t("recruitment.filledOf", { filled: counts.filledCount, total: r.requestedHeadcount })}
                     </td>
@@ -160,6 +163,7 @@ export default async function RecruitmentListPage({
                       <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                         {t(`recruitmentStatus.${r.status}`)}
                       </span>
+                      {r.heldAt && <span className="ml-1.5 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">Ditahan</span>}
                     </td>
                   </tr>
                 );

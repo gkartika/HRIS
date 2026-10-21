@@ -56,6 +56,7 @@ export async function applyExternalAction(
       select: { requestId: true, status: true, closedAt: true },
     }),
   ]);
+  if (request.heldAt) return "Lowongan ini sedang dihentikan sementara. Silakan coba lagi nanti.";
   if (readinessProblems(ctx, request, request._count.fulfillments).length > 0 || !request.jobId) {
     return "Lowongan ini belum bisa menerima pelamar. Silakan coba lagi nanti.";
   }

@@ -9,7 +9,6 @@ import {
   cancelRecruitmentRequest,
   closeRecruitmentRequest,
 } from "../actions";
-import { vacantSeatShortfall } from "@/lib/recruitment";
 import { t } from "@/lib/i18n/id";
 
 type DecideAction = typeof decideRecruitmentRequest;
@@ -17,11 +16,6 @@ type DecideAction = typeof decideRecruitmentRequest;
 export interface DecisionPositionOption {
   positionId: string;
   positionCode: string;
-  jobTitle: string;
-}
-
-export interface DecisionJobOption {
-  id: string;
   jobTitle: string;
 }
 
@@ -64,65 +58,6 @@ function DecisionPositionField({ positions }: { positions: DecisionPositionOptio
   );
 }
 
-// Heads-up only, never a block: hiring needs a vacant position for the chosen
-// job to exist in this department, so the HR Manager sees how many there are
-// before approving. Admin SDM adds missing positions in Posisi Organisasi.
-function VacantSeatNote({
-  jobId,
-  vacantByJob,
-  requestedHeadcount,
-}: {
-  jobId: string;
-  vacantByJob: Record<string, number>;
-  requestedHeadcount: number;
-}) {
-  if (!jobId) return null;
-  const vacant = vacantByJob[jobId] ?? 0;
-  const shortfall = vacantSeatShortfall(requestedHeadcount, vacant);
-  return (
-    <p className={`mt-1 text-xs ${shortfall > 0 ? "text-amber-700" : "text-slate-500"}`}>
-      {t("recruitment.vacantSeatsForJob", { vacant, requested: requestedHeadcount })}
-      {shortfall > 0 && <> {t("recruitment.vacantSeatsShortfall", { shortfall })}</>}
-    </p>
-  );
-}
-
-function DecisionJobField({
-  jobs,
-  defaultJobId,
-  vacantByJob,
-  requestedHeadcount,
-}: {
-  jobs: DecisionJobOption[];
-  defaultJobId?: string | null;
-  vacantByJob?: Record<string, number>;
-  requestedHeadcount?: number;
-}) {
-  const [selectedJobId, setSelectedJobId] = useState(defaultJobId ?? "");
-  return (
-    <div>
-      <label className="block text-xs text-slate-500">{t("recruitment.setJobToApprove")}</label>
-      <select
-        name="jobId"
-        required
-        value={selectedJobId}
-        onChange={(e) => setSelectedJobId(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-      >
-        <option value="">— Pilih —</option>
-        {jobs.map((j) => (
-          <option key={j.id} value={j.id}>
-            {j.jobTitle}
-          </option>
-        ))}
-      </select>
-      {vacantByJob && requestedHeadcount !== undefined && (
-        <VacantSeatNote jobId={selectedJobId} vacantByJob={vacantByJob} requestedHeadcount={requestedHeadcount} />
-      )}
-    </div>
-  );
-}
-
 function DecisionButton({
   requestId,
   decision,
@@ -130,10 +65,7 @@ function DecisionButton({
   tone,
   requireNote,
   positions,
-  jobs,
-  defaultJobId,
-  vacantByJob,
-  requestedHeadcount,
+  blockedReason,
   decideAction = decideRecruitmentRequest,
 }: {
   requestId: string;
@@ -142,15 +74,21 @@ function DecisionButton({
   tone: string;
   requireNote: boolean;
   positions: DecisionPositionOption[];
-  jobs?: DecisionJobOption[];
-  defaultJobId?: string | null;
-  vacantByJob?: Record<string, number>;
-  requestedHeadcount?: number;
+  /** Why this button cannot be used yet (shown instead of the button). */
+  blockedReason?: string;
   decideAction?: DecideAction;
 }) {
   const [open, setOpen] = useState(false);
   const action = decideAction.bind(null, requestId, decision);
   const [error, formAction, isPending] = useActionState(action, undefined);
+
+  if (blockedReason) {
+    return (
+      <button type="button" disabled title={blockedReason} className="cursor-not-allowed rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500">
+        {label}
+      </button>
+    );
+  }
 
   if (!open) {
     return (
@@ -166,14 +104,6 @@ function DecisionButton({
   return (
     <form action={formAction} className="w-full space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <DecisionPositionField positions={positions} />
-      {decision === "APPROVED" && jobs && (
-        <DecisionJobField
-          jobs={jobs}
-          defaultJobId={defaultJobId}
-          vacantByJob={vacantByJob}
-          requestedHeadcount={requestedHeadcount}
-        />
-      )}
       <label className="block text-xs text-slate-500">
         {t("recruitment.decisionNote")} {requireNote && "(wajib)"}
       </label>
@@ -205,17 +135,12 @@ function DecisionButton({
 export function DecisionButtons({
   requestId,
   positions,
-  jobs,
-  defaultJobId,
-  vacantByJob,
-  requestedHeadcount,
+  approveBlockedReason,
 }: {
   requestId: string;
   positions: DecisionPositionOption[];
-  jobs: DecisionJobOption[];
-  defaultJobId?: string | null;
-  vacantByJob?: Record<string, number>;
-  requestedHeadcount?: number;
+  /** Set while Admin SDM / Admin Rekrutmen have not set the standard Jabatan yet. */
+  approveBlockedReason?: string;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -226,10 +151,7 @@ export function DecisionButtons({
         tone="bg-emerald-600 text-white hover:bg-emerald-700"
         requireNote={false}
         positions={positions}
-        jobs={jobs}
-        defaultJobId={defaultJobId}
-        vacantByJob={vacantByJob}
-        requestedHeadcount={requestedHeadcount}
+        blockedReason={approveBlockedReason}
       />
       <DecisionButton
         requestId={requestId}

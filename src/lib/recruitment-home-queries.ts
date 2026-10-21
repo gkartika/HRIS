@@ -44,6 +44,7 @@ export async function getRecruitmentHomeData() {
         accessCode: true,
         requestedHeadcount: true,
         jobId: true,
+        heldAt: true,
         testsCustomized: true,
         testTypeIds: true,
         job: { select: { jobTitle: true } },

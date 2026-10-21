@@ -1,14 +1,5 @@
 import { t } from "@/lib/i18n/id";
-import {
-  PERFORMANCE_CRITERIA,
-  PERFORMANCE_MAX_TOTAL,
-  TATA_NILAI_CRITERIA,
-  averageMatrixScores,
-  isMatrixScores,
-  performanceSummary,
-  tataNilaiAverage,
-  type EvaluationMatrixScores,
-} from "@/lib/evaluation";
+import { averageMatrixScores, isMatrixScores, performanceSummary, tataNilaiAverage, type EvaluationMatrixScores, type MatrixDefinition } from "@/lib/evaluation";
 
 // The final result of an evaluation, for Admin SDM (also while an evaluator is still missing) and the Department
 // Head (once completed). Two big numbers (performance, tata nilai), then one table per section with a column per
@@ -45,15 +36,13 @@ function Cell({ value, max, highlight }: { value: number | null; max: number; hi
 
 function CompareTable({
   title,
-  keys,
-  labelOf,
+  criteria,
   max,
   columns,
   footer,
 }: {
   title: string;
-  keys: readonly string[];
-  labelOf: (key: string) => string;
+  criteria: { key: string; label: string }[];
   max: number;
   columns: { name: string; values: (number | null)[]; final?: boolean; foot: string }[];
   footer: string;
@@ -72,9 +61,9 @@ function CompareTable({
               </span>
             ))}
           </div>
-          {keys.map((key, i) => (
+          {criteria.map(({ key, label }, i) => (
             <div key={key} className="grid items-center gap-2 border-t border-slate-100 py-1.5" style={grid}>
-              <span className="text-slate-800">{labelOf(key)}</span>
+              <span className="text-slate-800">{label}</span>
               {columns.map((c) => (
                 <Cell key={c.name} value={c.values[i]} max={max} highlight={c.final} />
               ))}
@@ -94,25 +83,25 @@ function CompareTable({
   );
 }
 
-export function EvaluationResultView({ evaluators, attendance }: { evaluators: EvaluatorResult[]; attendance: React.ReactNode }) {
+export function EvaluationResultView({ evaluators, attendance, definition }: { evaluators: EvaluatorResult[]; attendance: React.ReactNode; definition: MatrixDefinition }) {
   const submitted = evaluators.filter((e) => e.submitted);
   const matrices = submitted.map((e) => e.scores).filter(isMatrixScores) as EvaluationMatrixScores[];
   // the result of an evaluation: the average of everyone who submitted (one person: their own grades)
-  const final = averageMatrixScores(matrices);
+  const final = averageMatrixScores(matrices, definition);
   if (!final || matrices.length !== submitted.length) return null; // older evaluations are shown by the caller
   const missing = evaluators.filter((e) => !e.submitted);
   const provisional = missing.length > 0;
-  const perf = performanceSummary(final);
-  const tata = tataNilaiAverage(final);
+  const perf = performanceSummary(final, definition);
+  const tata = tataNilaiAverage(final, definition);
   const two = evaluators.length > 1;
 
   const perfColumn = (e: EvaluatorResult) => {
     const s = e.submitted && isMatrixScores(e.scores) ? e.scores : null;
-    return { name: `${e.slot} · ${e.name}`, values: PERFORMANCE_CRITERIA.map((k) => (s ? s.performance[k] : null)), foot: s ? fmt(performanceSummary(s).total) : "—" };
+    return { name: `${e.slot} · ${e.name}`, values: definition.performance.map((c) => (s ? s.performance[c.key] ?? null : null)), foot: s ? fmt(performanceSummary(s, definition).total) : "—" };
   };
   const tataColumn = (e: EvaluatorResult) => {
     const s = e.submitted && isMatrixScores(e.scores) ? e.scores : null;
-    return { name: `${e.slot} · ${e.name}`, values: TATA_NILAI_CRITERIA.map((k) => (s ? s.tataNilai[k] : null)), foot: s ? fmt(tataNilaiAverage(s)) : "—" };
+    return { name: `${e.slot} · ${e.name}`, values: definition.tataNilai.map((c) => (s ? s.tataNilai[c.key] ?? null : null)), foot: s ? fmt(tataNilaiAverage(s, definition)) : "—" };
   };
   const caption = provisional ? ` (${t("evaluation.matrix.provisional")}, ${submitted.map((e) => e.slot).join(" & ")})` : two ? ` (${t("evaluation.matrix.averageOf")})` : "";
 
@@ -131,7 +120,7 @@ export function EvaluationResultView({ evaluators, attendance }: { evaluators: E
             {caption}
           </p>
           <p className="mt-1 text-3xl font-extrabold text-slate-900">
-            {fmt(perf.total)} <span className="text-sm font-semibold text-slate-500">/ {PERFORMANCE_MAX_TOTAL}</span>
+            {fmt(perf.total)} <span className="text-sm font-semibold text-slate-500">/ {perf.max}</span>
           </p>
           <div className="mt-2">
             <Bar pct={perf.percent} color="#4f46e5" />
@@ -153,23 +142,21 @@ export function EvaluationResultView({ evaluators, attendance }: { evaluators: E
 
       <CompareTable
         title={t("evaluation.matrix.performanceName")}
-        keys={PERFORMANCE_CRITERIA}
-        labelOf={(k) => t(`evaluation.matrix.performance.${k}`)}
+        criteria={definition.performance}
         max={8}
         columns={[
           ...evaluators.map(perfColumn),
-          ...(two && !provisional ? [{ name: t("evaluation.matrix.average"), values: PERFORMANCE_CRITERIA.map((k) => final.performance[k]), final: true, foot: fmt(perf.total) }] : []),
+          ...(two && !provisional ? [{ name: t("evaluation.matrix.average"), values: definition.performance.map((c) => final.performance[c.key]), final: true, foot: fmt(perf.total) }] : []),
         ]}
-        footer={t("evaluation.matrix.totalOf", { max: PERFORMANCE_MAX_TOTAL })}
+        footer={t("evaluation.matrix.totalOf", { max: perf.max })}
       />
       <CompareTable
         title={t("evaluation.matrix.tataNilaiName")}
-        keys={TATA_NILAI_CRITERIA}
-        labelOf={(k) => t(`evaluation.matrix.tataNilai.${k}`)}
+        criteria={definition.tataNilai}
         max={100}
         columns={[
           ...evaluators.map(tataColumn),
-          ...(two && !provisional ? [{ name: t("evaluation.matrix.average"), values: TATA_NILAI_CRITERIA.map((k) => final.tataNilai[k]), final: true, foot: fmt(tata) }] : []),
+          ...(two && !provisional ? [{ name: t("evaluation.matrix.average"), values: definition.tataNilai.map((c) => final.tataNilai[c.key]), final: true, foot: fmt(tata) }] : []),
         ]}
         footer={t("evaluation.matrix.averageRow")}
       />

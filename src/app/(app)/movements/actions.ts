@@ -34,8 +34,9 @@ import {
 import { requiresEvaluationForMovementType, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/lib/evaluation-create";
 import { completeInternalHire, notifyManagersOfInternalHire } from "@/lib/recruitment-flow";
+import { mutationFillProblem } from "@/lib/mutation-fill";
 import { canManageRecruitment } from "@/lib/permissions";
-import type { MovementType, EmploymentStatus } from "@/generated/prisma/enums";
+import type { MovementType, EmploymentStatus, RecruitmentRequestStatus } from "@/generated/prisma/enums";
 
 export async function submitMovementRequest(
   _prevState: string | undefined,
@@ -54,6 +55,20 @@ export async function submitMovementRequest(
   const performanceEvaluationRef = (formData.get("performanceEvaluationRef") as string)?.trim() || null;
   // Set when HR Admin opened this form from an internal applicant (Rekrutmen).
   const candidateId = (formData.get("candidateId") as string) || null;
+  // Set when Admin SDM filed this Mutasi to fill a recruitment request ("Isi dengan Mutasi").
+  const recruitmentRequestId = (formData.get("recruitmentRequestId") as string) || null;
+  let fillRequest: { jobId: string | null; status: RecruitmentRequestStatus; requestedHeadcount: number; requesterEmployeeId: string; filled: number; held: boolean } | null = null;
+  if (recruitmentRequestId) {
+    if (!isHrAdmin(session)) return "Hanya Admin SDM yang bisa mengisi permintaan tenaga kerja dengan Mutasi.";
+    const r = await prisma.recruitmentRequest.findUnique({
+      where: { id: recruitmentRequestId },
+      select: { jobId: true, status: true, requestedHeadcount: true, requesterEmployeeId: true, heldAt: true, _count: { select: { fulfillments: true } } },
+    });
+    if (!r) return "Permintaan tenaga kerja tidak ditemukan.";
+    fillRequest = { jobId: r.jobId, status: r.status, requestedHeadcount: r.requestedHeadcount, requesterEmployeeId: r.requesterEmployeeId, filled: r._count.fulfillments, held: r.heldAt !== null };
+    // the move is filed on behalf of the request's own requester
+    requesterEmployeeId = r.requesterEmployeeId;
+  }
   // Admin Rekrutmen has no employee record, so the vacancy's own requester files the move.
   if (candidateId && canManageRecruitment(session) && !isHrAdmin(session)) {
     const c = await prisma.recruitmentCandidate.findUnique({ where: { id: candidateId }, select: { request: { select: { requesterEmployeeId: true } } } });
@@ -151,6 +166,16 @@ export async function submitMovementRequest(
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
   if (!requester) return "Karyawan pengaju tidak ditemukan.";
 
+  if (recruitmentRequestId && fillRequest) {
+    const mutationsUnderway = await prisma.movementRequest.count({ where: { recruitmentRequestId, status: { in: OPEN_MOVEMENT_STATUSES } } });
+    const fillError = mutationFillProblem({
+      request: { ...fillRequest, mutationsUnderway },
+      movementType,
+      position: { jobId: proposedPosition.jobId, positionStatus: proposedPosition.positionStatus, archived: proposedPosition.archived },
+    });
+    if (fillError) return fillError;
+  }
+
   if (candidateId) {
     const candidate = await prisma.recruitmentCandidate.findUnique({
       where: { id: candidateId },
@@ -210,8 +235,10 @@ export async function submitMovementRequest(
       submittedByAccountId: session.user.id,
       performanceEvaluationRef,
       evaluationId,
+      recruitmentRequestId,
     },
   });
+  if (recruitmentRequestId) revalidatePath(`/recruitment/${recruitmentRequestId}`);
 
   // The applicant's page follows this request from now on.
   if (candidateId) {
@@ -548,7 +575,7 @@ export async function executeMovementRequest(requestId: string): Promise<string 
       effectiveDate: request.proposedEffectiveDate,
     });
     revalidatePath(`/recruitment/${result.hired.requestId}`);
-    revalidatePath(`/recruitment/${result.hired.requestId}/candidates/${result.hired.candidateId}`);
+    if (result.hired.candidateId) revalidatePath(`/recruitment/${result.hired.requestId}/candidates/${result.hired.candidateId}`);
     revalidatePath("/recruitment/applicants");
   }
 

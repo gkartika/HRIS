@@ -32,12 +32,11 @@ export default async function EditReturnedRecruitmentRequestPage({ params }: { p
     );
   }
 
-  const [departments, jobs] = await Promise.all([
+  const [departments] = await Promise.all([
     prisma.orgUnit.findMany({
       where: { OR: [{ activeFlag: true, unitType: "DEPARTMENT" }, { id: request.departmentId }] },
       orderBy: { unitName: "asc" },
     }),
-    prisma.job.findMany({ orderBy: { jobTitle: "asc" } }),
   ]);
 
   const returnedByHrManager = !!request.approvedByAccountId;
@@ -71,7 +70,6 @@ export default async function EditReturnedRecruitmentRequestPage({ params }: { p
         </div>
         <CreateRequestForm
           departments={departments}
-          jobs={jobs}
           employees={[]}
           currentEmployeeId={session.user.employeeId}
           isHrAdmin={isHrAdmin(session)}
@@ -80,7 +78,7 @@ export default async function EditReturnedRecruitmentRequestPage({ params }: { p
             requestDate: request.requestDate.toISOString().slice(0, 10),
             reasonCode: request.reasonCode,
             departmentId: request.departmentId,
-            jobId: request.jobId,
+            requestedJobText: request.requestedJobText ?? "",
             shiftCode: request.shiftCode,
             requestedHeadcount: request.requestedHeadcount,
             jobDescriptionSnapshot: request.jobDescriptionSnapshot,
@@ -88,7 +86,6 @@ export default async function EditReturnedRecruitmentRequestPage({ params }: { p
             workExperienceBand: request.workExperienceBand,
             ageBand: request.ageBand,
             genderRequirement: request.genderRequirement,
-            requestedJobLevel: request.requestedJobLevel,
             specialCriteria: request.specialCriteria,
           }}
         />

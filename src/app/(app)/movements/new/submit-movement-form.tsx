@@ -33,6 +33,7 @@ export function SubmitMovementForm({
   currentEmployeeId,
   isHrAdmin,
   candidate,
+  fillRequest,
 }: {
   employees: EmployeeOption[];
   defaultEmployeeId: string;
@@ -42,15 +43,19 @@ export function SubmitMovementForm({
   isHrAdmin: boolean;
   /** Set when HR Admin opened this form from an internal applicant. */
   candidate?: { id: string; label: string; requesterEmployeeId: string } | null;
+  /** Set when Admin SDM opened this form from a recruitment request to fill it with a Mutasi. */
+  fillRequest?: { id: string; label: string; requesterEmployeeId: string } | null;
 }) {
   const [error, formAction, isPending] = useActionState(submitMovementRequest, undefined);
   const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
-  const [movementType, setMovementType] = useState<(typeof MOVEMENT_TYPES)[number] | "">("");
+  const [movementType, setMovementType] = useState<(typeof MOVEMENT_TYPES)[number] | "">(fillRequest ? "MUTATION" : "");
 
   const employee = useMemo(() => employees.find((e) => e.id === employeeId) ?? null, [employees, employeeId]);
   const assignments = employee?.assignments ?? [];
   const primaryAssignment = assignments.find((a) => a.assignmentType === "PRIMARY");
-  const isPerubahanPosisi = movementType === "PROMOTION" || movementType === "MUTATION" || movementType === "DEMOTION";
+  // a Mutasi needs no evaluation, so there is nothing to reference for it
+  const needsEvaluation = movementType === "PROMOTION" || movementType === "DEMOTION";
+  const requesterDefault = fillRequest?.requesterEmployeeId ?? candidate?.requesterEmployeeId ?? currentEmployeeId ?? "";
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-6 md:grid-cols-2">
@@ -62,13 +67,21 @@ export function SubmitMovementForm({
           </p>
         </>
       )}
-      {isHrAdmin ? (
+      {fillRequest && (
+        <>
+          <input type="hidden" name="recruitmentRequestId" value={fillRequest.id} />
+          <p className="rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-900 md:col-span-2">
+            Mengisi permintaan tenaga kerja {fillRequest.label} dengan Mutasi. Pilih karyawan dan kursi kosong yang akan diisi. Mutasi tidak butuh evaluasi.
+          </p>
+        </>
+      )}
+      {isHrAdmin && !fillRequest ? (
         <div>
           <label className="mb-1 block text-xs text-slate-500">{t("recruitment.submittedBy")}</label>
           <select
             name="requesterEmployeeId"
             required
-            defaultValue={candidate?.requesterEmployeeId ?? currentEmployeeId ?? ""}
+            defaultValue={requesterDefault}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
           >
             <option value="">— Pilih Karyawan —</option>
@@ -80,7 +93,7 @@ export function SubmitMovementForm({
           </select>
         </div>
       ) : (
-        <input type="hidden" name="requesterEmployeeId" value={candidate?.requesterEmployeeId ?? currentEmployeeId ?? ""} />
+        <input type="hidden" name="requesterEmployeeId" value={requesterDefault} />
       )}
 
       <div className="md:col-span-2">
@@ -104,20 +117,27 @@ export function SubmitMovementForm({
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("movement.movementType")}</label>
-        <select
-          name="movementType"
-          required
-          value={movementType}
-          onChange={(e) => setMovementType(e.target.value as (typeof MOVEMENT_TYPES)[number])}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-        >
-          <option value="">— Pilih —</option>
-          {MOVEMENT_TYPES.map((mt) => (
-            <option key={mt} value={mt}>
-              {t(`movementType.${mt}`)}
-            </option>
-          ))}
-        </select>
+        {fillRequest ? (
+          <>
+            <input type="hidden" name="movementType" value="MUTATION" />
+            <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">{t("movementType.MUTATION")}</p>
+          </>
+        ) : (
+          <select
+            name="movementType"
+            required
+            value={movementType}
+            onChange={(e) => setMovementType(e.target.value as (typeof MOVEMENT_TYPES)[number])}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="">— Pilih —</option>
+            {MOVEMENT_TYPES.map((mt) => (
+              <option key={mt} value={mt}>
+                {t(`movementType.${mt}`)}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div>
@@ -184,7 +204,7 @@ export function SubmitMovementForm({
         />
       </div>
 
-      {isPerubahanPosisi && (
+      {needsEvaluation && (
         <div className="md:col-span-2">
           <label className="mb-1 block text-xs text-slate-500">{t("movement.performanceEvaluationRef")}</label>
           <input

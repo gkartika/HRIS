@@ -12,6 +12,8 @@ import {
   allAssignedEvaluatorsSubmitted,
   canReleaseEvaluationStatus,
   canSubmitEvaluationSlot,
+  buildMatrixDefinition,
+  matrixDefinitionOf,
   parseEvaluationMatrix,
 } from "@/lib/evaluation";
 import { addWorkingDays } from "@/lib/work-calendar";
@@ -86,10 +88,17 @@ export async function releaseEvaluation(
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
 
+  // The evaluation is released with the criteria as they are now; later edits in Pengaturan Evaluasi do not touch it.
+  const matrix = buildMatrixDefinition(await prisma.evaluationCriterion.findMany({ select: { section: true, key: true, label: true, sortOrder: true, active: true } }));
+  if (matrix.performance.length === 0 || matrix.tataNilai.length === 0) {
+    return "Matriks penilaian belum punya kriteria aktif. Atur dulu di Pengaturan > Evaluasi.";
+  }
+
   const now = new Date();
   await prisma.evaluation.update({
     where: { id: evaluationId },
     data: {
+      matrixSnapshot: matrix as unknown as Prisma.InputJsonValue,
       status: "RELEASED",
       responsibleHrAdminAccountId: session.user.id,
       releasedByAccountId: session.user.id,
@@ -155,7 +164,7 @@ export async function submitEvaluation(
     return "Evaluasi ini sudah dikirim atau belum siap menerima evaluasi.";
   }
 
-  const parsed = parseEvaluationMatrix((field) => formData.get(field) as string | null);
+  const parsed = parseEvaluationMatrix(matrixDefinitionOf(evaluation.matrixSnapshot), (field) => formData.get(field) as string | null);
   if (!parsed.ok) return parsed.error;
   const scores = parsed.scores as unknown as Prisma.InputJsonValue;
   const total = parsed.performanceTotal;

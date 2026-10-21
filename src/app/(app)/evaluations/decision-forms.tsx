@@ -4,16 +4,7 @@ import { useActionState, useRef, useState } from "react";
 import { AttendanceCard, type EvaluationAttendance } from "./attendance-card";
 import { releaseEvaluation, submitEvaluation, createManualEvaluation } from "./actions";
 import { t } from "@/lib/i18n/id";
-import {
-  PERFORMANCE_CRITERIA,
-  PERFORMANCE_SCALE,
-  TATA_NILAI_CRITERIA,
-  TATA_NILAI_SCALE,
-  performanceField,
-  tataNilaiField,
-  type PerformanceKey,
-  type TataNilaiKey,
-} from "@/lib/evaluation";
+import { PERFORMANCE_SCALE, TATA_NILAI_SCALE, performanceField, tataNilaiField, type MatrixDefinition } from "@/lib/evaluation";
 import type { Employee } from "@/generated/prisma/client";
 type EmployeeOption = Pick<Employee, "id" | "fullLegalName" | "employeeNumber">;
 
@@ -80,8 +71,7 @@ export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationI
 function GradeMatrix({
   title,
   hint,
-  keys,
-  labelOf,
+  criteria,
   fieldOf,
   scale,
   values,
@@ -90,8 +80,7 @@ function GradeMatrix({
 }: {
   title: string;
   hint: string;
-  keys: readonly string[];
-  labelOf: (key: string) => string;
+  criteria: { key: string; label: string }[];
   fieldOf: (key: string) => string;
   scale: readonly number[];
   values: Record<string, number | undefined>;
@@ -110,7 +99,7 @@ function GradeMatrix({
             <span key={n}>{n}</span>
           ))}
         </div>
-        {keys.map((key) => {
+        {criteria.map(({ key, label }) => {
           const value = values[key];
           const missing = highlightMissing && value === undefined;
           return (
@@ -119,12 +108,12 @@ function GradeMatrix({
               data-missing={missing ? "true" : undefined}
               className={`grid grid-cols-[repeat(var(--n),1fr)] items-center gap-1.5 border-0 border-t border-slate-100 py-2 sm:grid-cols-[minmax(0,1fr)_repeat(var(--n),56px)] ${missing ? "rounded-lg bg-amber-50 pl-2 shadow-[inset_3px_0_0_#f59e0b]" : ""}`}
             >
-              <legend className="sr-only">{labelOf(key)}</legend>
+              <legend className="sr-only">{label}</legend>
               <span className="col-span-full mb-1 flex items-start gap-2 text-sm leading-snug text-slate-900 sm:col-span-1 sm:mb-0">
                 <span className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${value === undefined ? "invisible" : "bg-green-600"}`} aria-hidden="true">
                   <svg width="10" height="10" viewBox="0 0 16 16"><path d="M3.8 8.4l2.7 2.7 5.7-6" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </span>
-                {labelOf(key)}
+                {label}
               </span>
               {scale.map((n, i) => (
                 <label key={n} className="relative block">
@@ -142,16 +131,28 @@ function GradeMatrix({
   );
 }
 
-export function EvaluationSlotForm({ evaluationId, slot, attendance }: { evaluationId: string; slot: "P1" | "P2"; attendance: EvaluationAttendance }) {
+export function EvaluationSlotForm({
+  evaluationId,
+  slot,
+  attendance,
+  definition,
+  hasGuideline,
+}: {
+  evaluationId: string;
+  slot: "P1" | "P2";
+  attendance: EvaluationAttendance;
+  definition: MatrixDefinition;
+  hasGuideline: boolean;
+}) {
   const action = submitEvaluation.bind(null, evaluationId, slot);
   const [error, formAction, isPending] = useActionState(action, undefined);
-  const [performance, setPerformance] = useState<Partial<Record<PerformanceKey, number>>>({});
-  const [tataNilai, setTataNilai] = useState<Partial<Record<TataNilaiKey, number>>>({});
+  const [performance, setPerformance] = useState<Record<string, number | undefined>>({});
+  const [tataNilai, setTataNilai] = useState<Record<string, number | undefined>>({});
   const [highlightMissing, setHighlightMissing] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const total = PERFORMANCE_CRITERIA.length + TATA_NILAI_CRITERIA.length;
-  const answered = PERFORMANCE_CRITERIA.filter((k) => performance[k] !== undefined).length + TATA_NILAI_CRITERIA.filter((k) => tataNilai[k] !== undefined).length;
+  const total = definition.performance.length + definition.tataNilai.length;
+  const answered = definition.performance.filter((c) => performance[c.key] !== undefined).length + definition.tataNilai.filter((c) => tataNilai[c.key] !== undefined).length;
   const ready = answered === total;
 
   // Pressing the button too early points at what is still missing instead of doing nothing.
@@ -163,13 +164,27 @@ export function EvaluationSlotForm({ evaluationId, slot, attendance }: { evaluat
   return (
     <form ref={formRef} action={formAction} className="space-y-4">
       <p className="text-sm font-semibold text-slate-900">{t(slot === "P1" ? "evaluation.p1Title" : "evaluation.p2Title")}</p>
+      {hasGuideline && (
+        <a
+          href="/api/evaluation-guideline"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 rounded-xl border border-rose-200 bg-white px-4 py-3 hover:bg-rose-50"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-100 text-[11px] font-bold text-rose-700">PDF</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-slate-900">{t("evaluation.matrix.guidelineTitle")}</span>
+            <span className="block text-xs text-slate-500">{t("evaluation.matrix.guidelineHint")}</span>
+          </span>
+          <span className="text-sm font-bold text-rose-700">{t("evaluation.matrix.guidelineOpen")} ↗</span>
+        </a>
+      )}
       <AttendanceCard attendance={attendance} hint />
       <GradeMatrix
         title={t("evaluation.matrix.performanceTitle")}
         hint={t("evaluation.matrix.performanceHint")}
-        keys={PERFORMANCE_CRITERIA}
-        labelOf={(k) => t(`evaluation.matrix.performance.${k}`)}
-        fieldOf={(k) => performanceField(k as PerformanceKey)}
+        criteria={definition.performance}
+        fieldOf={(k) => performanceField(k)}
         scale={PERFORMANCE_SCALE}
         values={performance}
         onPick={(k, n) => setPerformance((p) => ({ ...p, [k]: n }))}
@@ -178,9 +193,8 @@ export function EvaluationSlotForm({ evaluationId, slot, attendance }: { evaluat
       <GradeMatrix
         title={t("evaluation.matrix.tataNilaiTitle")}
         hint={t("evaluation.matrix.tataNilaiHint")}
-        keys={TATA_NILAI_CRITERIA}
-        labelOf={(k) => t(`evaluation.matrix.tataNilai.${k}`)}
-        fieldOf={(k) => tataNilaiField(k as TataNilaiKey)}
+        criteria={definition.tataNilai}
+        fieldOf={(k) => tataNilaiField(k)}
         scale={TATA_NILAI_SCALE}
         values={tataNilai}
         onPick={(k, n) => setTataNilai((p) => ({ ...p, [k]: n }))}

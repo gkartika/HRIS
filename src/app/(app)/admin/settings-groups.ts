@@ -1,4 +1,4 @@
-import { Building2, User, Clock, LogOut, Award, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Building2, User, Clock, LogOut, Award, ShieldCheck, ClipboardCheck, type LucideIcon } from "lucide-react";
 
 export interface SettingsPage {
   href: string;
@@ -67,6 +67,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     desc: "Login terpisah untuk orang yang menjalankan proses pelamar.",
     icon: ShieldCheck,
     pages: [{ href: "/admin/recruitment-admins", label: "Kelola Akun" }],
+  },
+  {
+    id: "evaluasi",
+    title: "Evaluasi Kinerja",
+    desc: "Pedoman PDF dan kriteria matriks penilaian (Performance dan Tata Nilai).",
+    icon: ClipboardCheck,
+    pages: [{ href: "/admin/evaluation-settings", label: "Pedoman & Kriteria" }],
   },
   {
     id: "kompetensi",

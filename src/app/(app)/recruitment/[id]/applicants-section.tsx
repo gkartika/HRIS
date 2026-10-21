@@ -18,6 +18,7 @@ export async function ApplicantsSection({
   request: {
     id: string;
     jobId: string | null;
+    heldAt: Date | null;
     status: RecruitmentRequestStatus;
     openFor: RecruitmentOpenFor;
     accessCode: string | null;

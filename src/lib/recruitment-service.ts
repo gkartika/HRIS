@@ -118,10 +118,11 @@ export function possibleTests(ctx: PlanContext, request: RequestTestChoice) {
 // What stops a request from taking applicants right now (empty = ready).
 export function readinessProblems(
   ctx: PlanContext,
-  request: RequestTestChoice & { status: RecruitmentRequestStatus; accessCode: string | null; requestedHeadcount: number; openFor: RecruitmentOpenFor },
+  request: RequestTestChoice & { status: RecruitmentRequestStatus; accessCode: string | null; requestedHeadcount: number; openFor: RecruitmentOpenFor; heldAt?: Date | null },
   filled: number
 ): string[] {
   const problems: string[] = [];
+  if (request.heldAt) problems.push("Permintaan sedang ditahan.");
   if (!request.jobId) problems.push("Jabatan pada permintaan ini belum ditentukan.");
   if (!canRequestAcceptFulfillment(request.status)) problems.push("Permintaan belum disetujui atau sudah ditutup.");
   if (computeFulfillmentCounts(request.requestedHeadcount, filled).isFull) problems.push("Permintaan sudah terisi penuh.");

@@ -124,7 +124,7 @@ export async function submitDeptHeadRecommendation(
     return "Anda tidak memiliki akses. Hanya Kepala Departemen/Manajer (Level 3B) di department ini yang dapat memberikan rekomendasi.";
   }
   if (!canSubmitDeptHeadRecommendation(renewalCase.status) || !isEvaluationComplete(renewalCase.evaluation?.status ?? "DRAFT")) {
-    return "Evaluasi FR-HC-01-07 (P1 dan P2) harus selesai terlebih dahulu.";
+    return "Evaluasi FR-HC-01-07 harus selesai terlebih dahulu.";
   }
 
   const decisionPositionId = (formData.get("decisionPositionId") as string) || "";

@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { formatDateLong } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin, canReleaseEvaluation, canSubmitEvaluationAs, canViewEvaluation } from "@/lib/permissions";
+import { isHrAdmin, canReleaseEvaluation, canSubmitEvaluationAs, canViewEvaluation, canViewEvaluationResults } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { resolveDepartmentId } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
-import { canReleaseEvaluationStatus, canSubmitEvaluationSlot, type EvaluationScores } from "@/lib/evaluation";
+import { canReleaseEvaluationStatus, canSubmitEvaluationSlot, isMatrixScores, type EvaluationScores } from "@/lib/evaluation";
+import { AttendanceCard, type EvaluationAttendance } from "./attendance-card";
+import { EvaluationResultView, type EvaluatorResult } from "./evaluation-result";
 import { isOverdue } from "@/lib/work-calendar";
 import { ReleaseEvaluationForm, EvaluationSlotForm } from "./decision-forms";
 
 function EvaluationScoreSummary({ scores, total }: { scores: unknown; total: number | null }) {
+  // evaluations submitted before 2026-10-21 keep showing the grades they were given
   const s = (scores ?? {}) as EvaluationScores;
   const entries: [string, number][] = [];
   const push = (key: keyof EvaluationScores, label: string) => {
@@ -89,14 +92,37 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
 
   const isViewerP1 = canSubmitEvaluationAs(session.user.employeeId, evaluation.p1EmployeeId);
   const isViewerP2 = canSubmitEvaluationAs(session.user.employeeId, evaluation.p2EmployeeId);
-  const isReviewer = isHrAdminUser || deptHeadPositions.length > 0 || hrManagerPositions.length > 0;
+  // Scores: Admin SDM (also provisional), the Department Head and the HR Manager (once completed). Evaluators and
+  // everyone else see status only; the evaluators are told it was received.
+  const canSeeResults = canViewEvaluationResults(
+    session,
+    deptHeadPositions.map((p) => p.positionId),
+    hrManagerPositions.map((p) => p.positionId),
+    evaluation.status
+  );
 
   const canRelease = canReleaseEvaluation(session) && canReleaseEvaluationStatus(evaluation.status);
   const canP1Submit = isViewerP1 && canSubmitEvaluationSlot(evaluation.status, evaluation.p1SubmittedAt);
   const canP2Submit = isViewerP2 && canSubmitEvaluationSlot(evaluation.status, evaluation.p2SubmittedAt);
+  const submittedByViewer = (isViewerP1 && !!evaluation.p1SubmittedAt) || (isViewerP2 && !!evaluation.p2SubmittedAt);
 
   const employees = canRelease ? await prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } }) : [];
   const overdue = isOverdue(evaluation.evaluationDueDate);
+
+  const attendance: EvaluationAttendance = {
+    sakit: evaluation.attendanceSakit,
+    ijin: evaluation.attendanceIjin,
+    alpha: evaluation.attendanceAlpha,
+    ijinHalfDay: evaluation.attendanceIjinHalfDay,
+  };
+  const evaluators: EvaluatorResult[] = [
+    { slot: "P1", name: evaluation.p1Employee?.fullLegalName ?? "—", submitted: !!evaluation.p1SubmittedAt, scores: evaluation.p1Scores },
+    ...(evaluation.p2EmployeeId ? [{ slot: "P2" as const, name: evaluation.p2Employee?.fullLegalName ?? "—", submitted: !!evaluation.p2SubmittedAt, scores: evaluation.p2Scores }] : []),
+  ];
+  const anySubmitted = evaluators.some((e) => e.submitted);
+  // evaluations submitted before the two-section matrix keep showing the grades they were given
+  const hasOlderForm = evaluators.some((e) => e.submitted && !isMatrixScores(e.scores));
+  const released = evaluation.status !== "DRAFT";
 
   return (
     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
@@ -125,41 +151,36 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
 
       {canRelease && <ReleaseEvaluationForm evaluationId={evaluation.id} employees={employees} />}
 
-      {evaluation.status !== "DRAFT" && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              {t("evaluation.p1Title")} — {evaluation.p1Employee?.fullLegalName}
-            </p>
-            {evaluation.p1SubmittedAt ? (
-              isViewerP1 || isReviewer ? (
-                <EvaluationScoreSummary scores={evaluation.p1Scores} total={evaluation.p1Total} />
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">{t("evaluation.submittedNotice")}</p>
-              )
-            ) : (
-              <p className="mt-2 text-xs text-slate-400">—</p>
-            )}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              {t("evaluation.p2Title")} — {evaluation.p2Employee?.fullLegalName}
-            </p>
-            {evaluation.p2SubmittedAt ? (
-              isViewerP2 || isReviewer ? (
-                <EvaluationScoreSummary scores={evaluation.p2Scores} total={evaluation.p2Total} />
-              ) : (
-                <p className="mt-2 text-xs text-slate-500">{t("evaluation.submittedNotice")}</p>
-              )
-            ) : (
-              <p className="mt-2 text-xs text-slate-400">—</p>
-            )}
-          </div>
+      {released && canSeeResults && anySubmitted && !hasOlderForm && <EvaluationResultView evaluators={evaluators} attendance={<AttendanceCard attendance={attendance} />} />}
+
+      {released && canSeeResults && anySubmitted && hasOlderForm && (
+        <div className={`grid grid-cols-1 gap-4 ${evaluators.length > 1 ? "md:grid-cols-2" : ""}`}>
+          {evaluators.map((e) => (
+            <div key={e.slot}>
+              <p className="text-sm font-medium text-slate-900">
+                {t(e.slot === "P1" ? "evaluation.p1Title" : "evaluation.p2Title")} — {e.name}
+              </p>
+              {e.submitted ? <EvaluationScoreSummary scores={e.scores} total={e.slot === "P1" ? evaluation.p1Total : evaluation.p2Total} /> : <p className="mt-2 text-xs text-slate-400">—</p>}
+            </div>
+          ))}
         </div>
       )}
 
-      {canP1Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P1" />}
-      {canP2Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P2" />}
+      {released && canSeeResults && !anySubmitted && <p className="text-sm text-slate-500">{t("evaluation.matrix.notSent")}</p>}
+
+      {released && !canSeeResults && !canP1Submit && !canP2Submit && (
+        submittedByViewer ? (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-6 text-center">
+            <p className="text-base font-semibold text-green-900">{t("evaluation.matrix.thanksTitle")}</p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-green-800">{t("evaluation.matrix.thanksText")}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">{t("evaluation.matrix.statusOnly")}</p>
+        )
+      )}
+
+      {canP1Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P1" attendance={attendance} />}
+      {canP2Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P2" attendance={attendance} />}
     </div>
   );
 }

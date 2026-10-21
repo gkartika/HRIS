@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Session } from "next-auth";
 import type { Employee } from "@/generated/prisma/client";
 import {
+  canViewEvaluationResults,
   isHrAdmin,
   isTrainingAdmin,
   isGaAdmin,
@@ -703,5 +704,25 @@ describe("Admin Rekrutmen", () => {
 
   it("does not make someone Admin SDM", () => {
     expect(isHrAdmin(mockSession({ roles: ["RECRUITMENT_ADMIN"] }))).toBe(false);
+  });
+});
+
+describe("canViewEvaluationResults (who sees the scores)", () => {
+  const hrAdmin = mockSession({ roles: ["HR_ADMIN"] });
+  const employee = mockSession({ roles: ["EMPLOYEE"], employeeId: "emp-1" });
+  it("Admin SDM sees them from the first submission on, but not a draft", () => {
+    expect(canViewEvaluationResults(hrAdmin, [], [], "RELEASED")).toBe(true);
+    expect(canViewEvaluationResults(hrAdmin, [], [], "COMPLETED")).toBe(true);
+    expect(canViewEvaluationResults(hrAdmin, [], [], "DRAFT")).toBe(false);
+  });
+  it("the Department Head and the HR Manager see them only once the evaluation is completed", () => {
+    expect(canViewEvaluationResults(employee, ["pos-dept-head"], [], "COMPLETED")).toBe(true);
+    expect(canViewEvaluationResults(employee, ["pos-dept-head"], [], "RELEASED")).toBe(false);
+    expect(canViewEvaluationResults(employee, [], ["pos-hr-manager"], "COMPLETED")).toBe(true);
+    expect(canViewEvaluationResults(employee, [], ["pos-hr-manager"], "RELEASED")).toBe(false);
+  });
+  it("evaluators and everyone else do not", () => {
+    expect(canViewEvaluationResults(employee, [], [], "COMPLETED")).toBe(false);
+    expect(canViewEvaluationResults(employee, [], [], "RELEASED")).toBe(false);
   });
 });

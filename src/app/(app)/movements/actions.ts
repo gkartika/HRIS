@@ -260,7 +260,7 @@ export async function decideMovementRequestAsDeptHead(
   // evaluation is Completed" — a null evaluation only occurs on a legacy
   // pre-refactor row and is never blocked.
   if (!isEvaluationGateSatisfied(request.evaluation?.status ?? null)) {
-    return "Evaluasi FR-HC-01-07 (P1 dan P2) harus selesai terlebih dahulu.";
+    return "Evaluasi FR-HC-01-07 harus selesai terlebih dahulu.";
   }
 
   const departmentId = await resolveDepartmentId(request.currentPosition.orgUnitId);
@@ -320,7 +320,7 @@ export async function decideMovementRequest(
   // checked again here since a request can only reach this stage after the
   // Dept Head already cleared it, but this stays defense-in-depth.
   if (!isEvaluationGateSatisfied(request.evaluation?.status ?? null)) {
-    return "Evaluasi FR-HC-01-07 (P1 dan P2) harus selesai terlebih dahulu.";
+    return "Evaluasi FR-HC-01-07 harus selesai terlebih dahulu.";
   }
 
   const decisionNote = (formData.get("decisionNote") as string)?.trim() || null;

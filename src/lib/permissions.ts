@@ -358,6 +358,20 @@ export function canDecideContractRenewalCase(activeHrManagerPositionIds: string[
   return isHrManager(activeHrManagerPositionIds);
 }
 
+// Who may see the SCORES of an evaluation (decided by the owner 2026-10-21): Admin SDM, from the first
+// submission on (a provisional result while an evaluator is still missing), and the primary Department Head and
+// the HR Manager, only once the evaluation is Completed. The evaluators themselves and the employee see no scores
+// (the evaluators see the attendance numbers and send; they are told it was received).
+export function canViewEvaluationResults(
+  session: Session,
+  activeDeptHeadPositionIds: string[],
+  activeHrManagerPositionIds: string[],
+  status: string
+): boolean {
+  if (isHrAdmin(session)) return status !== "DRAFT";
+  return status === "COMPLETED" && (isDeptHeadApprover(activeDeptHeadPositionIds) || isHrManager(activeHrManagerPositionIds));
+}
+
 // ACC-17: evaluation detail visibility — HR Admin, either assigned
 // evaluator (own slot only — field-level hiding of the *other* evaluator's
 // scores still happens at the page level), the primary Dept Head and HR

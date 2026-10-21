@@ -9,11 +9,10 @@ import { requireSession } from "@/lib/require-session";
 import { canCreateManualEvaluation, canReleaseEvaluation, canSubmitEvaluationAs } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import {
+  allAssignedEvaluatorsSubmitted,
   canReleaseEvaluationStatus,
   canSubmitEvaluationSlot,
-  isValidScoreValue,
-  computeEvaluationTotal,
-  type EvaluationScores,
+  parseEvaluationMatrix,
 } from "@/lib/evaluation";
 import { addWorkingDays } from "@/lib/work-calendar";
 import type { Prisma } from "@/generated/prisma/client";
@@ -50,8 +49,8 @@ export async function createManualEvaluation(
   redirect(`/evaluations/${created.id}`);
 }
 
-// ACC-17: HR Admin alone reviews a Draft, assigns two different P1/P2
-// evaluators and releases it — this is the single action every source
+// ACC-17: HR Admin alone reviews a Draft, assigns the evaluator (P1) and, optionally, a second
+// different evaluator (P2), and releases it — this is the single action every source
 // workflow's "send/release evaluation" button calls.
 export async function releaseEvaluation(
   evaluationId: string,
@@ -70,14 +69,15 @@ export async function releaseEvaluation(
 
   const p1EmployeeId = (formData.get("p1EmployeeId") as string) || "";
   const p2EmployeeId = (formData.get("p2EmployeeId") as string) || "";
-  if (!p1EmployeeId || !p2EmployeeId) return "P1 dan P2 wajib dipilih.";
-  if (p1EmployeeId === p2EmployeeId) return "P1 dan P2 harus dua orang yang berbeda.";
+  if (!p1EmployeeId) return "Evaluator P1 wajib dipilih.";
+  if (p2EmployeeId && p1EmployeeId === p2EmployeeId) return "P1 dan P2 harus dua orang yang berbeda.";
 
   const [p1, p2] = await Promise.all([
     prisma.employee.findUnique({ where: { id: p1EmployeeId } }),
-    prisma.employee.findUnique({ where: { id: p2EmployeeId } }),
+    p2EmployeeId ? prisma.employee.findUnique({ where: { id: p2EmployeeId } }) : Promise.resolve(null),
   ]);
-  if (!p1 || !p2) return "P1 atau P2 tidak ditemukan.";
+  if (!p1) return "Evaluator P1 tidak ditemukan.";
+  if (p2EmployeeId && !p2) return "Evaluator P2 tidak ditemukan.";
 
   const parseCount = (name: string): number | null => {
     const raw = (formData.get(name) as string)?.trim();
@@ -101,8 +101,8 @@ export async function releaseEvaluation(
       attendanceIjinHalfDay: parseCount("attendanceIjinHalfDay"),
       p1EmployeeId,
       p1PositionId: p1.currentPositionId,
-      p2EmployeeId,
-      p2PositionId: p2.currentPositionId,
+      p2EmployeeId: p2EmployeeId || null,
+      p2PositionId: p2?.currentPositionId ?? null,
     },
   });
 
@@ -124,7 +124,7 @@ export async function releaseEvaluation(
     action: "UPDATE",
     datasetName: "Evaluation",
     recordId: evaluationId,
-    reason: `Released ${evaluation.evaluationNumber} to P1=${p1EmployeeId}, P2=${p2EmployeeId}`,
+    reason: `Released ${evaluation.evaluationNumber} to P1=${p1EmployeeId}, P2=${p2EmployeeId || "none"}`,
   });
 
   revalidatePath(`/evaluations/${evaluationId}`);
@@ -133,50 +133,8 @@ export async function releaseEvaluation(
   revalidatePath("/movements");
 }
 
-function parseEvaluationScores(formData: FormData): { scores: Prisma.InputJsonValue; total: number } {
-  const parseScore = (name: string): number | undefined => {
-    const raw = (formData.get(name) as string)?.trim();
-    if (!raw) return undefined;
-    const n = Number(raw);
-    return isValidScoreValue(n) ? n : undefined;
-  };
-
-  const useKpi = formData.get("useKpi") === "on" || formData.get("useKpi") === "true";
-  const companyValues = ["companyValue1", "companyValue2", "companyValue3", "companyValue4", "companyValue5"]
-    .map(parseScore)
-    .filter((v): v is number => typeof v === "number");
-
-  const rawScores: EvaluationScores = useKpi
-    ? {
-        kpiProductivity: parseScore("kpiProductivity"),
-        absensi: parseScore("absensi"),
-        tugasKhusus: parseScore("tugasKhusus"),
-        sp: parseScore("sp"),
-        kompetensi: parseScore("kompetensi"),
-        companyValues,
-      }
-    : {
-        qualityOrientation: parseScore("qualityOrientation"),
-        problemSolving: parseScore("problemSolving"),
-        communicationLeadership: parseScore("communicationLeadership"),
-        technicalExpertise: parseScore("technicalExpertise"),
-        workDiscipline: parseScore("workDiscipline"),
-        absensi: parseScore("absensi"),
-        tugasKhusus: parseScore("tugasKhusus"),
-        sp: parseScore("sp"),
-        kompetensi: parseScore("kompetensi"),
-        companyValues,
-      };
-
-  const total = computeEvaluationTotal(rawScores);
-  // Strips undefined-valued keys — Prisma's Json scalar requires a plain
-  // JSON-serializable value, and JSON.stringify already drops `undefined`.
-  const scores = JSON.parse(JSON.stringify(rawScores)) as Prisma.InputJsonValue;
-  return { scores, total };
-}
-
-// ACC-17: each evaluator submits only their own assigned slot. When both
-// slots are in, the Evaluation moves straight to Completed — no separate
+// ACC-17: each evaluator submits only their own assigned slot. When every assigned slot is in (one or
+// two), the Evaluation moves straight to Completed — no separate
 // HR Admin confirmation step.
 export async function submitEvaluation(
   evaluationId: string,
@@ -197,12 +155,19 @@ export async function submitEvaluation(
     return "Evaluasi ini sudah dikirim atau belum siap menerima evaluasi.";
   }
 
-  const { scores, total } = parseEvaluationScores(formData);
+  const parsed = parseEvaluationMatrix((field) => formData.get(field) as string | null);
+  if (!parsed.ok) return parsed.error;
+  const scores = parsed.scores as unknown as Prisma.InputJsonValue;
+  const total = parsed.performanceTotal;
   const evaluator = await prisma.employee.findUnique({ where: { id: session.user.employeeId! } });
 
-  const otherSlotSubmittedAt = slot === "P1" ? evaluation.p2SubmittedAt : evaluation.p1SubmittedAt;
   const now = new Date();
-  const bothNowDone = !!otherSlotSubmittedAt;
+  const bothNowDone = allAssignedEvaluatorsSubmitted({
+    p1EmployeeId: evaluation.p1EmployeeId,
+    p1SubmittedAt: slot === "P1" ? now : evaluation.p1SubmittedAt,
+    p2EmployeeId: evaluation.p2EmployeeId,
+    p2SubmittedAt: slot === "P2" ? now : evaluation.p2SubmittedAt,
+  });
 
   await prisma.evaluation.update({
     where: { id: evaluationId },

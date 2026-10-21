@@ -21,6 +21,19 @@ export function canSubmitEvaluationSlot(status: EvaluationStatus, alreadySubmitt
   return status === "RELEASED" && !alreadySubmittedAt;
 }
 
+// An evaluation has one required evaluator (P1) and an optional second one (P2). It is complete when every
+// evaluator that was assigned has submitted.
+export function allAssignedEvaluatorsSubmitted(slots: {
+  p1EmployeeId: string | null;
+  p1SubmittedAt: Date | null;
+  p2EmployeeId: string | null;
+  p2SubmittedAt: Date | null;
+}): boolean {
+  if (!slots.p1EmployeeId) return false;
+  if (!slots.p1SubmittedAt) return false;
+  return !slots.p2EmployeeId || !!slots.p2SubmittedAt;
+}
+
 export function isEvaluationComplete(status: EvaluationStatus): boolean {
   return status === "COMPLETED";
 }
@@ -40,7 +53,81 @@ export function isValidScoreValue(value: number): boolean {
   return (EVALUATION_SCORE_SCALE as readonly number[]).includes(value);
 }
 
-// DM-26: "KPI/Productivity... When no KPI/Productivity applies, use Quality
+// ---------- the evaluation matrix (from 2026-10-21) ----------
+// Two sections. Performance: six criteria, each graded 2, 4, 6 or 8. Tata Nilai: five company values, each graded
+// 0, 25, 50, 75 or 100. The result is shown as two separate results (performance total and percentage of the
+// maximum, and the average of the tata nilai); there is no single combined number.
+export const PERFORMANCE_CRITERIA = ["kualitasKerja", "komunikasi", "pemecahanMasalah", "pengambilanKeputusan", "kepemimpinan", "keahlianTeknis"] as const;
+export const TATA_NILAI_CRITERIA = ["melayani", "jujur", "rencana", "kemajuan", "legenda"] as const;
+export const PERFORMANCE_SCALE = [2, 4, 6, 8] as const;
+export const TATA_NILAI_SCALE = [0, 25, 50, 75, 100] as const;
+
+export type PerformanceKey = (typeof PERFORMANCE_CRITERIA)[number];
+export type TataNilaiKey = (typeof TATA_NILAI_CRITERIA)[number];
+
+export interface EvaluationMatrixScores {
+  version: 2;
+  performance: Record<PerformanceKey, number>;
+  tataNilai: Record<TataNilaiKey, number>;
+}
+
+export const PERFORMANCE_MAX_TOTAL = PERFORMANCE_CRITERIA.length * Math.max(...PERFORMANCE_SCALE);
+
+// Names of the form fields: perf_<key> and tata_<key>.
+export const performanceField = (key: PerformanceKey) => `perf_${key}`;
+export const tataNilaiField = (key: TataNilaiKey) => `tata_${key}`;
+
+export function isMatrixScores(value: unknown): value is EvaluationMatrixScores {
+  return typeof value === "object" && value !== null && (value as { version?: unknown }).version === 2;
+}
+
+// Reads the submitted form. Every one of the 11 grades is required and must be on its own scale.
+export function parseEvaluationMatrix(
+  read: (field: string) => string | null | undefined
+): { ok: true; scores: EvaluationMatrixScores; performanceTotal: number } | { ok: false; error: string } {
+  const performance = {} as Record<PerformanceKey, number>;
+  const tataNilai = {} as Record<TataNilaiKey, number>;
+  for (const key of PERFORMANCE_CRITERIA) {
+    const raw = (read(performanceField(key)) ?? "").trim();
+    const n = Number(raw);
+    if (!raw || !(PERFORMANCE_SCALE as readonly number[]).includes(n)) return { ok: false, error: "Semua penilaian Performance wajib diisi dengan nilai 2, 4, 6 atau 8." };
+    performance[key] = n;
+  }
+  for (const key of TATA_NILAI_CRITERIA) {
+    const raw = (read(tataNilaiField(key)) ?? "").trim();
+    const n = Number(raw);
+    if (!raw || !(TATA_NILAI_SCALE as readonly number[]).includes(n)) return { ok: false, error: "Semua penilaian Tata Nilai wajib diisi dengan nilai 0, 25, 50, 75 atau 100." };
+    tataNilai[key] = n;
+  }
+  const scores: EvaluationMatrixScores = { version: 2, performance, tataNilai };
+  return { ok: true, scores, performanceTotal: performanceSummary(scores).total };
+}
+
+export function performanceSummary(scores: Pick<EvaluationMatrixScores, "performance">): { total: number; max: number; percent: number } {
+  const sum = PERFORMANCE_CRITERIA.reduce((acc, key) => acc + (scores.performance[key] ?? 0), 0);
+  // an average of two evaluators can have a decimal (e.g. 40.5)
+  const total = Math.round(sum * 10) / 10;
+  return { total, max: PERFORMANCE_MAX_TOTAL, percent: Math.round((sum / PERFORMANCE_MAX_TOTAL) * 1000) / 10 };
+}
+
+// The final result when two evaluators submitted: the average of their grades, criterion by criterion. With one
+// evaluator it is simply their grades.
+export function averageMatrixScores(list: EvaluationMatrixScores[]): EvaluationMatrixScores | null {
+  if (list.length === 0) return null;
+  const mean = (values: number[]) => Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+  const performance = {} as Record<PerformanceKey, number>;
+  const tataNilai = {} as Record<TataNilaiKey, number>;
+  for (const key of PERFORMANCE_CRITERIA) performance[key] = mean(list.map((s) => s.performance[key]));
+  for (const key of TATA_NILAI_CRITERIA) tataNilai[key] = mean(list.map((s) => s.tataNilai[key]));
+  return { version: 2, performance, tataNilai };
+}
+
+export function tataNilaiAverage(scores: Pick<EvaluationMatrixScores, "tataNilai">): number {
+  const sum = TATA_NILAI_CRITERIA.reduce((acc, key) => acc + (scores.tataNilai[key] ?? 0), 0);
+  return Math.round((sum / TATA_NILAI_CRITERIA.length) * 10) / 10;
+}
+
+// DM-26 (the form used until 2026-10-21, still shown for evaluations already submitted with it): "KPI/Productivity... When no KPI/Productivity applies, use Quality
 // Orientation, Problem Solving, Communication/Leadership, Technical
 // Expertise and Work Discipline" — mutually exclusive, so the itemized
 // scores are stored as a single JSON object with whichever branch applies

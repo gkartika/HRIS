@@ -17,7 +17,7 @@ import {
   isHrAdmin,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
-import { getActiveDeptHeadPositions } from "@/lib/dept-head";
+import { getActiveDeptHeadPositions, listDeptHeadApprovers } from "@/lib/dept-head";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary } from "@/lib/position-occupancy";
 import {
@@ -47,6 +47,13 @@ import type {
   Gender,
   EmploymentStatus,
 } from "@/generated/prisma/enums";
+
+// A request that waits for the Department Head of a department nobody heads would never move on.
+async function noApproverMessage(departmentId: string): Promise<string | null> {
+  if ((await listDeptHeadApprovers([departmentId])).get(departmentId)?.length) return null;
+  const unit = await prisma.orgUnit.findUnique({ where: { id: departmentId }, select: { unitName: true } });
+  return `Departemen ${unit?.unitName ?? ""} belum punya Kepala Departemen (posisi level 3B yang terisi), jadi permintaan ini tidak bisa disetujui. Pilih departemen yang benar, atau minta Admin SDM mengisi posisi Kepala Departemen dulu.`;
+}
 
 // The fields of FR-HC-01-01 that the requester fills in. Shared by the first
 // submission and by resubmitting a returned request, so both validate the same.
@@ -141,6 +148,10 @@ export async function submitRecruitmentRequest(
   // Admin SDM files for a Dept Head, the request still goes to that Dept Head.
   const submitterDeptHeadPositions = await getActiveDeptHeadPositions(session.user.employeeId, f.departmentId);
   const initialStatus = initialRecruitmentStatus(submitterDeptHeadPositions.length > 0);
+  if (initialStatus === "PENDING_DEPT_HEAD") {
+    const problem = await noApproverMessage(f.departmentId);
+    if (problem) return problem;
+  }
 
   const year = companyYear(new Date(f.requestDate));
   const seq = await nextSequence(`REQ-${year}`);
@@ -213,6 +224,10 @@ export async function resubmitRecruitmentRequest(
     departmentChanged,
     submitterIsDeptHead: submitterDeptHeadPositions.length > 0,
   });
+  if (nextStatus === "PENDING_DEPT_HEAD") {
+    const problem = await noApproverMessage(f.departmentId);
+    if (problem) return problem;
+  }
   const returnNote = returnedByHrManager ? request.decisionNote : request.deptHeadDecisionNote;
 
   const clearHrManagerStage = {

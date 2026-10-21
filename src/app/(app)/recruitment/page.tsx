@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import { computeFulfillmentCounts } from "@/lib/recruitment";
+import { listDeptHeadApprovers } from "@/lib/dept-head";
 import type { Prisma, RecruitmentRequestStatus } from "@/generated/prisma/client";
 
 const RECRUITMENT_STATUSES: RecruitmentRequestStatus[] = [
@@ -58,6 +59,9 @@ export default async function RecruitmentListPage({
   ]);
 
   const hasFilters = !!(status || departmentId);
+  // For requests waiting on the Department Head: who that is (or that nobody can approve).
+  const waitingDepartmentIds = [...new Set(requests.filter((r) => r.status === "PENDING_DEPT_HEAD").map((r) => r.departmentId))];
+  const deptHeadApprovers = await listDeptHeadApprovers(waitingDepartmentIds);
 
   return (
     <div>
@@ -164,6 +168,12 @@ export default async function RecruitmentListPage({
                         {t(`recruitmentStatus.${r.status}`)}
                       </span>
                       {r.heldAt && <span className="ml-1.5 rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">Ditahan</span>}
+                      {r.status === "PENDING_DEPT_HEAD" &&
+                        (deptHeadApprovers.get(r.departmentId)?.length ? (
+                          <p className="mt-1 text-xs text-slate-500">Menunggu: {deptHeadApprovers.get(r.departmentId)!.map((a) => a.name).join(", ")}</p>
+                        ) : (
+                          <p className="mt-1 text-xs text-amber-700">Belum ada Kepala Departemen yang bisa menyetujui</p>
+                        ))}
                     </td>
                   </tr>
                 );

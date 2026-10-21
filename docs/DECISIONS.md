@@ -2764,3 +2764,9 @@ Problem: requesters picked a wrong Jabatan from the company-wide list (or the Ja
 - **Tahan / Lanjutkan** (same four): approved and not filled. A flag (`heldAt`, `heldReason`) on the request, its real status is untouched. While held: no new applicants (public vacancy says it is paused, internal vacancies hidden), no interview scheduling, final decision (a rejection still works), offer, create employee or Isi dengan Mutasi; applicants stay, tests already sent can still be taken, an applicant can still answer an offer already sent. No automatic resume. The list has a "Ditahan" badge and filter.
 - **Riwayat** (`RecruitmentRequestEvent`): every hold, resume, reduction and Jabatan set/change with who, when, reason. The other parties (requester, HR Manager, Admin SDM, Admin Rekrutmen, not the actor) are emailed. Migration 20261021110000, additive.
 - Not built: a dashboard figure for held requests.
+
+### Who must approve at the Department Head stage (2026-10-21)
+REQ-2026-0002 sat at "Menunggu Persetujuan Kepala Departemen/Manajer" and nobody could tell whose approval was needed: it was filed for Quality Engineering, a department with no level-3B seat holder, so no one could ever approve it (the stage only accepts the 3B holder of that exact department).
+- The request page shows "Menunggu persetujuan Kepala Departemen X: name (seat)", or a warning when nobody can approve; the list shows the same line under the status (\`listDeptHeadApprovers\` in dept-head.ts).
+- Filing or resubmitting a request for a department without a Department Head is refused with an explanation, so a request can no longer get stuck there.
+- Perubahan Posisi has the same Department Head stage and is not changed here.

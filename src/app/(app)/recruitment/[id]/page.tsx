@@ -12,7 +12,7 @@ import {
   canManageRecruitment,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
-import { getActiveDeptHeadPositions } from "@/lib/dept-head";
+import { getActiveDeptHeadPositions, listDeptHeadApprovers } from "@/lib/dept-head";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import {
@@ -104,7 +104,8 @@ export default async function RecruitmentDetailPage({
 
   // Vacant seats per Jabatan in this department, so a request for more people than seats is noticed early.
   // The three lookups are independent, so they run together.
-  const [vacantByJob, jobRows, internalMovesUnderway] = await Promise.all([
+  const [deptHeadApprovers, vacantByJob, jobRows, internalMovesUnderway] = await Promise.all([
+    request.status === "PENDING_DEPT_HEAD" ? listDeptHeadApprovers([request.departmentId]) : Promise.resolve(new Map<string, { name: string; positionCode: string }[]>()),
     needsJobData ? countVacantSeatsByJob(request.departmentId) : Promise.resolve({} as Record<string, number>),
     canSetJobBeforeApproval || canChangeJobAfterApproval
       ? prisma.job.findMany({ orderBy: { jobTitle: "asc" }, select: { id: true, jobCode: true, jobTitle: true } })
@@ -287,6 +288,27 @@ export default async function RecruitmentDetailPage({
         </p>
       </div>
 
+      {request.status === "PENDING_DEPT_HEAD" && (
+        <div className={`rounded-xl border p-5 text-sm ${deptHeadApprovers.get(request.departmentId)?.length ? "border-sky-200 bg-sky-50 text-sky-900" : "border-amber-300 bg-amber-50 text-amber-900"}`}>
+          {deptHeadApprovers.get(request.departmentId)?.length ? (
+            <p>
+              <b>Menunggu persetujuan Kepala Departemen {request.department.unitName}:</b>{" "}
+              {deptHeadApprovers.get(request.departmentId)!.map((a) => `${a.name} (${a.positionCode})`).join(", ")}
+            </p>
+          ) : (
+            <>
+              <p>
+                <b>Belum ada yang bisa menyetujui.</b> Departemen {request.department.unitName} tidak punya Kepala Departemen (posisi level 3B yang terisi), jadi permintaan ini tidak akan pernah sampai ke HR Manager.
+              </p>
+              <p className="mt-1 text-xs">
+                {manageRecruitment || isHrManagerNow || isOwnRequest
+                  ? "Pilihan: batalkan permintaan ini lalu ajukan lagi dengan departemen yang benar, atau minta Admin SDM mengisi posisi Kepala Departemen di Pengaturan > Posisi Organisasi."
+                  : "Hubungi Admin SDM."}
+              </p>
+            </>
+          )}
+        </div>
+      )}
       {isHeld && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
           <p>

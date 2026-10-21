@@ -1,4 +1,5 @@
-import { getActiveAssignmentsOf } from "@/lib/active-assignments";
+import { activeAssignmentWhere, getActiveAssignmentsOf } from "@/lib/active-assignments";
+import { prisma } from "@/lib/db";
 
 // Department Manager/Head approval gate, added ahead of the HR Manager per
 // direct user request. Defined literally as "Job level 3B" (not a
@@ -33,6 +34,26 @@ export async function getActiveDeptHeadPositions(
       positionCode: a.position.positionCode,
       jobTitle: a.position.job.jobTitle,
     }));
+}
+
+/**
+ * Who can approve for each of these departments right now: the people holding a level-3B seat directly in the
+ * department. A department missing from the result has nobody, so a request waiting there can not be approved.
+ * Shown on the request page and list so nobody has to guess whose approval is pending.
+ */
+export async function listDeptHeadApprovers(departmentIds: string[]): Promise<Map<string, { name: string; positionCode: string }[]>> {
+  const result = new Map<string, { name: string; positionCode: string }[]>();
+  if (departmentIds.length === 0) return result;
+  const assignments = await prisma.assignment.findMany({
+    where: { ...activeAssignmentWhere(new Date()), position: { jobLevel: DEPT_HEAD_JOB_LEVEL, orgUnitId: { in: departmentIds }, archived: false } },
+    select: { employee: { select: { fullLegalName: true } }, position: { select: { orgUnitId: true, positionCode: true } } },
+  });
+  for (const a of assignments) {
+    const list = result.get(a.position.orgUnitId) ?? [];
+    if (!list.some((x) => x.name === a.employee.fullLegalName)) list.push({ name: a.employee.fullLegalName, positionCode: a.position.positionCode });
+    result.set(a.position.orgUnitId, list);
+  }
+  return result;
 }
 
 /**

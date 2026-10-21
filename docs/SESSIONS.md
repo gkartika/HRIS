@@ -25,7 +25,8 @@ built without risk. Both read `CLAUDE.md` ("START HERE") and the memory folder; 
 3. Standing owner rules still apply in both: UI mock-up first for anything new on screen, no backend access for users
    (every setting is a button or form), perf + schema-overlap + leftovers check and a build before calling anything done,
    text in `src/lib/i18n/id.ts`, the app is called **SAPA**.
-4. Keep the sessions' notes in the shared memory folder only for things that are true for both.
+4. Claude's memory is kept per folder, so the two sessions do not share it automatically. The files in the repo (`CLAUDE.md`,
+   `docs/DECISIONS.md`, this file) are the shared truth: anything the other session must know goes there, not only in memory.
 
 ## FIX session routine
 - Work on `main`. Before deploying: `git pull`, `npx tsc --noEmit`, `npx eslint src --quiet`, `npx vitest run`,

@@ -9,7 +9,7 @@ built without risk. Both read `CLAUDE.md` ("START HERE") and the memory folder; 
 | Branch | `main` | `build` (one branch per big feature is fine: `build-<name>`) |
 | Does | bugs and feedback from users and UAT, wording, small improvements, performance, clean-up | new modules and bigger changes, UI mock-ups first |
 | Commits | small, often, straight on `main` | on its own branch; merged into `main` only when the owner says a feature is ready |
-| **Deploys to Vercel** | **yes, the only one** | **never** (the CLI uploads the folder; the build folder holds unfinished work) |
+| **Deploys to Vercel** | **yes, from the main folder** | **never from the build folder** (the CLI uploads the folder; it holds unfinished work). Only when the owner says "deploy": merge `build` into `main` first, then deploy from the main folder |
 | Database migrations | additive only | additive only, and applied only when the owner has agreed |
 
 ## Why folders, not just two chats
@@ -42,6 +42,13 @@ built without risk. Both read `CLAUDE.md` ("START HERE") and the memory folder; 
 - Run the dev server on another port so it does not clash with the FIX session: `npx next dev -p 3001`.
 - When a feature is finished and the owner agrees: run all checks, commit, then in the **main folder**:
   `git merge build`, run the checks again, and let the FIX session deploy.
+- **When the owner says "deploy"** (rule from 2026-10-21): never deploy from the build folder. Instead, in order:
+  1. check the main folder has no uncommitted work from the FIX session;
+  2. commit `build`, then in the **main folder** `git merge build` (resolve conflicts and show the owner);
+  3. run `npx tsc --noEmit`, `npx eslint src --quiet`, `npx vitest run`, `npm run build` on `main`;
+  4. `git push`, then `npx vercel deploy --prod --yes` **from the main folder**, and check with `npx vercel inspect`.
+  Merging ships everything on `build`; if only part should go live, ask the owner first.
+- Migrations: write additive SQL by hand, show the owner what it does, and run `prisma migrate deploy` only after they agree.
 - Never edit `scripts/` (the owner's wipe tools; they are not in git).
 
 ## Opening message to paste into each session
@@ -53,5 +60,6 @@ built without risk. Both read `CLAUDE.md` ("START HERE") and the memory folder; 
 
 **BUILD session (folder `Desktop\claude-build`):**
 > You are the BUILD session for the SAPA HR app. Read CLAUDE.md "START HERE", docs/SESSIONS.md and the latest entries of
-> docs/DECISIONS.md. You work only in this folder on the `build` branch, you never deploy to Vercel, migrations are
+> docs/DECISIONS.md. You work only in this folder on the `build` branch, you never deploy to Vercel from here (when I say
+> "deploy", merge `build` into `main` in the main folder first, then deploy from there), migrations are
 > additive only and applied only after I agree. Start with `git merge main`, then wait for my request (UI mock-up first).

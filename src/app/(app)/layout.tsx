@@ -1,5 +1,6 @@
 ﻿import { requireSession } from "@/lib/require-session";
 import {
+  canManageAssessmentRubric,
   isHrAdmin,
   isTrainingAdmin,
   isGaAdmin,
@@ -104,6 +105,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   if (hasRecruitmentWork) {
     buckets.rekrutmenMutasi.push({ href: "/recruitment/tasks", label: "Tugas Rekrutmen", icon: "ListChecks" });
+  }
+  // Tes Situasi Kerja rubric and results: Admin Rekrutmen prepares it, the HR Manager approves it. Admin SDM has no access.
+  if (canManageAssessmentRubric(session) || isHrManagerNow) {
+    buckets.rekrutmenMutasi.push({ href: "/recruitment/assessment", label: t("assessment.rubricNav"), icon: "ListChecks" });
   }
   // LIF-04: same broad visibility as Recruitment — any employee-linked
   // account can see the list (scoped to their own cases) or HR Admin (sees

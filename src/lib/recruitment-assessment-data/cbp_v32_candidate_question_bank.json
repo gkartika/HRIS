@@ -1,0 +1,498 @@
+{
+  "assessmentVersion": "V3.2",
+  "name": "CBP — TES SITUASI KERJA",
+  "organization": "PT Cahaya Bukit Perunggu",
+  "language": "id-ID",
+  "instructions": [
+    "Anda akan diberikan 20 situasi yang mungkin terjadi di lingkungan kerja. Setiap situasi memiliki empat pilihan jawaban.",
+    "Bacalah situasi dengan saksama, kemudian pilih satu jawaban berdasarkan pertimbangan Anda sendiri.",
+    "Beberapa pilihan mungkin sama-sama masuk akal. Pilih yang paling sesuai dengan cara Anda menghadapi situasi atau mengambil keputusan."
+  ],
+  "estimatedDurationMinutes": {
+    "min": 25,
+    "max": 30
+  },
+  "closingText": "Terima kasih telah menyelesaikan tes ini. Jawaban Anda akan digunakan sebagai salah satu bahan pertimbangan dalam proses rekrutmen PT Cahaya Bukit Perunggu.",
+  "questions": [
+    {
+      "questionId": 1,
+      "questionCode": "Q01",
+      "scenario": "Anda harus menyelesaikan rekap pekerjaan hari ini. Sebagian data dari bagian lain belum tersedia, sedangkan PIC terkait sedang mengerjakan tugas mendesak. Tim lain akan menggunakan rekap Anda sore ini.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menghubungi PIC untuk mengetahui data yang sudah tersedia dan mencari kemungkinan menyelesaikan rekap secara bertahap."
+        },
+        {
+          "key": "B",
+          "text": "Menginformasikan kendala kepada atasan dan meminta bantuan menentukan prioritas koordinasi dengan bagian tersebut."
+        },
+        {
+          "key": "C",
+          "text": "Menyelesaikan bagian yang memungkinkan sambil memberi tahu tim penerima mengenai data yang masih ditunggu."
+        },
+        {
+          "key": "D",
+          "text": "Beralih menyelesaikan pekerjaan lain sambil menunggu data karena kelengkapan tersebut merupakan tanggung jawab bagian pengirim."
+        }
+      ]
+    },
+    {
+      "questionId": 2,
+      "questionCode": "Q02",
+      "scenario": "Anda menemukan kesalahan pada laporan yang sudah dibagikan kepada beberapa rekan. Laporan tersebut akan digunakan dalam rapat dua jam lagi. Anda belum tahu apakah kesalahan itu memengaruhi kesimpulannya.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Memberi tahu penerima bahwa ada informasi yang perlu diperiksa, kemudian menyiapkan koreksi."
+        },
+        {
+          "key": "B",
+          "text": "Segera memeriksa bagian yang terdampak agar dapat menjelaskan kesalahan dan koreksinya sebelum rapat."
+        },
+        {
+          "key": "C",
+          "text": "Mendiskusikan kesalahan dengan atasan terlebih dahulu untuk menentukan cara penyampaiannya kepada penerima."
+        },
+        {
+          "key": "D",
+          "text": "Memperbaiki file yang dibagikan agar penerima menggunakan versi terbaru tanpa perlu membuat pemberitahuan tambahan."
+        }
+      ]
+    },
+    {
+      "questionId": 3,
+      "questionCode": "Q03",
+      "scenario": "Dalam rapat, pimpinan mengusulkan cara kerja baru. Anda melihat kemungkinan dampak negatif yang belum dibahas, tetapi data pendukung Anda belum lengkap. Sebagian besar peserta terlihat setuju dan keputusan akan dibuat hari itu.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menyampaikan potensi kendala beserta keterbatasan informasi yang Anda miliki sebelum keputusan dibuat."
+        },
+        {
+          "key": "B",
+          "text": "Meminta kesempatan berbicara dengan pimpinan secara pribadi sebelum keputusan ditetapkan."
+        },
+        {
+          "key": "C",
+          "text": "Mengusulkan percobaan terbatas agar risiko perubahan dapat dipahami sebelum diterapkan lebih luas."
+        },
+        {
+          "key": "D",
+          "text": "Mengikuti keputusan rapat dahulu dan menyampaikan temuan apabila masalah benar-benar muncul saat pelaksanaan."
+        }
+      ]
+    },
+    {
+      "questionId": 4,
+      "questionCode": "Q04",
+      "scenario": "Anda menerima pekerjaan baru yang belum pernah dikerjakan. Seorang rekan sangat menguasai pekerjaan tersebut dan bersedia membantu selama 20 menit. Tugas harus selesai besok.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Meminta rekan mendemonstrasikan langkah terpenting, lalu mencoba mengerjakannya sendiri."
+        },
+        {
+          "key": "B",
+          "text": "Mempelajari panduan terlebih dahulu dan menggunakan waktu bantuan untuk pertanyaan yang belum terjawab."
+        },
+        {
+          "key": "C",
+          "text": "Meminta contoh hasil pekerjaan rekan agar dapat memahami dan menyesuaikan pendekatannya."
+        },
+        {
+          "key": "D",
+          "text": "Meminta bantuan mengerjakan bagian yang paling kompleks sambil mempelajari proses dan hasil pengerjaannya."
+        }
+      ]
+    },
+    {
+      "questionId": 5,
+      "questionCode": "Q05",
+      "scenario": "Anda menemukan perbedaan kecil antara data sistem dan catatan kerja. Angka yang lebih tinggi akan membuat pencapaian target bulanan terlihat lebih baik. Selisih serupa biasanya diselesaikan pada rekonsiliasi, tetapi laporan ini akan digunakan untuk mengambil keputusan.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menggunakan angka yang sudah dapat diverifikasi dan mencatat selisih yang masih terbuka."
+        },
+        {
+          "key": "B",
+          "text": "Memeriksa sumber selisih terlebih dahulu untuk mencari angka yang paling dapat dipertanggungjawabkan."
+        },
+        {
+          "key": "C",
+          "text": "Mengonfirmasi angka yang akan digunakan dengan penanggung jawab data serta menyepakati tindak lanjutnya."
+        },
+        {
+          "key": "D",
+          "text": "Menggunakan angka yang lebih sesuai dengan pola hasil sebelumnya dan menyelesaikan perbedaannya saat rekonsiliasi."
+        }
+      ]
+    },
+    {
+      "questionId": 6,
+      "questionCode": "Q06",
+      "scenario": "Seorang rekan dari bagian lain beberapa kali mengubah jadwal yang sudah disepakati. Perubahan tersebut tidak selalu besar, tetapi membuat Anda harus berulang kali menyesuaikan pekerjaan.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Mengajak rekan tersebut membahas penyebab perubahan dan cara memperbaiki koordinasi."
+        },
+        {
+          "key": "B",
+          "text": "Mengusulkan pencatatan perubahan jadwal yang dapat dilihat oleh bagian-bagian terkait."
+        },
+        {
+          "key": "C",
+          "text": "Menyusun jadwal kerja dengan waktu cadangan lebih besar untuk mengantisipasi perubahan serupa."
+        },
+        {
+          "key": "D",
+          "text": "Membawa pola perubahan tersebut ke pertemuan koordinasi untuk menyepakati aturan yang lebih jelas."
+        }
+      ]
+    },
+    {
+      "questionId": 7,
+      "questionCode": "Q07",
+      "scenario": "Seorang rekan meminta bantuan karena kesulitan menyelesaikan pekerjaan. Anda mengetahui cara menyelesaikannya, tetapi pekerjaan Anda sendiri juga harus selesai hari ini.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menghubungkan rekan dengan orang atau sumber informasi yang paling tepat untuk membantunya."
+        },
+        {
+          "key": "B",
+          "text": "Meluangkan waktu menjelaskan langkah penyelesaian agar rekan dapat meneruskan pekerjaannya."
+        },
+        {
+          "key": "C",
+          "text": "Membantu mengerjakan bagian yang paling sulit, kemudian kembali menyelesaikan pekerjaan sendiri."
+        },
+        {
+          "key": "D",
+          "text": "Menyelesaikan tanggung jawab sendiri yang paling mendesak sebelum menawarkan bantuan."
+        }
+      ]
+    },
+    {
+      "questionId": 8,
+      "questionCode": "Q08",
+      "scenario": "Perusahaan akan mewajibkan penggunaan aplikasi baru mulai dua minggu lagi. Anda sudah mendapatkan panduan dasar, tetapi percobaan pertama belum berhasil. Pekerjaan harian juga cukup padat.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Mencoba kembali dengan pekerjaan yang lebih sederhana dan mencatat kendala yang ditemukan."
+        },
+        {
+          "key": "B",
+          "text": "Meminta rekan yang sudah memahami aplikasi membantu menunjukkan bagian yang membuat Anda kesulitan."
+        },
+        {
+          "key": "C",
+          "text": "Menunggu pelatihan berikutnya agar dapat mempelajari aplikasi dengan arahan yang lebih terstruktur."
+        },
+        {
+          "key": "D",
+          "text": "Tetap menggunakan cara lama untuk menjaga produktivitas dan meminta bantuan tim lain memindahkan hasil pekerjaan setelah aplikasi diwajibkan."
+        }
+      ]
+    },
+    {
+      "questionId": 9,
+      "questionCode": "Q09",
+      "scenario": "Anda memperkirakan pekerjaan Anda mungkin terlambat. Tim lain akan menggunakan hasilnya besok pagi. Anda masih mempunyai peluang mengejar ketertinggalan malam ini, tetapi hasil akhirnya belum pasti.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Memberikan informasi awal mengenai risiko keterlambatan dan memperbaruinya sesuai perkembangan."
+        },
+        {
+          "key": "B",
+          "text": "Memaksimalkan penyelesaian malam ini terlebih dahulu agar tidak memberikan peringatan yang mungkin tidak diperlukan."
+        },
+        {
+          "key": "C",
+          "text": "Menyampaikan kondisi kepada atasan agar perubahan jadwal dapat dikomunikasikan melalui koordinasi yang tepat."
+        },
+        {
+          "key": "D",
+          "text": "Menghubungi tim penerima untuk mengetahui bagian yang paling mendesak, lalu menyusun urutan penyelesaian bersama."
+        }
+      ]
+    },
+    {
+      "questionId": 10,
+      "questionCode": "Q10",
+      "scenario": "Anda dan seorang rekan menyiapkan usulan perbaikan. Ide awal berasal dari rekan tersebut, sedangkan Anda mengembangkan perhitungan, menguji pendekatan, dan mempresentasikan hasilnya.\n\nDalam rapat, pimpinan memberikan apresiasi kepada Anda dan mempertimbangkan Anda sebagai PIC proyek berikutnya. Rekan Anda tidak hadir.",
+      "prompt": "Apa yang paling mungkin Anda lakukan?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menjelaskan pembagian kontribusi saat itu juga agar pimpinan memahami peran masing-masing."
+        },
+        {
+          "key": "B",
+          "text": "Menerima apresiasi, kemudian mengirim ringkasan hasil yang mencantumkan kontribusi rekan secara jelas."
+        },
+        {
+          "key": "C",
+          "text": "Mengajak rekan menyepakati pembagian peran sebelum membahas pelaksanaan proyek berikutnya."
+        },
+        {
+          "key": "D",
+          "text": "Menerima penugasan sebagai PIC berdasarkan tanggung jawab presentasi, lalu melibatkan rekan saat implementasi."
+        }
+      ]
+    },
+    {
+      "questionId": 11,
+      "questionCode": "Q11",
+      "scenario": "Pesanan akan segera dikirim. Saat pemeriksaan akhir, sebagian produk memiliki kode identifikasi yang berbeda dari dokumen. Catatan produksi menunjukkan produk kemungkinan sesuai, tetapi identitas produk belum dapat dipastikan.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menggunakan catatan produksi sebagai dasar sementara untuk melanjutkan proses, kemudian memperbaiki dokumen jika diperlukan."
+        },
+        {
+          "key": "B",
+          "text": "Memisahkan produk yang identitasnya belum pasti, meminta verifikasi yang berwenang, dan menginformasikan kemungkinan dampak pada pengiriman."
+        },
+        {
+          "key": "C",
+          "text": "Meminta penanggung jawab produksi menentukan tindakan berikutnya sambil menyiapkan catatan yang mendukung identifikasi produk."
+        },
+        {
+          "key": "D",
+          "text": "Menunda proses pelepasan produk yang terdampak sampai informasi identifikasinya dapat diperiksa."
+        }
+      ]
+    },
+    {
+      "questionId": 12,
+      "questionCode": "Q12",
+      "scenario": "Anda menemukan angka baru yang berbeda dari laporan sebelumnya. Angka tersebut belum dapat diverifikasi sebelum tenggat, sedangkan laporan akan digunakan untuk menentukan langkah kerja berikutnya.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menggunakan angka terakhir yang sudah disetujui dan memasukkan angka baru ke daftar pemeriksaan berikutnya tanpa menyebutkan perbedaannya dalam laporan."
+        },
+        {
+          "key": "B",
+          "text": "Menandai informasi yang belum terverifikasi, menjelaskan dampak ketidakpastiannya, dan menentukan tindak lanjut pemeriksaan."
+        },
+        {
+          "key": "C",
+          "text": "Menunda penyampaian bagian laporan yang belum dapat dipastikan sambil mengirim bagian lain yang sudah lengkap."
+        },
+        {
+          "key": "D",
+          "text": "Meminta atasan memilih angka yang akan dipakai berdasarkan data yang tersedia agar laporan dapat segera disampaikan."
+        }
+      ]
+    },
+    {
+      "questionId": 13,
+      "questionCode": "Q13",
+      "scenario": "Sales telah menjanjikan waktu pengiriman kepada pelanggan, tetapi Production menyatakan kapasitas pada tanggal tersebut hampir penuh. Perubahan jadwal masih mungkin dilakukan, tetapi dapat memengaruhi pesanan lain.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Mempertemukan PIC terkait untuk meninjau kapasitas, alternatif, dan kewenangan keputusan sebelum mengonfirmasi jadwal."
+        },
+        {
+          "key": "B",
+          "text": "Meminta Production menghitung kapasitas yang realistis agar Sales memiliki dasar untuk bernegosiasi."
+        },
+        {
+          "key": "C",
+          "text": "Menyampaikan pilihan jadwal beserta konsekuensinya kepada kepala departemen untuk menentukan prioritas."
+        },
+        {
+          "key": "D",
+          "text": "Meminta Sales memastikan kebutuhan dan toleransi waktu pelanggan sebelum menyusun ulang jadwal."
+        }
+      ]
+    },
+    {
+      "questionId": 14,
+      "questionCode": "Q14",
+      "scenario": "Atasan meminta Anda melewati satu pemeriksaan yang diwajibkan prosedur karena pekerjaan terlambat. Pemeriksaan sebelumnya selalu menunjukkan hasil baik, tetapi tidak ada ketentuan pengecualian untuk tahap tersebut.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Meminta persetujuan tertulis dari atasan sebelum melakukan perubahan agar keputusan dan tanggung jawab tercatat."
+        },
+        {
+          "key": "B",
+          "text": "Mengurangi pemeriksaan menjadi beberapa sampel yang dianggap paling penting agar waktu penyelesaian lebih singkat."
+        },
+        {
+          "key": "C",
+          "text": "Mempertahankan pemeriksaan wajib dan mencari cara mempercepat tahapan pekerjaan lainnya."
+        },
+        {
+          "key": "D",
+          "text": "Menahan tahap yang memerlukan pemeriksaan sambil meminta bantuan pihak berwenang menemukan penyelesaian sesuai prosedur."
+        }
+      ]
+    },
+    {
+      "questionId": 15,
+      "questionCode": "Q15",
+      "scenario": "Perkiraan penyelesaian pekerjaan yang Anda buat minggu lalu ternyata terlalu optimistis. Departemen lain sudah menggunakan estimasi tersebut. Keterlambatan hampir pasti terjadi, tetapi tanggal akhirnya belum diketahui.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Memperbaiki perhitungan lebih dahulu agar dapat memberikan informasi yang lebih lengkap."
+        },
+        {
+          "key": "B",
+          "text": "Menyampaikan risiko keterlambatan kepada pihak terkait dan memperbarui perkiraan seiring perkembangan."
+        },
+        {
+          "key": "C",
+          "text": "Menjelaskan keadaan kepada atasan dan meminta arahan mengenai penyampaian perubahan jadwal."
+        },
+        {
+          "key": "D",
+          "text": "Menyampaikan bahwa ada perubahan kondisi operasional tanpa membahas kesalahan estimasi awal, sambil menyiapkan jadwal pengganti."
+        }
+      ]
+    },
+    {
+      "questionId": 16,
+      "questionCode": "Q16",
+      "scenario": "Anda harus mengerjakan laporan menggunakan aplikasi baru. Rekan yang berpengalaman hanya dapat membantu selama 30 menit. Setelah itu Anda masih mempunyai beberapa jam untuk menyelesaikan pekerjaan.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Meminta rekan menangani bagian paling kompleks dan mempelajari hasilnya agar dapat melanjutkan pekerjaan."
+        },
+        {
+          "key": "B",
+          "text": "Meminta rekan menunjukkan langkah penting, kemudian mempraktikkannya sendiri untuk memastikan pemahaman."
+        },
+        {
+          "key": "C",
+          "text": "Mencoba beberapa langkah terlebih dahulu dan menggunakan waktu bantuan untuk kendala yang belum dapat diselesaikan."
+        },
+        {
+          "key": "D",
+          "text": "Meminta rekan menunjukkan contoh laporan lengkap, lalu menggunakannya sebagai acuan dalam mengerjakan tugas."
+        }
+      ]
+    },
+    {
+      "questionId": 17,
+      "questionCode": "Q17",
+      "scenario": "Anda sudah beberapa kali menggunakan cara tertentu untuk menyelesaikan pekerjaan. Hasilnya selama ini diterima. Kini seorang rekan menunjukkan bahwa cara tersebut dapat menimbulkan pekerjaan ulang dalam kondisi tertentu. Anda sedang dikejar tenggat.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Memeriksa contoh yang diberikan, lalu menyesuaikan cara kerja apabila risiko tersebut memang relevan."
+        },
+        {
+          "key": "B",
+          "text": "Meminta rekan menjelaskan kondisi khusus yang menjadi masalah agar dapat menentukan kapan penyesuaian diperlukan."
+        },
+        {
+          "key": "C",
+          "text": "Meminta atasan menentukan metode yang digunakan karena kedua pendekatan memiliki dasar pertimbangan berbeda."
+        },
+        {
+          "key": "D",
+          "text": "Mempertahankan cara yang selama ini berhasil untuk tenggat sekarang, lalu membahas masukan setelah pekerjaan selesai."
+        }
+      ]
+    },
+    {
+      "questionId": 18,
+      "questionCode": "Q18",
+      "scenario": "Dalam rapat, pimpinan senior hampir menyetujui perubahan proses. Anda mempunyai informasi baru yang mungkin memengaruhi keputusan, tetapi informasi itu belum sepenuhnya diverifikasi.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menyampaikan informasi dan keterbatasannya dalam rapat agar menjadi pertimbangan sebelum keputusan."
+        },
+        {
+          "key": "B",
+          "text": "Meminta waktu singkat berbicara dengan pimpinan sebelum keputusan ditetapkan untuk menjelaskan informasi tersebut."
+        },
+        {
+          "key": "C",
+          "text": "Mengusulkan keputusan bersyarat, dengan verifikasi data sebelum pelaksanaan perubahan."
+        },
+        {
+          "key": "D",
+          "text": "Meminta pemilik data segera mengonfirmasi bagian yang paling menentukan agar rapat dapat menggunakan informasi yang lebih pasti."
+        }
+      ]
+    },
+    {
+      "questionId": 19,
+      "questionCode": "Q19",
+      "scenario": "Sebuah pekerjaan membutuhkan konfirmasi pemeriksaan sebelum dinyatakan selesai. Petugas yang biasa memeriksa tidak masuk, sedangkan proses berikutnya sudah menunggu. Prosedur mensyaratkan pemeriksaan oleh personel berwenang.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Menggunakan hasil pemeriksaan pekerjaan sebelumnya sebagai dasar konfirmasi sementara."
+        },
+        {
+          "key": "B",
+          "text": "Meminta personel lain yang berwenang melakukan pemeriksaan sebelum pekerjaan dinyatakan selesai."
+        },
+        {
+          "key": "C",
+          "text": "Menjadwalkan ulang pemeriksaan sambil memberi tahu pihak berikutnya tentang perubahan waktu penyelesaian."
+        },
+        {
+          "key": "D",
+          "text": "Meminta persetujuan penanggung jawab untuk melepaskan pekerjaan berdasarkan riwayat hasil sebelumnya."
+        }
+      ]
+    },
+    {
+      "questionId": 20,
+      "questionCode": "Q20",
+      "scenario": "Dua departemen mempunyai perkiraan waktu penyelesaian yang berbeda karena menggunakan sumber data dan asumsi berbeda. Perbedaan ini sudah menunda keputusan beberapa hari, sementara pelanggan menunggu kepastian.",
+      "prompt": "Apa tindakan yang paling efektif?",
+      "options": [
+        {
+          "key": "A",
+          "text": "Mempertemukan PIC untuk menyamakan dasar perhitungan dan menetapkan pemilik keputusan serta tenggatnya."
+        },
+        {
+          "key": "B",
+          "text": "Menggunakan estimasi paling konservatif sebagai informasi sementara kepada pelanggan sambil melanjutkan koordinasi internal."
+        },
+        {
+          "key": "C",
+          "text": "Meminta pimpinan memilih estimasi berdasarkan perhitungan yang disiapkan kedua departemen."
+        },
+        {
+          "key": "D",
+          "text": "Menetapkan satu departemen sebagai pemilik perhitungan final dengan kewajiban mempertimbangkan data dari kedua pihak."
+        }
+      ]
+    }
+  ]
+}

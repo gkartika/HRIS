@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
+import { MOVEMENT_ORIGINS, MOVEMENT_ORIGIN_LABEL, MOVEMENT_ORIGIN_TONE } from "@/lib/recruitment-source";
 import { FilePlus } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, canSubmitMovementRequest } from "@/lib/permissions";
@@ -38,6 +39,7 @@ export default async function MovementListPage({
     approverAccountId?: string;
     effectiveFrom?: string;
     effectiveTo?: string;
+    origin?: string;
   }>;
 }) {
   const session = await requireSession();
@@ -62,6 +64,7 @@ export default async function MovementListPage({
     effectiveFrom,
     effectiveTo,
     page: pageRaw,
+    origin,
   } = await searchParams;
 
   // Perubahan Posisi refactor: Department Head 3B sees every request within
@@ -93,6 +96,7 @@ export default async function MovementListPage({
   if (employeeId) conditions.push({ employeeId });
   if (status) conditions.push({ status: status as MovementRequestStatus });
   if (movementType) conditions.push({ movementType: movementType as MovementType });
+  if (origin === "MUTASI" || origin === "REKRUTMEN_INTERNAL") conditions.push({ origin });
   if (currentPositionId) conditions.push({ currentPositionId });
   if (proposedPositionId) conditions.push({ proposedPositionId });
   if (requesterEmployeeId) conditions.push({ requesterEmployeeId });
@@ -127,6 +131,9 @@ export default async function MovementListPage({
         employee: true,
         currentPosition: { include: { job: true, orgUnit: true } },
         proposedPosition: { include: { job: true } },
+        // where it came from: the applicant's request, or the request a Mutasi fills
+        recruitmentCandidate: { select: { request: { select: { id: true, requestNumber: true } } } },
+        recruitmentRequest: { select: { id: true, requestNumber: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -150,7 +157,8 @@ export default async function MovementListPage({
     requesterEmployeeId ||
     approverAccountId ||
     effectiveFrom ||
-    effectiveTo
+    effectiveTo ||
+    origin
   );
 
   return (
@@ -198,6 +206,17 @@ export default async function MovementListPage({
             {MOVEMENT_TYPES.map((mt) => (
               <option key={mt} value={mt}>
                 {t(`movementType.${mt}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Sumber</label>
+          <select name="origin" defaultValue={origin ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            {MOVEMENT_ORIGINS.map((o) => (
+              <option key={o} value={o}>
+                {MOVEMENT_ORIGIN_LABEL[o]}
               </option>
             ))}
           </select>
@@ -298,6 +317,7 @@ export default async function MovementListPage({
                 <th className="px-4 py-3 font-medium">{t("movement.requestNumber")}</th>
                 <th className="px-4 py-3 font-medium">{t("employee.fullLegalName")}</th>
                 <th className="px-4 py-3 font-medium">{t("movement.movementType")}</th>
+                <th className="px-4 py-3 font-medium">Sumber</th>
                 <th className="px-4 py-3 font-medium">{t("movement.fromTo")}</th>
                 <th className="px-4 py-3 font-medium">{t("recruitment.status")}</th>
               </tr>
@@ -314,6 +334,11 @@ export default async function MovementListPage({
                     {r.employee.fullLegalName}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{t(`movementType.${r.movementType}`)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${MOVEMENT_ORIGIN_TONE[r.origin]}`}>{MOVEMENT_ORIGIN_LABEL[r.origin]}</span>
+                    {r.origin === "REKRUTMEN_INTERNAL" && r.recruitmentCandidate && <span className="block text-[11px] text-slate-400">{r.recruitmentCandidate.request.requestNumber} · pelamar</span>}
+                    {r.origin === "MUTASI" && r.recruitmentRequest && <span className="block text-[11px] text-slate-400">mengisi {r.recruitmentRequest.requestNumber}</span>}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">
                     {r.currentPosition.job.jobTitle} → {r.proposedPosition.job.jobTitle}
                   </td>
@@ -328,7 +353,7 @@ export default async function MovementListPage({
           </table>
         </div>
       )}
-      <Pager page={page} total={total} basePath="/movements" params={{ requestNumber, employeeId, status, movementType, departmentId, currentPositionId, proposedPositionId, requesterEmployeeId, approverAccountId, effectiveFrom, effectiveTo }} />
+      <Pager page={page} total={total} basePath="/movements" params={{ requestNumber, employeeId, status, movementType, departmentId, currentPositionId, proposedPositionId, requesterEmployeeId, approverAccountId, effectiveFrom, effectiveTo, origin }} />
     </div>
   );
 }

@@ -44,10 +44,21 @@ export default async function ApplyPage({ params }: { params: Promise<{ requestI
       <Link href="/cbp-recruitment" className="text-sm font-semibold text-brand hover:underline">
         ← Semua lowongan
       </Link>
-      <h1 className="mt-3 text-2xl font-extrabold text-[#231a28]">{request.job?.jobTitle}</h1>
+      <h1 className="mt-3 text-2xl font-extrabold text-[#231a28]">{request.publicTitle || request.job?.jobTitle}</h1>
       <p className="text-sm text-[#6a5f72]">
         {request.department.unitName} · {t(`shiftCode.${request.shiftCode}`)}
       </p>
+
+      <div className="mt-5 rounded-xl border border-[#e6dcea] bg-white p-5">
+        <h2 className="text-xs font-bold uppercase tracking-wide text-[#8a7e92]">Tentang pekerjaan</h2>
+        <p className="mt-1 whitespace-pre-line text-sm text-[#4a3e52]">{request.publicDescription}</p>
+        {request.publicRequirements && (
+          <>
+            <h2 className="mt-4 text-xs font-bold uppercase tracking-wide text-[#8a7e92]">Persyaratan</h2>
+            <p className="mt-1 whitespace-pre-line text-sm text-[#4a3e52]">{request.publicRequirements}</p>
+          </>
+        )}
+      </div>
 
       <div className="mt-5 rounded-xl border border-[#e6dcea] bg-white p-5">
         <h2 className="text-base font-bold text-[#231a28]">Sebelum melamar</h2>

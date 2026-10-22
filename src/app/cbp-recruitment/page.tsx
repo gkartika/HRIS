@@ -24,7 +24,7 @@ export default async function PublicVacanciesPage() {
             <li key={v.id} className="rounded-xl border border-[#e6dcea] bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-[#231a28]">{v.job?.jobTitle}</h2>
+                  <h2 className="text-lg font-bold text-[#231a28]">{v.publicTitle || v.job?.jobTitle}</h2>
                   <p className="text-sm text-[#6a5f72]">
                     {v.department.unitName} · {t(`shiftCode.${v.shiftCode}`)}
                   </p>
@@ -36,18 +36,14 @@ export default async function PublicVacanciesPage() {
                   Lamar
                 </Link>
               </div>
-              <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm text-[#4a3e52] sm:grid-cols-2">
-                <div>
-                  <dt className="inline text-[#8a7e92]">Pendidikan: </dt>
-                  <dd className="inline">{t(`educationRequirementCode.${v.educationRequirementCode}`)}</dd>
-                </div>
-                <div>
-                  <dt className="inline text-[#8a7e92]">Pengalaman: </dt>
-                  <dd className="inline">{t(`workExperienceBand.${v.workExperienceBand}`)}</dd>
-                </div>
-              </dl>
-              <p className="mt-3 whitespace-pre-line text-sm text-[#4a3e52]">{v.jobDescriptionSnapshot}</p>
-              {v.specialCriteria && <p className="mt-2 text-sm text-[#4a3e52]">Kriteria khusus: {v.specialCriteria}</p>}
+              <h3 className="mt-4 text-xs font-bold uppercase tracking-wide text-[#8a7e92]">Tentang pekerjaan</h3>
+              <p className="mt-1 whitespace-pre-line text-sm text-[#4a3e52]">{v.publicDescription}</p>
+              {v.publicRequirements && (
+                <>
+                  <h3 className="mt-4 text-xs font-bold uppercase tracking-wide text-[#8a7e92]">Persyaratan</h3>
+                  <p className="mt-1 whitespace-pre-line text-sm text-[#4a3e52]">{v.publicRequirements}</p>
+                </>
+              )}
             </li>
           ))}
         </ul>

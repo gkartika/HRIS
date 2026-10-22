@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import type { RequestedJobLevel } from "@/generated/prisma/enums";
 import type { DashboardCandidate, DashboardFilters, DashboardRange, DashboardRequest } from "@/lib/recruitment-dashboard";
+import { countBySource } from "@/lib/recruitment-source";
 
 // Loads the rows the dashboard needs, already narrowed by department, level and source.
 // Applicants are fetched when they applied inside the period OR their last status change falls
@@ -26,7 +27,15 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
       : {}),
   };
 
-  const [candidates, requests, departments] = await Promise.all([
+  // Positions filled in the period, by how they were filled (new hire, internal applicant, Mutasi). The source
+  // filter narrows it to that kind of applicant, so it also hides Mutasi.
+  const fulfillmentWhere: Prisma.RecruitmentRequestFulfillmentWhereInput = {
+    recruitmentRequest: requestWhere,
+    ...(filters.source ? { source: filters.source === "EXTERNAL" ? "RECRUITMENT_EXTERNAL" : "RECRUITMENT_INTERNAL" } : {}),
+    ...(range.from || range.to ? { linkedAt: { ...(range.from ? { gte: range.from } : {}), ...(range.to ? { lte: range.to } : {}) } } : {}),
+  };
+
+  const [candidates, requests, departments, filledRows] = await Promise.all([
     prisma.recruitmentCandidate.findMany({
       relationLoadStrategy: "join",
       where: candidateWhere,
@@ -56,6 +65,7 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
       orderBy: { unitName: "asc" },
       select: { id: true, unitName: true },
     }),
+    prisma.recruitmentRequestFulfillment.findMany({ where: fulfillmentWhere, select: { source: true } }),
   ]);
 
   const dashboardCandidates: DashboardCandidate[] = candidates.map((c) => ({
@@ -80,5 +90,5 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
     filledAt: r.status === "FILLED" && r.fulfillments.length ? new Date(Math.max(...r.fulfillments.map((f) => f.linkedAt.getTime()))) : null,
   }));
 
-  return { candidates: dashboardCandidates, requests: dashboardRequests, departments };
+  return { candidates: dashboardCandidates, requests: dashboardRequests, departments, filled: countBySource(filledRows.map((f) => f.source)) };
 }

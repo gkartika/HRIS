@@ -5,7 +5,7 @@ import { FULFILLABLE_STATUSES, loadPlanContext, possibleTests, readinessProblems
 import { loadDashboardData } from "@/lib/recruitment-dashboard-data";
 import { computeDashboard, parseDashboardFilters } from "@/lib/recruitment-dashboard";
 import { DAY_MS } from "@/lib/company-time";
-import { buildRecruitmentRows, buildRecruitmentTiles, buildSetupWarnings, recRowCounts, type HomeCandidate, type HomeVacancy } from "@/lib/recruitment-home";
+import { buildRecruitmentRows, buildRecruitmentTiles, buildSetupWarnings, buildUnopenedRequests, recRowCounts, type HomeCandidate, type HomeVacancy } from "@/lib/recruitment-home";
 
 function toHomeCandidate(c: CandidateRow): HomeCandidate {
   return {
@@ -45,6 +45,8 @@ export async function getRecruitmentHomeData() {
         requestedHeadcount: true,
         jobId: true,
         heldAt: true,
+        approvedAt: true,
+        publicDescription: true,
         testsCustomized: true,
         testTypeIds: true,
         job: { select: { jobTitle: true } },
@@ -71,6 +73,20 @@ export async function getRecruitmentHomeData() {
     testTypeIds: possibleTests(ctx, r).map((t) => t.id),
   }));
   const open = vacancies.filter((v) => v.openFor !== "NONE");
+  const unopenedRequests = buildUnopenedRequests(
+    requests
+      .filter((r) => r.openFor === "NONE")
+      .map((r) => ({
+        id: r.id,
+        requestNumber: r.requestNumber,
+        jobLabel: r.job?.jobTitle ?? r.department.unitName,
+        department: r.department.unitName,
+        seatsLeft: Math.max(0, r.requestedHeadcount - r._count.fulfillments),
+        approvedAt: r.approvedAt,
+        heldAt: r.heldAt,
+      })),
+    now
+  );
 
   const result = computeDashboard({ candidates: month.candidates, requests: month.requests, range: { from: monthAgo, to: now }, now });
   const hiredBy = (source: "EXTERNAL" | "INTERNAL") => result.bySource.find((s) => s.source === source)?.hired ?? 0;
@@ -86,6 +102,7 @@ export async function getRecruitmentHomeData() {
     tiles,
     warnings,
     vacancies: open,
+    unopenedRequests,
     summary: {
       applicants: result.funnel[0].count,
       passed: result.funnel[1].count,

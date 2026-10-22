@@ -263,6 +263,32 @@ export async function setRecruitmentRequestJobAction(requestId: string, _prev: s
   }
 }
 
+// The text applicants read on the vacancy (public page and Lowongan Internal), written by Admin Rekrutmen or
+// Admin SDM. The request's own job description and criteria stay internal.
+export async function saveVacancyDetailAction(requestId: string, _prev: string | undefined, formData: FormData): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageRecruitment(session)) return t("common.forbidden");
+  const request = await loadRequest(requestId);
+  if (!request) return "Permintaan tidak ditemukan.";
+
+  const clean = (name: string) => ((formData.get(name) as string) ?? "").replace(/\r\n/g, "\n").trim();
+  const title = clean("publicTitle").replace(/\s+/g, " ");
+  const description = clean("publicDescription");
+  const requirements = clean("publicRequirements");
+  if (title.length > 120) return "Judul lowongan maksimal 120 huruf.";
+  if (description.length < 20) return "Tulis tentang pekerjaannya (minimal 20 huruf).";
+  if (description.length > 4000 || requirements.length > 4000) return "Teks terlalu panjang (maksimal 4000 huruf per bagian).";
+
+  await prisma.recruitmentRequest.update({
+    where: { id: requestId },
+    data: { publicTitle: title || null, publicDescription: description, publicRequirements: requirements || null },
+  });
+  await logAudit({ actorAccountId: session.user.id, action: "UPDATE", datasetName: "RecruitmentRequest", recordId: requestId, reason: `Vacancy detail written for ${request.requestNumber}` });
+  revalidate(requestId);
+  revalidatePath("/cbp-recruitment");
+  revalidatePath("/internal-jobs");
+}
+
 // "+ Tambah kursi": empty seats for the request's Jabatan in its Department, reporting to the requester's seat.
 export async function addRequestSeatsAction(requestId: string, _prev: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();

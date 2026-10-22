@@ -5,6 +5,7 @@ import { listCandidates, STAGE_FILTERS, statusesForStage } from "@/lib/recruitme
 import { groupTestColumns, TEST_FORM_LABEL, testIdsForRequest } from "@/lib/recruitment-candidates";
 import { CandidateTable } from "../candidate-table";
 import { OpenForControl, RequestTestsControl } from "../candidate-forms";
+import { VacancyDetailCard } from "./vacancy-detail";
 import type { RecruitmentOpenFor, RecruitmentRequestStatus } from "@/generated/prisma/enums";
 
 // "Pelamar" block on a request's page (HR Admin only; the page checks that before
@@ -19,6 +20,12 @@ export async function ApplicantsSection({
     id: string;
     jobId: string | null;
     heldAt: Date | null;
+    jobTitle: string;
+    publicTitle: string | null;
+    publicDescription: string | null;
+    publicRequirements: string | null;
+    internalDescription: string;
+    internalCriteria: string | null;
     status: RecruitmentRequestStatus;
     openFor: RecruitmentOpenFor;
     accessCode: string | null;
@@ -51,6 +58,14 @@ export async function ApplicantsSection({
       </div>
 
       <div className="mt-4 space-y-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
+        <VacancyDetailCard
+          key={`${request.publicTitle}|${request.publicDescription}|${request.publicRequirements}`}
+          requestId={request.id}
+          jobTitle={request.jobTitle}
+          saved={{ title: request.publicTitle, description: request.publicDescription, requirements: request.publicRequirements }}
+          internalDescription={request.internalDescription}
+          internalCriteria={request.internalCriteria}
+        />
         <RequestTestsControl
           key={`${request.testsCustomized}:${currentKeys.join(",")}`}
           requestId={request.id}

@@ -635,6 +635,7 @@ export async function createEmployeeFromRecruitmentRequest(
         employeeId: employee.id,
         assignmentId: assignment.id,
         linkedByAccountId: session.user.id,
+        source: "RECRUITMENT_EXTERNAL",
       },
     });
 

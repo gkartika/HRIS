@@ -206,6 +206,45 @@ export interface HomeVacancy {
   problems: string[];
 }
 
+// Approved requests that are not open for applicants yet: what Admin Rekrutmen still has to publish.
+export interface UnopenedRequest {
+  id: string;
+  requestNumber: string;
+  jobLabel: string;
+  department: string;
+  seatsLeft: number;
+  waitingLabel: string;
+  severity: Severity;
+  /** On hold: shown, but it can not be opened until it is resumed. */
+  held: boolean;
+}
+
+export function buildUnopenedRequests(
+  requests: { id: string; requestNumber: string; jobLabel: string; department: string; seatsLeft: number; approvedAt: Date | null; heldAt: Date | null }[],
+  now: Date
+): UnopenedRequest[] {
+  return requests
+    .map((r) => {
+      const age = r.approvedAt ? daysSince(r.approvedAt, now) : 0;
+      const held = r.heldAt !== null;
+      return {
+        age,
+        row: {
+          id: r.id,
+          requestNumber: r.requestNumber,
+          jobLabel: r.jobLabel,
+          department: r.department,
+          seatsLeft: r.seatsLeft,
+          waitingLabel: waitingLabel(age),
+          severity: held ? ("slate" as Severity) : waitingSeverity(age),
+          held,
+        },
+      };
+    })
+    .sort((a, b) => Number(a.row.held) - Number(b.row.held) || b.age - a.age)
+    .map((x) => x.row);
+}
+
 export interface Tile {
   title: string;
   total: number;

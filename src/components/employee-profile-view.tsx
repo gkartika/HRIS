@@ -174,8 +174,11 @@ export function EmployeeAssignmentHistory({
   reportsTo,
   startDateEditor,
   scheduledAction,
+  originLabels,
 }: {
   assignments: AssignmentWithPosition[];
+  /** How a placement came about (Rekrutmen eksternal, Rekrutmen internal, Mutasi), by assignment id. */
+  originLabels?: Record<string, string>;
   reportsTo?: { label: string; holderName: string | null } | null;
   /** When given (HR admin), shown instead of the plain start date so it can be changed in place. */
   startDateEditor?: (assignment: AssignmentWithPosition) => React.ReactNode;
@@ -207,6 +210,7 @@ export function EmployeeAssignmentHistory({
                   {" — "}
                   {a.effectiveTo ? formatDate(a.effectiveTo) : t("assignmentUi.ongoing")}
                 </p>
+                {originLabels?.[a.id] && <p className="mt-1 text-xs text-slate-500">Asal: {originLabels[a.id]}</p>}
               </div>
               <div className="flex flex-col items-end gap-1">
                 <span className={`rounded-md px-2 py-1 text-xs font-medium ${ASSIGNMENT_BADGE_TONE[a.assignmentType]}`}>

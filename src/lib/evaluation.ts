@@ -229,6 +229,12 @@ export function computeEvaluationTotal(scores: EvaluationScores): number {
 // no evaluation (owner's decision): nothing is created and nothing waits on one.
 const MOVEMENT_TYPES_REQUIRING_EVALUATION: MovementType[] = ["PROMOTION", "DEMOTION"];
 
+// A move that comes from internal recruitment already went through tests and an interview, so it needs no
+// performance evaluation whatever its type. Any other move follows the type rule above.
+export function movementNeedsEvaluation(movementType: MovementType, origin: "MUTASI" | "REKRUTMEN_INTERNAL"): boolean {
+  return origin !== "REKRUTMEN_INTERNAL" && requiresEvaluationForMovementType(movementType);
+}
+
 export function requiresEvaluationForMovementType(movementType: MovementType): boolean {
   return MOVEMENT_TYPES_REQUIRING_EVALUATION.includes(movementType);
 }

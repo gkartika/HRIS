@@ -11,7 +11,6 @@ import { MAX_DOCUMENT_SIZE_BYTES } from "@/lib/validation/employee-fields";
 const SHRINK_ABOVE_BYTES = 1.2 * 1024 * 1024;
 const MAX_SIDE_PX = 2200;
 const JPEG_QUALITY = 0.85;
-const LIMIT_MB = Math.round(MAX_DOCUMENT_SIZE_BYTES / (1024 * 1024));
 
 async function shrinkImage(file: File): Promise<File> {
   const bitmap = await createImageBitmap(file);
@@ -34,8 +33,9 @@ async function shrinkImage(file: File): Promise<File> {
 export function DocumentFileInput({
   accept = ".pdf,.jpg,.jpeg,.png",
   onChange,
+  maxBytes = MAX_DOCUMENT_SIZE_BYTES,
   ...rest
-}: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { maxBytes?: number }) {
   const [note, setNote] = useState<{ text: string; tone: "info" | "error" } | null>(null);
 
   async function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -60,9 +60,9 @@ export function DocumentFileInput({
       }
     }
 
-    if (result.size > MAX_DOCUMENT_SIZE_BYTES) {
+    if (result.size > maxBytes) {
       input.value = "";
-      setNote({ text: `Ukuran berkas ${(result.size / 1048576).toFixed(1)} MB melebihi batas ${LIMIT_MB} MB. Perkecil berkas lalu pilih lagi.`, tone: "error" });
+      setNote({ text: `Ukuran berkas ${(result.size / 1048576).toFixed(1)} MB melebihi batas ${Math.round(maxBytes / 1048576)} MB. Perkecil berkas lalu pilih lagi.`, tone: "error" });
     }
   }
 

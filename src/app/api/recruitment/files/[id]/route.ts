@@ -5,8 +5,9 @@ import { canManageRecruitment } from "@/lib/permissions";
 import { readPrivateFile } from "@/lib/file-storage";
 import { logAudit } from "@/lib/audit";
 
-// An applicant's CV or offering letter. Admin SDM and Admin Rekrutmen may open any; an interviewer or essay
-// reviewer may open the CV of an applicant they were assigned. Every open is logged.
+// An applicant's CV, supporting document or offering letter. Admin SDM and Admin Rekrutmen may open any; an
+// interviewer or essay reviewer may open the CV and supporting document of an applicant they were assigned.
+// Every open is logged.
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!canView && me) {
     const assigned = await prisma.recruitmentCandidate.findFirst({
       where: {
-        cvFileId: id,
+        AND: [{ OR: [{ cvFileId: id }, { supportingFileId: id }] }],
         OR: [
           { interview: { is: { interviewers: { some: { employeeId: me } } } } },
           { tests: { some: { reviewers: { some: { employeeId: me } } } } },

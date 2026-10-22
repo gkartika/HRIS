@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState } from "react";
 import { applyExternalAction } from "../../actions";
-import { DocumentFileInput } from "@/components/document-file-input";
+import { ApplicantContactFields } from "@/components/applicant-contact-fields";
 
 const inputClass = "w-full rounded-lg border border-[#cfc4d6] bg-white px-3 py-2.5 text-[15px] text-[#231a28] focus:border-brand focus:outline-none";
 const labelClass = "mb-1 block text-[13px] font-semibold text-[#4a3e52]";
@@ -35,25 +35,7 @@ export function ApplyForm({ requestId }: { requestId: string }) {
         </label>
         <input id="fullName" name="fullName" required autoComplete="name" className={inputClass} />
       </div>
-      <div>
-        <label htmlFor="email" className={labelClass}>
-          Email
-        </label>
-        <input id="email" name="email" type="email" required autoComplete="email" className={inputClass} />
-      </div>
-      <div>
-        <label htmlFor="mobileNumber" className={labelClass}>
-          Nomor WhatsApp
-        </label>
-        <input id="mobileNumber" name="mobileNumber" type="tel" required autoComplete="tel" placeholder="0812 3456 7890" className={inputClass} />
-      </div>
-      <div>
-        <label htmlFor="cv" className={labelClass}>
-          CV (opsional)
-        </label>
-        <DocumentFileInput id="cv" name="cv" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className="block w-full text-sm text-[#4a3e52]" />
-        <p className="mt-1 text-xs text-[#8a7e92]">PDF, Word, atau foto. Maksimal 4 MB.</p>
-      </div>
+      <ApplicantContactFields inputClass={inputClass} labelClass={labelClass} hintClass="mt-1 text-xs text-[#8a7e92]" />
 
       {error && (
         <p role="alert" className="rounded-[10px] border border-[#f3c1c6] bg-[#fdecee] px-3 py-2.5 text-[13.5px] text-[#a1252f]">

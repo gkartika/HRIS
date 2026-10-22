@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
 import { formatDateLong } from "@/lib/format";
@@ -7,8 +8,10 @@ import {
   canApproveMovementRequestAsDeptHead,
   canExecuteMovementRequest,
   canCancelMovementRequest,
+  canManageRecruitment,
   isHrAdmin,
 } from "@/lib/permissions";
+import { MOVEMENT_ORIGIN_LABEL } from "@/lib/recruitment-source";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions } from "@/lib/dept-head";
 import { resolveDepartmentId } from "@/lib/level3-scope";
@@ -53,6 +56,9 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
       cancelledByAccount: true,
       cancelledByEmployee: true,
       evaluation: { select: { status: true } },
+      // where the move came from: the applicant's request, or the request a Mutasi fills
+      recruitmentCandidate: { select: { request: { select: { id: true, requestNumber: true, job: { select: { jobTitle: true } } } } } },
+      recruitmentRequest: { select: { id: true, requestNumber: true } },
     },
   });
   if (!request) notFound();
@@ -125,6 +131,40 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           {t("movement.legacyTypeNotice")}
         </div>
       )}
+      <div
+        className={`rounded-xl border px-4 py-3 text-sm ${
+          request.origin === "REKRUTMEN_INTERNAL" ? "border-indigo-200 bg-indigo-50 text-indigo-900" : "border-amber-200 bg-amber-50 text-amber-900"
+        }`}
+      >
+        <b>Sumber: {MOVEMENT_ORIGIN_LABEL[request.origin]}.</b>{" "}
+        {request.origin === "REKRUTMEN_INTERNAL" && request.recruitmentCandidate ? (
+          <>
+            Karyawan ini melamar {request.recruitmentCandidate.request.job?.jobTitle ?? "lowongan internal"} ({request.recruitmentCandidate.request.requestNumber}), lulus tes dan interview.
+            {(canManageRecruitment(session) || isHrManagerNow) && (
+              <>
+                {" "}
+                <Link href={`/recruitment/${request.recruitmentCandidate.request.id}`} className="font-medium underline">
+                  Buka permintaan
+                </Link>
+              </>
+            )}
+          </>
+        ) : request.recruitmentRequest ? (
+          <>
+            Mengisi {request.recruitmentRequest.requestNumber} lewat tombol &quot;Isi dengan Mutasi&quot;, tanpa pelamar.
+            {(canManageRecruitment(session) || isHrManagerNow) && (
+              <>
+                {" "}
+                <Link href={`/recruitment/${request.recruitmentRequest.id}`} className="font-medium underline">
+                  Buka permintaan
+                </Link>
+              </>
+            )}
+          </>
+        ) : (
+          <>Diajukan oleh {request.requesterEmployee.fullLegalName}. Tidak terkait permintaan tenaga kerja.</>
+        )}
+      </div>
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex items-start justify-between">
           <div>

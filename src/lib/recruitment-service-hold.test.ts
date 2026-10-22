@@ -11,11 +11,17 @@ const request = {
   openFor: "EXTERNAL" as const,
   testsCustomized: false,
   testTypeIds: [] as string[],
+  publicDescription: "Tentang pekerjaan",
 };
 
 describe("readinessProblems and hold", () => {
   it("is ready when not held", () => {
     expect(readinessProblems(ctx, { ...request, heldAt: null }, 0)).toEqual([]);
+  });
+
+  it("a vacancy without its written detail is not ready", () => {
+    expect(readinessProblems(ctx, { ...request, heldAt: null, publicDescription: null }, 0)).toEqual(["Detail lowongan belum ditulis."]);
+    expect(readinessProblems(ctx, { ...request, heldAt: null, publicDescription: "   " }, 0)).toEqual(["Detail lowongan belum ditulis."]);
   });
 
   it("reports the hold as a problem and nothing else changes", () => {

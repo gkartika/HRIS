@@ -4,6 +4,8 @@ import { AccessDenied } from "@/components/access-denied";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { ReasonForm } from "@/components/reason-form";
 import { StatusChip } from "@/components/status-chip";
+import { CopyTextButton } from "@/components/copy-text-button";
+import { formatMobile } from "@/lib/mobile-number";
 import { prisma } from "@/lib/db";
 import { formatDateLong, formatDateTimeMedium } from "@/lib/format";
 import { canManageRecruitment, isHrAdmin } from "@/lib/permissions";
@@ -64,6 +66,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
     include: {
       request: { include: { job: true, department: true } },
       cvFile: true,
+      supportingFile: true,
       employee: { select: { id: true, fullLegalName: true, employeeNumber: true } },
       tests: {
         orderBy: { sortOrder: "asc" },
@@ -138,18 +141,22 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
             <StatusChip tone={CANDIDATE_STATUS_TONE[candidate.status]}>{CANDIDATE_STATUS_LABEL[candidate.status]}</StatusChip>
           </div>
         </div>
-        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
           <div>
             <dt className="text-xs text-slate-500">Email</dt>
             <dd className="break-all text-slate-900">{candidate.email}</dd>
           </div>
           <div>
             <dt className="text-xs text-slate-500">WhatsApp</dt>
-            <dd className="text-slate-900">
+            <dd className="flex flex-wrap items-center gap-2 text-slate-900">
               {candidate.mobileNumber ? (
-                <a href={whatsappLink(candidate.mobileNumber, "")} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
-                  {candidate.mobileNumber}
-                </a>
+                <>
+                  <b>{formatMobile(candidate.mobileNumber)}</b>
+                  <a href={whatsappLink(candidate.mobileNumber, "")} target="_blank" rel="noopener noreferrer" className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100">
+                    Chat WhatsApp
+                  </a>
+                  <CopyTextButton text={formatMobile(candidate.mobileNumber)} />
+                </>
               ) : (
                 "—"
               )}
@@ -160,12 +167,30 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
             <dd className="text-slate-900">{formatDateTimeMedium(candidate.createdAt)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">CV</dt>
+            <dt className="text-xs text-slate-500">CV terbaru</dt>
             <dd>
               {candidate.cvFile ? (
-                <a href={`/api/recruitment/files/${candidate.cvFile.id}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
-                  {candidate.cvFile.fileName}
-                </a>
+                <>
+                  <a href={`/api/recruitment/files/${candidate.cvFile.id}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                    {candidate.cvFile.fileName}
+                  </a>
+                  <span className="block text-xs text-slate-400">diunggah {formatDateTimeMedium(candidate.cvFile.createdAt)} WIB</span>
+                </>
+              ) : (
+                <span className="text-slate-400">Tidak ada</span>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Dokumen pendukung</dt>
+            <dd>
+              {candidate.supportingFile ? (
+                <>
+                  <a href={`/api/recruitment/files/${candidate.supportingFile.id}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                    {candidate.supportingFile.fileName}
+                  </a>
+                  <span className="block text-xs text-slate-400">diunggah {formatDateTimeMedium(candidate.supportingFile.createdAt)} WIB</span>
+                </>
               ) : (
                 <span className="text-slate-400">Tidak ada</span>
               )}

@@ -118,11 +118,12 @@ export function possibleTests(ctx: PlanContext, request: RequestTestChoice) {
 // What stops a request from taking applicants right now (empty = ready).
 export function readinessProblems(
   ctx: PlanContext,
-  request: RequestTestChoice & { status: RecruitmentRequestStatus; accessCode: string | null; requestedHeadcount: number; openFor: RecruitmentOpenFor; heldAt?: Date | null },
+  request: RequestTestChoice & { status: RecruitmentRequestStatus; accessCode: string | null; requestedHeadcount: number; openFor: RecruitmentOpenFor; heldAt?: Date | null; publicDescription: string | null },
   filled: number
 ): string[] {
   const problems: string[] = [];
   if (request.heldAt) problems.push("Permintaan sedang ditahan.");
+  if (!request.publicDescription?.trim()) problems.push("Detail lowongan belum ditulis.");
   if (!request.jobId) problems.push("Jabatan pada permintaan ini belum ditentukan.");
   if (!canRequestAcceptFulfillment(request.status)) problems.push("Permintaan belum disetujui atau sudah ditutup.");
   if (computeFulfillmentCounts(request.requestedHeadcount, filled).isFull) problems.push("Permintaan sudah terisi penuh.");
@@ -165,6 +166,8 @@ export interface NewCandidateInput {
   email: string;
   mobileNumber: string | null;
   cv?: { name: string; type: string; data: Buffer } | null;
+  /** One optional supporting document (diploma, certificate, portfolio). */
+  supporting?: { name: string; type: string; data: Buffer } | null;
 }
 
 // Creates the applicant, their CV and one row per test they must take. External
@@ -179,15 +182,17 @@ export async function createCandidate(input: NewCandidateInput): Promise<{ id: s
   const planned = plannedTests(ctx, { jobId: input.jobId, testsCustomized: input.testsCustomized, testTypeIds: input.testTypeIds }, new Map(handedOut.map((g) => [g.testTypeId, g._count._all])));
   const rawToken = input.source === "EXTERNAL" ? randomBytes(24).toString("base64url") : null;
   return prisma.$transaction(async (tx) => {
-    let cvFileId: string | null = null;
-    if (input.cv) {
-      const storageKey = randomStorageKey("recruitment-cv", fileExtension(input.cv.name) || ".bin");
-      await tx.fileBlob.create({ data: { storageKey, data: new Uint8Array(input.cv.data) } });
+    const storeFile = async (upload: { name: string; type: string; data: Buffer } | null | undefined, prefix: string): Promise<string | null> => {
+      if (!upload) return null;
+      const storageKey = randomStorageKey(prefix, fileExtension(upload.name) || ".bin");
+      await tx.fileBlob.create({ data: { storageKey, data: new Uint8Array(upload.data) } });
       const file = await tx.recruitmentFile.create({
-        data: { storageKey, fileName: input.cv.name.slice(0, 150), mimeType: input.cv.type || "application/octet-stream", sizeBytes: input.cv.data.length },
+        data: { storageKey, fileName: upload.name.slice(0, 150), mimeType: upload.type || "application/octet-stream", sizeBytes: upload.data.length },
       });
-      cvFileId = file.id;
-    }
+      return file.id;
+    };
+    const cvFileId = await storeFile(input.cv, "recruitment-cv");
+    const supportingFileId = await storeFile(input.supporting, "recruitment-doc");
     const candidate = await tx.recruitmentCandidate.create({
       data: {
         requestId: input.requestId,
@@ -197,6 +202,7 @@ export async function createCandidate(input: NewCandidateInput): Promise<{ id: s
         email: input.email,
         mobileNumber: input.mobileNumber,
         cvFileId,
+        supportingFileId,
         tokenHash: rawToken ? hashToken(rawToken) : null,
         tests: { create: planned.map((t, i) => ({ testTypeId: t.id, sortOrder: i })) },
       },
@@ -526,10 +532,10 @@ export async function purgeOldCandidates(actorAccountId: string, now: Date = new
   const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
   const candidates = await prisma.recruitmentCandidate.findMany({
     where: purgeWhere(cutoff),
-    select: { id: true, cvFileId: true, offer: { select: { fileId: true } } },
+    select: { id: true, cvFileId: true, supportingFileId: true, offer: { select: { fileId: true } } },
   });
   if (candidates.length === 0) return 0;
-  const fileIds = candidates.flatMap((c) => [c.cvFileId, c.offer?.fileId]).filter((x): x is string => !!x);
+  const fileIds = candidates.flatMap((c) => [c.cvFileId, c.supportingFileId, c.offer?.fileId]).filter((x): x is string => !!x);
   const files = await prisma.recruitmentFile.findMany({ where: { id: { in: fileIds } }, select: { id: true, storageKey: true } });
 
   await prisma.$transaction(async (tx) => {

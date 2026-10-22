@@ -168,6 +168,37 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
             </p>
           </div>
 
+          {data.unopenedRequests.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-white p-5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">
+                  Belum dibuka <span className={`ml-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${PILL.amber}`}>{data.unopenedRequests.length} permintaan</span>
+                </p>
+                <Link href="/recruitment" className="text-xs text-indigo-600 hover:underline">
+                  Semua permintaan →
+                </Link>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500">Sudah disetujui, belum dibuka untuk pelamar. Yang paling lama menunggu di atas.</p>
+              <div className="mt-2 divide-y divide-slate-100 text-sm">
+                {data.unopenedRequests.slice(0, 6).map((r) => (
+                  <Link key={r.id} href={`/recruitment/${r.id}`} className={`flex items-center justify-between gap-2 py-2 hover:bg-slate-50 ${r.held ? "opacity-70" : ""}`}>
+                    <span className="min-w-0">
+                      <span className="block truncate text-slate-900">{r.jobLabel}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {r.requestNumber} · {r.department} · {r.seatsLeft} posisi
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className={`block rounded-md px-2 py-0.5 text-[11px] font-medium ${r.held ? "bg-amber-100 text-amber-800" : PILL[r.severity]}`}>{r.held ? "Ditahan" : r.waitingLabel}</span>
+                      <span className={`mt-1 inline-block text-xs ${r.held ? "text-slate-400" : "font-medium text-indigo-600"}`}>{r.held ? "tidak bisa dibuka" : "Buka lowongan →"}</span>
+                    </span>
+                  </Link>
+                ))}
+                {data.unopenedRequests.length > 6 && <p className="pt-2 text-xs text-slate-400">dan {data.unopenedRequests.length - 6} permintaan lain.</p>}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-900">Lowongan dibuka</p>

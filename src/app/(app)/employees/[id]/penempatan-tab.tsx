@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmployeeAssignmentHistory, formatDate } from "@/components/employee-profile-view";
+import { FULFILLMENT_SOURCE_LABEL, MOVEMENT_ORIGIN_LABEL } from "@/lib/recruitment-source";
 import { StartDateEditor } from "./start-date-editor";
 import { CancelScheduledPlacementButton } from "./cancel-scheduled-button";
 import { AssignmentManagementPanel } from "./assignment-panel";
@@ -97,10 +98,28 @@ export async function PenempatanTabContent({
     }));
   const taskForceNames = taskForceNameRows.map((r) => r.name);
 
+  // How each placement came about: filled through a request (new hire, internal applicant, Mutasi) or a plain
+  // Perubahan Posisi (Mutasi, or an internal applicant's move).
+  const assignmentIds = assignments.map((a) => a.id);
+  const [filledBy, movedBy] = await Promise.all([
+    prisma.recruitmentRequestFulfillment.findMany({
+      where: { assignmentId: { in: assignmentIds } },
+      select: { assignmentId: true, source: true, recruitmentRequest: { select: { requestNumber: true } } },
+    }),
+    prisma.movementRequest.findMany({
+      where: { implementedAssignmentId: { in: assignmentIds } },
+      select: { implementedAssignmentId: true, origin: true },
+    }),
+  ]);
+  const originLabels: Record<string, string> = {};
+  for (const m of movedBy) if (m.implementedAssignmentId) originLabels[m.implementedAssignmentId] = MOVEMENT_ORIGIN_LABEL[m.origin];
+  for (const f of filledBy) originLabels[f.assignmentId] = `${FULFILLMENT_SOURCE_LABEL[f.source]} (${f.recruitmentRequest.requestNumber})`;
+
   return (
     <div className={SECTION_DIVIDERS}>
       <EmployeeAssignmentHistory
         assignments={assignments}
+        originLabels={originLabels}
         reportsTo={reportsTo}
         scheduledAction={
           canManage ? (a) => <CancelScheduledPlacementButton assignmentId={a.id} employeeId={employeeId} /> : undefined

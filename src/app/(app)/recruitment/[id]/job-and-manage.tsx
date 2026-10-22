@@ -35,7 +35,7 @@ function withDone(action: FormAction, onDone?: () => void): FormAction {
 
 // Like <form action>, but React does not wipe the fields afterwards: when the server answers with an error the
 // person keeps what they typed and chose.
-function useKeptForm(action: FormAction) {
+export function useKeptForm(action: FormAction) {
   const [error, run, pending] = useActionState(action, undefined);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

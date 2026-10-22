@@ -25,6 +25,7 @@ export default async function InterviewerPage({ params }: { params: Promise<{ in
           status: true,
           interviewDecision: true,
           cvFileId: true,
+          supportingFileId: true,
           request: { select: { job: { select: { jobTitle: true } }, department: { select: { unitName: true } } } },
           tests: { orderBy: { sortOrder: "asc" }, select: { status: true, passed: true, scorePercent: true, testType: { select: { name: true, form: true } } } },
         },
@@ -64,6 +65,18 @@ export default async function InterviewerPage({ params }: { params: Promise<{ in
               {c.cvFileId ? (
                 <a href={`/api/recruitment/files/${c.cvFileId}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
                   Buka CV
+                </a>
+              ) : (
+                <span className="text-slate-400">Tidak ada</span>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Dokumen pendukung</dt>
+            <dd>
+              {c.supportingFileId ? (
+                <a href={`/api/recruitment/files/${c.supportingFileId}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                  Buka dokumen
                 </a>
               ) : (
                 <span className="text-slate-400">Tidak ada</span>

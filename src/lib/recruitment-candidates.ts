@@ -1,6 +1,10 @@
 // Pure rules for the applicant pipeline (tests, statuses, re-applying, messages).
 // No Prisma/Next imports, so everything here is unit testable.
 import { randomBytes } from "crypto";
+import { normalizeMobile } from "@/lib/mobile-number";
+
+// The WhatsApp number rules live in mobile-number.ts (shared with the browser forms); re-exported here.
+export { normalizeMobile, mobileProblem, isValidMobile, formatMobile } from "@/lib/mobile-number";
 import type {
   RecruitmentCandidateStatus,
   RecruitmentCandidateTestStatus,
@@ -102,19 +106,6 @@ export function normalizeEmail(input: string): string {
 
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
-}
-
-// "0812-3456-7890" / "+62 812 3456 7890" / "62812..." all become "6281234567890".
-export function normalizeMobile(input: string): string {
-  let digits = input.replace(/\D/g, "");
-  if (digits.startsWith("0")) digits = `62${digits.slice(1)}`;
-  else if (digits.startsWith("8")) digits = `62${digits}`;
-  return digits;
-}
-
-export function isValidMobile(input: string): boolean {
-  const n = normalizeMobile(input);
-  return n.length >= 10 && n.length <= 15;
 }
 
 export function whatsappLink(mobile: string, message: string): string {
@@ -458,6 +449,9 @@ export function countDecisions(
 // ---------- files ----------
 
 export const CV_MAX_BYTES = 4 * 1024 * 1024;
+// An application carries two uploads (CV and supporting document) in one request, and a request body may
+// not exceed 4.5 MB, so each applicant upload is limited to 2 MB. The offering letter is a single file (4 MB).
+export const APPLICANT_FILE_MAX_BYTES = 2 * 1024 * 1024;
 const CV_TYPES: Record<string, string[]> = {
   ".pdf": ["application/pdf"],
   ".doc": ["application/msword"],
@@ -472,14 +466,19 @@ export function fileExtension(name: string): string {
   return i < 0 ? "" : name.slice(i).toLowerCase();
 }
 
-export function validateCvFile(file: { name: string; size: number; type: string }): string | null {
-  if (file.size === 0) return "Berkas CV kosong.";
-  if (file.size > CV_MAX_BYTES) return "Berkas CV maksimal 4 MB.";
+// An applicant's upload (the CV or the supporting document): PDF, Word or a photo, at most 4 MB.
+export function validateApplicantFile(file: { name: string; size: number; type: string }, label: string): string | null {
+  if (file.size === 0) return `Berkas ${label} kosong.`;
+  if (file.size > APPLICANT_FILE_MAX_BYTES) return `Berkas ${label} maksimal 2 MB.`;
   const ext = fileExtension(file.name);
   const allowed = CV_TYPES[ext];
-  if (!allowed) return "CV harus berupa PDF, Word (doc/docx), atau foto JPG/PNG.";
-  if (file.type && !allowed.includes(file.type)) return "Jenis berkas CV tidak sesuai dengan ekstensinya.";
+  if (!allowed) return `${label} harus berupa PDF, Word (doc/docx), atau foto JPG/PNG.`;
+  if (file.type && !allowed.includes(file.type)) return `Jenis berkas ${label} tidak sesuai dengan ekstensinya.`;
   return null;
+}
+
+export function validateCvFile(file: { name: string; size: number; type: string }): string | null {
+  return validateApplicantFile(file, "CV");
 }
 
 export function validateOfferFile(file: { name: string; size: number; type: string }): string | null {

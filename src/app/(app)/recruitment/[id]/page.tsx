@@ -32,6 +32,7 @@ import {
 } from "./decision-forms";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { OPEN_MOVEMENT_STATUSES } from "@/lib/movement";
+import { countBySource, FULFILLMENT_SOURCES, FULFILLMENT_SOURCE_BAR, FULFILLMENT_SOURCE_LABEL, FULFILLMENT_SOURCE_TONE } from "@/lib/recruitment-source";
 import { ApplicantsSection } from "./applicants-section";
 import { JobForm, ManagePanel, ResumeButton, type JobChoice } from "./job-and-manage";
 import { canHoldStatus, describeEvent, jobChangeNeedsReason } from "@/lib/recruitment-request-changes";
@@ -90,6 +91,8 @@ export default async function RecruitmentDetailPage({
   }
 
   const counts = computeFulfillmentCounts(request.requestedHeadcount, request.fulfillments.length);
+  // One total, with how each position was filled: new hire, internal applicant, or Mutasi.
+  const bySource = countBySource(request.fulfillments.map((f) => f.source));
   const canApprove = canApproveRecruitmentRequest(activeHrManagerPositionIds);
   const canApproveAsDeptHead =
     canApproveRecruitmentRequestAsDeptHead(activeDeptHeadPositionIds) && request.status === "PENDING_DEPT_HEAD";
@@ -185,6 +188,20 @@ export default async function RecruitmentDetailPage({
             <p className="text-sm text-slate-900">
               {t("recruitment.filledOf", { filled: counts.filledCount, total: request.requestedHeadcount })}
             </p>
+            {bySource.total > 0 && (
+              <>
+                <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-slate-200" role="presentation">
+                  {FULFILLMENT_SOURCES.filter((s) => bySource[s] > 0).map((s) => (
+                    <div key={s} className={FULFILLMENT_SOURCE_BAR[s]} style={{ width: `${(bySource[s] / Math.max(request.requestedHeadcount, bySource.total)) * 100}%` }} />
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {FULFILLMENT_SOURCES.filter((s) => bySource[s] > 0)
+                    .map((s) => `${bySource[s]} ${FULFILLMENT_SOURCE_LABEL[s]}`)
+                    .join(" · ")}
+                </p>
+              </>
+            )}
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("recruitment.educationRequirement")}</p>
@@ -417,6 +434,12 @@ export default async function RecruitmentDetailPage({
             id: request.id,
             jobId: request.jobId,
             heldAt: request.heldAt,
+            jobTitle: request.job?.jobTitle ?? request.requestedJobText ?? "",
+            publicTitle: request.publicTitle,
+            publicDescription: request.publicDescription,
+            publicRequirements: request.publicRequirements,
+            internalDescription: request.jobDescriptionSnapshot,
+            internalCriteria: request.specialCriteria,
             status: request.status,
             openFor: request.openFor,
             accessCode: request.accessCode,
@@ -463,7 +486,10 @@ export default async function RecruitmentDetailPage({
                 <Link href={`/employees/${f.employeeId}`} className="text-indigo-600 hover:underline">
                   {f.employee.fullLegalName} ({f.employee.employeeNumber})
                 </Link>
-                <span className="text-xs text-slate-500">{f.assignment.position.job.jobTitle}</span>
+                <span className="flex items-center gap-2">
+                  <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${FULFILLMENT_SOURCE_TONE[f.source]}`}>{FULFILLMENT_SOURCE_LABEL[f.source]}</span>
+                  <span className="text-xs text-slate-500">{f.assignment.position.job.jobTitle}</span>
+                </span>
               </div>
             ))}
           </div>

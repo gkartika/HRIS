@@ -6,12 +6,12 @@ import { logAudit } from "@/lib/audit";
 import {
   accessCodeMatches,
   isValidEmail,
-  isValidMobile,
+  mobileProblem,
   normalizeEmail,
   normalizeMobile,
   reapplyBlock,
-  validateCvFile,
 } from "@/lib/recruitment-candidates";
+import { readApplicantUpload } from "@/lib/applicant-uploads";
 import { createCandidate, getRecruitmentSettings, loadPlanContext, readinessProblems } from "@/lib/recruitment-service";
 import { respondToOffer } from "@/lib/recruitment-flow";
 
@@ -27,7 +27,6 @@ export async function applyExternalAction(
   const fullName = ((formData.get("fullName") as string) ?? "").trim().replace(/\s+/g, " ");
   const email = normalizeEmail((formData.get("email") as string) ?? "");
   const mobile = ((formData.get("mobileNumber") as string) ?? "").trim();
-  const cvEntry = formData.get("cv");
 
   const request = await prisma.recruitmentRequest.findUnique({
     where: { id: requestId },
@@ -39,14 +38,16 @@ export async function applyExternalAction(
 
   if (fullName.length < 3 || fullName.length > 120) return "Isi nama lengkap Anda.";
   if (!isValidEmail(email)) return "Alamat email tidak valid.";
-  if (!isValidMobile(mobile)) return "Nomor WhatsApp tidak valid. Contoh: 0812 3456 7890.";
+  const mobileIssue = mobileProblem(mobile);
+  if (mobileIssue) return mobileIssue;
 
-  let cv: { name: string; type: string; data: Buffer } | null = null;
-  if (cvEntry instanceof File && cvEntry.size > 0) {
-    const cvError = validateCvFile({ name: cvEntry.name, size: cvEntry.size, type: cvEntry.type });
-    if (cvError) return cvError;
-    cv = { name: cvEntry.name, type: cvEntry.type, data: Buffer.from(await cvEntry.arrayBuffer()) };
-  }
+  // The newest CV is required; one supporting document is optional.
+  const cvRead = await readApplicantUpload(formData.get("cv"), "CV terbaru", true);
+  if ("error" in cvRead) return cvRead.error;
+  const supportingRead = await readApplicantUpload(formData.get("supporting"), "dokumen pendukung", false);
+  if ("error" in supportingRead) return supportingRead.error;
+  const cv = cvRead.upload;
+  const supporting = supportingRead.upload;
 
   const [ctx, settings, prior] = await Promise.all([
     loadPlanContext(),
@@ -73,6 +74,7 @@ export async function applyExternalAction(
     email,
     mobileNumber: normalizeMobile(mobile),
     cv,
+    supporting,
   });
   await logAudit({
     actorAccountId: null,

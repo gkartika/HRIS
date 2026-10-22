@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatusChip } from "@/components/status-chip";
 import { formatDateMedium } from "@/lib/format";
+import { formatMobile } from "@/lib/mobile-number";
 import { CANDIDATE_STATUS_LABEL, CANDIDATE_STATUS_TONE } from "@/lib/recruitment-candidates";
 import { nextStepOf, testSummary, type CandidateRow } from "@/lib/recruitment-queries";
 
@@ -29,6 +30,7 @@ export function CandidateTable({ rows, showRequest }: { rows: CandidateRow[]; sh
                   <Link href={`/recruitment/${c.requestId}/candidates/${c.id}`} className="font-medium text-indigo-600 hover:underline">
                     {c.fullName}
                   </Link>
+                  {c.mobileNumber && <div className="mt-0.5 text-xs text-slate-500">{formatMobile(c.mobileNumber)}</div>}
                 </td>
                 {showRequest && (
                   <td className="px-3 py-3 text-xs text-slate-600">

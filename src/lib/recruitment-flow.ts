@@ -491,7 +491,7 @@ export async function markCandidateHired(
 export async function completeInternalHire(
   tx: Prisma.TransactionClient,
   args: { movementRequestId: string; employeeId: string; assignmentId: string | null; accountId: string }
-): Promise<{ candidateId: string | null; requestId: string } | null> {
+): Promise<{ candidateId: string | null; requestId: string; source: "RECRUITMENT_INTERNAL" | "MUTASI" } | null> {
   const candidate = await tx.recruitmentCandidate.findUnique({
     where: { movementRequestId: args.movementRequestId },
     include: { request: { include: { _count: { select: { fulfillments: true } } } } },
@@ -517,7 +517,14 @@ export async function completeInternalHire(
     const already = await tx.recruitmentRequestFulfillment.findUnique({ where: { employeeId: args.employeeId } });
     if (!already) {
       await tx.recruitmentRequestFulfillment.create({
-        data: { recruitmentRequestId: request.id, employeeId: args.employeeId, assignmentId: args.assignmentId, linkedByAccountId: args.accountId },
+        data: {
+          recruitmentRequestId: request.id,
+          employeeId: args.employeeId,
+          assignmentId: args.assignmentId,
+          linkedByAccountId: args.accountId,
+          // an applicant who went through internal recruitment, or a Mutasi with no applicant
+          source: candidate ? "RECRUITMENT_INTERNAL" : "MUTASI",
+        },
       });
       filled += 1;
       await tx.recruitmentRequest.update({
@@ -529,11 +536,11 @@ export async function completeInternalHire(
   if (computeFulfillmentCounts(request.requestedHeadcount, filled).isFull) {
     await closeRemainingCandidates(tx, request.id, candidate?.id ?? null);
   }
-  return { candidateId: candidate?.id ?? null, requestId: request.id };
+  return { candidateId: candidate?.id ?? null, requestId: request.id, source: candidate ? "RECRUITMENT_INTERNAL" : "MUTASI" };
 }
 
 // After the internal move is done: tell the managers of the old and the new seat.
-export async function notifyManagersOfInternalHire(args: { employeeId: string; oldPositionId: string; newPositionId: string; effectiveDate: Date }) {
+export async function notifyManagersOfInternalHire(args: { source: "RECRUITMENT_INTERNAL" | "MUTASI"; employeeId: string; oldPositionId: string; newPositionId: string; effectiveDate: Date }) {
   const [employee, oldPos, newPos] = await Promise.all([
     prisma.employee.findUnique({ where: { id: args.employeeId }, select: { fullLegalName: true } }),
     prisma.position.findUnique({ where: { id: args.oldPositionId }, select: { reportsToPositionId: true, job: { select: { jobTitle: true } } } }),
@@ -551,7 +558,7 @@ export async function notifyManagersOfInternalHire(args: { employeeId: string; o
     await mailEmployee(
       m.id,
       "Perubahan posisi karyawan (SAPA)",
-      `${employee.fullLegalName} resmi pindah dari ${oldPos?.job.jobTitle ?? "posisi lama"} ke ${newPos?.job.jobTitle ?? "posisi baru"} mulai ${when}, melalui permintaan tenaga kerja.`
+      `${employee.fullLegalName} resmi pindah dari ${oldPos?.job.jobTitle ?? "posisi lama"} ke ${newPos?.job.jobTitle ?? "posisi baru"} mulai ${when}, melalui ${args.source === "MUTASI" ? "mutasi untuk mengisi permintaan tenaga kerja" : "rekrutmen internal"}.`
     );
   }
 }

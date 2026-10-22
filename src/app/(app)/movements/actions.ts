@@ -31,7 +31,7 @@ import {
   isPerubahanPosisiType,
   validateJobLevelDirection,
 } from "@/lib/movement";
-import { requiresEvaluationForMovementType, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
+import { movementNeedsEvaluation, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/lib/evaluation-create";
 import { completeInternalHire, notifyManagersOfInternalHire } from "@/lib/recruitment-flow";
 import { mutationFillProblem } from "@/lib/mutation-fill";
@@ -205,8 +205,10 @@ export async function submitMovementRequest(
   // (ACC-16/17). Created before the request itself so it can be linked in
   // the same insert; nothing is released to evaluators yet, and HR Admin
   // still has to release it before Dept Head/HR Manager can complete.
+  // Where the move comes from is fixed now: an internal applicant's move, or a Mutasi.
+  const origin = candidateId ? "REKRUTMEN_INTERNAL" : "MUTASI";
   let evaluationId: string | null = null;
-  if (requiresEvaluationForMovementType(movementType)) {
+  if (movementNeedsEvaluation(movementType, origin)) {
     const purpose = movementTypeToEvaluationPurpose(movementType)!;
     const evaluation = await createDraftEvaluation({
       employeeId,
@@ -236,6 +238,7 @@ export async function submitMovementRequest(
       performanceEvaluationRef,
       evaluationId,
       recruitmentRequestId,
+      origin,
     },
   });
   if (recruitmentRequestId) revalidatePath(`/recruitment/${recruitmentRequestId}`);
@@ -569,6 +572,7 @@ export async function executeMovementRequest(requestId: string): Promise<string 
 
   if (result.hired) {
     await notifyManagersOfInternalHire({
+      source: result.hired.source,
       employeeId: request.employeeId,
       oldPositionId: request.currentPositionId,
       newPositionId: request.proposedPositionId,

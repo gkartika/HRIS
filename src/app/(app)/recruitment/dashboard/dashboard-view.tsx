@@ -3,6 +3,7 @@ import { EmptyState } from "@/components/empty-state";
 import { t } from "@/lib/i18n/id";
 import { PERIOD_OPTIONS, type DashboardFilters, type DashboardResult } from "@/lib/recruitment-dashboard";
 import { RequestedJobLevel } from "@/generated/prisma/enums";
+import { FULFILLMENT_SOURCES, FULFILLMENT_SOURCE_BAR, FULFILLMENT_SOURCE_LABEL, type countBySource } from "@/lib/recruitment-source";
 
 const REQUESTED_JOB_LEVELS = Object.values(RequestedJobLevel);
 const field = "rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -15,17 +16,19 @@ const fmtPercent = (p: number | null) => (p === null ? "—" : `${p.toLocaleStri
 export function DashboardView({
   filters,
   result,
+  filled,
   departments,
   error,
 }: {
   filters: DashboardFilters;
   result: DashboardResult;
+  filled: ReturnType<typeof countBySource>;
   departments: { id: string; unitName: string }[];
   error: string | null;
 }) {
   const departmentName = new Map(departments.map((d) => [d.id, d.unitName]));
   const filtered = Boolean(filters.departmentId || filters.level || filters.source || filters.period !== "12m");
-  const noData = result.funnel[0].count === 0 && result.timeToFill.filled === 0 && result.timeToHire.hired === 0;
+  const noData = result.funnel[0].count === 0 && result.timeToFill.filled === 0 && result.timeToHire.hired === 0 && filled.total === 0;
   const maxFunnel = Math.max(1, result.funnel[0].count);
   const maxTrend = Math.max(1, ...result.trend.flatMap((m) => [m.applied, m.passed, m.hired]));
 
@@ -110,7 +113,23 @@ export function DashboardView({
         <EmptyState message="Belum ada data rekrutmen pada filter ini." filtered={filtered} resetHref="/recruitment/dashboard" hint="Angka muncul setelah ada pelamar atau lowongan yang terisi." />
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-xs font-medium text-slate-500">Posisi terisi</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{filled.total}</p>
+              <ul className="mt-2 space-y-0.5 text-xs text-slate-600">
+                {FULFILLMENT_SOURCES.map((s) => (
+                  <li key={s} className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5">
+                      <i className={`inline-block h-2 w-2 rounded-full ${FULFILLMENT_SOURCE_BAR[s]}`} />
+                      {FULFILLMENT_SOURCE_LABEL[s]}
+                    </span>
+                    <b className="tabular-nums">{filled[s]}</b>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] text-slate-400">Hiring rate dan waktu ke diterima hanya menghitung pelamar, bukan Mutasi.</p>
+            </div>
             <SummaryCard title="Time to Fill" value={fmtDays(result.timeToFill.days)} note={`rata-rata dari lowongan disetujui sampai terisi penuh · dari ${result.timeToFill.filled} posisi terpenuhi`} />
             <SummaryCard title="Time to Hire" value={fmtDays(result.timeToHire.days)} note={`rata-rata dari tanggal melamar sampai diterima · dari ${result.timeToHire.hired} orang diterima`} />
             <SummaryCard title="Hiring Rate" value={fmtPercent(result.hiringRate.percent)} note={`${result.hiringRate.hired} diterima dari ${result.hiringRate.applicants} pelamar`} />

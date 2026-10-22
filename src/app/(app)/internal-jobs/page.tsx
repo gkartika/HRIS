@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
 import { isActiveCandidateStatus } from "@/lib/recruitment-candidates";
 import { listOpenVacancies } from "@/lib/recruitment-service";
+import { formatMobile } from "@/lib/mobile-number";
 import { t } from "@/lib/i18n/id";
 import { ApplyInternalButton } from "./apply-button";
 import type { RecruitmentCandidateStatus } from "@/generated/prisma/enums";
@@ -23,14 +24,19 @@ export default async function InternalJobsPage() {
   const employeeId = session.user.employeeId;
   if (!employeeId) return <AccessDenied />;
 
-  const [vacancies, mine] = await Promise.all([
+  const [vacancies, mine, me] = await Promise.all([
     listOpenVacancies("INTERNAL"),
     prisma.recruitmentCandidate.findMany({
       where: { employeeId, source: "INTERNAL" },
       orderBy: { createdAt: "desc" },
       select: { id: true, requestId: true, status: true, createdAt: true, request: { select: { job: { select: { jobTitle: true } }, department: { select: { unitName: true } } } } },
     }),
+    prisma.employee.findUnique({ where: { id: employeeId }, select: { personalEmail: true, mobileNumber: true, account: { select: { usernameOrEmail: true } } } }),
   ]);
+  // Prefilled on the apply form, kept for the application only; the employee can change both.
+  const login = me?.account?.usernameOrEmail;
+  const defaultEmail = me?.personalEmail ?? (login?.includes("@") ? login : "");
+  const defaultMobile = me?.mobileNumber ? formatMobile(me.mobileNumber) : "";
   const appliedTo = new Set(mine.filter((m) => isActiveCandidateStatus(m.status)).map((m) => m.requestId));
 
   return (
@@ -76,22 +82,26 @@ export default async function InternalJobsPage() {
             <div key={v.id} className="rounded-xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-900">{v.job?.jobTitle}</h2>
+                  <h2 className="text-base font-semibold text-slate-900">{v.publicTitle || v.job?.jobTitle}</h2>
                   <p className="text-sm text-slate-500">
                     {v.department.unitName} · {t(`shiftCode.${v.shiftCode}`)}
                     {v.requestedJobLevel ? ` · ${t(`requestedJobLevel.${v.requestedJobLevel}`)}` : ""}
                   </p>
                 </div>
               </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Pendidikan: {t(`educationRequirementCode.${v.educationRequirementCode}`)} · Pengalaman: {t(`workExperienceBand.${v.workExperienceBand}`)}
-              </p>
-              <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{v.jobDescriptionSnapshot}</p>
+              <h3 className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Tentang pekerjaan</h3>
+              <p className="mt-1 whitespace-pre-line text-sm text-slate-700">{v.publicDescription}</p>
+              {v.publicRequirements && (
+                <>
+                  <h3 className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Persyaratan</h3>
+                  <p className="mt-1 whitespace-pre-line text-sm text-slate-700">{v.publicRequirements}</p>
+                </>
+              )}
               <div className="mt-4">
                 {appliedTo.has(v.id) ? (
                   <span className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">Anda sudah melamar</span>
                 ) : (
-                  <ApplyInternalButton requestId={v.id} />
+                  <ApplyInternalButton requestId={v.id} defaultEmail={defaultEmail} defaultMobile={defaultMobile} />
                 )}
               </div>
             </div>

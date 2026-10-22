@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionableCount, buildRecruitmentRows, buildRecruitmentTiles, buildSetupWarnings, recRowCounts, type HomeCandidate, type HomeVacancy } from "./recruitment-home";
+import { actionableCount, buildRecruitmentRows, buildRecruitmentTiles, buildSetupWarnings, buildUnopenedRequests, recRowCounts, type HomeCandidate, type HomeVacancy } from "./recruitment-home";
 import type { CandidateProgress } from "./recruitment-candidates";
 
 const now = new Date("2026-10-20T05:00:00Z"); // 12:00 WIB
@@ -208,5 +208,39 @@ describe("buildSetupWarnings", () => {
     const out = buildSetupWarnings({ types: [], openVacancies: many });
     expect(out.shown).toHaveLength(4);
     expect(out.hidden).toBe(3);
+  });
+});
+
+describe("buildUnopenedRequests", () => {
+  const req = (id: string, approvedDaysAgo: number | null, held = false) => ({
+    id,
+    requestNumber: `REQ-${id}`,
+    jobLabel: `Job ${id}`,
+    department: "Produksi",
+    seatsLeft: 1,
+    approvedAt: approvedDaysAgo === null ? null : ago(approvedDaysAgo),
+    heldAt: held ? ago(1) : null,
+  });
+
+  it("puts the longest waiting first and shows how long", () => {
+    const list = buildUnopenedRequests([req("a", 1), req("b", 5), req("c", 0)], now);
+    expect(list.map((r) => r.id)).toEqual(["b", "a", "c"]);
+    expect(list[0].waitingLabel).toBe("menunggu 5 hari");
+    expect(list[2].waitingLabel).toBe("baru hari ini");
+  });
+
+  it("colours by waiting time: quiet, amber from 3 days, rose from 7", () => {
+    const [a, b, c] = buildUnopenedRequests([req("a", 7), req("b", 3), req("c", 1)], now);
+    expect([a.severity, b.severity, c.severity]).toEqual(["rose", "amber", "slate"]);
+  });
+
+  it("held requests go last, quiet and marked held", () => {
+    const list = buildUnopenedRequests([req("held", 9, true), req("open", 1)], now);
+    expect(list.map((r) => r.id)).toEqual(["open", "held"]);
+    expect(list[1]).toMatchObject({ held: true, severity: "slate" });
+  });
+
+  it("a request without an approval date counts as new", () => {
+    expect(buildUnopenedRequests([req("x", null)], now)[0].waitingLabel).toBe("baru hari ini");
   });
 });

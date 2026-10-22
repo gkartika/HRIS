@@ -19,7 +19,7 @@ export default async function ReviewEssayPage({ params }: { params: Promise<{ te
       testType: true,
       reviewers: { select: { employeeId: true } },
       answers: { include: { question: { select: { prompt: true, sortOrder: true } } } },
-      candidate: { select: { fullName: true, cvFileId: true, request: { select: { job: { select: { jobTitle: true } }, department: { select: { unitName: true } } } } } },
+      candidate: { select: { fullName: true, cvFileId: true, supportingFileId: true, request: { select: { job: { select: { jobTitle: true } }, department: { select: { unitName: true } } } } } },
     },
   });
   if (!test) notFound();
@@ -43,6 +43,13 @@ export default async function ReviewEssayPage({ params }: { params: Promise<{ te
           <p className="mt-2 text-sm">
             <a href={`/api/recruitment/files/${test.candidate.cvFileId}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
               Buka CV pelamar
+            </a>
+          </p>
+        )}
+        {test.candidate.supportingFileId && (
+          <p className="mt-1 text-sm">
+            <a href={`/api/recruitment/files/${test.candidate.supportingFileId}`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+              Buka dokumen pendukung
             </a>
           </p>
         )}

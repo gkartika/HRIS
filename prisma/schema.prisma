@@ -1336,6 +1336,12 @@ model RecruitmentRequest {
   specialCriteria          String?
   status                   RecruitmentRequestStatus @default(DRAFT)
 
+  // What applicants read on the vacancy (written by Admin Rekrutmen / Admin SDM). The request's own job
+  // description and criteria above are internal and are never shown to applicants.
+  publicTitle        String?
+  publicDescription  String?
+  publicRequirements String?
+
   // "Tahan": recruiting is paused while heldAt is set; the real status above is not touched.
   heldAt     DateTime?
   heldReason String?
@@ -1432,7 +1438,21 @@ model RecruitmentRequestFulfillment {
   linkedAt             DateTime           @default(now())
   linkedByAccountId    String
   linkedByAccount      Account            @relation(fields: [linkedByAccountId], references: [id])
+  // Fixed when the row is created: new hire (external applicant), internal applicant, or a Mutasi.
+  source               FulfillmentSource  @default(RECRUITMENT_EXTERNAL)
   @@index([recruitmentRequestId])
+}
+
+enum FulfillmentSource {
+  RECRUITMENT_EXTERNAL
+  RECRUITMENT_INTERNAL
+  MUTASI
+}
+
+// Where a Perubahan Posisi came from. Fixed when the move is filed.
+enum MovementOrigin {
+  MUTASI
+  REKRUTMEN_INTERNAL
 }
 
 // ---------- Phase 2: Movement Request (LIF-04) ----------
@@ -1559,6 +1579,7 @@ model MovementRequest {
   // Set when Admin SDM files this Mutasi to FILL a recruitment request ("Isi dengan Mutasi"): once the move is
   // carried out the employee counts as one of the request's fulfilments, like a new hire would.
   recruitmentRequestId String?
+  origin               MovementOrigin @default(MUTASI)
   recruitmentRequest   RecruitmentRequest? @relation("RecruitmentRequestMovements", fields: [recruitmentRequestId], references: [id])
 
   @@index([employeeId])
@@ -3511,6 +3532,7 @@ model RecruitmentFile {
   createdAt  DateTime @default(now())
 
   candidatesWithCv RecruitmentCandidate[] @relation("RecruitmentCandidateCv")
+  candidatesWithSupporting RecruitmentCandidate[] @relation("RecruitmentCandidateSupporting")
   offers           RecruitmentOffer[]
 }
 
@@ -3527,6 +3549,9 @@ model RecruitmentCandidate {
   mobileNumber       String?
   cvFileId           String?
   cvFile             RecruitmentFile?              @relation("RecruitmentCandidateCv", fields: [cvFileId], references: [id])
+  // One optional supporting document (diploma, certificate, portfolio) next to the CV.
+  supportingFileId   String?
+  supportingFile     RecruitmentFile?              @relation("RecruitmentCandidateSupporting", fields: [supportingFileId], references: [id])
   status             RecruitmentCandidateStatus    @default(TESTING)
   statusChangedAt    DateTime                      @default(now())
   // SHA-256 of the private test link (external applicants). Internal applicants

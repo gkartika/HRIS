@@ -13,6 +13,9 @@ import {
   isPassing,
   isValidEmail,
   isValidMobile,
+  mobileProblem,
+  formatMobile,
+  validateApplicantFile,
   isValidSignatureDataUrl,
   normalizeAccessCode,
   normalizeEmail,
@@ -54,6 +57,32 @@ describe("applicant contact details", () => {
     expect(normalizeMobile("81234567890")).toBe("6281234567890");
     expect(isValidMobile("08123")).toBe(false);
     expect(isValidMobile("081234567890")).toBe(true);
+  });
+
+  it("accepts every way of typing the same Indonesian mobile number", () => {
+    for (const typed of ["0812-3456-7890", "+62 812 3456 7890", "62812.3456.7890", "(0812) 3456 7890", "812 3456 7890", " 0812 3456 7890 "]) {
+      expect(normalizeMobile(typed)).toBe("6281234567890");
+      expect(mobileProblem(typed)).toBeNull();
+    }
+  });
+
+  it("refuses short, landline, foreign and empty numbers with a reason", () => {
+    expect(mobileProblem("0812 3456")).toMatch(/pendek/);
+    expect(mobileProblem("0812 3456 7890 1234 5")).toMatch(/panjang/);
+    expect(mobileProblem("021 555 1234")).toMatch(/seluler/);
+    expect(mobileProblem("+1 415 555 0100")).toMatch(/Indonesia/);
+    expect(mobileProblem("")).toMatch(/Isi/);
+  });
+
+  it("shows a stored number the same way everywhere", () => {
+    expect(formatMobile("6281234567890")).toBe("+62 812-3456-7890");
+    expect(formatMobile("62811123456")).toBe("+62 811-123-456");
+    expect(formatMobile("628123456789012")).toBe("+62 812-3456-789012");
+  });
+
+  it("checks the supporting document like the CV, with its own name in the message", () => {
+    expect(validateApplicantFile({ name: "ijazah.pdf", size: 1000, type: "application/pdf" }, "dokumen pendukung")).toBeNull();
+    expect(validateApplicantFile({ name: "ijazah.exe", size: 1000, type: "application/octet-stream" }, "dokumen pendukung")).toMatch(/dokumen pendukung/);
   });
 
   it("builds a WhatsApp link with the message encoded", () => {
@@ -283,6 +312,8 @@ describe("uploads", () => {
     expect(validateCvFile({ name: "foto.JPG", size: 1000, type: "image/jpeg" })).toBeNull();
     expect(validateCvFile({ name: "cv.exe", size: 1000, type: "application/octet-stream" })).not.toBeNull();
     expect(validateCvFile({ name: "cv.pdf", size: 5 * 1024 * 1024, type: "application/pdf" })).not.toBeNull();
+    expect(validateCvFile({ name: "cv.pdf", size: 2 * 1024 * 1024, type: "application/pdf" })).toBeNull();
+    expect(validateCvFile({ name: "cv.pdf", size: 2 * 1024 * 1024 + 1, type: "application/pdf" })).toMatch(/2 MB/);
     expect(validateCvFile({ name: "cv.pdf", size: 0, type: "application/pdf" })).not.toBeNull();
     expect(validateCvFile({ name: "cv.pdf", size: 1000, type: "image/png" })).not.toBeNull();
   });

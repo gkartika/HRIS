@@ -21,6 +21,7 @@ import {
   isValidScoreValue,
   computeEvaluationTotal,
   requiresEvaluationForMovementType,
+  movementNeedsEvaluation,
   movementTypeToEvaluationPurpose,
 } from "./evaluation";
 
@@ -241,6 +242,13 @@ describe("requiresEvaluationForMovementType (DM-27/WF-17/LIF-14)", () => {
   it("true for Promosi and Demosi", () => {
     expect(requiresEvaluationForMovementType("PROMOTION")).toBe(true);
     expect(requiresEvaluationForMovementType("DEMOTION")).toBe(true);
+  });
+
+  it("a move from internal recruitment needs none, whatever its type", () => {
+    expect(movementNeedsEvaluation("PROMOTION", "REKRUTMEN_INTERNAL")).toBe(false);
+    expect(movementNeedsEvaluation("DEMOTION", "REKRUTMEN_INTERNAL")).toBe(false);
+    expect(movementNeedsEvaluation("PROMOTION", "MUTASI")).toBe(true);
+    expect(movementNeedsEvaluation("MUTATION", "MUTASI")).toBe(false);
   });
 
   it("false for Mutasi: it needs no evaluation", () => {

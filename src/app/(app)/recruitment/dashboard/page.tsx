@@ -18,8 +18,8 @@ export default async function RecruitmentDashboardPage({
   const now = new Date();
   const { range, error } = rangeForFilters(filters, now);
   const effectiveRange = error ? rangeForFilters({ ...filters, period: "12m" }, now).range : range;
-  const { candidates, requests, departments } = await loadDashboardData(filters, effectiveRange);
+  const { candidates, requests, departments, filled } = await loadDashboardData(filters, effectiveRange);
   const result = computeDashboard({ candidates, requests, range: effectiveRange, now });
 
-  return <DashboardView filters={filters} result={result} departments={departments} error={error} />;
+  return <DashboardView filters={filters} result={result} filled={filled} departments={departments} error={error} />;
 }

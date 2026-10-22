@@ -55,15 +55,22 @@ export function AssessmentRunner({ access, state }: { access: AssessmentAccess; 
     if (closingRef.current) return;
     closingRef.current = true;
     setBusy(true);
-    await chain.current;
-    const res = await submitAssessmentAction(access);
-    setBusy(false);
-    if (!res.ok) {
-      closingRef.current = false; // try again on the next tick (the server allows a few seconds of grace)
-      setError(res.error);
-      return;
+    try {
+      await chain.current;
+      const res = await submitAssessmentAction(access);
+      setBusy(false);
+      if (!res.ok) {
+        closingRef.current = false; // try again on the next tick (the server allows a few seconds of grace)
+        setError(res.error);
+        return;
+      }
+      setPhase(res.timedOut ? "timeup" : "done");
+    } catch {
+      // The connection dropped: never stay stuck on "Mengirim...", let the applicant (or the clock) try again.
+      setBusy(false);
+      closingRef.current = false;
+      setError(t("assessment.candidate.connectionLost"));
     }
-    setPhase(res.timedOut ? "timeup" : "done");
   }
 
   useEffect(() => {
@@ -75,17 +82,21 @@ export function AssessmentRunner({ access, state }: { access: AssessmentAccess; 
   useEffect(() => {
     if (phase !== "run") return;
     let cancelled = false;
-    void loadAssessmentQuestionsAction(access).then((res) => {
-      if (cancelled) return;
-      if (res.ok) {
-        setQuestions(res.questions);
-        setError(null);
-      } else {
-        setError(res.error);
-        // Closed on the server (time up): show the final screen.
-        if (/ditutup|waktu/i.test(res.error)) void finish();
-      }
-    });
+    void loadAssessmentQuestionsAction(access)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          setQuestions(res.questions);
+          setError(null);
+        } else {
+          setError(res.error);
+          // Closed on the server (time up): show the final screen.
+          if (/ditutup|waktu/i.test(res.error)) void finish();
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError(t("assessment.candidate.connectionLost"));
+      });
     return () => {
       cancelled = true;
     };
@@ -122,16 +133,21 @@ export function AssessmentRunner({ access, state }: { access: AssessmentAccess; 
             onClick={async () => {
               setBusy(true);
               setError(null);
-              const res = await startAssessmentAction(access);
-              setBusy(false);
-              if (!res.ok) {
-                setError(res.error);
-                return;
+              try {
+                const res = await startAssessmentAction(access);
+                setBusy(false);
+                if (!res.ok) {
+                  setError(res.error);
+                  return;
+                }
+                offsetRef.current = res.serverNowMs - Date.now();
+                setNowMs(res.serverNowMs);
+                setDeadline(res.deadlineAtMs);
+                setPhase("run");
+              } catch {
+                setBusy(false);
+                setError(t("assessment.candidate.connectionLost"));
               }
-              offsetRef.current = res.serverNowMs - Date.now();
-              setNowMs(res.serverNowMs);
-              setDeadline(res.deadlineAtMs);
-              setPhase("run");
             }}
           >
             {busy ? t("assessment.candidate.saving") : t("assessment.candidate.start")}
@@ -154,13 +170,22 @@ export function AssessmentRunner({ access, state }: { access: AssessmentAccess; 
     setError(null);
     setSaving(true);
     // Saves go one after the other, so the last click is the one that is kept.
+    // A failed request must never break the chain, or every later save and the final send would hang with it.
     chain.current = chain.current.then(async () => {
-      const res = await saveAssessmentAnswerAction(access, question.id, optionId);
-      setSaving(false);
-      if (!res.ok) {
+      const revert = (message: string) => {
         setQuestions((qs) => (qs ?? []).map((q) => (q.id === question.id ? { ...q, chosenOptionId: previous } : q)));
-        setError(res.error || t("assessment.candidate.saveFailed"));
-        if (/waktu/i.test(res.error)) void finish();
+        setError(message);
+      };
+      try {
+        const res = await saveAssessmentAnswerAction(access, question.id, optionId);
+        setSaving(false);
+        if (!res.ok) {
+          revert(res.error || t("assessment.candidate.saveFailed"));
+          if (/waktu/i.test(res.error)) void finish();
+        }
+      } catch {
+        setSaving(false);
+        revert(t("assessment.candidate.saveFailed"));
       }
     });
   }

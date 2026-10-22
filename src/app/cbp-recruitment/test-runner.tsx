@@ -9,6 +9,8 @@ import { saveAnswerAction, startTestAction, submitTestAction, type TestAccess } 
 
 type Answer = { index?: number; text?: string };
 
+const CONNECTION_LOST = "Koneksi terputus. Periksa internet Anda lalu coba lagi. Jawaban yang sudah tersimpan tidak hilang.";
+
 const btnPrimary = "rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 const btnGhost = "rounded-full border border-[#cfc4d6] bg-white px-5 py-2.5 text-sm font-semibold text-[#4a3e52] hover:bg-[#f4eef5] disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -55,15 +57,22 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
     submittedRef.current = !!auto;
     setBusy(true);
     setError(null);
-    await chain.current;
-    const res = await submitTestAction(access, active.testId, auto);
-    setBusy(false);
-    if (!res.ok) {
+    try {
+      await chain.current;
+      const res = await submitTestAction(access, active.testId, auto);
+      setBusy(false);
+      if (!res.ok) {
+        submittedRef.current = false;
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      // The connection dropped: never stay stuck on "Mengirim...", let the applicant (or the clock) try again.
+      setBusy(false);
       submittedRef.current = false;
-      setError(res.error);
-      return;
+      setError(CONNECTION_LOST);
     }
-    router.refresh();
   }
 
   useEffect(() => {
@@ -72,10 +81,15 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
 
   function save(questionId: string, value: Answer) {
     if (!active) return;
+    // A failed request must never break the chain, or every later save and the final send would hang with it.
     chain.current = chain.current.then(async () => {
-      const res = await saveAnswerAction(access, active.testId, questionId, value);
-      if (!res.ok && res.expired) router.refresh();
-      else if (!res.ok) setError(res.error);
+      try {
+        const res = await saveAnswerAction(access, active.testId, questionId, value);
+        if (!res.ok && res.expired) router.refresh();
+        else if (!res.ok) setError(res.error);
+      } catch {
+        setError(CONNECTION_LOST);
+      }
     });
   }
 
@@ -94,13 +108,18 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
   async function start(testId: string) {
     setBusy(true);
     setError(null);
-    const res = await startTestAction(access, testId);
-    setBusy(false);
-    if (!res.ok) {
-      setError(res.error);
-      return;
+    try {
+      const res = await startTestAction(access, testId);
+      setBusy(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setBusy(false);
+      setError(CONNECTION_LOST);
     }
-    router.refresh();
   }
 
   // ----- finished (or no longer in the test phase): a plain thank you -----

@@ -986,6 +986,12 @@ export const strings = {
     observation: "Observasi perilaku",
     riskValue: "Nilai risiko",
     noRubrics: "Belum ada rubrik.",
+    settings: {
+      title: "Waktu pengerjaan",
+      label: "Waktu pengerjaan (menit)",
+      help: "Dihitung sejak pelamar menekan Mulai. Pelamar yang sedang mengerjakan tetap memakai waktu semula, perubahan berlaku untuk yang mulai sesudahnya. Waktu tes lain (Cultural Fit dan seterusnya) diatur per tes di Pengaturan Rekrutmen.",
+      save: "Simpan waktu",
+    },
     // Candidate page
     candidate: {
       closedNotOpen: "Tes ini belum bisa dikerjakan. Selesaikan tes yang diminta lebih dulu, atau hubungi HR.",
@@ -994,20 +1000,31 @@ export const strings = {
       saving: "Menyimpan...",
       saveFailed: "Jawaban belum tersimpan. Periksa koneksi lalu pilih lagi.",
       progress: "Soal {n} dari {total}",
+      answeredOf: "{n} dari {total} soal terjawab",
+      allAnswered: "Semua soal sudah terjawab. Periksa lagi bila perlu, lalu kirim.",
       previous: "Sebelumnya",
       next: "Berikutnya",
       submit: "Kirim jawaban",
       sending: "Mengirim...",
-      unanswered: "Masih ada soal yang belum dijawab: {nomor}.",
+      unansweredLead: "Masih ada soal yang belum dijawab, pilih nomornya:",
+      loadingQuestion: "Memuat soal...",
       doneTitle: "Terima kasih",
-      estimate: "Perkiraan waktu {min} sampai {max} menit. Tidak ada batas waktu, dan jawaban Anda tersimpan setiap kali dipilih.",
-      noCopy: "Soal tidak dapat disalin.",
+      timeRule: "Waktu mengerjakan {menit} menit, dihitung sejak Anda menekan Mulai.",
+      timeRuleDetail:
+        "Jawaban tersimpan setiap kali dipilih. Jika waktu habis dan masih ada soal yang belum dijawab, tes ditutup dengan jawaban yang sudah terisi dan dianggap belum lengkap. Soal tidak dapat disalin atau dicetak.",
+      timeLeft: "Sisa waktu",
+      timeWarn: "Waktu tinggal 5 menit. Pastikan semua soal terjawab lalu kirim.",
+      timeWarnLast: "Waktu tinggal kurang dari 1 menit.",
+      timeUpTitle: "Waktu habis",
+      timeUpBody:
+        "Waktu mengerjakan sudah habis. Jawaban yang sempat Anda isi sudah tersimpan, tetapi tes ini belum lengkap. HR akan menghubungi Anda bila diperlukan.",
     },
     // HR result
     result: {
       title: "Hasil Tes Situasi Kerja",
       notStarted: "Pelamar belum mengerjakan tes ini.",
       inProgress: "Sedang dikerjakan: {n} dari 20 soal terjawab. Belum ada skor.",
+      timedOut: "Waktu {menit} menit habis dengan {n} dari {total} soal terjawab. Tes ditutup tanpa skor, jawaban yang ada tersimpan. Pertimbangkan meminta pelamar mengulang bila perlu.",
       status: "Status penyaringan",
       score: "Skor risiko kumulatif",
       versions: "Versi asesmen dan rubrik",

@@ -5,6 +5,7 @@ import { runOffboardingDeactivations } from "@/lib/offboarding-deactivate";
 import { applyDuePlacementChanges } from "@/lib/placement-schedule";
 import { createDueMaintenanceWorkOrders } from "@/lib/maintenance-create";
 import { finalizeExpiredTests } from "@/lib/recruitment-service";
+import { finalizeExpiredAssessments } from "@/lib/recruitment-assessment-service";
 
 // Daily scheduled job (Vercel Cron, see vercel.json): the two things that used
 // to run — and write to the database — whenever someone opened the Kontrak or
@@ -29,9 +30,12 @@ export async function GET(request: Request) {
   const maintenance = await createDueMaintenanceWorkOrders();
   // Applicants who left a test open: hand it in as it stands and grade it.
   const expiredTests = await finalizeExpiredTests();
+  // Tes Situasi Kerja attempts past their 30 minutes: scored if complete, else closed without a score.
+  const expiredAssessments = await finalizeExpiredAssessments();
   return NextResponse.json({
     ok: true,
     recruitmentTestsClosed: expiredTests,
+    recruitmentAssessmentsClosed: expiredAssessments,
     renewalCasesCreated: renewals.created,
     employeesDeactivated: offboarding.deactivated,
     loginsDisabled: offboarding.loginsDisabled,

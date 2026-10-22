@@ -356,3 +356,25 @@ export function isAssessmentOpenFor(candidate: {
   if (candidate.closedAt !== null || CLOSED_CANDIDATE_STATUSES.includes(candidate.status)) return false;
   return candidate.tests.filter((t) => t.testType.isGate).every((t) => t.status === "SUBMITTED");
 }
+
+// ---------- time limit ----------
+
+// The limit is set in the app per assessment (Admin Rekrutmen); this is the starting value and the allowed range.
+export const ASSESSMENT_TIME_LIMIT_MINUTES = 30;
+export const ASSESSMENT_TIME_LIMIT_MIN = 5;
+export const ASSESSMENT_TIME_LIMIT_MAX = 240;
+
+export function isValidTimeLimit(minutes: number): boolean {
+  return Number.isInteger(minutes) && minutes >= ASSESSMENT_TIME_LIMIT_MIN && minutes <= ASSESSMENT_TIME_LIMIT_MAX;
+}
+// The browser sends the last answer a moment before the clock reaches zero; this much late is still accepted.
+export const ASSESSMENT_GRACE_SECONDS = 20;
+
+export function assessmentDeadline(startedAt: Date, limitMinutes: number = ASSESSMENT_TIME_LIMIT_MINUTES): Date {
+  return new Date(startedAt.getTime() + limitMinutes * 60 * 1000);
+}
+
+/** True once the time limit of that attempt (plus the short grace for slow connections) is over. */
+export function isAssessmentExpired(startedAt: Date, now: Date, graceSeconds: number = ASSESSMENT_GRACE_SECONDS, limitMinutes: number = ASSESSMENT_TIME_LIMIT_MINUTES): boolean {
+  return now.getTime() > assessmentDeadline(startedAt, limitMinutes).getTime() + graceSeconds * 1000;
+}

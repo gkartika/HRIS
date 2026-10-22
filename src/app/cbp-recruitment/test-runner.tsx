@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { TestProtection } from "@/components/test-protection";
 import { ESSAY_MAX_CHARS, ESSAY_MIN_CHARS, SCALE_LABELS, formatClock } from "@/lib/recruitment-candidates";
 import type { RunnerState } from "@/lib/recruitment-service";
 import { saveAnswerAction, startTestAction, submitTestAction, type TestAccess } from "./test-actions";
@@ -11,11 +12,11 @@ type Answer = { index?: number; text?: string };
 const btnPrimary = "rounded-full bg-brand px-6 py-2.5 text-sm font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 const btnGhost = "rounded-full border border-[#cfc4d6] bg-white px-5 py-2.5 text-sm font-semibold text-[#4a3e52] hover:bg-[#f4eef5] disabled:cursor-not-allowed disabled:opacity-50";
 
-// The test page for one applicant: the list of tests, one question per screen, a
+// The test page for one applicant: the list of tests, every question on one page, a
 // countdown that comes from the server's deadline, and answers saved as they are given.
-// Copying and pasting inside the test is switched off (a deterrent, not a lock).
+// Copy protection (see TestProtection) is the same for every test and for Tes Situasi Kerja.
 export function TestRunner(props: { access: TestAccess; state: RunnerState; serverNowMs: number }) {
-  // A new key per test and per status makes each test start with fresh answers and from question 1.
+  // A new key per test and per status makes each test start with fresh answers.
   const key = props.state.active?.testId ?? props.state.tests.map((t) => t.status[0]).join("") + props.state.candidate.status;
   return <TestRunnerInner key={key} {...props} />;
 }
@@ -24,14 +25,13 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
   const router = useRouter();
   const active = state.active;
   const [answers, setAnswers] = useState<Record<string, Answer>>(active?.answers ?? {});
-  const [qi, setQi] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(serverNowMs);
   const offsetRef = useRef(0);
   const submittedRef = useRef(false);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
-  const essayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const essayTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const submitRef = useRef<(auto: boolean) => Promise<void>>(async () => {});
   const deadlineAtMs = active?.deadlineAtMs ?? null;
@@ -87,8 +87,8 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
 
   function typeEssay(questionId: string, text: string) {
     setAnswers((a) => ({ ...a, [questionId]: { text } }));
-    if (essayTimer.current) clearTimeout(essayTimer.current);
-    essayTimer.current = setTimeout(() => save(questionId, { text }), 800);
+    clearTimeout(essayTimers.current[questionId]);
+    essayTimers.current[questionId] = setTimeout(() => save(questionId, { text }), 800);
   }
 
   async function start(testId: string) {
@@ -103,13 +103,6 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
     router.refresh();
   }
 
-  const blockClipboard = {
-    onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
-    onCut: (e: React.ClipboardEvent) => e.preventDefault(),
-    onPaste: (e: React.ClipboardEvent) => e.preventDefault(),
-    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
-  };
-
   // ----- finished (or no longer in the test phase): a plain thank you -----
   if (state.candidate.status !== "TESTING") {
     return (
@@ -123,126 +116,138 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
     );
   }
 
-  // ----- a test is running: one question per screen -----
+  // ----- a test is running: every question on one page, answered in any order -----
   if (active) {
     const running = state.tests.find((t) => t.id === active.testId);
-    const q = active.questions[Math.min(qi, active.questions.length - 1)];
-    const a = answers[q.id] ?? {};
-    const isLast = qi >= active.questions.length - 1;
-    const answeredCount = active.questions.filter((x) => {
-      const v = answers[x.id];
-      return active.form === "ESSAY" ? (v?.text ?? "").trim().length > 0 : v?.index !== undefined;
-    }).length;
+    const total = active.questions.length;
+    // An essay counts once it is long enough; a scale or multiple-choice question once an option is picked.
+    const isDone = (id: string) => (active.form === "ESSAY" ? (answers[id]?.text ?? "").trim().length >= ESSAY_MIN_CHARS : answers[id]?.index !== undefined);
+    const missing = active.questions.map((x, n) => (isDone(x.id) ? -1 : n)).filter((n) => n >= 0);
+    const answeredCount = total - missing.length;
+    const canSubmit = missing.length === 0;
     const lowTime = remaining <= 60;
-    const essayLength = (a.text ?? "").length;
-    const canSubmit =
-      active.form === "ESSAY"
-        ? active.questions.every((x) => (answers[x.id]?.text ?? "").trim().length >= ESSAY_MIN_CHARS)
-        : answeredCount === active.questions.length;
+    const jump = (n: number) => document.getElementById(`soal-${n}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
 
     return (
-      <div className="rounded-xl border border-[#e6dcea] bg-white p-5" {...blockClipboard}>
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-extrabold text-[#231a28]">{running?.name}</h1>
-          <span
-            role="timer"
-            aria-label="Sisa waktu"
-            className={`rounded-full px-3 py-1 font-mono text-sm font-semibold ${lowTime ? "bg-[#fdecee] text-[#a1252f]" : "bg-[#fff6d6] text-[#7a5b00]"}`}
-          >
-            {formatClock(remaining)}
-          </span>
+      <TestProtection watermarkName={state.candidate.fullName}>
+      <div className="space-y-4">
+        <div className="sticky top-0 z-10 rounded-xl border border-[#e6dcea] bg-white px-5 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-lg font-extrabold text-[#231a28]">{running?.name}</h1>
+            <span
+              role="timer"
+              aria-label="Sisa waktu"
+              className={`rounded-full px-3 py-1 font-mono text-sm font-semibold ${lowTime ? "bg-[#fdecee] text-[#a1252f]" : "bg-[#fff6d6] text-[#7a5b00]"}`}
+            >
+              {formatClock(remaining)}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eadfef]" role="presentation">
+            <div className="h-full bg-brand transition-all" style={{ width: `${Math.round((answeredCount / total) * 100)}%` }} />
+          </div>
+          <p className="mt-1.5 text-xs text-[#8a7e92]">
+            {answeredCount} dari {total} soal terjawab · salin dan tempel dinonaktifkan
+          </p>
         </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#eadfef]" role="presentation">
-          <div className="h-full bg-brand transition-all" style={{ width: `${Math.round(((qi + 1) / active.questions.length) * 100)}%` }} />
-        </div>
-        <p className="mt-2 text-xs text-[#8a7e92]">
-          Soal {qi + 1} dari {active.questions.length} · salin dan tempel dinonaktifkan
-        </p>
 
-        <p className={`mt-4 select-none text-[15px] font-semibold text-[#231a28] ${active.monospace ? "whitespace-pre-wrap break-all font-mono text-[14px] leading-7" : "whitespace-pre-line"}`}>{q.prompt}</p>
+        <ol className="space-y-4">
+          {active.questions.map((q, n) => {
+            const a = answers[q.id] ?? {};
+            const essayLength = (a.text ?? "").length;
+            return (
+              <li key={q.id} id={`soal-${n}`} className="rounded-xl border border-[#e6dcea] bg-white p-5">
+                <p className="text-xs font-bold text-brand">
+                  Soal {n + 1} dari {total}
+                </p>
+                <p className={`mt-1 select-none text-[15px] font-semibold text-[#231a28] ${active.monospace ? "whitespace-pre-wrap break-all font-mono text-[14px] leading-7" : "whitespace-pre-line"}`}>{q.prompt}</p>
 
-        {active.form === "SCALE" && (
-          <div className="mt-4">
-            <div className="grid grid-cols-5 gap-2">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => choose(q.id, n)}
-                  aria-pressed={a.index === n}
-                  className={`rounded-lg border-2 py-3 text-base font-bold ${a.index === n ? "border-brand bg-brand text-white" : "border-[#cfc4d6] bg-white text-[#4a3e52] hover:border-brand"}`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <div className="mt-1 flex justify-between text-xs text-[#8a7e92]">
-              <span>{SCALE_LABELS[0]}</span>
-              <span>{SCALE_LABELS[4]}</span>
-            </div>
-          </div>
-        )}
+                {active.form === "SCALE" && (
+                  <div className="mt-4">
+                    <div className="grid grid-cols-5 gap-2">
+                      {[1, 2, 3, 4, 5].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => choose(q.id, v)}
+                          aria-pressed={a.index === v}
+                          className={`rounded-lg border-2 py-3 text-base font-bold ${a.index === v ? "border-brand bg-brand text-white" : "border-[#cfc4d6] bg-white text-[#4a3e52] hover:border-brand"}`}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-1 flex justify-between text-xs text-[#8a7e92]">
+                      <span>{SCALE_LABELS[0]}</span>
+                      <span>{SCALE_LABELS[4]}</span>
+                    </div>
+                  </div>
+                )}
 
-        {active.form === "MULTIPLE_CHOICE" && (
-          <div className="mt-4 space-y-2">
-            {q.options.map((opt) => (
-              <button
-                key={opt.index}
-                type="button"
-                onClick={() => choose(q.id, opt.index)}
-                aria-pressed={a.index === opt.index}
-                className={`block w-full select-none rounded-lg border-2 px-4 py-3 text-left text-[15px] ${a.index === opt.index ? "border-brand bg-[#f4eef5] font-semibold text-[#231a28]" : "border-[#cfc4d6] bg-white text-[#4a3e52] hover:border-brand"}`}
-              >
-                {opt.text}
-              </button>
-            ))}
-          </div>
-        )}
+                {active.form === "MULTIPLE_CHOICE" && (
+                  <div className="mt-4 space-y-2">
+                    {q.options.map((opt) => (
+                      <button
+                        key={opt.index}
+                        type="button"
+                        onClick={() => choose(q.id, opt.index)}
+                        aria-pressed={a.index === opt.index}
+                        className={`block w-full select-none rounded-lg border-2 px-4 py-3 text-left text-[15px] ${a.index === opt.index ? "border-brand bg-[#f4eef5] font-semibold text-[#231a28]" : "border-[#cfc4d6] bg-white text-[#4a3e52] hover:border-brand"}`}
+                      >
+                        {opt.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-        {active.form === "ESSAY" && (
-          <div className="mt-4">
-            <textarea
-              value={a.text ?? ""}
-              onChange={(e) => typeEssay(q.id, e.target.value)}
-              onBlur={() => save(q.id, { text: a.text ?? "" })}
-              maxLength={ESSAY_MAX_CHARS}
-              rows={10}
-              placeholder="Tulis jawaban Anda di sini. Menempel teks tidak diizinkan."
-              aria-label="Jawaban"
-              className="w-full rounded-lg border border-[#cfc4d6] px-3 py-2.5 text-[15px] focus:border-brand focus:outline-none"
-            />
-            <p className={`mt-1 text-xs ${essayLength >= ESSAY_MIN_CHARS ? "text-[#1d6b43]" : "text-[#8a7e92]"}`}>
-              {essayLength} karakter (minimal {ESSAY_MIN_CHARS})
-            </p>
-          </div>
-        )}
+                {active.form === "ESSAY" && (
+                  <div className="mt-4">
+                    <textarea
+                      value={a.text ?? ""}
+                      onChange={(e) => typeEssay(q.id, e.target.value)}
+                      onBlur={() => save(q.id, { text: a.text ?? "" })}
+                      maxLength={ESSAY_MAX_CHARS}
+                      rows={10}
+                      placeholder="Tulis jawaban Anda di sini. Menempel teks tidak diizinkan."
+                      aria-label={`Jawaban soal ${n + 1}`}
+                      className="w-full rounded-lg border border-[#cfc4d6] px-3 py-2.5 text-[15px] focus:border-brand focus:outline-none"
+                    />
+                    <p className={`mt-1 text-xs ${essayLength >= ESSAY_MIN_CHARS ? "text-[#1d6b43]" : "text-[#8a7e92]"}`}>
+                      {essayLength} karakter (minimal {ESSAY_MIN_CHARS})
+                    </p>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
 
         {error && (
-          <p role="alert" className="mt-4 rounded-[10px] border border-[#f3c1c6] bg-[#fdecee] px-3 py-2.5 text-[13.5px] text-[#a1252f]">
+          <p role="alert" className="rounded-[10px] border border-[#f3c1c6] bg-[#fdecee] px-3 py-2.5 text-[13.5px] text-[#a1252f]">
             {error}
           </p>
         )}
 
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <button type="button" className={btnGhost} disabled={qi === 0 || busy} onClick={() => setQi((i) => i - 1)}>
-            Sebelumnya
-          </button>
-          {isLast ? (
-            <button type="button" className={btnPrimary} disabled={!canSubmit || busy} onClick={() => submit(false)}>
-              {busy ? "Mengirim..." : "Kirim tes"}
-            </button>
-          ) : (
-            <button type="button" className={btnPrimary} disabled={busy} onClick={() => setQi((i) => i + 1)}>
-              Berikutnya
-            </button>
-          )}
-        </div>
-        {isLast && !canSubmit && (
-          <p className="mt-2 text-right text-xs text-[#8a7e92]">
-            {active.form === "ESSAY" ? `Tiap jawaban esai minimal ${ESSAY_MIN_CHARS} karakter.` : "Jawab semua soal dulu. Pakai tombol Sebelumnya untuk memeriksa."}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e6dcea] bg-white p-5">
+          <p className="text-xs text-[#8a7e92]">
+            {canSubmit ? (
+              "Semua soal sudah terjawab."
+            ) : (
+              <>
+                {active.form === "ESSAY" ? `Tiap jawaban esai minimal ${ESSAY_MIN_CHARS} karakter. Belum lengkap:` : "Jawab semua soal dulu. Belum dijawab:"}{" "}
+                {missing.map((n) => (
+                  <button key={n} type="button" onClick={() => jump(n)} className="mr-1.5 font-semibold text-brand underline">
+                    {n + 1}
+                  </button>
+                ))}
+              </>
+            )}
           </p>
-        )}
+          <button type="button" className={btnPrimary} disabled={!canSubmit || busy} onClick={() => submit(false)}>
+            {busy ? "Mengirim..." : "Kirim tes"}
+          </button>
+        </div>
       </div>
+      </TestProtection>
     );
   }
 

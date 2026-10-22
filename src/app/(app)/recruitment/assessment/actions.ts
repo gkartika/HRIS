@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/require-session";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { canApproveAssessmentRubric, canManageAssessmentRubric, canViewAssessmentRubric } from "@/lib/permissions";
-import { createRubricRevision, importV32Package, transitionRubric, updateInterpretation } from "@/lib/recruitment-assessment-service";
+import { createRubricRevision, importV32Package, transitionRubric, updateAssessmentTimeLimit, updateInterpretation } from "@/lib/recruitment-assessment-service";
 import type { RubricAction } from "@/lib/recruitment-assessment";
 import { t } from "@/lib/i18n/id";
 
@@ -71,6 +71,15 @@ export async function createRevisionAction(fromRubricId: string): Promise<Result
   const me = await who();
   if (!me.isAdmin) return t("common.forbidden");
   const res = await createRubricRevision(me.accountId, fromRubricId);
+  refresh();
+  return res.ok ? undefined : res.error;
+}
+
+// How long applicants have for the assessment (minutes). Admin Rekrutmen only; running attempts keep their own limit.
+export async function saveTimeLimitAction(versionId: string, _prev: Result, formData: FormData): Promise<Result> {
+  const me = await who();
+  if (!me.isAdmin) return t("common.forbidden");
+  const res = await updateAssessmentTimeLimit(me.accountId, versionId, Number(((formData.get("minutes") as string) ?? "").trim()));
   refresh();
   return res.ok ? undefined : res.error;
 }

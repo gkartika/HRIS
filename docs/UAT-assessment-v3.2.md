@@ -36,3 +36,16 @@ Cleanup: delete the ZZT applicant's rows; leave the imported master data.
 19. Apply to an internal vacancy as a test employee (ZZT), sign in as that employee, finish Cultural Fit on Lowongan Internal > Tes: the Tes Situasi Kerja card appears below. Take it as in C.
 20. In the results list and detail the applicant shows "Internal" with the employee's name and number.
 21. Another signed-in employee opening `/internal-jobs/asesmen/<that id>` gets "Anda tidak memiliki akses.".
+
+## G. Time limit and copying
+22. The intro says 30 minutes from pressing Mulai. After Mulai a countdown "Sisa waktu 30:00" runs; it turns amber at 5 minutes and red at 1 minute.
+23. Reload the page mid-test: the countdown continues from the same moment (it does not restart), and the question you were on comes back.
+24. Let the clock reach 0:00 with fewer than 20 answered: the page changes to "Waktu habis". HR sees the applicant as "Belum lengkap" with "n dari 20 soal terjawab", no score. With all 20 answered the attempt is scored normally.
+25. Close the browser, come back after 30 minutes: "Waktu habis" (or "Terima kasih" if it was scored); no question is shown.
+26. On a question: you cannot select text, copy, cut, drag, right-click, print or Ctrl+C/A/P/S/U; switching to another tab blurs the question; a faint watermark with the applicant's name is behind the text. The questions are not in the page source before Mulai; after Mulai all 20 are on the page in one list, with the clock and the count pinned at the top.
+
+## H. Time limit setting and copy protection on every test
+27. Rekrutmen > Rubrik Tes Situasi Kerja shows "Waktu pengerjaan" with the current minutes. Admin Rekrutmen can change it (5 to 240; 3 or 300 is refused with a message); the HR Manager sees the number but no form.
+28. After changing it, a NEW applicant's intro and countdown use the new minutes. An applicant who already pressed Mulai keeps the old minutes.
+29. A normal test (e.g. Cultural Fit) takes its minutes from Pengaturan Rekrutmen > Katalog tes > "Waktu pengerjaan" for that test.
+30. On Cultural Fit and on Tes Situasi Kerja alike: no selecting or copying, no right-click, Ctrl+C/A/P/S/U do nothing, printing shows nothing, switching tab blurs the questions, a faint watermark with the applicant's name is behind the text. In an essay test the answer box is still typeable but pasting into it is blocked.

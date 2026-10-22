@@ -6,6 +6,13 @@ import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import {
   ASSESSMENT_ENGINE_VERSION,
+  ASSESSMENT_GRACE_SECONDS,
+  ASSESSMENT_TIME_LIMIT_MINUTES,
+  assessmentDeadline,
+  isAssessmentExpired,
+  isValidTimeLimit,
+  ASSESSMENT_TIME_LIMIT_MAX,
+  ASSESSMENT_TIME_LIMIT_MIN,
   RubricNotApprovedError,
   isAssessmentOpenFor,
   isOptionOfQuestion,
@@ -310,14 +317,18 @@ export async function createRubricRevision(actorAccountId: string, fromRubricId:
 
 // ---------- candidate: taking the assessment ----------
 
-export interface AssessmentRunnerQuestion {
+export interface AssessmentQuestion {
   id: string;
   questionNo: number;
   scenario: string;
   prompt: string;
   options: { id: string; key: string; text: string }[];
+  /** The option this applicant already chose for this question, if any. */
+  chosenOptionId: string | null;
 }
 
+// What the page knows before any question is shown. The questions themselves are fetched one at a time
+// (loadAssessmentQuestion), so the whole test is never sent to the browser in one piece.
 export type AssessmentRunnerState =
   | { kind: "closed"; reason: "NOT_OPEN" | "NO_ACTIVE_RUBRIC" }
   | {
@@ -328,9 +339,15 @@ export type AssessmentRunnerState =
       closingText: string;
       estimatedMin: number;
       estimatedMax: number;
-      // No titles, dimensions or scores: only the situation, the question and the four choices.
-      questions: AssessmentRunnerQuestion[];
-      answers: Record<string, string>;
+      timeLimitMinutes: number;
+      questionCount: number;
+      /** Question numbers already answered (numbers only, never the answers). */
+      answeredNos: number[];
+      /** In progress: when the 30 minutes end, by the server's clock. */
+      deadlineAtMs: number | null;
+      serverNowMs: number;
+      /** Finished by the clock with questions left unanswered: closed, not scored. */
+      timedOut: boolean;
     };
 
 async function loadCandidateForAssessment(candidateId: string) {
@@ -340,7 +357,8 @@ async function loadCandidateForAssessment(candidateId: string) {
   });
 }
 
-export async function loadAssessmentRunner(candidateId: string): Promise<AssessmentRunnerState | null> {
+export async function loadAssessmentRunner(candidateId: string, now: Date = new Date()): Promise<AssessmentRunnerState | null> {
+  await finalizeExpiredAssessments(candidateId, now);
   const candidate = await loadCandidateForAssessment(candidateId);
   if (!candidate) return null;
   const existing = candidate.assessment;
@@ -353,10 +371,11 @@ export async function loadAssessmentRunner(candidateId: string): Promise<Assessm
   }
   const version = await prisma.recruitmentAssessmentVersion.findUnique({
     where: { id: versionId },
-    include: { questions: { orderBy: { questionNo: "asc" }, include: { options: { orderBy: { optionKey: "asc" } } } } },
+    include: { _count: { select: { questions: true } } },
   });
   if (!version) return { kind: "closed", reason: "NO_ACTIVE_RUBRIC" };
-  const answers = existing ? await prisma.recruitmentAssessmentAnswer.findMany({ where: { submissionId: existing.id }, select: { questionId: true, optionId: true } }) : [];
+  const answers = existing ? await prisma.recruitmentAssessmentAnswer.findMany({ where: { submissionId: existing.id }, select: { question: { select: { questionNo: true } } } }) : [];
+  const inProgress = existing?.status === "IN_PROGRESS";
   return {
     kind: existing ? (existing.status === "SUBMITTED" ? "done" : "in-progress") : "ready",
     candidateName: candidate.fullName,
@@ -365,39 +384,77 @@ export async function loadAssessmentRunner(candidateId: string): Promise<Assessm
     closingText: version.closingText,
     estimatedMin: version.estimatedMinMin,
     estimatedMax: version.estimatedMinMax,
-    questions: version.questions.map((q) => ({
-      id: q.id,
-      questionNo: q.questionNo,
-      scenario: q.scenario,
-      prompt: q.prompt,
-      options: q.options.map((o) => ({ id: o.id, key: o.optionKey, text: o.text })),
-    })),
-    answers: Object.fromEntries(answers.map((a) => [a.questionId, a.optionId])),
+    timeLimitMinutes: existing?.timeLimitMinutes ?? version.timeLimitMinutes,
+    questionCount: version._count.questions,
+    answeredNos: answers.map((a) => a.question.questionNo).sort((a, b) => a - b),
+    deadlineAtMs: existing && inProgress ? assessmentDeadline(existing.startedAt, existing.timeLimitMinutes).getTime() : null,
+    serverNowMs: now.getTime(),
+    timedOut: existing?.status === "SUBMITTED" && existing.screeningStatus === "INCOMPLETE",
   };
 }
 
-/** Starts the assessment with the rubric in force now. Starting twice returns the same attempt. */
-export async function startAssessment(candidateId: string): Promise<ServiceResult> {
+/** Starts the assessment with the rubric in force now, and the 30 minutes begin. Starting twice returns the same attempt. */
+export async function startAssessment(candidateId: string, now: Date = new Date()): Promise<ServiceResult<{ deadlineAtMs: number; serverNowMs: number }>> {
   const candidate = await loadCandidateForAssessment(candidateId);
   if (!candidate) return { ok: false, error: "Akses asesmen tidak valid." };
-  if (candidate.assessment) return { ok: true };
-  if (!isAssessmentOpenFor(candidate)) return { ok: false, error: "Asesmen ini belum bisa dikerjakan." };
-  const active = await getActiveRubric();
-  if (!active) return { ok: false, error: "Asesmen belum tersedia. Hubungi HR." };
-  try {
-    await prisma.recruitmentAssessmentSubmission.create({ data: { candidateId, versionId: active.versionId, rubricId: active.id } });
-  } catch (e) {
-    // Two tabs starting at once: the unique candidate link keeps a single attempt.
-    if ((e as { code?: string }).code !== "P2002") throw e;
+  let startedAt = candidate.assessment?.startedAt;
+  let limit = candidate.assessment?.timeLimitMinutes ?? ASSESSMENT_TIME_LIMIT_MINUTES;
+  if (!candidate.assessment) {
+    if (!isAssessmentOpenFor(candidate)) return { ok: false, error: "Asesmen ini belum bisa dikerjakan." };
+    const active = await getActiveRubric();
+    if (!active) return { ok: false, error: "Asesmen belum tersedia. Hubungi HR." };
+    try {
+      const created = await prisma.recruitmentAssessmentSubmission.create({ data: { candidateId, versionId: active.versionId, rubricId: active.id, startedAt: now, timeLimitMinutes: active.version.timeLimitMinutes } });
+      startedAt = created.startedAt;
+      limit = created.timeLimitMinutes;
+    } catch (e) {
+      // Two tabs starting at once: the unique candidate link keeps a single attempt.
+      if ((e as { code?: string }).code !== "P2002") throw e;
+      const existingAttempt = await prisma.recruitmentAssessmentSubmission.findUniqueOrThrow({ where: { candidateId }, select: { startedAt: true, timeLimitMinutes: true } });
+      startedAt = existingAttempt.startedAt;
+      limit = existingAttempt.timeLimitMinutes;
+    }
   }
-  return { ok: true };
+  return { ok: true, deadlineAtMs: assessmentDeadline(startedAt!, limit).getTime(), serverNowMs: now.getTime() };
 }
 
-/** Saves one answer. The question must belong to this attempt's assessment version and the option to the question. */
-export async function saveAssessmentAnswer(candidateId: string, questionId: string, optionId: string): Promise<ServiceResult> {
+/**
+ * All questions of the applicant's attempt in the approved order, each with their own earlier choice. They are
+ * fetched only after Mulai (never part of the page's own source), and refused once the attempt is closed or
+ * the time is up.
+ */
+export async function loadAssessmentQuestions(candidateId: string, now: Date = new Date()): Promise<ServiceResult<{ questions: AssessmentQuestion[] }>> {
+  await finalizeExpiredAssessments(candidateId, now);
   const submission = await prisma.recruitmentAssessmentSubmission.findUnique({ where: { candidateId }, select: { id: true, status: true, versionId: true } });
   if (!submission) return { ok: false, error: "Mulai asesmen dulu." };
+  if (submission.status !== "IN_PROGRESS") return { ok: false, error: "Asesmen ini sudah ditutup." };
+  const questions = await prisma.recruitmentAssessmentQuestion.findMany({
+    where: { versionId: submission.versionId },
+    orderBy: { questionNo: "asc" },
+    include: { options: { orderBy: { optionKey: "asc" } }, answers: { where: { submissionId: submission.id }, select: { optionId: true } } },
+  });
+  return {
+    ok: true,
+    questions: questions.map((question) => ({
+      id: question.id,
+      questionNo: question.questionNo,
+      scenario: question.scenario,
+      prompt: question.prompt,
+      options: question.options.map((o) => ({ id: o.id, key: o.optionKey, text: o.text })),
+      chosenOptionId: question.answers[0]?.optionId ?? null,
+    })),
+  };
+}
+
+/** Saves one answer. The question must belong to this attempt's assessment version, the option to the question, and the time must not be up. */
+export async function saveAssessmentAnswer(candidateId: string, questionId: string, optionId: string, now: Date = new Date()): Promise<ServiceResult> {
+  const submission = await prisma.recruitmentAssessmentSubmission.findUnique({ where: { candidateId }, select: { id: true, status: true, versionId: true, startedAt: true, timeLimitMinutes: true } });
+  if (!submission) return { ok: false, error: "Mulai asesmen dulu." };
   if (submission.status !== "IN_PROGRESS") return { ok: false, error: "Asesmen ini sudah dikirim dan tidak bisa diubah." };
+  if (isAssessmentExpired(submission.startedAt, now, ASSESSMENT_GRACE_SECONDS, submission.timeLimitMinutes)) {
+    await finalizeExpiredAssessments(candidateId, now);
+    return { ok: false, error: "Waktu pengerjaan sudah habis." };
+  }
   const question = await prisma.recruitmentAssessmentQuestion.findFirst({ where: { id: questionId, versionId: submission.versionId }, include: { options: { select: { id: true } } } });
   if (!question || !isOptionOfQuestion(question, optionId)) return { ok: false, error: "Jawaban tidak valid." };
   await prisma.recruitmentAssessmentAnswer.upsert({
@@ -412,8 +469,10 @@ export async function saveAssessmentAnswer(candidateId: string, questionId: stri
  * The one final submission. Validates on the server that all 20 questions are answered, claims the attempt
  * with a conditional update (a second click or tab finds it already claimed), then writes the score and
  * an immutable snapshot of every interpretation used, all in one transaction.
+ * When the 30 minutes are over and questions are still open, the attempt is closed without a score
+ * (INCOMPLETE): the answers given stay saved, nothing is guessed for the rest.
  */
-export async function submitAssessment(candidateId: string, now: Date = new Date()): Promise<ServiceResult<{ already?: boolean }>> {
+export async function submitAssessment(candidateId: string, now: Date = new Date()): Promise<ServiceResult<{ already?: boolean; timedOut?: boolean }>> {
   const submission = await prisma.recruitmentAssessmentSubmission.findUnique({
     where: { candidateId },
     include: {
@@ -441,7 +500,15 @@ export async function submitAssessment(candidateId: string, now: Date = new Date
     throw e;
   }
   if (result.status === "INCOMPLETE") {
-    return { ok: false, error: `Masih ada ${20 - result.answered} soal yang belum dijawab (nomor ${result.missingQuestionNos.join(", ")}).` };
+    if (!isAssessmentExpired(submission.startedAt, now, ASSESSMENT_GRACE_SECONDS, submission.timeLimitMinutes)) {
+      return { ok: false, error: `Masih ada ${submission.version.questions.length - result.answered} soal yang belum dijawab (nomor ${result.missingQuestionNos.join(", ")}).` };
+    }
+    // Time is up: close it as it stands, with no score.
+    const closed = await prisma.recruitmentAssessmentSubmission.updateMany({
+      where: { id: submission.id, status: "IN_PROGRESS" },
+      data: { status: "SUBMITTED", submittedAt: now, screeningStatus: "INCOMPLETE", engineVersion: ASSESSMENT_ENGINE_VERSION },
+    });
+    return closed.count === 1 ? { ok: true, timedOut: true } : { ok: true, already: true };
   }
   const scored = result;
 
@@ -478,6 +545,33 @@ export async function submitAssessment(candidateId: string, now: Date = new Date
   return claimed ? { ok: true } : { ok: true, already: true };
 }
 
+/**
+ * Closes every attempt whose 30 minutes are over (the applicant left the page or lost connection): scored if all
+ * 20 were answered, otherwise closed without a score. Runs every night and whenever that applicant opens the page.
+ */
+export async function finalizeExpiredAssessments(candidateId?: string, now: Date = new Date()): Promise<number> {
+  // The limit differs per attempt, so first take everything older than the shortest allowed limit, then check each one's own.
+  const cutoff = new Date(now.getTime() - (ASSESSMENT_TIME_LIMIT_MIN * 60 + ASSESSMENT_GRACE_SECONDS) * 1000);
+  const open = await prisma.recruitmentAssessmentSubmission.findMany({
+    where: { status: "IN_PROGRESS", startedAt: { lt: cutoff }, ...(candidateId ? { candidateId } : {}) },
+    select: { candidateId: true, startedAt: true, timeLimitMinutes: true },
+  });
+  const due = open.filter((x) => isAssessmentExpired(x.startedAt, now, ASSESSMENT_GRACE_SECONDS, x.timeLimitMinutes));
+  for (const x of due) await submitAssessment(x.candidateId, now);
+  return due.length;
+}
+
+/** Admin Rekrutmen sets how long applicants have. Attempts already running keep the limit they started with. */
+export async function updateAssessmentTimeLimit(actorAccountId: string, versionId: string, minutes: number): Promise<ServiceResult> {
+  if (!isValidTimeLimit(minutes)) return { ok: false, error: `Waktu harus bilangan bulat ${ASSESSMENT_TIME_LIMIT_MIN} sampai ${ASSESSMENT_TIME_LIMIT_MAX} menit.` };
+  const version = await prisma.recruitmentAssessmentVersion.findUnique({ where: { id: versionId }, select: { id: true, timeLimitMinutes: true } });
+  if (!version) return { ok: false, error: "Asesmen tidak ditemukan." };
+  if (version.timeLimitMinutes === minutes) return { ok: true };
+  await prisma.recruitmentAssessmentVersion.update({ where: { id: versionId }, data: { timeLimitMinutes: minutes } });
+  await logAudit({ actorAccountId, action: "UPDATE", datasetName: "RecruitmentAssessmentVersion", recordId: versionId, fieldName: "timeLimitMinutes", oldValueMasked: String(version.timeLimitMinutes), newValueMasked: String(minutes) });
+  return { ok: true };
+}
+
 // ---------- HR: reading a result ----------
 
 /** Everything the HR scoring view shows, read only from the stored snapshots. */
@@ -502,4 +596,9 @@ export async function assessmentEntryState(candidateId: string): Promise<"none" 
   if (candidate.assessment) return candidate.assessment.status === "SUBMITTED" ? "done" : "in-progress";
   if (!isAssessmentOpenFor(candidate)) return "none";
   return (await prisma.recruitmentAssessmentRubric.count({ where: { status: "ACTIVE" } })) > 0 ? "open" : "none";
+}
+
+/** The assessments with their time limit, for the settings card on the rubric page. */
+export async function listAssessmentVersions() {
+  return prisma.recruitmentAssessmentVersion.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, versionLabel: true, name: true, timeLimitMinutes: true } });
 }

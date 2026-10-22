@@ -10,7 +10,7 @@ import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { t } from "@/lib/i18n/id";
 import { canViewAssessmentResults } from "@/lib/permissions";
 import { isMaterialConcern } from "@/lib/recruitment-assessment";
-import { loadAssessmentResult } from "@/lib/recruitment-assessment-service";
+import { finalizeExpiredAssessments, loadAssessmentResult } from "@/lib/recruitment-assessment-service";
 import { requireSession } from "@/lib/require-session";
 
 export default async function AssessmentResultPage({ params }: { params: Promise<{ candidateId: string }> }) {
@@ -24,6 +24,7 @@ export default async function AssessmentResultPage({ params }: { params: Promise
     select: { id: true, fullName: true, source: true, employee: { select: { fullLegalName: true, employeeNumber: true } }, request: { select: { job: { select: { jobTitle: true } }, department: { select: { unitName: true } } } } },
   });
   if (!candidate) notFound();
+  await finalizeExpiredAssessments(candidateId);
   const result = await loadAssessmentResult(candidateId);
   await logAudit({ actorAccountId: session.user.id, action: "VIEW", datasetName: "RecruitmentAssessmentSubmission", recordId: result?.id ?? candidateId });
 
@@ -56,6 +57,17 @@ export default async function AssessmentResultPage({ params }: { params: Promise
     );
   }
 
+  // Time ran out with questions left: closed without a score, the answers given are kept.
+  if (result.screeningStatus === "INCOMPLETE" || result.totalScore === null) {
+    return (
+      <div className="space-y-5">
+        {heading}
+        <StatusChip tone={SCREENING_TONE.INCOMPLETE}>{t("assessment.result.screening.INCOMPLETE")}</StatusChip>
+        <p className="text-sm text-slate-600">{t("assessment.result.timedOut", { menit: result.timeLimitMinutes, n: result._count.answers, total: 20 })}</p>
+        <p className="text-xs text-slate-400">{t("assessment.result.versions")}: {result.version.versionLabel} / {result.rubric.rubricLabel}{result.submittedAt ? ` · ${t("assessment.result.submittedAt")} ${formatDateTimeMedium(result.submittedAt)}` : ""}</p>
+      </div>
+    );
+  }
   const status = result.screeningStatus ?? "INCOMPLETE";
   const material = result.items.filter((i) => isMaterialConcern(i));
 

@@ -8,6 +8,7 @@ import { formatDateTimeMedium } from "@/lib/format";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { t } from "@/lib/i18n/id";
 import { canViewAssessmentResults } from "@/lib/permissions";
+import { finalizeExpiredAssessments } from "@/lib/recruitment-assessment-service";
 import { requireSession } from "@/lib/require-session";
 
 const STATUSES = ["PRIORITY_REVIEW", "INTERVIEW_ATTENTION", "NO_AGGREGATE_CONCERN"] as const;
@@ -20,6 +21,8 @@ export default async function AssessmentResultsPage({ searchParams }: { searchPa
   const status = STATUSES.find((s) => s === statusRaw);
   const search = q?.trim() ?? "";
 
+  // Attempts past their 30 minutes are closed first, so the list never shows a stale "in progress".
+  await finalizeExpiredAssessments();
   const rows = await prisma.recruitmentAssessmentSubmission.findMany({
     where: {
       ...(status ? { screeningStatus: status } : {}),

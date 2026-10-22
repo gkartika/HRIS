@@ -3667,6 +3667,9 @@ model RecruitmentAssessmentVersion {
   closingText        String
   estimatedMinMin    Int
   estimatedMinMax    Int
+  // How long an applicant has, in minutes from pressing Mulai. Set by Admin Rekrutmen in the app; each attempt
+  // keeps the value it started with.
+  timeLimitMinutes   Int      @default(30)
   // SHA-256 of the imported question bank file, so the text can be traced to its source.
   sourceSha256       String
   createdByAccountId String
@@ -3790,6 +3793,8 @@ model RecruitmentAssessmentSubmission {
   totalScore      Int?
   screeningStatus AssessmentScreeningStatus?
   engineVersion   String?
+  // The time limit in force when this attempt started (a later change does not move a running clock).
+  timeLimitMinutes Int                         @default(30)
   updatedAt       DateTime                     @updatedAt
 
   answers RecruitmentAssessmentAnswer[]

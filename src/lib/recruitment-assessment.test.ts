@@ -372,3 +372,59 @@ describe("when the assessment opens for an applicant", () => {
     expect(isAssessmentOpenFor({ status: "TESTING", closedAt: new Date(), tests: [test(true, "SUBMITTED")] })).toBe(false);
   });
 });
+
+describe("the 30-minute limit", () => {
+  const started = new Date("2026-10-22T08:00:00Z");
+  const at = (minutes: number, seconds = 0) => new Date(started.getTime() + (minutes * 60 + seconds) * 1000);
+
+  it("the deadline is exactly 30 minutes after the start", async () => {
+    const { assessmentDeadline, ASSESSMENT_TIME_LIMIT_MINUTES } = await import("./recruitment-assessment");
+    expect(ASSESSMENT_TIME_LIMIT_MINUTES).toBe(30);
+    expect(assessmentDeadline(started).toISOString()).toBe("2026-10-22T08:30:00.000Z");
+  });
+
+  it("is open before the deadline, and for a short grace after it, then closed", async () => {
+    const { isAssessmentExpired } = await import("./recruitment-assessment");
+    expect(isAssessmentExpired(started, at(0))).toBe(false);
+    expect(isAssessmentExpired(started, at(29, 59))).toBe(false);
+    expect(isAssessmentExpired(started, at(30))).toBe(false);
+    expect(isAssessmentExpired(started, at(30, 20))).toBe(false);
+    expect(isAssessmentExpired(started, at(30, 21))).toBe(true);
+    expect(isAssessmentExpired(started, at(31))).toBe(true);
+  });
+
+  it("with no grace the limit is exact", async () => {
+    const { isAssessmentExpired } = await import("./recruitment-assessment");
+    expect(isAssessmentExpired(started, at(30), 0)).toBe(false);
+    expect(isAssessmentExpired(started, at(30, 1), 0)).toBe(true);
+  });
+});
+
+describe("the time limit is set per assessment", () => {
+  const started = new Date("2026-10-22T08:00:00Z");
+  const at = (minutes: number, seconds = 0) => new Date(started.getTime() + (minutes * 60 + seconds) * 1000);
+
+  it("accepts whole minutes from 5 to 240 and nothing else", async () => {
+    const { isValidTimeLimit } = await import("./recruitment-assessment");
+    for (const ok of [5, 30, 45, 90, 240]) expect(isValidTimeLimit(ok)).toBe(true);
+    for (const bad of [0, 4, 241, -30, 30.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(isValidTimeLimit(bad)).toBe(false);
+  });
+
+  it("each attempt uses its own limit for the deadline and the expiry", async () => {
+    const { assessmentDeadline, isAssessmentExpired } = await import("./recruitment-assessment");
+    expect(assessmentDeadline(started, 45).toISOString()).toBe("2026-10-22T08:45:00.000Z");
+    expect(assessmentDeadline(started, 15).toISOString()).toBe("2026-10-22T08:15:00.000Z");
+    // 20 minutes in: open with a 45-minute limit, over with a 15-minute limit
+    expect(isAssessmentExpired(started, at(20), 20, 45)).toBe(false);
+    expect(isAssessmentExpired(started, at(20), 20, 15)).toBe(true);
+    // the grace still applies on top of any limit
+    expect(isAssessmentExpired(started, at(45, 20), 20, 45)).toBe(false);
+    expect(isAssessmentExpired(started, at(45, 21), 20, 45)).toBe(true);
+  });
+
+  it("without a limit given it is the default 30 minutes", async () => {
+    const { isAssessmentExpired, ASSESSMENT_TIME_LIMIT_MINUTES } = await import("./recruitment-assessment");
+    expect(ASSESSMENT_TIME_LIMIT_MINUTES).toBe(30);
+    expect(isAssessmentExpired(started, at(31))).toBe(true);
+  });
+});

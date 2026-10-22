@@ -1008,6 +1008,7 @@ export const strings = {
       sending: "Mengirim...",
       unansweredLead: "Masih ada soal yang belum dijawab, pilih nomornya:",
       loadingQuestion: "Memuat soal...",
+      connectionLost: "Koneksi terputus. Periksa internet Anda lalu coba lagi. Jawaban yang sudah tersimpan tidak hilang.",
       doneTitle: "Terima kasih",
       timeRule: "Waktu mengerjakan {menit} menit, dihitung sejak Anda menekan Mulai.",
       timeRuleDetail:

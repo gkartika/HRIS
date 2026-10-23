@@ -483,9 +483,11 @@ export function ShiftScheduler({
       {/* The paper: not on screen, and the only thing printed (the app around it is hidden while printing). */}
       <style>{`@media print {
         @page { size: A4 portrait; margin: 12mm; }
-        body * { visibility: hidden !important; }
-        #shift-print-sheet, #shift-print-sheet * { visibility: visible !important; }
-        #shift-print-sheet { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
+        /* Everything except the sheet is taken out of the layout (hiding it would still leave its height behind, and
+           print many blank pages); the parts that contain the sheet become plain blocks so it flows over pages. */
+        body *:not(#shift-print-sheet):not(#shift-print-sheet *):not(:has(#shift-print-sheet)) { display: none !important; }
+        body *:has(#shift-print-sheet) { display: block !important; overflow: visible !important; height: auto !important; min-height: 0 !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+        #shift-print-sheet { display: block !important; width: 100%; color: #000; background: #fff; }
         #shift-print-sheet thead { display: table-header-group; }
         #shift-print-sheet tr { break-inside: avoid; }
       }`}</style>
@@ -508,7 +510,7 @@ export function ShiftScheduler({
               <th className="w-8 border border-slate-500 px-2 py-1.5">No</th>
               <th className="border border-slate-500 px-2 py-1.5 text-left">Nama</th>
               <th className="border border-slate-500 px-2 py-1.5 text-left">No. Karyawan</th>
-              <th className="border border-slate-500 px-2 py-1.5 text-left">Departemen</th>
+              <th className="border border-slate-500 px-2 py-1.5 text-left">Grup</th>
               <th className="border border-slate-500 px-2 py-1.5">Shift</th>
             </tr>
           </thead>
@@ -518,7 +520,7 @@ export function ShiftScheduler({
                 <td className="border border-slate-500 px-2 py-1.5 text-center">{i + 1}</td>
                 <td className="border border-slate-500 px-2 py-1.5 font-medium">{e.name}</td>
                 <td className="border border-slate-500 px-2 py-1.5">{e.employeeNumber}</td>
-                <td className="border border-slate-500 px-2 py-1.5">{e.departmentName}</td>
+                <td className="border border-slate-500 px-2 py-1.5">{e.groupName ?? "—"}</td>
                 <td className="border border-slate-500 px-2 py-1.5 text-center font-semibold">{shiftPrintLabel(shiftOf(e.id))}</td>
               </tr>
             ))}

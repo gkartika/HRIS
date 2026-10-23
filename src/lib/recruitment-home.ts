@@ -3,7 +3,7 @@
 // shared with the Admin GA / Admin SDM Beranda (ga-home.ts).
 import { DAY_MS, WIB_OFFSET_MS } from "@/lib/company-time";
 import { daysSince, SEVERITY_RANK, sortTodo, waitingLabel, waitingSeverity, type Severity } from "@/lib/ga-home";
-import { candidateNextStep, type CandidateProgress } from "@/lib/recruitment-candidates";
+import { ASSESSMENT_NOT_ACTIVE_PROBLEM, candidateNextStep, type CandidateProgress } from "@/lib/recruitment-candidates";
 import type { RecruitmentCandidateStatus } from "@/generated/prisma/enums";
 
 export type RecKind = "es" | "iv" | "of" | "mv";
@@ -400,8 +400,14 @@ export function buildSetupWarnings(input: {
   types: { id: string; name: string; isGate: boolean; active: boolean; activeQuestions: number }[];
   /** For each open vacancy: the tests it uses (by id). */
   openVacancies: { id: string; requestNumber: string; testTypeIds: string[]; problems: string[] }[];
+  /** False while no Tes Situasi Kerja rubric is active: no vacancy can take applicants then. Default true. */
+  assessmentActive?: boolean;
 }): { shown: SetupWarning[]; hidden: number } {
   const all: SetupWarning[] = [];
+
+  if (input.assessmentActive === false) {
+    all.push({ text: "Tes Situasi Kerja belum aktif, jadi tidak ada lowongan yang bisa menerima pelamar.", href: "/recruitment/assessment", actionLabel: "Buka rubrik" });
+  }
 
   for (const t of input.types) {
     if (!t.active || t.activeQuestions > 0) continue;
@@ -416,7 +422,8 @@ export function buildSetupWarnings(input: {
   // The questions themselves are covered above; what is left per vacancy is e.g. a missing access code.
   for (const v of input.openVacancies) {
     for (const p of v.problems) {
-      if (/belum punya soal\.?$/.test(p) || p.startsWith("Belum ada tes gerbang")) continue;
+      // Both are reported once above, not for every vacancy.
+      if (/belum punya soal\.?$/.test(p) || p === ASSESSMENT_NOT_ACTIVE_PROBLEM) continue;
       all.push({ text: `${v.requestNumber}: ${p}`, href: `/recruitment/${v.id}`, actionLabel: "Buka" });
     }
   }

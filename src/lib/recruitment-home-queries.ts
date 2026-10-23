@@ -94,7 +94,7 @@ export async function getRecruitmentHomeData() {
 
   const rows = buildRecruitmentRows(candidates, now);
   const tiles = buildRecruitmentTiles({ candidates, rows, vacancies, unopened: vacancies.length - open.length, lastMonth, now });
-  const warnings = buildSetupWarnings({ types: ctx.types, openVacancies: open });
+  const warnings = buildSetupWarnings({ types: ctx.types, openVacancies: open, assessmentActive: ctx.assessment !== null });
 
   return {
     rows,

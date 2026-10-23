@@ -16,7 +16,7 @@ Before: the migration `20261021120000_recruitment_assessment_v32` is applied (th
 9. Buat revisi: a new draft V3.2-R2 appears with the same values; R1 is unchanged. Only one revision can be open.
 
 ## C. Applicant
-10. Apply to an external vacancy, finish Cultural Fit: the test page now shows the Tes Situasi Kerja card. Before Cultural Fit is finished it does not show.
+10. Apply to an external vacancy: the test page lists Tes Situasi Kerja as step 1 with a Mulai button; any other test of that vacancy is listed after it and cannot start until step 1 is finished (or its time ran out). Cultural Fit no longer exists as a test.
 11. Open it: instructions, then one situation per screen, no titles/dimensions/scores. Choose, go next, close the page, reopen: answers and position are kept.
 12. The last screen cannot be sent until all 20 are answered. Send: a thank-you text. Open the link again or click send twice: no second score.
 13. The applicant's status did not change.
@@ -33,7 +33,7 @@ Before: the migration `20261021120000_recruitment_assessment_v32` is applied (th
 Cleanup: delete the ZZT applicant's rows; leave the imported master data.
 
 ## F. Internal employee
-19. Apply to an internal vacancy as a test employee (ZZT), sign in as that employee, finish Cultural Fit on Lowongan Internal > Tes: the Tes Situasi Kerja card appears below. Take it as in C.
+19. Apply to an internal vacancy as a test employee (ZZT), sign in as that employee, open Lowongan Internal > Tes: Tes Situasi Kerja is step 1. Take it as in C, then press Lanjut: the other tests (if any) open, otherwise the thank-you page shows.
 20. In the results list and detail the applicant shows "Internal" with the employee's name and number.
 21. Another signed-in employee opening `/internal-jobs/asesmen/<that id>` gets "Anda tidak memiliki akses.".
 
@@ -47,5 +47,5 @@ Cleanup: delete the ZZT applicant's rows; leave the imported master data.
 ## H. Time limit setting and copy protection on every test
 27. Rekrutmen > Rubrik Tes Situasi Kerja shows "Waktu pengerjaan" with the current minutes. Admin Rekrutmen can change it (5 to 240; 3 or 300 is refused with a message); the HR Manager sees the number but no form.
 28. After changing it, a NEW applicant's intro and countdown use the new minutes. An applicant who already pressed Mulai keeps the old minutes.
-29. A normal test (e.g. Cultural Fit) takes its minutes from Pengaturan Rekrutmen > Katalog tes > "Waktu pengerjaan" for that test.
-30. On Cultural Fit and on Tes Situasi Kerja alike: no selecting or copying, no right-click, Ctrl+C/A/P/S/U do nothing, printing shows nothing, switching tab blurs the questions, a faint watermark with the applicant's name is behind the text. In an essay test the answer box is still typeable but pasting into it is blocked.
+29. A normal test (e.g. Ketelitian) takes its minutes from Pengaturan Rekrutmen > Katalog tes > "Waktu pengerjaan" for that test.
+30. On every test and on Tes Situasi Kerja alike: no selecting or copying, no right-click, Ctrl+C/A/P/S/U do nothing, printing shows nothing, switching tab blurs the questions, a faint watermark with the applicant's name is behind the text. In an essay test the answer box is still typeable but pasting into it is blocked.

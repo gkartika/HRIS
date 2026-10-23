@@ -59,7 +59,7 @@ export function CopyButton({ text, labelText = "Salin" }: { text: string; labelT
 // ---------- the vacancy: which tests, who may apply, access code ----------
 
 // Pick the tests for ONE vacancy. Starts from the job title's tests (Pengaturan Rekrutmen); once saved,
-// the vacancy keeps its own pick. Cultural Fit is always required.
+// the vacancy keeps its own pick. Tes Situasi Kerja is always required (it is the first test of everyone).
 export function RequestTestsControl({
   requestId,
   columns,
@@ -98,7 +98,7 @@ export function RequestTestsControl({
       <p className={label}>Tes untuk lowongan ini</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="inline-flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked disabled aria-label="Cultural Fit (wajib)" /> Cultural Fit <span className="text-[11px] text-slate-400">(wajib)</span>
+          <input type="checkbox" checked disabled aria-label="Tes Situasi Kerja (wajib)" /> Tes Situasi Kerja <span className="text-[11px] text-slate-400">(wajib, dikerjakan pertama)</span>
         </span>
         {columns.map((c) => (
           <label key={c.key} className="inline-flex items-center gap-2 text-sm text-slate-700">

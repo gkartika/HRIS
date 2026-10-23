@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/audit";
 import { randomStorageKey } from "@/lib/file-storage";
 import { canRequestAcceptFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
 import {
+  ASSESSMENT_NOT_ACTIVE_PROBLEM,
   CLOSED_WITHOUT_HIRE_STATUSES,
   ESSAY_MAX_CHARS,
   ESSAY_MIN_CHARS,
@@ -62,15 +63,21 @@ export interface PlanContext {
     activeQuestions: number;
   }[];
   jobTestIds: Map<string, string[]>;
+  /** Tes Situasi Kerja, the first test of every applicant: null while no rubric is active (nobody can take it then). */
+  assessment: { timeLimitMinutes: number; questionCount: number } | null;
 }
 
 export async function loadPlanContext(): Promise<PlanContext> {
-  const [types, jobTests] = await Promise.all([
+  const [types, jobTests, activeRubric] = await Promise.all([
     prisma.recruitmentTestType.findMany({
       orderBy: [{ isGate: "desc" }, { sortOrder: "asc" }],
       include: { _count: { select: { questions: { where: { active: true } } } } },
     }),
     prisma.recruitmentJobTest.findMany({ select: { jobId: true, testTypeId: true } }),
+    prisma.recruitmentAssessmentRubric.findFirst({
+      where: { status: "ACTIVE" },
+      select: { version: { select: { timeLimitMinutes: true, _count: { select: { questions: true } } } } },
+    }),
   ]);
   const jobTestIds = new Map<string, string[]>();
   for (const jt of jobTests) jobTestIds.set(jt.jobId, [...(jobTestIds.get(jt.jobId) ?? []), jt.testTypeId]);
@@ -91,6 +98,7 @@ export async function loadPlanContext(): Promise<PlanContext> {
       activeQuestions: t._count.questions,
     })),
     jobTestIds,
+    assessment: activeRubric ? { timeLimitMinutes: activeRubric.version.timeLimitMinutes, questionCount: activeRubric.version._count.questions } : null,
   };
 }
 
@@ -127,7 +135,7 @@ export function readinessProblems(
   if (!request.jobId) problems.push("Jabatan pada permintaan ini belum ditentukan.");
   if (!canRequestAcceptFulfillment(request.status)) problems.push("Permintaan belum disetujui atau sudah ditutup.");
   if (computeFulfillmentCounts(request.requestedHeadcount, filled).isFull) problems.push("Permintaan sudah terisi penuh.");
-  if (!ctx.types.some((t) => t.isGate && t.active)) problems.push("Belum ada tes gerbang (Cultural Fit) yang aktif.");
+  if (!ctx.assessment) problems.push(ASSESSMENT_NOT_ACTIVE_PROBLEM);
   if (request.jobId) {
     for (const t of possibleTests(ctx, request)) {
       if (t.activeQuestions === 0) problems.push(`Tes ${t.name} belum punya soal.`);
@@ -243,10 +251,10 @@ export type EngineResult = { ok: true } | { ok: false; error: string };
 export async function refreshCandidateStatus(candidateId: string): Promise<void> {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: candidateId },
-    select: { status: true, tests: { select: { status: true, passed: true, testType: { select: { name: true } } } } },
+    select: { status: true, assessment: { select: { status: true } }, tests: { select: { status: true, passed: true, testType: { select: { name: true } } } } },
   });
   if (!candidate || (candidate.status !== "TESTING" && candidate.status !== "AWAITING_REVIEW")) return;
-  const next = deriveStatusFromTests(candidate.tests);
+  const next = deriveStatusFromTests(candidate.tests, candidate.assessment?.status === "SUBMITTED");
   if (next === candidate.status) return;
   if (next === "TEST_FAILED") {
     const failed = candidate.tests.filter((t) => t.passed === false).map((t) => t.testType.name);
@@ -261,6 +269,7 @@ export async function startCandidateTest(candidateId: string, testId: string, no
     where: { id: candidateId },
     select: {
       status: true,
+      assessment: { select: { status: true } },
       tests: { orderBy: { sortOrder: "asc" }, select: { id: true, status: true, passed: true, testTypeId: true, testType: { select: { timeLimitMinutes: true } } } },
     },
   });
@@ -268,7 +277,9 @@ export async function startCandidateTest(candidateId: string, testId: string, no
   const index = candidate.tests.findIndex((t) => t.id === testId);
   if (index < 0) return { ok: false, error: "Tes tidak ditemukan." };
   if (candidate.tests.some((t) => t.status === "IN_PROGRESS")) return { ok: false, error: "Selesaikan tes yang sedang berjalan dulu." };
-  if (!canStartTest(candidate.tests, index)) return { ok: false, error: "Tes ini belum bisa dimulai." };
+  const assessmentDone = candidate.assessment?.status === "SUBMITTED";
+  if (!assessmentDone) return { ok: false, error: "Kerjakan Tes Situasi Kerja dulu." };
+  if (!canStartTest(candidate.tests, index, assessmentDone)) return { ok: false, error: "Tes ini belum bisa dimulai." };
   const test = candidate.tests[index];
   const questions = await prisma.recruitmentTestQuestion.count({ where: { testTypeId: test.testTypeId, active: true } });
   if (questions === 0) return { ok: false, error: "Tes ini belum punya soal. Hubungi HR." };
@@ -414,8 +425,19 @@ export interface RunnerTest {
   questionCount: number;
   canStart: boolean;
 }
+// Tes Situasi Kerja, shown as the first step of the list. It is taken on its own page.
+export interface RunnerAssessment {
+  status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED";
+  /** Closed by the clock with questions left: not scored, but the other tests open. */
+  timedOut: boolean;
+  questionCount: number;
+  timeLimitMinutes: number;
+  /** Not started and no rubric in force: nobody can start it until HR activates one. */
+  unavailable: boolean;
+}
 export interface RunnerState {
   candidate: { id: string; fullName: string; status: RecruitmentCandidateStatus; positionTitle: string };
+  assessment: RunnerAssessment;
   tests: RunnerTest[];
   active: {
     testId: string;
@@ -435,6 +457,7 @@ export async function loadRunnerState(candidateId: string, now: Date = new Date(
     where: { id: candidateId },
     include: {
       request: { select: { job: { select: { jobTitle: true } }, department: { select: { unitName: true } } } },
+      assessment: { select: { status: true, screeningStatus: true, timeLimitMinutes: true, version: { select: { _count: { select: { questions: true } } } } } },
       tests: {
         orderBy: { sortOrder: "asc" },
         include: { testType: true, answers: true },
@@ -442,6 +465,30 @@ export async function loadRunnerState(candidateId: string, now: Date = new Date(
     },
   });
   if (!candidate) return null;
+
+  let assessment: RunnerAssessment;
+  if (candidate.assessment) {
+    assessment = {
+      status: candidate.assessment.status,
+      timedOut: candidate.assessment.status === "SUBMITTED" && candidate.assessment.screeningStatus === "INCOMPLETE",
+      questionCount: candidate.assessment.version._count.questions,
+      timeLimitMinutes: candidate.assessment.timeLimitMinutes,
+      unavailable: false,
+    };
+  } else {
+    const rubric = await prisma.recruitmentAssessmentRubric.findFirst({
+      where: { status: "ACTIVE" },
+      select: { version: { select: { timeLimitMinutes: true, _count: { select: { questions: true } } } } },
+    });
+    assessment = {
+      status: "NOT_STARTED",
+      timedOut: false,
+      questionCount: rubric?.version._count.questions ?? 0,
+      timeLimitMinutes: rubric?.version.timeLimitMinutes ?? 0,
+      unavailable: !rubric,
+    };
+  }
+  const assessmentDone = assessment.status === "SUBMITTED";
 
   const counts = await prisma.recruitmentTestQuestion.groupBy({
     by: ["testTypeId"],
@@ -458,7 +505,7 @@ export async function loadRunnerState(candidateId: string, now: Date = new Date(
     timeLimitMinutes: t.testType.timeLimitMinutes,
     status: t.status,
     questionCount: countOf.get(t.testTypeId) ?? 0,
-    canStart: candidate.status === "TESTING" && !candidate.tests.some((x) => x.status === "IN_PROGRESS") && canStartTest(candidate.tests, i),
+    canStart: candidate.status === "TESTING" && !candidate.tests.some((x) => x.status === "IN_PROGRESS") && canStartTest(candidate.tests, i, assessmentDone),
   }));
 
   let active: RunnerState["active"] = null;
@@ -493,6 +540,7 @@ export async function loadRunnerState(candidateId: string, now: Date = new Date(
       status: candidate.status,
       positionTitle: `${candidate.request.job?.jobTitle ?? "Lowongan"} · ${candidate.request.department.unitName}`,
     },
+    assessment,
     tests,
     active,
   };

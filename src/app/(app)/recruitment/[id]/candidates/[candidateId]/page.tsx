@@ -230,7 +230,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
         </p>
       )}
 
-      <Section title="Tes" hint="Cultural Fit dikerjakan pertama. Tes pilihan ganda dan skala dinilai otomatis begitu dikirim atau waktu habis.">
+      <Section title="Tes" hint="Tes Situasi Kerja dikerjakan pertama dan tidak punya lulus atau tidak lulus. Tes pilihan ganda dan skala dinilai otomatis begitu dikirim atau waktu habis.">
         {candidate.tests.length === 0 && <p className="text-sm text-slate-400">Tidak ada tes.</p>}
         <div className="space-y-4">
           {candidate.tests.map((t) => {

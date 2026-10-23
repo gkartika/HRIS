@@ -49,6 +49,7 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
         movementRequestId: true,
         request: { select: { departmentId: true } },
         tests: { select: { passed: true, submittedAt: true, reviewedAt: true } },
+        assessment: { select: { status: true, submittedAt: true } },
         interview: { select: { invitationSentAt: true, createdAt: true } },
         offer: { select: { id: true } },
       },
@@ -79,7 +80,11 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
     interviewInvitedAt: c.interview ? c.interview.invitationSentAt ?? c.interview.createdAt : null,
     hasOffer: c.offer !== null,
     hasMovement: c.movementRequestId !== null,
-    tests: c.tests.map((t) => ({ passed: t.passed, doneAt: t.reviewedAt ?? t.submittedAt })),
+    // Tes Situasi Kerja is the first step of everyone and never pass/fail: finished counts as passed.
+    tests: [
+      { passed: c.assessment?.status === "SUBMITTED" ? true : null, doneAt: c.assessment?.submittedAt ?? null },
+      ...c.tests.map((t) => ({ passed: t.passed, doneAt: t.reviewedAt ?? t.submittedAt })),
+    ],
   }));
 
   const dashboardRequests: DashboardRequest[] = requests.map((r) => ({

@@ -233,7 +233,7 @@ async function JobTestsTab({ q }: { q: string }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Cultural Fit wajib untuk semua jabatan. Centang tes tambahan untuk tiap jabatan; boleh lebih dari satu, boleh tidak ada. Ini pilihan awal untuk setiap lowongan jabatan itu dan tersimpan langsung; di halaman tiap lowongan (blok Pelamar) pilihan tes bisa diubah khusus untuk lowongan tersebut.
+        Tes Situasi Kerja wajib untuk semua jabatan dan dikerjakan pertama. Centang tes tambahan untuk tiap jabatan; boleh lebih dari satu, boleh tidak ada. Ini pilihan awal untuk setiap lowongan jabatan itu dan tersimpan langsung; di halaman tiap lowongan (blok Pelamar) pilihan tes bisa diubah khusus untuk lowongan tersebut.
       </p>
       <form className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="min-w-[220px] flex-1">
@@ -252,7 +252,7 @@ async function JobTestsTab({ q }: { q: string }) {
             <thead className="bg-slate-50 text-left text-xs text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Jabatan</th>
-                <th className="px-3 py-3 font-medium">Cultural Fit</th>
+                <th className="px-3 py-3 font-medium">Tes Situasi Kerja</th>
                 {columns.map((c) => (
                   <th key={c.key} className="px-3 py-3 font-medium">
                     {c.label}

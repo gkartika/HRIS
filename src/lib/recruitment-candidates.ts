@@ -216,12 +216,18 @@ export interface TestProgress {
   passed: boolean | null;
 }
 
-// What the applicant's overall status should be, from their tests alone.
+// Why a vacancy cannot take applicants while no Tes Situasi Kerja rubric is active.
+export const ASSESSMENT_NOT_ACTIVE_PROBLEM = "Tes Situasi Kerja belum aktif (rubriknya belum disetujui dan diaktifkan).";
+
+// What the applicant's overall status should be, from their tests. Tes Situasi Kerja (the first step
+// everyone takes) is not one of the tests: it is never pass/fail, but the applicant stays in TESTING until
+// it is finished or closed by the clock.
 export function deriveStatusFromTests(
-  tests: TestProgress[]
+  tests: TestProgress[],
+  assessmentDone: boolean = true
 ): Extract<RecruitmentCandidateStatus, "TESTING" | "AWAITING_REVIEW" | "TEST_PASSED" | "TEST_FAILED"> {
   if (tests.some((t) => t.passed === false)) return "TEST_FAILED";
-  if (tests.some((t) => t.status !== "SUBMITTED")) return "TESTING";
+  if (!assessmentDone || tests.some((t) => t.status !== "SUBMITTED")) return "TESTING";
   if (tests.some((t) => t.passed === null)) return "AWAITING_REVIEW";
   return "TEST_PASSED";
 }
@@ -357,8 +363,9 @@ export function isExcellent(scorePercent: number | null, excellentScore: number 
   return scorePercent !== null && excellentScore != null && scorePercent >= excellentScore;
 }
 
-// A test may start only when every earlier one is submitted and none failed.
-export function canStartTest(sortedTests: TestProgress[], index: number): boolean {
+// A test may start only when Tes Situasi Kerja is finished and every earlier test is submitted and none failed.
+export function canStartTest(sortedTests: TestProgress[], index: number, assessmentDone: boolean = true): boolean {
+  if (!assessmentDone) return false;
   if (sortedTests[index]?.status === "SUBMITTED") return false;
   return sortedTests.slice(0, index).every((t) => t.status === "SUBMITTED" && t.passed !== false);
 }

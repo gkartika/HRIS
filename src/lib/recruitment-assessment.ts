@@ -345,16 +345,12 @@ export function isOptionOfQuestion(question: { options: { id: string }[] }, opti
 const CLOSED_CANDIDATE_STATUSES = ["TEST_FAILED", "REJECTED", "OFFER_DECLINED", "NOT_SELECTED", "HIRED"];
 
 /**
- * The assessment opens once the applicant has finished the gate test (Cultural Fit) and is still in the
- * process. It never changes the applicant's status, and it is not a pass/fail test.
+ * Tes Situasi Kerja is the first test everyone takes (it replaced Cultural Fit), so it is open for every
+ * applicant who is still in the process. It is not a pass/fail test and never rejects anyone; it only has to
+ * be finished (or closed by the clock) before the applicant's other tests open.
  */
-export function isAssessmentOpenFor(candidate: {
-  status: string;
-  closedAt: Date | null;
-  tests: { status: string; testType: { isGate: boolean } }[];
-}): boolean {
-  if (candidate.closedAt !== null || CLOSED_CANDIDATE_STATUSES.includes(candidate.status)) return false;
-  return candidate.tests.filter((t) => t.testType.isGate).every((t) => t.status === "SUBMITTED");
+export function isAssessmentOpenFor(candidate: { status: string; closedAt: Date | null }): boolean {
+  return candidate.closedAt === null && !CLOSED_CANDIDATE_STATUSES.includes(candidate.status);
 }
 
 // ---------- time limit ----------

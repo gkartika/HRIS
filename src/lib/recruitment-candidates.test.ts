@@ -194,6 +194,15 @@ describe("overall test status", () => {
   it("fails as soon as any test failed, even if others are unfinished", () => {
     expect(deriveStatusFromTests([done(false), waiting])).toBe("TEST_FAILED");
   });
+  it("stays TESTING until Tes Situasi Kerja is finished, whatever the other tests say", () => {
+    expect(deriveStatusFromTests([], false)).toBe("TESTING");
+    expect(deriveStatusFromTests([done(true)], false)).toBe("TESTING");
+  });
+  it("moves on once Tes Situasi Kerja is finished, even for a vacancy with no other tests", () => {
+    expect(deriveStatusFromTests([], true)).toBe("TEST_PASSED");
+    expect(deriveStatusFromTests([done(true)], true)).toBe("TEST_PASSED");
+    expect(deriveStatusFromTests([done(null)], true)).toBe("AWAITING_REVIEW");
+  });
   it("stays TESTING while a test is not submitted", () => {
     expect(deriveStatusFromTests([done(true), { status: "IN_PROGRESS", passed: null }])).toBe("TESTING");
   });
@@ -227,6 +236,11 @@ describe("planning and ordering tests", () => {
     expect(canStartTest(t, 2)).toBe(false);
     expect(canStartTest(t, 0)).toBe(false);
     expect(canStartTest([{ status: "SUBMITTED", passed: false }, t[1]], 1)).toBe(false);
+  });
+  it("opens no test before Tes Situasi Kerja is finished", () => {
+    const t = [{ status: "NOT_STARTED" as const, passed: null }];
+    expect(canStartTest(t, 0, false)).toBe(false);
+    expect(canStartTest(t, 0, true)).toBe(true);
   });
 });
 

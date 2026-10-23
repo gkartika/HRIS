@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ASSESSMENT_NOT_ACTIVE_PROBLEM } from "./recruitment-candidates";
 import { actionableCount, buildRecruitmentRows, buildRecruitmentTiles, buildSetupWarnings, buildUnopenedRequests, recRowCounts, type HomeCandidate, type HomeVacancy } from "./recruitment-home";
 import type { CandidateProgress } from "./recruitment-candidates";
 
@@ -200,6 +201,18 @@ describe("buildSetupWarnings", () => {
     ]);
     expect(shown[0].href).toBe("/recruitment/settings/tests/cf");
     expect(shown[2].href).toBe("/recruitment/v1");
+  });
+
+  it("says once that Tes Situasi Kerja is not active, and does not repeat it per vacancy", () => {
+    const { shown } = buildSetupWarnings({
+      types: [],
+      assessmentActive: false,
+      openVacancies: [{ id: "v1", requestNumber: "REQ-1", testTypeIds: [], problems: [ASSESSMENT_NOT_ACTIVE_PROBLEM] }],
+    });
+    expect(shown).toHaveLength(1);
+    expect(shown[0].text).toContain("Tes Situasi Kerja belum aktif");
+    expect(shown[0].href).toBe("/recruitment/assessment");
+    expect(buildSetupWarnings({ types: [], openVacancies: [] }).shown).toEqual([]);
   });
 
   it("is empty when everything is ready, and caps a long list", () => {

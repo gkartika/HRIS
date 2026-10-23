@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TestProtection } from "@/components/test-protection";
+import { t } from "@/lib/i18n/id";
 import { ESSAY_MAX_CHARS, ESSAY_MIN_CHARS, SCALE_LABELS, formatClock } from "@/lib/recruitment-candidates";
 import type { RunnerState } from "@/lib/recruitment-service";
 import { saveAnswerAction, startTestAction, submitTestAction, type TestAccess } from "./test-actions";
@@ -19,7 +21,7 @@ const btnGhost = "rounded-full border border-[#cfc4d6] bg-white px-5 py-2.5 text
 // Copy protection (see TestProtection) is the same for every test and for Tes Situasi Kerja.
 export function TestRunner(props: { access: TestAccess; state: RunnerState; serverNowMs: number }) {
   // A new key per test and per status makes each test start with fresh answers.
-  const key = props.state.active?.testId ?? props.state.tests.map((t) => t.status[0]).join("") + props.state.candidate.status;
+  const key = props.state.active?.testId ?? props.state.assessment.status[0] + props.state.tests.map((t) => t.status[0]).join("") + props.state.candidate.status;
   return <TestRunnerInner key={key} {...props} />;
 }
 
@@ -271,18 +273,34 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
   }
 
   // ----- between tests: what is next -----
-  const next = state.tests.find((t) => t.canStart);
-  const nextIndex = next ? state.tests.indexOf(next) : -1;
+  // Tes Situasi Kerja is always the first step; it has its own page, the other tests open after it.
+  const assessment = state.assessment;
+  const assessmentDone = assessment.status === "SUBMITTED";
+  const assessmentHref = "token" in access ? `/cbp-recruitment/asesmen/${access.token}` : `/internal-jobs/asesmen/${access.candidateId}`;
+  const next = assessmentDone ? state.tests.find((t) => t.canStart) : undefined;
+  const nextIndex = next ? state.tests.indexOf(next) + 1 : -1;
+  const stepCount = state.tests.length + 1;
   return (
     <div className="rounded-xl border border-[#e6dcea] bg-white p-5">
       <h1 className="text-xl font-extrabold text-[#231a28]">Halo, {state.candidate.fullName}</h1>
       <p className="text-sm text-[#6a5f72]">Lamaran: {state.candidate.positionTitle}</p>
 
       <ol className="mt-4 space-y-2">
+        <li className="flex items-center justify-between gap-3 rounded-lg border border-[#eadfef] px-4 py-2.5 text-sm">
+          <span className="font-semibold text-[#231a28]">
+            1. {t("assessment.name")}
+            {!assessment.unavailable && (
+              <span className="ml-2 font-normal text-[#8a7e92]">
+                {assessment.questionCount} soal · {assessment.timeLimitMinutes} menit
+              </span>
+            )}
+          </span>
+          <span className={assessmentDone ? "text-[#1d6b43]" : "text-[#8a7e92]"}>{assessmentDone ? "Selesai" : assessment.status === "IN_PROGRESS" ? "Berjalan" : "Belum"}</span>
+        </li>
         {state.tests.map((t, i) => (
           <li key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#eadfef] px-4 py-2.5 text-sm">
             <span className="font-semibold text-[#231a28]">
-              {i + 1}. {t.name}
+              {i + 2}. {t.name}
               <span className="ml-2 font-normal text-[#8a7e92]">
                 {t.questionCount} soal · {t.timeLimitMinutes} menit
               </span>
@@ -292,10 +310,30 @@ function TestRunnerInner({ access, state, serverNowMs }: { access: TestAccess; s
         ))}
       </ol>
 
+      {!assessmentDone && (
+        <div className="mt-5 rounded-lg bg-[#fff6d6] p-4 text-sm text-[#5c4710]">
+          <b>
+            Tes 1 dari {stepCount}: {t("assessment.name")}
+          </b>
+          {assessment.unavailable ? (
+            <p className="mt-1">Tes ini belum tersedia. Silakan hubungi HR.</p>
+          ) : (
+            <>
+              <p className="mt-1">
+                {assessment.questionCount} situasi kerja dengan empat pilihan jawaban. Tidak ada jawaban benar atau salah, jawablah sesuai yang biasanya Anda lakukan. Tes ini dikerjakan lebih dulu; tes berikutnya terbuka setelah tes ini selesai.
+              </p>
+              <p className="mt-1">Waktu {assessment.timeLimitMinutes} menit mulai berjalan begitu Anda menekan Mulai, dan tidak bisa dihentikan. Jawaban tersimpan otomatis.</p>
+              <Link href={assessmentHref} className={`${btnPrimary} mt-3 inline-block`}>
+                {assessment.status === "IN_PROGRESS" ? "Lanjutkan" : `Mulai ${t("assessment.name")}`}
+              </Link>
+            </>
+          )}
+        </div>
+      )}
       {next && (
         <div className="mt-5 rounded-lg bg-[#fff6d6] p-4 text-sm text-[#5c4710]">
           <b>
-            Tes {nextIndex + 1} dari {state.tests.length}: {next.name}
+            Tes {nextIndex + 1} dari {stepCount}: {next.name}
           </b>
           {next.description && <p className="mt-1 whitespace-pre-line">{next.description}</p>}
           <p className="mt-1">

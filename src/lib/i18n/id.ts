@@ -1020,12 +1020,12 @@ export const strings = {
     settings: {
       title: "Waktu pengerjaan",
       label: "Waktu pengerjaan (menit)",
-      help: "Dihitung sejak pelamar menekan Mulai. Pelamar yang sedang mengerjakan tetap memakai waktu semula, perubahan berlaku untuk yang mulai sesudahnya. Waktu tes lain (Cultural Fit dan seterusnya) diatur per tes di Pengaturan Rekrutmen.",
+      help: "Dihitung sejak pelamar menekan Mulai. Pelamar yang sedang mengerjakan tetap memakai waktu semula, perubahan berlaku untuk yang mulai sesudahnya. Waktu tes lain (Ketelitian dan seterusnya) diatur per tes di Pengaturan Rekrutmen.",
       save: "Simpan waktu",
     },
     // Candidate page
     candidate: {
-      closedNotOpen: "Tes ini belum bisa dikerjakan. Selesaikan tes yang diminta lebih dulu, atau hubungi HR.",
+      closedNotOpen: "Tes ini tidak bisa dikerjakan lagi karena lamaran Anda sudah ditutup. Hubungi HR bila ada pertanyaan.",
       closedNoRubric: "Tes ini belum tersedia. HR akan menghubungi Anda.",
       start: "Mulai",
       saving: "Menyimpan...",

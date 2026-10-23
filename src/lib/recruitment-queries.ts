@@ -126,7 +126,7 @@ export function nextStepOf(c: CandidateRow) {
   return candidateNextStep(progressOf(c));
 }
 
-// One-line summary of the tests, e.g. "Cultural Fit 82 lulus, Studi Kasus menunggu".
+// One-line summary of the tests, e.g. "Ketelitian 82 lulus, Studi Kasus menunggu".
 export function testSummary(c: {
   tests: { status: "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED"; passed: boolean | null; scorePercent: number | null; testType: { name: string; excellentScore?: number | null } }[];
 }): string {

@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 const BLOCKED_KEYS = ["c", "x", "a", "p", "s", "u"];
 
 /**
- * Wraps the questions of any applicant test (Cultural Fit and the other tests, and Tes Situasi Kerja) with the
+ * Wraps the questions of any applicant test (the catalog tests and Tes Situasi Kerja) with the
  * same copy protection: selecting, copying, cutting, pasting, dragging, the right-click menu, printing and the
  * usual shortcuts are switched off; the content blurs when the browser tab is left; PrintScreen clears the
  * clipboard; and a faint watermark with the applicant's name covers the questions.

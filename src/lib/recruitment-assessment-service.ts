@@ -4,6 +4,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { refreshCandidateStatus } from "@/lib/recruitment-service";
 import {
   ASSESSMENT_ENGINE_VERSION,
   ASSESSMENT_GRACE_SECONDS,
@@ -353,7 +354,7 @@ export type AssessmentRunnerState =
 async function loadCandidateForAssessment(candidateId: string) {
   return prisma.recruitmentCandidate.findUnique({
     where: { id: candidateId },
-    select: { id: true, fullName: true, status: true, closedAt: true, tests: { select: { status: true, testType: { select: { isGate: true } } } }, assessment: true },
+    select: { id: true, fullName: true, status: true, closedAt: true, assessment: true },
   });
 }
 
@@ -508,7 +509,9 @@ export async function submitAssessment(candidateId: string, now: Date = new Date
       where: { id: submission.id, status: "IN_PROGRESS" },
       data: { status: "SUBMITTED", submittedAt: now, screeningStatus: "INCOMPLETE", engineVersion: ASSESSMENT_ENGINE_VERSION },
     });
-    return closed.count === 1 ? { ok: true, timedOut: true } : { ok: true, already: true };
+    if (closed.count !== 1) return { ok: true, already: true };
+    await refreshCandidateStatus(candidateId);
+    return { ok: true, timedOut: true };
   }
   const scored = result;
 
@@ -542,7 +545,10 @@ export async function submitAssessment(candidateId: string, now: Date = new Date
     },
     { timeout: 30000, maxWait: 10000 }
   );
-  return claimed ? { ok: true } : { ok: true, already: true };
+  if (!claimed) return { ok: true, already: true };
+  // Finishing it opens the applicant's other tests (or, with none, moves them on).
+  await refreshCandidateStatus(candidateId);
+  return { ok: true };
 }
 
 /**
@@ -587,15 +593,6 @@ export async function loadAssessmentResult(candidateId: string) {
   });
   if (!submission) return null;
   return submission;
-}
-
-/** What the applicant's test page shows about the assessment: nothing, a link to it, or that it is done. */
-export async function assessmentEntryState(candidateId: string): Promise<"none" | "open" | "in-progress" | "done"> {
-  const candidate = await loadCandidateForAssessment(candidateId);
-  if (!candidate) return "none";
-  if (candidate.assessment) return candidate.assessment.status === "SUBMITTED" ? "done" : "in-progress";
-  if (!isAssessmentOpenFor(candidate)) return "none";
-  return (await prisma.recruitmentAssessmentRubric.count({ where: { status: "ACTIVE" } })) > 0 ? "open" : "none";
 }
 
 /** The assessments with their time limit, for the settings card on the rubric page. */

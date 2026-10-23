@@ -37,7 +37,11 @@ export default async function ApplyPage({ params }: { params: Promise<{ requestI
     );
   }
 
-  const steps = describeTestSteps(possibleTests(ctx, request));
+  // Tes Situasi Kerja is everyone's first test (readiness already guarantees it is active).
+  const steps = [
+    { label: t("assessment.name"), timeLimitMinutes: ctx.assessment?.timeLimitMinutes ?? 0 },
+    ...describeTestSteps(possibleTests(ctx, request)),
+  ];
 
   return (
     <div>

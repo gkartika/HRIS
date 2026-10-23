@@ -350,26 +350,20 @@ describe("material concerns are shown even when the total is above -6", () => {
 });
 
 describe("when the assessment opens for an applicant", () => {
-  const test = (isGate: boolean, status: string) => ({ status, testType: { isGate } });
   const base = { status: "TESTING", closedAt: null };
 
-  it("opens after the gate test is submitted, whatever the other tests are doing", async () => {
+  it("is open from the start for an applicant still in the process (it is the first test)", async () => {
     const { isAssessmentOpenFor } = await import("./recruitment-assessment");
-    expect(isAssessmentOpenFor({ ...base, tests: [test(true, "SUBMITTED"), test(false, "NOT_STARTED")] })).toBe(true);
-  });
-
-  it("stays closed while the gate test is not finished", async () => {
-    const { isAssessmentOpenFor } = await import("./recruitment-assessment");
-    expect(isAssessmentOpenFor({ ...base, tests: [test(true, "IN_PROGRESS")] })).toBe(false);
-    expect(isAssessmentOpenFor({ ...base, tests: [test(true, "NOT_STARTED")] })).toBe(false);
+    expect(isAssessmentOpenFor(base)).toBe(true);
+    expect(isAssessmentOpenFor({ status: "AWAITING_REVIEW", closedAt: null })).toBe(true);
   });
 
   it("stays closed for an applicant who left the process", async () => {
     const { isAssessmentOpenFor } = await import("./recruitment-assessment");
     for (const status of ["TEST_FAILED", "REJECTED", "OFFER_DECLINED", "NOT_SELECTED", "HIRED"]) {
-      expect(isAssessmentOpenFor({ status, closedAt: null, tests: [test(true, "SUBMITTED")] })).toBe(false);
+      expect(isAssessmentOpenFor({ status, closedAt: null })).toBe(false);
     }
-    expect(isAssessmentOpenFor({ status: "TESTING", closedAt: new Date(), tests: [test(true, "SUBMITTED")] })).toBe(false);
+    expect(isAssessmentOpenFor({ status: "TESTING", closedAt: new Date() })).toBe(false);
   });
 });
 

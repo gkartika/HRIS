@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { TestProtection } from "@/components/test-protection";
 import { t } from "@/lib/i18n/id";
@@ -108,6 +109,10 @@ export function AssessmentRunner({ access, state }: { access: AssessmentAccess; 
       <div className="rounded-xl border border-[#e6dcea] bg-white p-6">
         <h1 className="text-lg font-bold text-[#231a28]">{phase === "timeup" ? t("assessment.candidate.timeUpTitle") : t("assessment.candidate.doneTitle")}</h1>
         <p className="mt-2 text-sm text-[#6a5f72]">{phase === "timeup" ? t("assessment.candidate.timeUpBody") : state.closingText}</p>
+        {/* The test list opens the applicant's other tests, or thanks them when there are none. */}
+        <Link href={"token" in access ? `/cbp-recruitment/tes/${access.token}` : `/internal-jobs/tes/${access.candidateId}`} className={`${btnPrimary} mt-4 inline-block`}>
+          Lanjut
+        </Link>
       </div>
     );
   }

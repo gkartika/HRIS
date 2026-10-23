@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
+import { printFilterText, shiftPrintLabel, weekPrintRange } from "@/lib/shift-print";
 import { saveShiftScheduleWeek, type ShiftChange } from "./actions";
 
 export type SchedulerShift = "SHIFT_2" | "SHIFT_3" | "NON_SHIFT";
@@ -36,7 +38,9 @@ export function ShiftScheduler({
   weekTag,
   prevWeekIso,
   nextWeekIso,
+  printedBy,
 }: {
+  printedBy: string;
   employees: SchedulerEmployee[];
   saved: Draft;
   prevSaved: Draft;
@@ -57,6 +61,7 @@ export function ShiftScheduler({
   const [departmentId, setDepartmentId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const lastIndex = useRef<number | null>(null);
 
   const departments = useMemo(() => {
@@ -106,6 +111,17 @@ export function ShiftScheduler({
   const allShownSelected = rows.length > 0 && rows.every((e) => selected.has(e.id));
   const someShownSelected = rows.some((e) => selected.has(e.id));
   const hiddenSelected = Array.from(selected).filter((id) => !rows.some((e) => e.id === id)).length;
+
+  // Prints the rows as they are shown now (week, shift button, department, search). What is on paper must be
+  // what is saved, so unsaved changes have to be saved first.
+  function printSheet() {
+    if (dirtyIds.length > 0) {
+      setMessage({ tone: "error", text: "Simpan jadwal dulu sebelum mencetak, supaya yang tercetak sama dengan yang tersimpan." });
+      return;
+    }
+    flushSync(() => setPrintedAt(new Date()));
+    window.print();
+  }
 
   function toggleRow(id: string, index: number, checked: boolean, shiftKey: boolean) {
     // Read the anchor now: the updater below runs later, after lastIndex has
@@ -239,6 +255,13 @@ export function ShiftScheduler({
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-brand-soft"
         >
           Salin dari minggu lalu
+        </button>
+        <button
+          type="button"
+          onClick={printSheet}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-brand-soft"
+        >
+          Cetak
         </button>
       </div>
 
@@ -456,6 +479,56 @@ export function ShiftScheduler({
           </button>
         </div>
       )}
+
+      {/* The paper: not on screen, and the only thing printed (the app around it is hidden while printing). */}
+      <style>{`@media print {
+        @page { size: A4 portrait; margin: 12mm; }
+        body * { visibility: hidden !important; }
+        #shift-print-sheet, #shift-print-sheet * { visibility: visible !important; }
+        #shift-print-sheet { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
+        #shift-print-sheet thead { display: table-header-group; }
+        #shift-print-sheet tr { break-inside: avoid; }
+      }`}</style>
+      <div id="shift-print-sheet" className="hidden print:block">
+        <p className="text-[10px] uppercase tracking-widest text-slate-600">PT Cahaya Bukit Perunggu</p>
+        <h1 className="text-xl font-bold">JADWAL SHIFT</h1>
+        <p className="text-base font-semibold">{weekPrintRange(weekStartIso)}</p>
+        <p className="mt-1 text-sm">
+          {printFilterText({
+            filter,
+            departmentName: departmentId ? (departments.find((d) => d.id === departmentId)?.name ?? null) : null,
+            groupName: groupId ? (groups.find((g) => g.id === groupId)?.name ?? null) : null,
+            search: q,
+          })}{" "}
+          · <b>{rows.length} karyawan</b>
+        </p>
+        <table className="mt-4 w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="w-8 border border-slate-500 px-2 py-1.5">No</th>
+              <th className="border border-slate-500 px-2 py-1.5 text-left">Nama</th>
+              <th className="border border-slate-500 px-2 py-1.5 text-left">No. Karyawan</th>
+              <th className="border border-slate-500 px-2 py-1.5 text-left">Departemen</th>
+              <th className="border border-slate-500 px-2 py-1.5">Shift</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((e, i) => (
+              <tr key={e.id}>
+                <td className="border border-slate-500 px-2 py-1.5 text-center">{i + 1}</td>
+                <td className="border border-slate-500 px-2 py-1.5 font-medium">{e.name}</td>
+                <td className="border border-slate-500 px-2 py-1.5">{e.employeeNumber}</td>
+                <td className="border border-slate-500 px-2 py-1.5">{e.departmentName}</td>
+                <td className="border border-slate-500 px-2 py-1.5 text-center font-semibold">{shiftPrintLabel(shiftOf(e.id))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-3 text-[10px] text-slate-600">
+          Dicetak oleh {printedBy}
+          {printedAt && `, ${new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", dateStyle: "medium", timeStyle: "short" }).format(printedAt)}`}.
+        </p>
+      </div>
     </div>
   );
 }

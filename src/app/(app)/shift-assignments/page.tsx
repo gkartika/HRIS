@@ -118,6 +118,7 @@ export default async function ShiftAssignmentsPage({ searchParams }: { searchPar
 
       <ShiftScheduler
         key={isoOf(weekStartDate)}
+        printedBy={session.user.name ?? ""}
         employees={employees}
         saved={toMap(thisWeek)}
         prevSaved={toMap(prevWeek)}

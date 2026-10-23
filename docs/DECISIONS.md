@@ -2812,3 +2812,9 @@ Owner supplied the master data (folder GPT-module: question bank JSON, HR rubric
 - **Vacancy readiness** is now "an active Tes Situasi Kerja rubric exists" (`PlanContext.assessment`), not "Cultural Fit has questions". Beranda Rekrutmen shows one warning (not one per vacancy) while no rubric is active. The test ticks on a vacancy and the job-title table show "Tes Situasi Kerja (wajib)" in place of Cultural Fit, and the apply page lists it first with its minutes.
 - **Dashboard.** For the stage and "passed" date, Tes Situasi Kerja counts as a test that is passed once finished, so applicants of a vacancy with no other tests still move from "applied" to "tests passed".
 - Removed `assessmentEntryState` (the separate card under the test list). `isAssessmentOpenFor` no longer looks at a gate test. Text on the closed page changed accordingly.
+
+### Cetak on Jadwal Shift (owner request 2026-10-23)
+- One **Cetak** button on the Jadwal Shift screen, next to "Salin dari minggu lalu". It prints what is on screen: the selected week, the shift button (Semua / Belum diatur / Shift 2 / Shift 3 / Libur), department, group and search. Shift 2 chosen = only the Shift 2 table; Semua = everyone with a Shift column.
+- The paper has the company name, "JADWAL SHIFT", the week as dates ("Minggu 18 Okt 2026 – Sabtu 24 Okt 2026"; the company week is Sunday to Saturday), what it was limited to and the head count, then No / Nama / No. Karyawan / Departemen / Shift, and who printed it and when. No Jabatan or Grup column (owner).
+- **Unsaved changes:** Cetak asks to save first (owner accepted the recommendation), so paper always equals what is saved. Someone with no stored change prints as Shift 1.
+- Browser print only (same hide-everything-but-the-sheet approach as the QR labels); no new page, no database change. Access is unchanged: Admin SDM sees everyone, a Level 3 head only their departments. Wording in `src/lib/shift-print.ts` (tested).

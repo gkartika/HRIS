@@ -367,6 +367,17 @@ describe("when the assessment opens for an applicant", () => {
   });
 });
 
+describe("the score in the applicant table", () => {
+  it("shows only the score, or why there is none", async () => {
+    const { assessmentSummary } = await import("./recruitment-assessment");
+    expect(assessmentSummary({ status: "SUBMITTED", totalScore: -3 })).toBe("Situasi Kerja -3");
+    expect(assessmentSummary({ status: "SUBMITTED", totalScore: 0 })).toBe("Situasi Kerja 0");
+    expect(assessmentSummary({ status: "SUBMITTED", totalScore: null })).toBe("Situasi Kerja: belum lengkap");
+    expect(assessmentSummary({ status: "IN_PROGRESS", totalScore: null })).toBe("Situasi Kerja: berjalan");
+    expect(assessmentSummary(null)).toBe("Situasi Kerja: belum");
+  });
+});
+
 describe("the 30-minute limit", () => {
   const started = new Date("2026-10-22T08:00:00Z");
   const at = (minutes: number, seconds = 0) => new Date(started.getTime() + (minutes * 60 + seconds) * 1000);

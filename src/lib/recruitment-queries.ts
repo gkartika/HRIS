@@ -43,6 +43,7 @@ const candidateRowSelect = {
       _count: { select: { reviewers: true } },
     },
   },
+  assessment: { select: { status: true, totalScore: true } },
   interview: { select: { id: true, scheduledAt: true, interviewers: { select: { submittedAt: true } } } },
   offer: { select: { sentAt: true, response: true } },
   movementRequest: { select: { id: true, requestNumber: true, status: true } },
@@ -60,7 +61,7 @@ export async function listCandidates(where: Prisma.RecruitmentCandidateWhereInpu
   });
 }
 
-export function progressOf(c: CandidateRow): CandidateProgress {
+export function progressOf(c: Omit<CandidateRow, "assessment">): CandidateProgress {
   const interviewers = c.interview?.interviewers ?? [];
   return {
     status: c.status,

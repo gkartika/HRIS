@@ -4,6 +4,7 @@ import { formatDateMedium } from "@/lib/format";
 import { formatMobile } from "@/lib/mobile-number";
 import { CANDIDATE_STATUS_LABEL, CANDIDATE_STATUS_TONE } from "@/lib/recruitment-candidates";
 import { nextStepOf, testSummary, type CandidateRow } from "@/lib/recruitment-queries";
+import { assessmentSummary } from "@/lib/recruitment-assessment";
 
 // The applicant table used by a request's own pipeline and by the Pelamar page.
 export function CandidateTable({ rows, showRequest }: { rows: CandidateRow[]; showRequest: boolean }) {
@@ -46,7 +47,10 @@ export function CandidateTable({ rows, showRequest }: { rows: CandidateRow[]; sh
                 <td className="px-3 py-3">
                   <StatusChip tone={CANDIDATE_STATUS_TONE[c.status]}>{CANDIDATE_STATUS_LABEL[c.status]}</StatusChip>
                 </td>
-                <td className="max-w-[260px] px-3 py-3 text-xs text-slate-600">{testSummary(c)}</td>
+                <td className="max-w-[260px] px-3 py-3 text-xs text-slate-600">
+                  <div className="font-medium text-slate-800">{assessmentSummary(c.assessment)}</div>
+                  {c.tests.length > 0 && <div>{testSummary(c)}</div>}
+                </td>
                 <td className="px-3 py-3 text-xs">
                   <span className={next.needsAction ? "font-medium text-amber-700" : "text-slate-500"}>{next.label}</span>
                 </td>

@@ -353,6 +353,18 @@ export function isAssessmentOpenFor(candidate: { status: string; closedAt: Date 
   return candidate.closedAt === null && !CLOSED_CANDIDATE_STATUSES.includes(candidate.status);
 }
 
+// ---------- the applicant table ----------
+
+/**
+ * Tes Situasi Kerja in the applicant table: only the score (0 down to a minus number), no judgement. It is not part
+ * of the test summary that interviewers also see.
+ */
+export function assessmentSummary(a: { status: "IN_PROGRESS" | "SUBMITTED"; totalScore: number | null } | null): string {
+  if (!a) return "Situasi Kerja: belum";
+  if (a.status === "IN_PROGRESS") return "Situasi Kerja: berjalan";
+  return a.totalScore === null ? "Situasi Kerja: belum lengkap" : `Situasi Kerja ${a.totalScore}`;
+}
+
 // ---------- time limit ----------
 
 // The limit is set in the app per assessment (Admin Rekrutmen); this is the starting value and the allowed range.

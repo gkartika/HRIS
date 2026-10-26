@@ -189,19 +189,27 @@ export async function createCandidate(input: NewCandidateInput): Promise<{ id: s
     : [];
   const planned = plannedTests(ctx, { jobId: input.jobId, testsCustomized: input.testsCustomized, testTypeIds: input.testTypeIds }, new Map(handedOut.map((g) => [g.testTypeId, g._count._all])));
   const rawToken = input.source === "EXTERNAL" ? randomBytes(24).toString("base64url") : null;
-  return prisma.$transaction(async (tx) => {
-    const storeFile = async (upload: { name: string; type: string; data: Buffer } | null | undefined, prefix: string): Promise<string | null> => {
-      if (!upload) return null;
-      const storageKey = randomStorageKey(prefix, fileExtension(upload.name) || ".bin");
-      await tx.fileBlob.create({ data: { storageKey, data: new Uint8Array(upload.data) } });
-      const file = await tx.recruitmentFile.create({
-        data: { storageKey, fileName: upload.name.slice(0, 150), mimeType: upload.type || "application/octet-stream", sizeBytes: upload.data.length },
-      });
-      return file.id;
-    };
+  // The two uploads (up to 2 MB each) are the slow part, so they are stored first on their own, NOT inside a
+  // transaction: an interactive transaction times out after 5 seconds, which a slow connection easily passes
+  // with two files, and the applicant then saw "page cannot be loaded". The applicant row with its tests is a
+  // single nested create (atomic by itself). If it fails, the stored files are removed again.
+  const storedKeys: string[] = [];
+  const storedFileIds: string[] = [];
+  const storeFile = async (upload: { name: string; type: string; data: Buffer } | null | undefined, prefix: string): Promise<string | null> => {
+    if (!upload) return null;
+    const storageKey = randomStorageKey(prefix, fileExtension(upload.name) || ".bin");
+    await prisma.fileBlob.create({ data: { storageKey, data: new Uint8Array(upload.data) } });
+    storedKeys.push(storageKey);
+    const file = await prisma.recruitmentFile.create({
+      data: { storageKey, fileName: upload.name.slice(0, 150), mimeType: upload.type || "application/octet-stream", sizeBytes: upload.data.length },
+    });
+    storedFileIds.push(file.id);
+    return file.id;
+  };
+  try {
     const cvFileId = await storeFile(input.cv, "recruitment-cv");
     const supportingFileId = await storeFile(input.supporting, "recruitment-doc");
-    const candidate = await tx.recruitmentCandidate.create({
+    const candidate = await prisma.recruitmentCandidate.create({
       data: {
         requestId: input.requestId,
         source: input.source,
@@ -216,7 +224,12 @@ export async function createCandidate(input: NewCandidateInput): Promise<{ id: s
       },
     });
     return { id: candidate.id, rawToken };
-  });
+  } catch (error) {
+    // Best effort: leave no orphan files behind, then let the caller report the failure.
+    await prisma.recruitmentFile.deleteMany({ where: { id: { in: storedFileIds } } }).catch(() => undefined);
+    await prisma.fileBlob.deleteMany({ where: { storageKey: { in: storedKeys } } }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function findCandidateByToken(rawToken: string) {

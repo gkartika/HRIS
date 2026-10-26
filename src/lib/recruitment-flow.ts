@@ -362,7 +362,8 @@ export async function createOffer(args: {
         companySignedByAccountId: args.accountId,
       },
     });
-  });
+    // The offer letter is up to 4 MB: on a slow connection the default 5 s transaction limit is not enough.
+  }, { timeout: 30000, maxWait: 10000 });
   return { ok: true };
 }
 

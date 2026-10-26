@@ -64,18 +64,25 @@ export async function applyExternalAction(
   const block = reapplyBlock(prior, request.id, new Date(), settings.retakeDays);
   if (block.blocked) return block.message;
 
-  const created = await createCandidate({
-    requestId: request.id,
-    jobId: request.jobId,
-    testsCustomized: request.testsCustomized,
-    testTypeIds: request.testTypeIds,
-    source: "EXTERNAL",
-    fullName,
-    email,
-    mobileNumber: normalizeMobile(mobile),
-    cv,
-    supporting,
-  });
+  let created: Awaited<ReturnType<typeof createCandidate>>;
+  try {
+    created = await createCandidate({
+      requestId: request.id,
+      jobId: request.jobId,
+      testsCustomized: request.testsCustomized,
+      testTypeIds: request.testTypeIds,
+      source: "EXTERNAL",
+      fullName,
+      email,
+      mobileNumber: normalizeMobile(mobile),
+      cv,
+      supporting,
+    });
+  } catch (error) {
+    // Say so on the form (their data stays filled in) instead of an error page.
+    console.error("applyExternalAction: createCandidate failed", error);
+    return "Lamaran belum bisa dikirim karena gangguan koneksi. Silakan tekan Kirim sekali lagi. Data Anda tidak hilang.";
+  }
   await logAudit({
     actorAccountId: null,
     action: "CREATE",

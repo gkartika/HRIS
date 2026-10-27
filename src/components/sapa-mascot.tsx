@@ -75,12 +75,8 @@ export function SapaMascot({ mood = "normal", className }: { mood?: MascotMood; 
   );
 }
 
-// The small speech-bubble mark next to the company name.
+// The SAPA app icon (check mark and the word SAPA) next to the company name.
 export function SapaMark({ size = 40 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 46 46" aria-hidden="true">
-      <path d="M8 4h30a6 6 0 0 1 6 6v20a6 6 0 0 1-6 6H22l-9 8v-8H8a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z" fill="#fdef0a" stroke={PURPLE} strokeWidth="2" />
-      <path d="M11 27 L23 14 L35 27" fill="none" stroke={PURPLE} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/pwa/icon-192.png" alt="" width={size} height={size} className="block shrink-0" />;
 }

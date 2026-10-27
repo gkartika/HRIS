@@ -2831,3 +2831,6 @@ Owner supplied the master data (folder GPT-module: question bank JSON, HR rubric
 - The icon of the installed app (phone and computer), the browser tab icon and the iPhone icon are no longer the company logo or the helmet mascot. Owner picked option D2: a white circle with a purple check mark and the word SAPA in white on the SAPA purple.
 - Files: `public/pwa/icon-192.png` and `icon-512.png` (rounded, for computers), `public/pwa/maskable-512.png` (artwork at 74 percent so Android's round or squircle crop never cuts the word), `src/app/apple-icon.png` (opaque square, the iPhone rounds it), `src/app/icon.png` and `src/app/favicon.ico` (check mark only, because the word cannot be read at 16 to 48 pixels). The offline cache was renamed to v3 so installed apps drop the old icon.
 - The login page mascot and the company logo on the login and recruitment pages are not part of this change.
+
+### Login page: new SAPA icon next to the company name (owner choice 2026-10-27)
+- The small yellow speech-bubble mark at the top left of the purple login panel is replaced by the new app icon (check mark and the word SAPA, `/pwa/icon-192.png`). The mascot stays. The CBP logo above the form stays too (owner picked option 3). Same on the sign-in help pages that use the same panel.

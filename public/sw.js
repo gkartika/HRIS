@@ -2,7 +2,7 @@
 // friendly "no connection" page when a page cannot be loaded. It never stores
 // pages, API responses or employee data, so nothing sensitive is kept on the
 // device and every screen always comes live from the server.
-const CACHE = "sapa-offline-v2";
+const CACHE = "sapa-offline-v3";
 const OFFLINE_URL = "/offline.html";
 const ICON_URL = "/pwa/icon-192.png";
 const OFFLINE_ASSETS = [OFFLINE_URL, ICON_URL];

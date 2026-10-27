@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "SAPA — PT Cahaya Bukit Perunggu",
   description: "SAPA: Sistem Administrasi dan Pelayanan kAryawan",
-  // Icons come from src/app/favicon.ico, icon.png and apple-icon.png (company logo mark).
+  // Icons come from src/app/favicon.ico, icon.png and apple-icon.png (SAPA check mark; the installed app icons are in public/pwa).
   appleWebApp: { title: "SAPA" },
 };
 

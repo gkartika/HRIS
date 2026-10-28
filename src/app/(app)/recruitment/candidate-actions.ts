@@ -114,7 +114,7 @@ export async function reviewEssayAction(testId: string, _prev: Result, formData:
 
 // ---------- interview ----------
 
-export type ScheduleResult = { error?: string; whatsappUrl?: string; emailedCandidate?: boolean; emailedInterviewers?: number };
+export type ScheduleResult = { error?: string; whatsappUrl?: string; emailedCandidate?: boolean; emailedInterviewers?: number; applicantEmailOff?: boolean };
 
 export async function scheduleInterviewAction(candidateId: string, _prev: ScheduleResult | undefined, formData: FormData): Promise<ScheduleResult> {
   const auth = await hrAdminOr();
@@ -153,7 +153,7 @@ export async function scheduleInterviewAction(candidateId: string, _prev: Schedu
       whatsappUrl = whatsappLink(candidate.mobileNumber, fillTemplate(settings.invitationWaTemplate, vars));
     }
   }
-  return { whatsappUrl, emailedCandidate: res.emailedCandidate, emailedInterviewers: res.emailedInterviewers };
+  return { whatsappUrl, emailedCandidate: res.emailedCandidate, emailedInterviewers: res.emailedInterviewers, applicantEmailOff: res.applicantEmailOff };
 }
 
 export async function submitInterviewFormAction(interviewerId: string, _prev: Result, formData: FormData): Promise<Result> {
@@ -230,7 +230,7 @@ export async function uploadOfferAction(candidateId: string, _prev: Result, form
   if (requestId) refresh(requestId, candidateId);
 }
 
-export type SendOfferResult = { error?: string; url?: string; emailed?: boolean; whatsappUrl?: string };
+export type SendOfferResult = { error?: string; url?: string; emailed?: boolean; applicantEmailOff?: boolean; whatsappUrl?: string };
 
 export async function sendOfferAction(candidateId: string): Promise<SendOfferResult> {
   const auth = await hrAdminOr();
@@ -242,7 +242,7 @@ export async function sendOfferAction(candidateId: string): Promise<SendOfferRes
   const whatsappUrl = res.mobileNumber
     ? whatsappLink(res.mobileNumber, `Halo ${res.candidateName}, ini HR PT CBP. Surat penawaran kerja Anda ada di tautan ini: ${res.url}`)
     : undefined;
-  return { url: res.url, emailed: res.emailed, whatsappUrl };
+  return { url: res.url, emailed: res.emailed, applicantEmailOff: res.applicantEmailOff, whatsappUrl };
 }
 
 export async function recordOfferResponseAction(candidateId: string, response: "ACCEPTED" | "DECLINED"): Promise<Result> {

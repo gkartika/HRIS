@@ -132,7 +132,6 @@ export default async function MovementListPage({
         currentPosition: { include: { job: true, orgUnit: true } },
         proposedPosition: { include: { job: true } },
         proposedJob: { select: { jobTitle: true } },
-        proposedOrgUnit: { select: { unitName: true } },
         // where it came from: the applicant's request, or the request a Mutasi fills
         recruitmentCandidate: { select: { request: { select: { id: true, requestNumber: true } } } },
         recruitmentRequest: { select: { id: true, requestNumber: true } },
@@ -343,9 +342,9 @@ export default async function MovementListPage({
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {r.movementType === "ADD_POSITION"
-                      ? `${r.currentPosition.job.jobTitle} + ${r.proposedJob?.jobTitle ?? "—"} (${r.proposedOrgUnit?.unitName ?? "—"})`
+                      ? `${r.currentPosition.job.jobTitle} + ${r.proposedJob?.jobTitle ?? "—"}`
                       : r.proposedJob && r.status !== "IMPLEMENTED"
-                        ? `${r.currentPosition.job.jobTitle} → ${r.proposedJob.jobTitle} (${r.proposedOrgUnit?.unitName ?? "—"})`
+                        ? `${r.currentPosition.job.jobTitle} → ${r.proposedJob.jobTitle}`
                         : `${r.currentPosition.job.jobTitle} → ${r.proposedPosition.job.jobTitle}`}
                   </td>
                   <td className="px-4 py-3">

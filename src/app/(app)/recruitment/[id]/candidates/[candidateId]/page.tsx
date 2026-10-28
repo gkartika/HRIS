@@ -90,10 +90,8 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
           proposedEffectiveDate: true,
           employeeId: true,
           proposedJobId: true,
-          proposedOrgUnitId: true,
           proposedJobLevel: true,
           proposedJob: { select: { jobTitle: true } },
-          proposedOrgUnit: { select: { unitName: true } },
           proposedPosition: { select: { positionCode: true, job: { select: { jobTitle: true } }, orgUnit: { select: { unitName: true } } } },
         },
       },
@@ -128,12 +126,10 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
   const movement = candidate.movementRequest;
   // an approved move that named a Jabatan and a unit: the seat is picked when it is carried out
   const movementSeats =
-    movement?.status === "APPROVED" && movement.proposedJobId && movement.proposedOrgUnitId
+    movement?.status === "APPROVED" && movement.proposedJobId
       ? await listMovementSeatChoices({
           jobId: movement.proposedJobId,
-          orgUnitId: movement.proposedOrgUnitId,
           jobTitle: movement.proposedJob?.jobTitle ?? "",
-          unitName: movement.proposedOrgUnit?.unitName ?? "",
           jobLevel: movement.proposedJobLevel,
           employeeId: movement.employeeId,
           addPosition: false,
@@ -483,7 +479,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
               <StatusChip tone="bg-slate-100 text-slate-600">{t(`movementStatus.${movement.status}`)}</StatusChip>
               <span className="ml-2 text-slate-600">
                 {movement.proposedJob && movement.status !== "IMPLEMENTED"
-                  ? `pindah ke ${movement.proposedJob.jobTitle} di ${movement.proposedOrgUnit?.unitName ?? "—"}${movement.proposedJobLevel ? `, level ${movement.proposedJobLevel}` : ""}, mulai ${formatDateLong(movement.proposedEffectiveDate)}`
+                  ? `pindah ke ${movement.proposedJob.jobTitle}${movement.proposedJobLevel ? `, level ${movement.proposedJobLevel}` : ""}, mulai ${formatDateLong(movement.proposedEffectiveDate)}`
                   : `pindah ke ${movement.proposedPosition.job.jobTitle} (${movement.proposedPosition.positionCode}), ${movement.proposedPosition.orgUnit.unitName}, mulai ${formatDateLong(movement.proposedEffectiveDate)}`}
               </span>
             </p>

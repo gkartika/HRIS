@@ -30,7 +30,6 @@ export function SubmitMovementForm({
   defaultEmployeeId,
   levels,
   jobs,
-  units,
   requesterCandidates,
   currentEmployeeId,
   isHrAdmin,
@@ -41,7 +40,6 @@ export function SubmitMovementForm({
   defaultEmployeeId: string;
   levels: string[];
   jobs: { id: string; jobTitle: string }[];
-  units: { id: string; unitName: string; unitType: string }[];
   requesterCandidates: CandidateOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
@@ -206,18 +204,6 @@ export function SubmitMovementForm({
               </select>
             )}
             <p className="mt-1 text-xs text-slate-500">{fixedJob ? "Jabatan mengikuti lowongan atau permintaan tenaga kerja yang bersangkutan." : t("movement.proposedJobHint")}</p>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedUnit")}</label>
-            <select name="proposedOrgUnitId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              <option value="">— Pilih —</option>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.unitName}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-slate-500">{t("movement.proposedUnitHint")}</p>
           </div>
           {needsLevel && (
             <div>

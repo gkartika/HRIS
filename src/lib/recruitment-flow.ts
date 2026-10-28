@@ -5,6 +5,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/db";
 import { hashToken } from "@/lib/account-tokens";
 import { appBaseUrl, sendMail } from "@/lib/mailer";
+import { APPLICANT_EMAILS_ENABLED } from "@/lib/applicant-email";
 import { randomStorageKey } from "@/lib/file-storage";
 import { nextStatusAfterFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
 import { HELD_MESSAGE } from "@/lib/recruitment-request-changes";
@@ -48,6 +49,13 @@ export async function trySend(to: string | null | undefined, subject: string, te
     console.error("[recruitment] email failed", error);
     return false;
   }
+}
+
+// The only way recruitment emails an applicant. While applicant email is off (applicant-email.ts) nothing is sent and the
+// caller gets false, so the screen offers the WhatsApp message and the link instead.
+export async function trySendToApplicant(to: string | null | undefined, subject: string, text: string, link?: { url: string; label: string }): Promise<boolean> {
+  if (!APPLICANT_EMAILS_ENABLED) return false;
+  return trySend(to, subject, text, link);
 }
 
 export async function emailOfEmployee(employeeId: string): Promise<string | null> {
@@ -166,7 +174,7 @@ export async function scheduleInterview(args: {
   location: string;
   employeeIds: string[];
   accountId: string;
-}): Promise<EngineResult & { interviewId?: string; emailedCandidate?: boolean; emailedInterviewers?: number }> {
+}): Promise<EngineResult & { interviewId?: string; emailedCandidate?: boolean; emailedInterviewers?: number; applicantEmailOff?: boolean }> {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: args.candidateId },
     include: {
@@ -221,9 +229,9 @@ export async function scheduleInterview(args: {
     );
     if (ok) emailedInterviewers++;
   }
-  const emailedCandidate = await trySend(candidate.email, "Undangan interview PT CBP", fillTemplate(settings.invitationEmailTemplate, vars));
+  const emailedCandidate = await trySendToApplicant(candidate.email, "Undangan interview PT CBP", fillTemplate(settings.invitationEmailTemplate, vars));
   if (emailedCandidate) await prisma.recruitmentInterview.update({ where: { id: interviewId }, data: { invitationSentAt: new Date() } });
-  return { ok: true, interviewId, emailedCandidate, emailedInterviewers };
+  return { ok: true, interviewId, emailedCandidate, emailedInterviewers, applicantEmailOff: !APPLICANT_EMAILS_ENABLED };
 }
 
 export async function submitInterviewerForm(args: {
@@ -370,7 +378,7 @@ export async function createOffer(args: {
 // Makes a fresh one-time link (the old one stops working) and emails it. The link is
 // returned too, so HR Admin can copy it or send it by WhatsApp when email fails.
 export async function sendOfferLink(candidateId: string): Promise<
-  { ok: true; url: string; emailed: boolean; candidateName: string; mobileNumber: string | null } | { ok: false; error: string }
+  { ok: true; url: string; emailed: boolean; applicantEmailOff: boolean; candidateName: string; mobileNumber: string | null } | { ok: false; error: string }
 > {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { id: candidateId },
@@ -385,13 +393,13 @@ export async function sendOfferLink(candidateId: string): Promise<
     data: { tokenHash: hashToken(raw), tokenExpiresAt: new Date(Date.now() + OFFER_VALID_DAYS * DAY_MS), sentAt: new Date() },
   });
   const url = `${appBaseUrl()}/cbp-recruitment/offer/${raw}`;
-  const emailed = await trySend(
+  const emailed = await trySendToApplicant(
     candidate.email,
     "Surat penawaran kerja PT CBP",
     `Yth. ${candidate.fullName},\n\nSelamat, Anda kami tawarkan posisi ${candidate.request.job?.jobTitle ?? "yang dilamar"} di PT Cahaya Bukit Perunggu. Silakan buka tautan di bawah untuk membaca surat penawaran, lalu menerima atau menolaknya.\n\nTautan berlaku ${OFFER_VALID_DAYS} hari dan hanya untuk Anda.`,
     { url, label: "Buka surat penawaran" }
   );
-  return { ok: true, url, emailed, candidateName: candidate.fullName, mobileNumber: candidate.mobileNumber };
+  return { ok: true, url, emailed, applicantEmailOff: !APPLICANT_EMAILS_ENABLED, candidateName: candidate.fullName, mobileNumber: candidate.mobileNumber };
 }
 
 export async function findOfferByToken(rawToken: string) {

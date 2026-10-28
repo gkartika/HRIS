@@ -81,10 +81,8 @@ export default async function RecruitmentDetailPage({
           employee: { select: { fullLegalName: true } },
           proposedPosition: { select: { positionCode: true } },
           proposedJobId: true,
-          proposedOrgUnitId: true,
           proposedJobLevel: true,
           proposedJob: { select: { jobTitle: true } },
-          proposedOrgUnit: { select: { unitName: true } },
         },
       },
     },
@@ -165,14 +163,12 @@ export default async function RecruitmentDetailPage({
   const mutationSeats = new Map<string, SeatChoice[]>();
   if (manageRecruitment) {
     for (const m of request.movementRequests) {
-      if (m.status === "APPROVED" && m.proposedJobId && m.proposedOrgUnitId) {
+      if (m.status === "APPROVED" && m.proposedJobId) {
         mutationSeats.set(
           m.id,
           await listMovementSeatChoices({
             jobId: m.proposedJobId,
-            orgUnitId: m.proposedOrgUnitId,
             jobTitle: m.proposedJob?.jobTitle ?? "",
-            unitName: m.proposedOrgUnit?.unitName ?? "",
             jobLevel: m.proposedJobLevel,
             employeeId: m.employeeId,
             addPosition: false,
@@ -574,7 +570,7 @@ export default async function RecruitmentDetailPage({
                       </span>
                     )}
                     <span className="text-xs text-slate-500">
-                      {m.proposedJob && m.status !== "IMPLEMENTED" ? `${m.proposedJob.jobTitle} (${m.proposedOrgUnit?.unitName ?? "—"})` : m.proposedPosition.positionCode} · {t(`movementStatus.${m.status}`)}
+                      {m.proposedJob && m.status !== "IMPLEMENTED" ? m.proposedJob.jobTitle : m.proposedPosition.positionCode} · {t(`movementStatus.${m.status}`)}
                     </span>
                   </div>
                   {manageRecruitment && m.status === "APPROVED" && (

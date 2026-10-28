@@ -48,7 +48,6 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
       currentPosition: { include: { job: true, orgUnit: true } },
       proposedPosition: { include: { job: true, orgUnit: true } },
       proposedJob: { select: { id: true, jobTitle: true } },
-      proposedOrgUnit: { select: { id: true, unitName: true } },
       requesterEmployee: true,
       requesterPosition: { include: { job: true } },
       submittedByAccount: true,
@@ -124,12 +123,10 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
   // A Mutasi or Tambah Posisi that named a Jabatan and a unit: the seat is picked when it is carried out.
   const isJobBased = !!request.proposedJobId && !(request.movementType !== "ADD_POSITION" && request.status === "IMPLEMENTED");
   const seatChoices =
-    canExecute && request.proposedJobId && request.proposedOrgUnitId
+    canExecute && request.proposedJobId
       ? await listMovementSeatChoices({
           jobId: request.proposedJobId,
-          orgUnitId: request.proposedOrgUnitId,
           jobTitle: request.proposedJob?.jobTitle ?? "",
-          unitName: request.proposedOrgUnit?.unitName ?? "",
           jobLevel: request.proposedJobLevel,
           employeeId: request.employeeId,
           addPosition: isAddPosition,
@@ -218,9 +215,9 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
               <p className="text-xs text-slate-500">{t("movement.proposedJob")}</p>
               <p className="text-sm text-slate-900">{request.proposedJob?.jobTitle ?? "—"}</p>
               <p className="text-xs text-slate-400">
-                {t("movement.proposedUnit")}: {request.proposedOrgUnit?.unitName ?? "—"}
-                {request.proposedJobLevel && ` · level yang dituju: ${request.proposedJobLevel}`}
-                {request.status !== "IMPLEMENTED" && " · posisi dipilih saat dilaksanakan"}
+                {request.proposedJobLevel ? `Level yang dituju: ${request.proposedJobLevel}` : null}
+                {request.proposedJobLevel && request.status !== "IMPLEMENTED" ? " · " : ""}
+                {request.status !== "IMPLEMENTED" && "posisi dipilih saat dilaksanakan"}
               </p>
             </div>
           ) : (

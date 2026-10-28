@@ -384,7 +384,11 @@ export function ScheduleInterviewForm({
       {result && !result.error && (
         <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
           Jadwal tersimpan.{" "}
-          {result.emailedCandidate ? "Email undangan terkirim ke pelamar." : "Email ke pelamar tidak terkirim, kirim lewat WhatsApp."}{" "}
+          {result.emailedCandidate
+            ? "Email undangan terkirim ke pelamar."
+            : result.applicantEmailOff
+              ? "Email ke pelamar sedang dinonaktifkan, jadi tidak dikirim. Kirim undangan lewat WhatsApp."
+              : "Email ke pelamar tidak terkirim, kirim lewat WhatsApp."}{" "}
           {result.emailedInterviewers ? `${result.emailedInterviewers} pewawancara diberi tahu lewat email.` : "Pewawancara belum menerima email, beri tahu langsung."}
           {result.whatsappUrl && (
             <div className="mt-2">
@@ -566,7 +570,11 @@ export function OfferSendPanel({
       )}
       {result?.url && (
         <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-          {result.emailed ? "Email berisi tautan sudah terkirim ke kandidat." : "Email tidak terkirim. Kirim tautan di bawah lewat WhatsApp."}
+          {result.emailed
+            ? "Email berisi tautan sudah terkirim ke kandidat."
+            : result.applicantEmailOff
+              ? "Email ke kandidat sedang dinonaktifkan, jadi tidak dikirim. Kirim tautan di bawah lewat WhatsApp."
+              : "Email tidak terkirim. Kirim tautan di bawah lewat WhatsApp."}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <code className="min-w-0 truncate rounded bg-white px-2 py-1 font-mono text-xs">{result.url}</code>
             <CopyButton text={result.url} />

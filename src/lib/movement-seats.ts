@@ -1,7 +1,8 @@
-// The seats Admin SDM or Admin Rekrutmen can pick when carrying out a Perubahan Posisi that named a Jabatan and a unit.
-// A Mutasi, Promosi or Demosi moves the employee into a seat nobody holds as their main placement (a holder who is
-// leaving does not block it); Tambah Posisi may also use a seat that already has a holder. Promosi and Demosi also
-// need the level that was named on the request.
+// The seats Admin SDM or Admin Rekrutmen can pick when carrying out a Perubahan Posisi that named a Jabatan.
+// The request names only the standard Jabatan (owner, 2026-10-28): which unit the seat is in is for Admin SDM to work out,
+// so every seat of that Jabatan is offered, in any department, and each shows its own unit. A Mutasi, Promosi or Demosi
+// moves the employee into a seat nobody holds as their main placement (a holder who is leaving does not block it);
+// Tambah Posisi may also use a seat that already has a holder. Promosi and Demosi also need the level named on the request.
 import { prisma } from "@/lib/db";
 import { formatDateMedium } from "@/lib/format";
 
@@ -13,20 +14,19 @@ export interface SeatChoice {
 
 export async function listMovementSeatChoices(input: {
   jobId: string;
-  orgUnitId: string;
   jobTitle: string;
-  unitName: string;
   jobLevel: string | null;
   employeeId: string;
   addPosition: boolean;
 }): Promise<SeatChoice[]> {
   const rows = await prisma.position.findMany({
-    where: { jobId: input.jobId, orgUnitId: input.orgUnitId, archived: false },
-    orderBy: { positionCode: "asc" },
+    where: { jobId: input.jobId, archived: false },
+    orderBy: [{ orgUnit: { unitName: "asc" } }, { positionCode: "asc" }],
     select: {
       id: true,
       positionCode: true,
       jobLevel: true,
+      orgUnit: { select: { unitName: true } },
       assignments: {
         where: { status: { in: ["ACTIVE", "SCHEDULED"] } },
         select: {
@@ -45,7 +45,7 @@ export async function listMovementSeatChoices(input: {
     )
     .map((p) => ({
       id: p.id,
-      label: `${p.positionCode} — ${p.jobLevel} ${input.jobTitle} (${input.unitName})${
+      label: `${p.positionCode} — ${p.jobLevel} ${input.jobTitle} (${p.orgUnit.unitName})${
         p.assignments.length
           ? `, dipegang ${p.assignments
               .map((a) => a.employee.fullLegalName + (a.employee.offboardingCases[0]?.lastWorkingDay ? ` (keluar ${formatDateMedium(a.employee.offboardingCases[0].lastWorkingDay)})` : ""))

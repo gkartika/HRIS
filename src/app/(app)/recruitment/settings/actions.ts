@@ -214,11 +214,13 @@ export async function saveRecruitmentSettingsAction(_prev: Result, formData: For
   const maxInterviewers = num("maxInterviewers", current?.maxInterviewers ?? 4);
   const defaultInterviewers = num("defaultInterviewers", current?.defaultInterviewers ?? 1);
   const retakeDays = num("retakeDays", current?.retakeDays ?? 30);
-  const retentionDays = num("retentionDays", current?.retentionDays ?? 30);
+  const retentionDays = num("retentionDays", current?.retentionDays ?? 180);
   if (!Number.isInteger(maxInterviewers) || maxInterviewers < 1 || maxInterviewers > 8) return "Jumlah pewawancara maksimum harus 1 sampai 8.";
   if (!Number.isInteger(defaultInterviewers) || defaultInterviewers < 1 || defaultInterviewers > maxInterviewers) return "Jumlah pewawancara awal harus 1 sampai jumlah maksimum.";
   if (!Number.isInteger(retakeDays) || retakeDays < 0 || retakeDays > 365) return "Masa tunggu melamar ulang harus 0 sampai 365 hari.";
   if (!Number.isInteger(retentionDays) || retentionDays < 7 || retentionDays > 730) return "Masa simpan data pelamar harus 7 sampai 730 hari.";
+  // Deleting an applicant also deletes the record that makes them wait, so keeping data shorter than the wait would lift it.
+  if (retentionDays < retakeDays) return `Masa simpan data pelamar (${retentionDays} hari) tidak boleh lebih pendek dari masa tunggu melamar ulang (${retakeDays} hari).`;
 
   const emailTemplate = formData.has("invitationEmailTemplate") ? ((formData.get("invitationEmailTemplate") as string) ?? "").trim() : current?.invitationEmailTemplate;
   const waTemplate = formData.has("invitationWaTemplate") ? ((formData.get("invitationWaTemplate") as string) ?? "").trim() : current?.invitationWaTemplate;

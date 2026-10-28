@@ -7,6 +7,7 @@ import { hashToken } from "@/lib/account-tokens";
 import { logAudit } from "@/lib/audit";
 import { randomStorageKey } from "@/lib/file-storage";
 import { canRequestAcceptFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
+import { candidateMilestones } from "@/lib/recruitment-dashboard";
 import {
   ASSESSMENT_NOT_ACTIVE_PROBLEM,
   CLOSED_WITHOUT_HIRE_STATUSES,
@@ -593,13 +594,51 @@ export async function purgeOldCandidates(actorAccountId: string, now: Date = new
   const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
   const candidates = await prisma.recruitmentCandidate.findMany({
     where: purgeWhere(cutoff),
-    select: { id: true, cvFileId: true, supportingFileId: true, offer: { select: { fileId: true } } },
+    select: {
+      id: true,
+      requestId: true,
+      source: true,
+      status: true,
+      createdAt: true,
+      statusChangedAt: true,
+      closedAt: true,
+      decidedAt: true,
+      movementRequestId: true,
+      cvFileId: true,
+      supportingFileId: true,
+      request: { select: { departmentId: true } },
+      tests: { select: { passed: true, submittedAt: true, reviewedAt: true } },
+      assessment: { select: { status: true, submittedAt: true } },
+      interview: { select: { invitationSentAt: true, createdAt: true } },
+      offer: { select: { id: true, fileId: true } },
+    },
   });
   if (candidates.length === 0) return 0;
+  // The dashboard counts these applicants by how far they got. Keep exactly that, without any personal data.
+  const archiveRows = candidates.map((c) => {
+    const m = candidateMilestones({
+      id: c.id,
+      source: c.source,
+      status: c.status,
+      appliedAt: c.createdAt,
+      statusChangedAt: c.statusChangedAt,
+      decidedAt: c.decidedAt,
+      departmentId: c.request.departmentId,
+      interviewInvitedAt: c.interview ? c.interview.invitationSentAt ?? c.interview.createdAt : null,
+      hasOffer: c.offer !== null,
+      hasMovement: c.movementRequestId !== null,
+      tests: [
+        { passed: c.assessment?.status === "SUBMITTED" ? true : null, doneAt: c.assessment?.submittedAt ?? null },
+        ...c.tests.map((t) => ({ passed: t.passed, doneAt: t.reviewedAt ?? t.submittedAt })),
+      ],
+    });
+    return { requestId: c.requestId, source: c.source, status: c.status, stage: m.stage, appliedAt: c.createdAt, passedAt: m.passedAt, invitedAt: m.invitedAt, closedAt: c.closedAt ?? c.statusChangedAt };
+  });
   const fileIds = candidates.flatMap((c) => [c.cvFileId, c.supportingFileId, c.offer?.fileId]).filter((x): x is string => !!x);
   const files = await prisma.recruitmentFile.findMany({ where: { id: { in: fileIds } }, select: { id: true, storageKey: true } });
 
   await prisma.$transaction(async (tx) => {
+    await tx.recruitmentCandidateArchive.createMany({ data: archiveRows });
     await tx.recruitmentCandidate.deleteMany({ where: { id: { in: candidates.map((c) => c.id) } } });
     await tx.recruitmentFile.deleteMany({ where: { id: { in: files.map((f) => f.id) } } });
     await tx.fileBlob.deleteMany({ where: { storageKey: { in: files.map((f) => f.storageKey) } } });
@@ -608,7 +647,7 @@ export async function purgeOldCandidates(actorAccountId: string, now: Date = new
     actorAccountId,
     action: "DELETE",
     datasetName: "RecruitmentCandidate",
-    reason: `Clean-up: ${candidates.length} applicant(s) left without being hired, older than ${retentionDays} days`,
+    reason: `Clean-up: ${candidates.length} applicant(s) left without being hired, older than ${retentionDays} days. An anonymous row per applicant was kept for the dashboard`,
   });
   return candidates.length;
 }

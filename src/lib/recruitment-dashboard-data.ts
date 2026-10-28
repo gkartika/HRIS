@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import type { RequestedJobLevel } from "@/generated/prisma/enums";
-import type { DashboardCandidate, DashboardFilters, DashboardRange, DashboardRequest } from "@/lib/recruitment-dashboard";
+import { archivedToDashboardCandidate, type DashboardCandidate, type DashboardFilters, type DashboardRange, type DashboardRequest } from "@/lib/recruitment-dashboard";
 import { countBySource } from "@/lib/recruitment-source";
 
 // Loads the rows the dashboard needs, already narrowed by department, level and source.
@@ -35,7 +35,21 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
     ...(range.from || range.to ? { linkedAt: { ...(range.from ? { gte: range.from } : {}), ...(range.to ? { lte: range.to } : {}) } } : {}),
   };
 
-  const [candidates, requests, departments, filledRows] = await Promise.all([
+  // Deleted applicants who were never hired: only an anonymous row is left (same filters, same period rule as above).
+  const archiveWhere: Prisma.RecruitmentCandidateArchiveWhereInput = {
+    request: requestWhere,
+    ...(filters.source ? { source: filters.source } : {}),
+    ...(range.from || range.to
+      ? {
+          OR: [
+            { appliedAt: { ...(range.from ? { gte: range.from } : {}), ...(range.to ? { lte: range.to } : {}) } },
+            ...(range.from ? [{ closedAt: { gte: range.from } }] : []),
+          ],
+        }
+      : {}),
+  };
+
+  const [candidates, requests, departments, filledRows, archived] = await Promise.all([
     prisma.recruitmentCandidate.findMany({
       relationLoadStrategy: "join",
       where: candidateWhere,
@@ -67,6 +81,10 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
       select: { id: true, unitName: true },
     }),
     prisma.recruitmentRequestFulfillment.findMany({ where: fulfillmentWhere, select: { source: true } }),
+    prisma.recruitmentCandidateArchive.findMany({
+      where: archiveWhere,
+      select: { id: true, source: true, status: true, stage: true, appliedAt: true, passedAt: true, invitedAt: true, closedAt: true, request: { select: { departmentId: true } } },
+    }),
   ]);
 
   const dashboardCandidates: DashboardCandidate[] = candidates.map((c) => ({
@@ -86,6 +104,9 @@ export async function loadDashboardData(filters: DashboardFilters, range: Dashbo
       ...c.tests.map((t) => ({ passed: t.passed, doneAt: t.reviewedAt ?? t.submittedAt })),
     ],
   }));
+
+  // An archived row is turned back into the same milestones the full applicant would have given.
+  dashboardCandidates.push(...archived.map((a) => archivedToDashboardCandidate({ ...a, departmentId: a.request.departmentId })));
 
   const dashboardRequests: DashboardRequest[] = requests.map((r) => ({
     id: r.id,

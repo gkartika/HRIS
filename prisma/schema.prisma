@@ -1310,8 +1310,30 @@ model Assignment {
 
 // ---------- Phase 2: Recruitment Request (DEC-013, DM-21..23, WF-13..14) ----------
 
+// What is left of a deleted applicant who was never hired: no name, email, phone, CV or answers, only how far they got, so
+// the dashboard figures stay the same after a clean-up.
+model RecruitmentCandidateArchive {
+  id         String                     @id @default(cuid())
+  requestId  String
+  request    RecruitmentRequest         @relation(fields: [requestId], references: [id])
+  source     RecruitmentCandidateSource
+  status     RecruitmentCandidateStatus
+  // How far they got: 1 applied, 2 passed the tests, 3 invited, 4 interviewed, 5 offering or Perubahan Posisi.
+  stage      Int
+  appliedAt  DateTime
+  passedAt   DateTime?
+  invitedAt  DateTime?
+  closedAt   DateTime
+  archivedAt DateTime                   @default(now())
+
+  @@index([requestId])
+  @@index([appliedAt])
+  @@index([closedAt])
+}
+
 model RecruitmentRequest {
   id                       String                   @id @default(cuid())
+  candidateArchive         RecruitmentCandidateArchive[]
   requestNumber            String                   @unique
   requestDate              DateTime
   reasonCode               RecruitmentReasonCode
@@ -3529,7 +3551,7 @@ model RecruitmentSetting {
   defaultInterviewers     Int      @default(1)
   maxInterviewers         Int      @default(4)
   retakeDays              Int      @default(30)
-  retentionDays           Int      @default(30)
+  retentionDays           Int      @default(180)
   invitationEmailTemplate String   @default("Yth. {nama}, kami mengundang Anda interview untuk posisi {posisi} pada {tanggal} pukul {jam} di {lokasi}. Mohon konfirmasi kehadiran dengan membalas pesan ini.")
   invitationWaTemplate    String   @default("Halo {nama}, ini HR PT CBP. Interview untuk posisi {posisi}: {tanggal}, pukul {jam}, di {lokasi}. Mohon balas pesan ini untuk konfirmasi.")
   updatedAt               DateTime @updatedAt

@@ -67,6 +67,37 @@ export function candidateMilestones(c: DashboardCandidate): Milestones {
   return { appliedAt: c.appliedAt, passedAt, invitedAt, hiredAt: hired ? c.statusChangedAt : null, stage };
 }
 
+// What is kept of an applicant who was deleted without ever being hired: only how far they got, no personal data.
+export interface ArchivedApplicant {
+  id: string;
+  source: DashboardSource;
+  status: string;
+  /** 1 applied, 2 passed the tests, 3 invited, 4 interviewed, 5 offering or Perubahan Posisi. */
+  stage: number;
+  appliedAt: Date;
+  passedAt: Date | null;
+  invitedAt: Date | null;
+  closedAt: Date;
+  departmentId: string;
+}
+
+// The archived row as a dashboard applicant that gives the same milestones the full applicant gave before the clean-up.
+export function archivedToDashboardCandidate(a: ArchivedApplicant): DashboardCandidate {
+  return {
+    id: `archive-${a.id}`,
+    source: a.source,
+    status: a.status,
+    appliedAt: a.appliedAt,
+    statusChangedAt: a.closedAt,
+    decidedAt: a.stage >= 4 ? a.closedAt : null,
+    departmentId: a.departmentId,
+    interviewInvitedAt: a.stage >= 3 ? a.invitedAt ?? a.closedAt : null,
+    hasOffer: a.stage >= 5,
+    hasMovement: false,
+    tests: a.stage >= 2 ? [{ passed: true, doneAt: a.passedAt }] : [],
+  };
+}
+
 function inRange(d: Date | null, range: DashboardRange): boolean {
   if (!d) return false;
   const t = d.getTime();

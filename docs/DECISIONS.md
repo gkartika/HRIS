@@ -2911,3 +2911,9 @@ Owner supplied the master data (folder GPT-module: question bank JSON, HR rubric
 - **REC-5:** ending an applicant, or closing the rest of a request, also cancels that applicant's open Perubahan Posisi. It only exists after the interview accepted an internal applicant.
 - **REC-13:** cancelling a scheduled placement that was counted as filling a request reverses the filling, reopens the request, closes the internal applicant whose move it was and notifies the request parties. Applicants closed earlier because the seat looked full stay closed (their previous step is not kept); they show in the optional list.
 - **REC-9 and REC-10:** kept as they are, by the owner.
+
+### Applicant data kept 180 days, dashboard numbers unchanged after a clean-up (REC-14, 2026-10-28)
+- **Decision:** applicants who left without being hired are eligible for the manual clean-up after **180 days** (was 30). Applicants who became employees are never deleted.
+- **Dashboard stays the same:** the clean-up writes one row per deleted applicant to `RecruitmentCandidateArchive` first (request, source, status, how far they got, applied / passed / invited / closed dates; no name, email, phone, CV or answers). The dashboard and the Beranda 30-day summary read these rows together with the live applicants, and a test checks the funnel is identical before and after.
+- **Keep period >= waiting period:** Pengaturan Rekrutmen refuses a keep period shorter than the re-apply wait, since deleting the rejection also deletes the wait.
+- Migration 20261028130000: one new table, and the stored 30-day setting moves to 180 (only if it was still 30). The clean-up itself stays manual, with its preview.

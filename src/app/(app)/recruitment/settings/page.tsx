@@ -376,7 +376,7 @@ async function MessagesTab() {
           <div>
             <label className={lab} htmlFor="s-keep">Data pelamar yang gugur disimpan (hari)</label>
             <input id="s-keep" name="retentionDays" type="number" min={7} max={730} defaultValue={settings.retentionDays} className={field} />
-            <p className="mt-1 text-[11px] text-slate-400">Setelah itu bisa dihapus dari halaman Pelamar dengan satu tombol, setelah Anda melihat daftarnya.</p>
+            <p className="mt-1 text-[11px] text-slate-400">Setelah itu bisa dihapus dari halaman Pelamar dengan satu tombol, setelah Anda melihat daftarnya. Nama, email, nomor, CV, dan jawaban hilang; hitungan dasbor tetap sama karena satu baris tanpa data pribadi disimpan. Tidak boleh lebih pendek dari masa tunggu di sebelah kiri.</p>
           </div>
         </div>
       </ActionForm>

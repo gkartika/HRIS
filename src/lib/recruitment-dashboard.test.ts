@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  archivedToDashboardCandidate,
   candidateMilestones,
   computeDashboard,
   monthsBetween,
@@ -167,5 +168,48 @@ describe("filters", () => {
 
   it("lists every month between two dates", () => {
     expect(monthsBetween(new Date("2025-11-15T00:00:00Z"), new Date("2026-02-02T00:00:00Z"))).toEqual(["2025-11", "2025-12", "2026-01", "2026-02"]);
+  });
+});
+
+describe("an applicant deleted in a clean-up keeps the dashboard numbers", () => {
+  // The archived row stores only how far the applicant got; read back, it must give the same milestones as the full applicant.
+  const cases: [string, Partial<DashboardCandidate>][] = [
+    ["only applied", { status: "TEST_FAILED", tests: [{ passed: false, doneAt: d("2026-03-02") }] }],
+    ["passed the tests, rejected", { status: "REJECTED", tests: [{ passed: true, doneAt: d("2026-03-02") }, { passed: true, doneAt: d("2026-03-04") }] }],
+    ["invited, then withdrew", { status: "WITHDRAWN", tests: [{ passed: true, doneAt: d("2026-03-02") }], interviewInvitedAt: d("2026-03-06") }],
+    ["interviewed, rejected", { status: "REJECTED", tests: [{ passed: true, doneAt: d("2026-03-02") }], interviewInvitedAt: d("2026-03-06"), decidedAt: d("2026-03-10") }],
+    ["offer declined", { status: "OFFER_DECLINED", tests: [{ passed: true, doneAt: d("2026-03-02") }], interviewInvitedAt: d("2026-03-06"), decidedAt: d("2026-03-10"), hasOffer: true }],
+  ];
+
+  it.each(cases)("%s", (_name, over) => {
+    const full = candidate({ statusChangedAt: d("2026-03-20"), ...over });
+    const m = candidateMilestones(full);
+    const archived = archivedToDashboardCandidate({
+      id: "x",
+      source: full.source,
+      status: full.status,
+      stage: m.stage,
+      appliedAt: m.appliedAt,
+      passedAt: m.passedAt,
+      invitedAt: m.invitedAt,
+      closedAt: full.statusChangedAt,
+      departmentId: full.departmentId,
+    });
+    expect(candidateMilestones(archived)).toEqual(m);
+  });
+
+  it("counts in the funnel exactly like the full applicant", () => {
+    const range = { from: d("2026-03-01"), to: d("2026-03-31") };
+    const now = d("2026-04-15");
+    const fulls = cases.map(([, over], i) => candidate({ id: `f${i}`, statusChangedAt: d("2026-03-20"), ...over }));
+    const asArchive = fulls.map((full) => {
+      const m = candidateMilestones(full);
+      return archivedToDashboardCandidate({ id: full.id, source: full.source, status: full.status, stage: m.stage, appliedAt: m.appliedAt, passedAt: m.passedAt, invitedAt: m.invitedAt, closedAt: full.statusChangedAt, departmentId: full.departmentId });
+    });
+    const before = computeDashboard({ candidates: fulls, requests: [], range, now });
+    const after = computeDashboard({ candidates: asArchive, requests: [], range, now });
+    expect(after.funnel).toEqual(before.funnel);
+    expect(after.hiringRate).toEqual(before.hiringRate);
+    expect(after.trend).toEqual(before.trend);
   });
 });

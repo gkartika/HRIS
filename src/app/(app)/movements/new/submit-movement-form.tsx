@@ -48,7 +48,7 @@ export function SubmitMovementForm({
   /** Set when HR Admin opened this form from an internal applicant. */
   candidate?: { id: string; label: string; requesterEmployeeId: string } | null;
   /** Set when Admin SDM opened this form from a recruitment request to fill it with a Mutasi. */
-  fillRequest?: { id: string; label: string; requesterEmployeeId: string } | null;
+  fillRequest?: { id: string; label: string; requesterEmployeeId: string; jobId: string; jobTitle: string } | null;
 }) {
   const [error, formAction, isPending] = useActionState(submitMovementRequest, undefined);
   const [employeeId, setEmployeeId] = useState(defaultEmployeeId);
@@ -59,6 +59,8 @@ export function SubmitMovementForm({
   const primaryAssignment = assignments.find((a) => a.assignmentType === "PRIMARY");
   // a Mutasi needs no evaluation, so there is nothing to reference for it
   const needsEvaluation = movementType === "PROMOTION" || movementType === "DEMOTION";
+  // Mutasi and Tambah Posisi name a standard Jabatan and a unit; an internal applicant's move keeps naming a position.
+  const jobBased = (movementType === "MUTATION" || movementType === "ADD_POSITION") && !candidate;
   const requesterDefault = fillRequest?.requesterEmployeeId ?? candidate?.requesterEmployeeId ?? currentEmployeeId ?? "";
 
   return (
@@ -145,6 +147,9 @@ export function SubmitMovementForm({
         {movementType === "ADD_POSITION" && (
           <p className="mt-1.5 text-xs text-slate-500">{t("movement.addPositionHint")}</p>
         )}
+        {movementType === "MUTATION" && !candidate && (
+          <p className="mt-1.5 text-xs text-slate-500">{t("movement.mutationJobHint")}</p>
+        )}
       </div>
 
       <div>
@@ -178,19 +183,26 @@ export function SubmitMovementForm({
         )}
       </div>
 
-      {movementType === "ADD_POSITION" ? (
+      {jobBased ? (
         <>
           <div>
             <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedJob")}</label>
-            <select name="proposedJobId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              <option value="">— Pilih —</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.jobTitle}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-slate-500">{t("movement.proposedJobHint")}</p>
+            {fillRequest ? (
+              <>
+                <input type="hidden" name="proposedJobId" value={fillRequest.jobId} />
+                <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">{fillRequest.jobTitle}</p>
+              </>
+            ) : (
+              <select name="proposedJobId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <option value="">— Pilih —</option>
+                {jobs.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.jobTitle}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="mt-1 text-xs text-slate-500">{fillRequest ? "Jabatan mengikuti permintaan tenaga kerja yang diisi." : t("movement.proposedJobHint")}</p>
           </div>
           <div>
             <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedUnit")}</label>

@@ -14,6 +14,7 @@ import {
   requiresVacantProposedPosition,
   initialMovementStatus,
   isMovementSubmitLevel,
+  usesStandardJabatan,
 } from "./movement";
 import { movementNeedsEvaluation } from "./evaluation";
 
@@ -106,6 +107,16 @@ describe("who may file a Perubahan Posisi: job level 2C and above", () => {
   it("does not guess when the level code cannot be read", () => {
     expect(isMovementSubmitLevel("")).toBe(false);
     expect(isMovementSubmitLevel("Manager")).toBe(false);
+  });
+});
+
+describe("which types name a standard Jabatan instead of a position", () => {
+  it("Mutasi and Tambah Posisi do, Promosi and Demosi do not (they are checked against the seat's level)", () => {
+    expect(usesStandardJabatan("MUTATION")).toBe(true);
+    expect(usesStandardJabatan("ADD_POSITION")).toBe(true);
+    expect(usesStandardJabatan("PROMOTION")).toBe(false);
+    expect(usesStandardJabatan("DEMOTION")).toBe(false);
+    expect(usesStandardJabatan("STATUS_CHANGE")).toBe(false);
   });
 });
 

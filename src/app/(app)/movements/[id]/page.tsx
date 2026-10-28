@@ -120,8 +120,10 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
     canCancelMovementRequestStatus(request.status);
   // Tambah Posisi: Admin SDM picks the real seat when carrying it out.
   const isAddPosition = isAddPositionType(request.movementType);
+  // A Mutasi or Tambah Posisi that named a Jabatan and a unit: the seat is picked when it is carried out.
+  const isJobBased = !!request.proposedJobId && !(request.movementType === "MUTATION" && request.status === "IMPLEMENTED");
   const addCandidates =
-    canExecute && isAddPosition && request.proposedJobId && request.proposedOrgUnitId
+    canExecute && request.proposedJobId && request.proposedOrgUnitId
       ? await prisma.position.findMany({
           where: { jobId: request.proposedJobId, orgUnitId: request.proposedOrgUnitId, archived: false },
           orderBy: { positionCode: "asc" },
@@ -129,7 +131,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
             id: true,
             positionCode: true,
             jobLevel: true,
-            assignments: { where: { status: { in: ["ACTIVE", "SCHEDULED"] } }, select: { employeeId: true, employee: { select: { fullLegalName: true } } } },
+            assignments: { where: { status: { in: ["ACTIVE", "SCHEDULED"] } }, select: { employeeId: true, assignmentType: true, employee: { select: { fullLegalName: true } } } },
           },
         })
       : [];
@@ -211,7 +213,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
             </p>
             <p className="text-xs text-slate-400">{request.currentPosition.orgUnit.unitName}</p>
           </div>
-          {isAddPosition ? (
+          {isJobBased ? (
             <div>
               <p className="text-xs text-slate-500">{t("movement.proposedJob")}</p>
               <p className="text-sm text-slate-900">{request.proposedJob?.jobTitle ?? "—"}</p>
@@ -388,10 +390,14 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
       {canExecute && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="mb-3 text-sm font-medium text-slate-900">{t("movement.executeButton")}</p>
-          {isAddPosition ? (
+          {request.proposedJobId ? (
             <ExecuteAddPositionForm
               requestId={request.id}
-              positions={addCandidates.map((p) => ({
+              mode={isAddPosition ? "ADD_POSITION" : "MUTATION"}
+              positions={addCandidates
+                // a Mutasi moves the employee into a seat nobody holds as their main placement
+                .filter((p) => isAddPosition || !p.assignments.some((a) => a.assignmentType === "PRIMARY"))
+                .map((p) => ({
                 id: p.id,
                 label: `${p.positionCode} — ${p.jobLevel} ${request.proposedJob?.jobTitle ?? ""} (${request.proposedOrgUnit?.unitName ?? ""})${p.assignments.length ? `, dipegang ${p.assignments.map((a) => a.employee.fullLegalName).join(", ")}` : ", kosong"}`,
                 heldByEmployee: p.assignments.some((a) => a.employeeId === request.employeeId),

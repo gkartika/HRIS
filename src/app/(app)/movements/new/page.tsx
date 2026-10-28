@@ -50,7 +50,7 @@ export default async function NewMovementRequestPage({
     }
   }
   // Opened from a recruitment request by Admin SDM ("Isi dengan Mutasi"): a Mutasi into one of its vacant seats.
-  let fillRow: { id: string; label: string; requesterEmployeeId: string; jobId: string } | null = null;
+  let fillRow: { id: string; label: string; requesterEmployeeId: string; jobId: string; jobTitle: string } | null = null;
   if (recruitmentRequestId && isHrAdminUser) {
     const r = await prisma.recruitmentRequest.findUnique({
       where: { id: recruitmentRequestId },
@@ -71,7 +71,7 @@ export default async function NewMovementRequestPage({
           </div>
         );
       }
-      fillRow = { id: r.id, label: `${r.job?.jobTitle ?? "permintaan"} (${r.requestNumber})`, requesterEmployeeId: r.requesterEmployeeId, jobId: r.jobId! };
+      fillRow = { id: r.id, label: `${r.job?.jobTitle ?? "permintaan"} (${r.requestNumber})`, requesterEmployeeId: r.requesterEmployeeId, jobId: r.jobId!, jobTitle: r.job?.jobTitle ?? "" };
     }
   }
   const viaCandidateOnly = !isHrAdminUser && level3DepartmentIds.length === 0 && !!candidateRow;

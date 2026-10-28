@@ -33,6 +33,7 @@ import {
   isAddPositionType,
   requiresVacantProposedPosition,
   initialMovementStatus,
+  usesStandardJabatan,
 } from "@/lib/movement";
 import { movementNeedsEvaluation, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/lib/evaluation-create";
@@ -63,6 +64,8 @@ export async function submitMovementRequest(
   const candidateId = (formData.get("candidateId") as string) || null;
   // Set when Admin SDM filed this Mutasi to fill a recruitment request ("Isi dengan Mutasi").
   const recruitmentRequestId = (formData.get("recruitmentRequestId") as string) || null;
+  // Mutasi and Tambah Posisi name a standard Jabatan and a unit (not a position); an internal applicant's move keeps naming a position.
+  const jobBased = usesStandardJabatan(movementType) && !candidateId;
   let fillRequest: { jobId: string | null; status: RecruitmentRequestStatus; requestedHeadcount: number; requesterEmployeeId: string; filled: number; held: boolean } | null = null;
   if (recruitmentRequestId) {
     if (!isHrAdmin(session)) return "Hanya Admin SDM yang bisa mengisi permintaan tenaga kerja dengan Mutasi.";
@@ -85,12 +88,12 @@ export async function submitMovementRequest(
     !employeeId ||
     !movementType ||
     !currentAssignmentId ||
-    !(movementType === "ADD_POSITION" ? proposedJobId && proposedOrgUnitId : proposedPositionId) ||
+    !(jobBased ? proposedJobId && proposedOrgUnitId : proposedPositionId) ||
     !proposedEffectiveDate ||
     !requestReason ||
     !requesterEmployeeId
   ) {
-    return movementType === "ADD_POSITION"
+    return jobBased
       ? "Karyawan, jenis perubahan, Assignment saat ini, jabatan, unit tujuan, tanggal efektif, alasan, dan pengaju wajib diisi."
       : "Karyawan, jenis perubahan, Assignment saat ini, posisi yang diusulkan, tanggal efektif, alasan, dan pengaju wajib diisi.";
   }
@@ -151,7 +154,7 @@ export async function submitMovementRequest(
   // Tambah Posisi: a standard Jabatan in a unit, no seat yet. The proposed position just repeats the current one
   // (same convention as the legacy Perubahan Status) until Admin SDM picks the real seat at execution.
   let proposedPosition: { jobId: string; positionStatus: PositionStatus; archived: boolean; jobLevel: string };
-  if (isAddPositionType(movementType)) {
+  if (jobBased) {
     const [job, unit] = await Promise.all([
       prisma.job.findUnique({ where: { id: proposedJobId! }, select: { id: true } }),
       prisma.orgUnit.findUnique({ where: { id: proposedOrgUnitId! }, select: { id: true, activeFlag: true } }),
@@ -159,7 +162,8 @@ export async function submitMovementRequest(
     if (!job) return "Jabatan yang diusulkan tidak ditemukan.";
     if (!unit || !unit.activeFlag) return "Unit tujuan tidak ditemukan atau tidak aktif.";
     proposedPositionId = employee.currentPositionId;
-    proposedPosition = { jobId: employee.currentPosition.jobId, positionStatus: employee.currentPosition.positionStatus, archived: false, jobLevel: employee.currentPosition.jobLevel };
+    // For a Mutasi that fills a recruitment request, the request's own Jabatan must match; the seat itself is checked at execution.
+    proposedPosition = { jobId: proposedJobId!, positionStatus: "VACANT", archived: false, jobLevel: employee.currentPosition.jobLevel };
   } else {
     const positionError = validateProposedPosition(movementType, employee.currentPositionId, proposedPositionId);
     if (positionError) return positionError;
@@ -179,7 +183,7 @@ export async function submitMovementRequest(
     if (levelError) return levelError;
   }
 
-  if (requiresVacantProposedPosition(movementType) && (await isPositionOccupiedByPrimary(proposedPositionId, employeeId))) {
+  if (!jobBased && requiresVacantProposedPosition(movementType) && (await isPositionOccupiedByPrimary(proposedPositionId, employeeId))) {
     return "Posisi yang diusulkan sudah memiliki pemegang Utama aktif — pilih posisi lain.";
   }
   if (isAddPositionType(movementType) && candidateId) {
@@ -251,8 +255,8 @@ export async function submitMovementRequest(
       currentPositionId: employee.currentPositionId,
       currentAssignmentId,
       proposedPositionId,
-      proposedJobId: isAddPositionType(movementType) ? proposedJobId : null,
-      proposedOrgUnitId: isAddPositionType(movementType) ? proposedOrgUnitId : null,
+      proposedJobId: jobBased ? proposedJobId : null,
+      proposedOrgUnitId: jobBased ? proposedOrgUnitId : null,
       proposedEmploymentStatus: proposedEmploymentStatus ? (proposedEmploymentStatus as EmploymentStatus) : null,
       proposedEffectiveDate: new Date(proposedEffectiveDate),
       requestReason,
@@ -385,6 +389,7 @@ export async function decideMovementRequest(
 
   if (
     decision === "APPROVED" &&
+    !request.proposedJobId &&
     requiresVacantProposedPosition(request.movementType) &&
     (await isPositionOccupiedByPrimary(request.proposedPositionId, request.employeeId))
   ) {
@@ -500,7 +505,7 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
     return "Permintaan ini belum disetujui atau sudah dilaksanakan.";
   }
 
-  if (requiresVacantProposedPosition(request.movementType) && (await isPositionOccupiedByPrimary(request.proposedPositionId, request.employeeId))) {
+  if (!request.proposedJobId && requiresVacantProposedPosition(request.movementType) && (await isPositionOccupiedByPrimary(request.proposedPositionId, request.employeeId))) {
     return "Posisi yang diusulkan sudah memiliki pemegang Utama aktif — pilih Posisi lain sebelum melaksanakan.";
   }
   // Tambah Posisi: nothing is ended or moved; the employee only gets one more placement.
@@ -549,6 +554,21 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
     return;
   }
 
+  // Mutasi that named a Jabatan and a unit: the seat is chosen now (it must be free of a main holder).
+  let targetPositionId = request.proposedPositionId;
+  if (request.proposedJobId && !isAddPositionType(request.movementType)) {
+    if (!addedPositionId) return "Pilih posisi untuk jabatan ini terlebih dahulu. Kalau belum ada, buat dulu di Struktur Organisasi.";
+    const chosen = await prisma.position.findUnique({ where: { id: addedPositionId }, select: { id: true, jobId: true, orgUnitId: true, archived: true } });
+    if (!chosen || chosen.archived) return "Posisi yang dipilih tidak ditemukan atau sudah diarsipkan.";
+    if (chosen.jobId !== request.proposedJobId || chosen.orgUnitId !== request.proposedOrgUnitId) {
+      return "Posisi yang dipilih harus berjabatan dan berunit sama dengan yang disetujui.";
+    }
+    if (await isPositionOccupiedByPrimary(chosen.id, request.employeeId)) {
+      return "Posisi yang dipilih sudah memiliki pemegang Utama aktif — pilih posisi lain.";
+    }
+    targetPositionId = chosen.id;
+  }
+
   // Perubahan Posisi refactor: end-date exactly the Assignment the request
   // identified at submission (currentAssignmentId) rather than re-deriving
   // "the Primary" at execution time — pre-refactor rows have no
@@ -589,7 +609,7 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
       const newAssignment = await tx.assignment.create({
         data: {
           employeeId: request.employeeId,
-          positionId: request.proposedPositionId,
+          positionId: targetPositionId,
           assignmentType: "PRIMARY",
           primaryAssignmentFlag: true,
           status: scheduleMove ? "SCHEDULED" : "ACTIVE",
@@ -600,12 +620,12 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
       if (!scheduleMove) {
         await tx.employee.update({
           where: { id: request.employeeId },
-          data: { currentPositionId: request.proposedPositionId },
+          data: { currentPositionId: targetPositionId },
         });
         if (assignmentToEnd) {
           await syncPositionStatus(assignmentToEnd.positionId);
         }
-        await syncPositionStatus(request.proposedPositionId);
+        await syncPositionStatus(targetPositionId);
       }
     }
 
@@ -623,6 +643,8 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
         implementedAt: new Date(),
         implementedByAccountId: session.user.id,
         implementedAssignmentId: newAssignmentId,
+        // a Mutasi that named a Jabatan now shows the real seat
+        proposedPositionId: targetPositionId,
       },
     });
 
@@ -642,7 +664,7 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
       source: result.hired.source,
       employeeId: request.employeeId,
       oldPositionId: request.currentPositionId,
-      newPositionId: request.proposedPositionId,
+      newPositionId: targetPositionId,
       effectiveDate: request.proposedEffectiveDate,
     });
     revalidatePath(`/recruitment/${result.hired.requestId}`);

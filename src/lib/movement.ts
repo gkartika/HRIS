@@ -84,6 +84,15 @@ export function initialMovementStatus(movementType: MovementType): MovementReque
   return movementType === "ADD_POSITION" ? "SUBMITTED" : "PENDING_DEPT_HEAD";
 }
 
+/**
+ * Mutasi and Tambah Posisi name a standard Jabatan and a unit instead of a position (owner, 2026-10-28), because the
+ * seat may not exist yet; Admin SDM picks or creates the seat when carrying the request out. Promosi and Demosi still
+ * name a position, because they are checked against the seat's job level.
+ */
+export function usesStandardJabatan(movementType: MovementType): boolean {
+  return movementType === "MUTATION" || movementType === "ADD_POSITION";
+}
+
 /** A move into a position needs that position to have no active primary holder; an added or status-only change does not. */
 export function requiresVacantProposedPosition(movementType: MovementType): boolean {
   return movementType !== "STATUS_CHANGE" && movementType !== "ADD_POSITION";

@@ -344,7 +344,9 @@ export default async function MovementListPage({
                   <td className="px-4 py-3 text-slate-600">
                     {r.movementType === "ADD_POSITION"
                       ? `${r.currentPosition.job.jobTitle} + ${r.proposedJob?.jobTitle ?? "—"} (${r.proposedOrgUnit?.unitName ?? "—"})`
-                      : `${r.currentPosition.job.jobTitle} → ${r.proposedPosition.job.jobTitle}`}
+                      : r.proposedJob && r.status !== "IMPLEMENTED"
+                        ? `${r.currentPosition.job.jobTitle} → ${r.proposedJob.jobTitle} (${r.proposedOrgUnit?.unitName ?? "—"})`
+                        : `${r.currentPosition.job.jobTitle} → ${r.proposedPosition.job.jobTitle}`}
                   </td>
                   <td className="px-4 py-3">
                     <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">

@@ -201,8 +201,10 @@ export function ExecuteMovementButton({ requestId }: { requestId: string }) {
 export function ExecuteAddPositionForm({
   requestId,
   positions,
+  mode = "ADD_POSITION",
 }: {
   requestId: string;
+  mode?: "ADD_POSITION" | "MUTATION";
   positions: { id: string; label: string; heldByEmployee: boolean }[];
 }) {
   const [error, setError] = useState<string | undefined>();
@@ -219,7 +221,7 @@ export function ExecuteAddPositionForm({
     <form action={action} className="space-y-3">
       <div>
         <label htmlFor="added-position" className="mb-1 block text-xs text-slate-500">
-          {t("movement.pickAddedPosition")}
+          {mode === "MUTATION" ? t("movement.pickMutationPosition") : t("movement.pickAddedPosition")}
         </label>
         <select
           id="added-position"
@@ -235,7 +237,7 @@ export function ExecuteAddPositionForm({
             </option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-slate-500">{t("movement.pickAddedPositionHint")}</p>
+        <p className="mt-1 text-xs text-slate-500">{mode === "MUTATION" ? t("movement.pickMutationPositionHint") : t("movement.pickAddedPositionHint")}</p>
       </div>
       <p className="text-xs text-slate-600">
         {t("movement.createPositionFirst")}{" "}

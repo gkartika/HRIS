@@ -5,44 +5,14 @@ import { StatusChip } from "@/components/status-chip";
 import { prisma } from "@/lib/db";
 import { canManageRecruitment } from "@/lib/permissions";
 import { requireSession } from "@/lib/require-session";
-import { MAX_OPTIONS, TEST_FORM_LABEL } from "@/lib/recruitment-candidates";
+import { TEST_FORM_LABEL } from "@/lib/recruitment-candidates";
 import { bulkAddQuestionsAction, deleteQuestionAction, saveQuestionAction, toggleQuestionAction } from "../../actions";
 import { ActionForm, ConfirmAction, RunButton } from "../../settings-forms";
-import type { RecruitmentTestForm } from "@/generated/prisma/enums";
+import { QuestionFields } from "./question-fields";
+import { QuestionPreview } from "./question-preview";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const lab = "mb-1 block text-xs text-slate-500";
-
-function QuestionFields({ form, defaults, idPrefix }: { form: RecruitmentTestForm; defaults?: { prompt: string; options: string[]; correctIndex: number | null; reverseScored: boolean }; idPrefix: string }) {
-  return (
-    <>
-      <div>
-        <label className={lab} htmlFor={`${idPrefix}-prompt`}>{form === "SCALE" ? "Pernyataan" : "Soal"}</label>
-        <textarea id={`${idPrefix}-prompt`} name="prompt" rows={form === "ESSAY" ? 4 : 2} required defaultValue={defaults?.prompt} className={field} />
-      </div>
-      {form === "MULTIPLE_CHOICE" && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="sm:col-span-2">
-            <label className={lab} htmlFor={`${idPrefix}-options`}>Opsi jawaban (satu per baris, 2 sampai {MAX_OPTIONS})</label>
-            <textarea id={`${idPrefix}-options`} name="options" rows={4} required defaultValue={defaults?.options.join("\n")} className={field} />
-          </div>
-          <div>
-            <label className={lab} htmlFor={`${idPrefix}-correct`}>Nomor jawaban yang benar</label>
-            <input id={`${idPrefix}-correct`} name="correct" type="number" min={1} max={MAX_OPTIONS} required defaultValue={defaults?.correctIndex != null ? defaults.correctIndex + 1 : undefined} className={field} />
-            <p className="mt-1 text-[11px] text-slate-400">1 = opsi pertama.</p>
-          </div>
-        </div>
-      )}
-      {form === "SCALE" && (
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" name="reverse" defaultChecked={defaults?.reverseScored} />
-          Pernyataan terbalik (jawaban &quot;Sangat setuju&quot; justru nilainya paling rendah)
-        </label>
-      )}
-    </>
-  );
-}
-
 export default async function TestQuestionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await requireSession();
@@ -53,7 +23,10 @@ export default async function TestQuestionsPage({ params }: { params: Promise<{ 
     include: { questions: { orderBy: { sortOrder: "asc" }, include: { _count: { select: { answers: true } } } } },
   });
   if (!type) notFound();
-  const active = type.questions.filter((q) => q.active).length;
+  const activeIds = type.questions.filter((q) => q.active).map((q) => q.id);
+  const active = activeIds.length;
+  // "Soal 2 dari 4" counts the active questions, the same way an applicant sees them.
+  const labelOf = (questionId: string) => (activeIds.includes(questionId) ? `Soal ${activeIds.indexOf(questionId) + 1} dari ${active}` : "Soal nonaktif, tidak tampil ke pelamar");
 
   const bulkHelp =
     type.form === "MULTIPLE_CHOICE"
@@ -78,19 +51,12 @@ export default async function TestQuestionsPage({ params }: { params: Promise<{ 
           <div key={q.id} className={`rounded-xl border bg-white p-4 ${q.active ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-slate-900">
-                  <span className="mr-2 font-mono text-xs text-slate-400">{i + 1}.</span>
-                  {q.prompt}
-                </p>
-                {type.form === "MULTIPLE_CHOICE" && (
-                  <ul className="mt-1 text-xs text-slate-600">
-                    {q.options.map((o, oi) => (
-                      <li key={oi} className={oi === q.correctIndex ? "font-medium text-emerald-700" : ""}>
-                        {oi + 1}. {o}
-                        {oi === q.correctIndex && " (benar)"}
-                      </li>
-                    ))}
-                  </ul>
+                <p className="mb-2 font-mono text-xs text-slate-400">{i + 1}.</p>
+                <QuestionPreview form={type.form} monospace={type.monospace} prompt={q.prompt} options={q.options} label={labelOf(q.id)} />
+                {type.form === "MULTIPLE_CHOICE" && q.correctIndex !== null && (
+                  <p className="mt-2 text-xs font-medium text-emerald-700">
+                    Jawaban benar (hanya terlihat HR): {q.correctIndex + 1}. {q.options[q.correctIndex]}
+                  </p>
                 )}
                 {q.reverseScored && <p className="mt-1 text-xs text-amber-700">Pernyataan terbalik</p>}
               </div>
@@ -107,7 +73,7 @@ export default async function TestQuestionsPage({ params }: { params: Promise<{ 
                 <summary className="cursor-pointer text-xs font-medium text-indigo-600">Ubah soal</summary>
                 <div className="mt-3">
                   <ActionForm action={saveQuestionAction.bind(null, type.id, q.id)} submitLabel="Simpan soal">
-                    <QuestionFields form={type.form} defaults={q} idPrefix={`q-${q.id}`} />
+                    <QuestionFields form={type.form} monospace={type.monospace} defaults={q} idPrefix={`q-${q.id}`} label={labelOf(q.id)} />
                   </ActionForm>
                 </div>
               </details>
@@ -121,7 +87,7 @@ export default async function TestQuestionsPage({ params }: { params: Promise<{ 
         <h2 className="text-sm font-medium text-slate-900">Tambah satu soal</h2>
         <div className="mt-3">
           <ActionForm action={saveQuestionAction.bind(null, type.id, null)} submitLabel="Tambah soal" resetOnSuccess>
-            <QuestionFields form={type.form} idPrefix="new" />
+            <QuestionFields form={type.form} monospace={type.monospace} idPrefix="new" label={`Soal ${active + 1} dari ${active + 1}`} />
           </ActionForm>
         </div>
       </div>

@@ -107,7 +107,7 @@ async function CatalogTab() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-4">
                   <div className="sm:col-span-3">
-                    <label className={lab} htmlFor={`d-${t.id}`}>Keterangan</label>
+                    <label className={lab} htmlFor={`d-${t.id}`}>Keterangan (dibaca pelamar di kartu kuning sebelum tes dimulai)</label>
                     <input id={`d-${t.id}`} name="description" defaultValue={t.description ?? ""} className={field} />
                   </div>
                   <div>

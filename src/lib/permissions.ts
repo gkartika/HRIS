@@ -19,8 +19,10 @@ export const isRecruitmentAdmin = (session: Session) => hasRole(session, "RECRUI
 
 // The applicant pipeline (Pelamar, tests, question banks, interviews, offers, hiring an
 // applicant): Admin Rekrutmen, and Admin SDM who keeps the same access.
+// Recruitment (requests, applicants, tests, interviews, offers, settings) belongs to Admin Rekrutmen alone (owner,
+// 2026-10-28). Admin SDM no longer has any of it, apart from creating an employee from an approved request.
 export function canManageRecruitment(session: Session): boolean {
-  return isHrAdmin(session) || isRecruitmentAdmin(session);
+  return isRecruitmentAdmin(session);
 }
 
 // Recruitment assessment "Tes Situasi Kerja" (behavioral risk screening). Admin Rekrutmen prepares the
@@ -86,7 +88,7 @@ export function canCreateEmployee(session: Session): boolean {
 // out of scope for this simplified flow (DEC-013) — any employee-linked
 // account can submit a request, same as HR Admin.
 export function canSubmitRecruitmentRequest(session: Session): boolean {
-  return isHrAdmin(session) || !!session.user.employeeId;
+  return !!session.user.employeeId || isRecruitmentAdmin(session);
 }
 
 // ACC-14/DEC-015: HR Manager authority is derived live from an active
@@ -125,8 +127,9 @@ export function canApproveRecruitmentRequestAsDeptHead(activeDeptHeadPositionIds
 // HR Manager approval (enforced separately by canRequestAcceptFulfillment on
 // the request's status) and may also create an Employee directly with no
 // request at all (DEC-014, unrelated to this predicate).
+// Both Admin SDM and Admin Rekrutmen may create the employee from an approved request (owner, 2026-10-28).
 export function canCreateEmployeeFromRequest(session: Session): boolean {
-  return canManageRecruitment(session);
+  return isHrAdmin(session) || isRecruitmentAdmin(session);
 }
 
 // DM-25/ACC-16: cancellation is the explicit exception to "HR Manager alone
@@ -140,7 +143,7 @@ export function canCancelRecruitmentRequest(
   activeHrManagerPositionIds: string[]
 ): boolean {
   const isRequester = !!session.user.employeeId && session.user.employeeId === requesterEmployeeId;
-  return isRequester || isHrManager(activeHrManagerPositionIds) || isHrAdmin(session);
+  return isRequester || isHrManager(activeHrManagerPositionIds) || isRecruitmentAdmin(session);
 }
 
 // Perubahan Posisi refactor: submission is now Level-3 (Job level 3A/3B,

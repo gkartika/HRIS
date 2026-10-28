@@ -184,9 +184,9 @@ describe("canCancelRecruitmentRequest (DM-25/ACC-16)", () => {
     expect(canCancelRecruitmentRequest(session, "emp-requester", ["pos-hr-manager"])).toBe(true);
   });
 
-  it("allows HR Admin who is neither the Requester nor an HR Manager", () => {
-    const session = mockSession({ roles: ["HR_ADMIN"], employeeId: null });
-    expect(canCancelRecruitmentRequest(session, "emp-requester", [])).toBe(true);
+  it("allows Admin Rekrutmen who is neither the Requester nor an HR Manager, but no longer Admin SDM", () => {
+    expect(canCancelRecruitmentRequest(mockSession({ roles: ["RECRUITMENT_ADMIN"], employeeId: null }), "emp-requester", [])).toBe(true);
+    expect(canCancelRecruitmentRequest(mockSession({ roles: ["HR_ADMIN"], employeeId: null }), "emp-requester", [])).toBe(false);
   });
 
   it("denies a plain employee who is neither the Requester, an HR Manager, nor HR Admin", () => {
@@ -691,8 +691,11 @@ describe("Admin Rekrutmen", () => {
 
   it("runs the applicant pipeline, as Admin SDM does too", () => {
     expect(canManageRecruitment(mockSession({ roles: ["RECRUITMENT_ADMIN"] }))).toBe(true);
-    expect(canManageRecruitment(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
+    // Admin SDM no longer manages recruitment (owner, 2026-10-28), only Admin Rekrutmen does
+    expect(canManageRecruitment(mockSession({ roles: ["HR_ADMIN"] }))).toBe(false);
     expect(canCreateEmployeeFromRequest(mockSession({ roles: ["RECRUITMENT_ADMIN"] }))).toBe(true);
+    // both admins may create the employee from an approved request
+    expect(canCreateEmployeeFromRequest(mockSession({ roles: ["HR_ADMIN"] }))).toBe(true);
   });
 
   it("is not granted to other admins or plain employees", () => {

@@ -15,6 +15,7 @@ import {
   canCancelRecruitmentRequest,
   isHrManager,
   isHrAdmin,
+  isRecruitmentAdmin,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getActiveDeptHeadPositions, listDeptHeadApprovers } from "@/lib/dept-head";
@@ -133,11 +134,11 @@ export async function submitRecruitmentRequest(
   if ("error" in parsed) return parsed.error;
   const f = parsed.fields;
 
-  // Only Admin SDM may file on someone else's behalf. Everyone else is always
+  // Only Admin Rekrutmen may file on someone else's behalf. Everyone else is always
   // the requester: a requester id in the form is ignored, so nobody can name
   // a Dept Head as requester to skip the Dept Head stage.
   const requesterEmployeeId =
-    (isHrAdmin(session) ? (formData.get("requesterEmployeeId") as string) : null) || session.user.employeeId;
+    (isRecruitmentAdmin(session) ? (formData.get("requesterEmployeeId") as string) : null) || session.user.employeeId;
   if (!requesterEmployeeId) return "Pilih karyawan pengaju terlebih dahulu.";
 
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
@@ -207,7 +208,7 @@ export async function resubmitRecruitmentRequest(
   if (!request) return "Permintaan tidak ditemukan.";
 
   const isRequester = !!session.user.employeeId && session.user.employeeId === request.requesterEmployeeId;
-  if (!isRequester && !isHrAdmin(session)) return t("common.forbidden");
+  if (!isRequester && !isRecruitmentAdmin(session)) return t("common.forbidden");
   if (!canResubmitRequestStatus(request.status)) {
     return "Hanya permintaan yang dikembalikan yang dapat diajukan ulang.";
   }
@@ -385,11 +386,11 @@ export async function decideRecruitmentRequest(
     return "Catatan keputusan wajib diisi untuk Tolak/Kembalikan.";
   }
 
-  // The standard Jabatan is set by Admin SDM / Admin Rekrutmen before this step (the requester only types a
+  // The standard Jabatan is set by Admin Rekrutmen before this step (the requester only types a
   // name), since hiring needs it to filter the seats. Not required for Reject/Return.
   const jobId = request.jobId;
   if (decision === "APPROVED" && !jobId) {
-    return "Menunggu Admin SDM / Admin Rekrutmen menetapkan jabatan standar sebelum permintaan ini bisa disetujui.";
+    return "Menunggu Admin Rekrutmen menetapkan jabatan standar sebelum permintaan ini bisa disetujui.";
   }
 
   await prisma.recruitmentRequest.update({
@@ -486,7 +487,7 @@ export async function closeRecruitmentRequest(
 ): Promise<string | undefined> {
   const session = await requireSession();
   const hrManagerPositions = await getActiveHrManagerPositions(session.user.employeeId);
-  if (!isHrAdmin(session) && !isHrManager(hrManagerPositions.map((p) => p.positionId))) {
+  if (!isRecruitmentAdmin(session) && !isHrManager(hrManagerPositions.map((p) => p.positionId))) {
     return t("common.forbidden");
   }
 
@@ -570,7 +571,7 @@ export async function createEmployeeFromRecruitmentRequest(
   // Prevent duplicate Employees (DEC-013/WF-14 acceptance criteria).
 
   if (!request.jobId) {
-    return "Jabatan pada permintaan ini belum ditetapkan oleh Admin SDM / Admin Rekrutmen.";
+    return "Jabatan pada permintaan ini belum ditetapkan oleh Admin Rekrutmen.";
   }
   const position = await prisma.position.findUnique({ where: { id: positionId } });
   if (!position) return "Posisi tidak ditemukan.";

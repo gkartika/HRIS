@@ -3,7 +3,7 @@ import { pageParams } from "@/lib/pagination";
 import { Pager } from "@/components/pager";
 import { FilePlus } from "lucide-react";
 import { requireSession } from "@/lib/require-session";
-import { canManageRecruitment, canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
+import { canCreateEmployeeFromRequest, canManageRecruitment, canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
@@ -34,11 +34,20 @@ export default async function RecruitmentListPage({
   const session = await requireSession();
   const { status, departmentId, page: pageRaw } = await searchParams;
 
+  // Admin Rekrutmen sees every request. Admin SDM sees only the approved ones that can still be filled, to create an
+  // employee from them. Everyone else sees their own.
+  const hireOnly = !canManageRecruitment(session) && canCreateEmployeeFromRequest(session);
   const where: Prisma.RecruitmentRequestWhereInput = canManageRecruitment(session)
     ? {}
-    : { requesterEmployeeId: session.user.employeeId ?? "__none__" };
+    : hireOnly
+      ? session.user.employeeId
+        ? { OR: [{ status: { in: ["APPROVED", "RECRUITMENT_IN_PROGRESS", "PARTIALLY_FILLED"] } }, { requesterEmployeeId: session.user.employeeId }] }
+        : { status: { in: ["APPROVED", "RECRUITMENT_IN_PROGRESS", "PARTIALLY_FILLED"] } }
+      : { requesterEmployeeId: session.user.employeeId ?? "__none__" };
   // "HELD" is not a status: a held request keeps its real status and only has heldAt set.
-  if (status === "HELD") where.heldAt = { not: null };
+  if (hireOnly) {
+    // the status filter does not apply to Admin SDM
+  } else if (status === "HELD") where.heldAt = { not: null };
   else if (status) where.status = status as RecruitmentRequestStatus;
   if (departmentId) where.departmentId = departmentId;
 

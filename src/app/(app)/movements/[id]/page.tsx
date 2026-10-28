@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
-import { formatDateLong, formatDateMedium } from "@/lib/format";
+import { formatDateLong } from "@/lib/format";
+import { listMovementSeatChoices } from "@/lib/movement-seats";
 import { requireSession } from "@/lib/require-session";
 import {
   canApproveMovementRequest,
@@ -122,24 +123,16 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
   const isAddPosition = isAddPositionType(request.movementType);
   // A Mutasi or Tambah Posisi that named a Jabatan and a unit: the seat is picked when it is carried out.
   const isJobBased = !!request.proposedJobId && !(request.movementType !== "ADD_POSITION" && request.status === "IMPLEMENTED");
-  const addCandidates =
+  const seatChoices =
     canExecute && request.proposedJobId && request.proposedOrgUnitId
-      ? await prisma.position.findMany({
-          where: { jobId: request.proposedJobId, orgUnitId: request.proposedOrgUnitId, archived: false },
-          orderBy: { positionCode: "asc" },
-          select: {
-            id: true,
-            positionCode: true,
-            jobLevel: true,
-            assignments: {
-              where: { status: { in: ["ACTIVE", "SCHEDULED"] } },
-              select: {
-                employeeId: true,
-                assignmentType: true,
-                employee: { select: { fullLegalName: true, offboardingCases: { where: { status: "PENDING_CLEARANCE" }, select: { lastWorkingDay: true } } } },
-              },
-            },
-          },
+      ? await listMovementSeatChoices({
+          jobId: request.proposedJobId,
+          orgUnitId: request.proposedOrgUnitId,
+          jobTitle: request.proposedJob?.jobTitle ?? "",
+          unitName: request.proposedOrgUnit?.unitName ?? "",
+          jobLevel: request.proposedJobLevel,
+          employeeId: request.employeeId,
+          addPosition: isAddPosition,
         })
       : [];
   const canEditHrFields = !isLegacyType && isHrAdminUser && request.status !== "IMPLEMENTED" && request.status !== "CANCELLED";
@@ -402,15 +395,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
             <ExecuteAddPositionForm
               requestId={request.id}
               mode={isAddPosition ? "ADD_POSITION" : "MUTATION"}
-              positions={addCandidates
-                // a Mutasi moves the employee into a seat nobody holds as their main placement
-                // a holder who is leaving (exit case waiting for clearance) does not block the seat
-                .filter((p) => isAddPosition || (!p.assignments.some((a) => a.assignmentType === "PRIMARY" && a.employee.offboardingCases.length === 0) && (!request.proposedJobLevel || p.jobLevel === request.proposedJobLevel)))
-                .map((p) => ({
-                id: p.id,
-                label: `${p.positionCode} — ${p.jobLevel} ${request.proposedJob?.jobTitle ?? ""} (${request.proposedOrgUnit?.unitName ?? ""})${p.assignments.length ? `, dipegang ${p.assignments.map((a) => a.employee.fullLegalName + (a.employee.offboardingCases[0]?.lastWorkingDay ? ` (keluar ${formatDateMedium(a.employee.offboardingCases[0].lastWorkingDay)})` : "")).join(", ")}` : ", kosong"}`,
-                heldByEmployee: p.assignments.some((a) => a.employeeId === request.employeeId),
-              }))}
+              positions={seatChoices}
             />
           ) : (
             <ExecuteMovementButton requestId={request.id} />

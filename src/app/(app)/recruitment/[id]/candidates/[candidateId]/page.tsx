@@ -28,6 +28,8 @@ import { getRecruitmentSettings } from "@/lib/recruitment-service";
 import { listSelectableStaff } from "@/lib/recruitment-flow";
 import { rejectCandidateAction } from "../../../candidate-actions";
 import { ExecuteMovementButton } from "./execute-movement-button";
+import { ExecuteAddPositionForm } from "../../../../movements/[id]/decision-forms";
+import { listMovementSeatChoices } from "@/lib/movement-seats";
 import { t } from "@/lib/i18n/id";
 import {
   DecisionForm,
@@ -86,6 +88,12 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
           requestNumber: true,
           status: true,
           proposedEffectiveDate: true,
+          employeeId: true,
+          proposedJobId: true,
+          proposedOrgUnitId: true,
+          proposedJobLevel: true,
+          proposedJob: { select: { jobTitle: true } },
+          proposedOrgUnit: { select: { unitName: true } },
           proposedPosition: { select: { positionCode: true, job: { select: { jobTitle: true } }, orgUnit: { select: { unitName: true } } } },
         },
       },
@@ -118,6 +126,19 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
   const canSchedule = candidate.status === "TEST_PASSED" || (candidate.status === "INTERVIEWING" && !candidate.interviewDecision);
   const canDecide = candidate.status === "INTERVIEWING" && !candidate.interviewDecision && submittedInterviewers.length > 0;
   const movement = candidate.movementRequest;
+  // an approved move that named a Jabatan and a unit: the seat is picked when it is carried out
+  const movementSeats =
+    movement?.status === "APPROVED" && movement.proposedJobId && movement.proposedOrgUnitId
+      ? await listMovementSeatChoices({
+          jobId: movement.proposedJobId,
+          orgUnitId: movement.proposedOrgUnitId,
+          jobTitle: movement.proposedJob?.jobTitle ?? "",
+          unitName: movement.proposedOrgUnit?.unitName ?? "",
+          jobLevel: movement.proposedJobLevel,
+          employeeId: movement.employeeId,
+          addPosition: false,
+        })
+      : [];
   const offer = candidate.offer;
   const aspectOrder = aspects.filter((a) => interview?.interviewers.some((i) => i.scores.some((s) => s.aspectId === a.id)));
 
@@ -461,13 +482,23 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
               )}{" "}
               <StatusChip tone="bg-slate-100 text-slate-600">{t(`movementStatus.${movement.status}`)}</StatusChip>
               <span className="ml-2 text-slate-600">
-                pindah ke {movement.proposedPosition.job.jobTitle} ({movement.proposedPosition.positionCode}), {movement.proposedPosition.orgUnit.unitName}, mulai {formatDateLong(movement.proposedEffectiveDate)}
+                {movement.proposedJob && movement.status !== "IMPLEMENTED"
+                  ? `pindah ke ${movement.proposedJob.jobTitle} di ${movement.proposedOrgUnit?.unitName ?? "—"}${movement.proposedJobLevel ? `, level ${movement.proposedJobLevel}` : ""}, mulai ${formatDateLong(movement.proposedEffectiveDate)}`
+                  : `pindah ke ${movement.proposedPosition.job.jobTitle} (${movement.proposedPosition.positionCode}), ${movement.proposedPosition.orgUnit.unitName}, mulai ${formatDateLong(movement.proposedEffectiveDate)}`}
               </span>
             </p>
           ) : (
             <p className="text-sm text-slate-500">Belum ada Perubahan Posisi untuk pelamar ini.</p>
           )}
-          {candidate.status === "MOVEMENT" && movement?.status === "APPROVED" && <ExecuteMovementButton movementRequestId={movement.id} />}
+          {candidate.status === "MOVEMENT" && movement?.status === "APPROVED" &&
+            (movement.proposedJobId ? (
+              <div className="mt-3 rounded-lg bg-emerald-50 p-4">
+                <p className="mb-3 text-sm text-emerald-900">Perubahan Posisi sudah disetujui. Pilih posisinya (atau buat dulu di Struktur Organisasi), lalu laksanakan.</p>
+                <ExecuteAddPositionForm requestId={movement.id} mode="MUTATION" positions={movementSeats} />
+              </div>
+            ) : (
+              <ExecuteMovementButton movementRequestId={movement.id} />
+            ))}
           {candidate.status === "MOVEMENT" && candidate.employeeId && (!movement || !isMovementRequestOpen(movement.status)) && (
             <Link
               href={`/movements/new?employeeId=${candidate.employeeId}&candidateId=${candidate.id}`}

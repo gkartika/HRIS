@@ -9,6 +9,7 @@ import {
   canCreateEmployeeFromRequest,
   canCancelRecruitmentRequest,
   isHrAdmin,
+  isRecruitmentAdmin,
   canManageRecruitment,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
@@ -23,6 +24,8 @@ import {
   canResubmitRequestStatus,
 } from "@/lib/recruitment";
 import { countVacantSeatsByJob } from "@/lib/recruitment-seats";
+import { listMovementSeatChoices, type SeatChoice } from "@/lib/movement-seats";
+import { ExecuteAddPositionForm, ExecuteMovementButton } from "../../movements/[id]/decision-forms";
 import {
   StartReviewButton,
   DecisionButtons,
@@ -70,7 +73,19 @@ export default async function RecruitmentDetailPage({
       // Mutasi filed to fill this request ("Isi dengan Mutasi")
       movementRequests: {
         orderBy: { createdAt: "desc" },
-        select: { id: true, requestNumber: true, status: true, employee: { select: { fullLegalName: true } }, proposedPosition: { select: { positionCode: true } } },
+        select: {
+          id: true,
+          requestNumber: true,
+          status: true,
+          employeeId: true,
+          employee: { select: { fullLegalName: true } },
+          proposedPosition: { select: { positionCode: true } },
+          proposedJobId: true,
+          proposedOrgUnitId: true,
+          proposedJobLevel: true,
+          proposedJob: { select: { jobTitle: true } },
+          proposedOrgUnit: { select: { unitName: true } },
+        },
       },
     },
   });
@@ -86,7 +101,9 @@ export default async function RecruitmentDetailPage({
   const activeDeptHeadPositionIds = deptHeadPositions.map((p) => p.positionId);
   const isDeptHeadNow = activeDeptHeadPositionIds.length > 0;
 
-  if (!canManageRecruitment(session) && !isHrManagerNow && !isDeptHeadNow && !isOwnRequest) {
+  // Admin SDM may open an approved request only to create an employee from it.
+  const hireView = canCreateEmployeeFromRequest(session) && canRequestAcceptFulfillment(request.status);
+  if (!canManageRecruitment(session) && !isHrManagerNow && !isDeptHeadNow && !isOwnRequest && !hireView) {
     return <AccessDenied />;
   }
 
@@ -98,7 +115,7 @@ export default async function RecruitmentDetailPage({
     canApproveRecruitmentRequestAsDeptHead(activeDeptHeadPositionIds) && request.status === "PENDING_DEPT_HEAD";
   const manageRecruitment = canManageRecruitment(session);
   const isHeld = request.heldAt !== null;
-  // The requester only types a Jabatan name. Admin SDM / Admin Rekrutmen pick or create the standard Jabatan and
+  // The requester only types a Jabatan name. Admin Rekrutmen pick or create the standard Jabatan and
   // the level before the HR Manager approves, and can still change it after approval (with a reason).
   const canSetJobBeforeApproval = manageRecruitment && (request.status === "PENDING_DEPT_HEAD" || request.status === "SUBMITTED" || request.status === "UNDER_REVIEW");
   const canChangeJobAfterApproval = manageRecruitment && canHoldStatus(request.status);
@@ -127,14 +144,43 @@ export default async function RecruitmentDetailPage({
     headcount: request.requestedHeadcount,
     needsReason: jobChangeNeedsReason(request.status),
   };
-  const approveBlockedReason = request.jobId ? undefined : "Menunggu Admin SDM / Admin Rekrutmen menetapkan jabatan standar.";
+  const approveBlockedReason = request.jobId ? undefined : "Menunggu Admin Rekrutmen menetapkan jabatan standar.";
   const canFulfill =
     canCreateEmployeeFromRequest(session) && canRequestAcceptFulfillment(request.status) && !counts.isFull && !isHeld;
   const mutationsUnderway = request.movementRequests.filter((m) => OPEN_MOVEMENT_STATUSES.includes(m.status)).length;
   const canFillWithMutation =
-    isHrAdmin(session) && !!request.jobId && canFulfill && request.fulfillments.length + mutationsUnderway < request.requestedHeadcount;
-  const canClose = canCloseRequestStatus(request.status) && (isHrAdmin(session) || isHrManagerNow);
-  const canResubmit = canResubmitRequestStatus(request.status) && (isOwnRequest || isHrAdmin(session));
+    isRecruitmentAdmin(session) && !!request.jobId && canFulfill && request.fulfillments.length + mutationsUnderway < request.requestedHeadcount;
+  const canClose = canCloseRequestStatus(request.status) && (isRecruitmentAdmin(session) || isHrManagerNow);
+  const canResubmit = canResubmitRequestStatus(request.status) && (isOwnRequest || isRecruitmentAdmin(session));
+  // Admin SDM, who cannot open the applicants, sees the ones who accepted their offer and can create the employee.
+  const readyToHire =
+    hireView && !manageRecruitment && canFulfill
+      ? await prisma.recruitmentCandidate.findMany({
+          where: { requestId: request.id, source: "EXTERNAL", status: "OFFERING", offer: { response: "ACCEPTED" } },
+          orderBy: { statusChangedAt: "asc" },
+          select: { id: true, fullName: true },
+        })
+      : [];
+  // Admin Rekrutmen carries out the approved Mutasi that fills this request (seat picked here, since they cannot open the Mutasi page).
+  const mutationSeats = new Map<string, SeatChoice[]>();
+  if (manageRecruitment) {
+    for (const m of request.movementRequests) {
+      if (m.status === "APPROVED" && m.proposedJobId && m.proposedOrgUnitId) {
+        mutationSeats.set(
+          m.id,
+          await listMovementSeatChoices({
+            jobId: m.proposedJobId,
+            orgUnitId: m.proposedOrgUnitId,
+            jobTitle: m.proposedJob?.jobTitle ?? "",
+            unitName: m.proposedOrgUnit?.unitName ?? "",
+            jobLevel: m.proposedJobLevel,
+            employeeId: m.employeeId,
+            addPosition: false,
+          })
+        );
+      }
+    }
+  }
   const canCancel =
     canCancelRecruitmentRequest(session, request.requesterEmployeeId, activeHrManagerPositionIds) &&
     canCancelRequestStatus(request.status);
@@ -368,7 +414,7 @@ export default async function RecruitmentDetailPage({
       {canApprove && (request.status === "SUBMITTED" || request.status === "UNDER_REVIEW") && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="rounded-lg bg-slate-50 p-4 text-sm">
-            <p className="text-xs text-slate-500">Jabatan standar (ditetapkan Admin SDM / Admin Rekrutmen)</p>
+            <p className="text-xs text-slate-500">Jabatan standar (ditetapkan Admin Rekrutmen)</p>
             {request.job ? (
               <>
                 <p className="font-medium text-slate-900">
@@ -378,7 +424,7 @@ export default async function RecruitmentDetailPage({
                 <p className="mt-0.5 text-xs text-slate-500">Ditulis pengaju: &quot;{request.requestedJobText ?? "—"}&quot;</p>
               </>
             ) : (
-              <p className="text-amber-800">Menunggu Admin SDM / Admin Rekrutmen menetapkan jabatan. Tombol Setujui aktif setelah itu.</p>
+              <p className="text-amber-800">Menunggu Admin Rekrutmen menetapkan jabatan. Tombol Setujui aktif setelah itu.</p>
             )}
           </div>
           {request.status === "SUBMITTED" && (
@@ -452,6 +498,23 @@ export default async function RecruitmentDetailPage({
         />
       )}
 
+      {readyToHire.length > 0 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
+          <h2 className="text-sm font-medium text-emerald-900">Pelamar yang sudah menerima offering</h2>
+          <p className="mt-1 text-xs text-emerald-800">Buat karyawannya dari sini. Data pelamar lainnya dikelola Admin Rekrutmen.</p>
+          <div className="mt-3 space-y-2">
+            {readyToHire.map((c) => (
+              <div key={c.id} className="flex items-center justify-between rounded-lg bg-white px-4 py-2 text-sm">
+                <span className="text-slate-900">{c.fullName}</span>
+                <Link href={`/recruitment/${request.id}/create-employee?candidateId=${c.id}`} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">
+                  {t("recruitment.createEmployeeFromRequest")}
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-slate-900">{t("recruitment.linkedEmployees")}</h2>
@@ -499,13 +562,27 @@ export default async function RecruitmentDetailPage({
             <p className="text-xs font-medium text-slate-500">Mutasi untuk permintaan ini</p>
             <div className="mt-2 space-y-2">
               {request.movementRequests.map((m) => (
-                <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-4 py-2 text-sm">
-                  <Link href={`/movements/${m.id}`} className="text-indigo-600 hover:underline">
-                    {m.employee.fullLegalName} · {m.requestNumber}
-                  </Link>
-                  <span className="text-xs text-slate-500">
-                    {m.proposedPosition.positionCode} · {t(`movementStatus.${m.status}`)}
-                  </span>
+                <div key={m.id} className="rounded-lg border border-slate-100 px-4 py-2 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {isHrAdmin(session) || isHrManagerNow ? (
+                      <Link href={`/movements/${m.id}`} className="text-indigo-600 hover:underline">
+                        {m.employee.fullLegalName} · {m.requestNumber}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-900">
+                        {m.employee.fullLegalName} · {m.requestNumber}
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-500">
+                      {m.proposedJob && m.status !== "IMPLEMENTED" ? `${m.proposedJob.jobTitle} (${m.proposedOrgUnit?.unitName ?? "—"})` : m.proposedPosition.positionCode} · {t(`movementStatus.${m.status}`)}
+                    </span>
+                  </div>
+                  {manageRecruitment && m.status === "APPROVED" && (
+                    <div className="mt-3 rounded-lg bg-slate-50 p-3">
+                      <p className="mb-2 text-xs font-medium text-slate-700">Mutasi sudah disetujui. Laksanakan untuk memindahkan karyawan dan mengisi permintaan ini.</p>
+                      {m.proposedJobId ? <ExecuteAddPositionForm requestId={m.id} mode="MUTATION" positions={mutationSeats.get(m.id) ?? []} /> : <ExecuteMovementButton requestId={m.id} />}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

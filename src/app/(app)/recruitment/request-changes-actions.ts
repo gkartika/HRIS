@@ -196,7 +196,7 @@ export async function reduceRecruitmentHeadcountAction(requestId: string, _prev:
 
 // ---------- Jabatan ----------
 
-// Admin SDM / Admin Rekrutmen pick the standard Jabatan (or create it) and the level. Before approval that is
+// Admin Rekrutmen pick the standard Jabatan (or create it) and the level. Before approval that is
 // the normal step; after approval it is a change and needs a reason.
 export async function setRecruitmentRequestJobAction(requestId: string, _prev: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();

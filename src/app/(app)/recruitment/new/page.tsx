@@ -1,6 +1,6 @@
 import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
-import { canSubmitRecruitmentRequest, isHrAdmin } from "@/lib/permissions";
+import { canSubmitRecruitmentRequest, isRecruitmentAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { CreateRequestForm } from "./create-request-form";
@@ -15,7 +15,7 @@ export default async function NewRecruitmentRequestPage() {
     // DEPARTMENT-only — the request names a Department; at fulfillment any
     // vacant seat in it or below it (Section/Group/Team) can be used.
     prisma.orgUnit.findMany({ where: { activeFlag: true, unitType: "DEPARTMENT" }, orderBy: { unitName: "asc" } }),
-    isHrAdmin(session)
+    isRecruitmentAdmin(session)
       ? prisma.employee.findMany({ where: { activeFlag: true }, orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } })
       : Promise.resolve([]),
   ]);
@@ -28,7 +28,7 @@ export default async function NewRecruitmentRequestPage() {
           departments={departments}
           employees={employees}
           currentEmployeeId={session.user.employeeId}
-          isHrAdmin={isHrAdmin(session)}
+          isHrAdmin={isRecruitmentAdmin(session)}
         />
       </div>
     </div>

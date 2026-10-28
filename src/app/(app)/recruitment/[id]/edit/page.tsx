@@ -2,7 +2,7 @@ import { AccessDenied } from "@/components/access-denied";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin } from "@/lib/permissions";
+import { isRecruitmentAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { canResubmitRequestStatus } from "@/lib/recruitment";
@@ -19,7 +19,7 @@ export default async function EditReturnedRecruitmentRequestPage({ params }: { p
   if (!request) notFound();
 
   const isRequester = !!session.user.employeeId && session.user.employeeId === request.requesterEmployeeId;
-  if (!isRequester && !isHrAdmin(session)) return <AccessDenied />;
+  if (!isRequester && !isRecruitmentAdmin(session)) return <AccessDenied />;
 
   if (!canResubmitRequestStatus(request.status)) {
     return (
@@ -72,7 +72,7 @@ export default async function EditReturnedRecruitmentRequestPage({ params }: { p
           departments={departments}
           employees={[]}
           currentEmployeeId={session.user.employeeId}
-          isHrAdmin={isHrAdmin(session)}
+          isHrAdmin={isRecruitmentAdmin(session)}
           resubmitRequestId={request.id}
           initial={{
             requestDate: request.requestDate.toISOString().slice(0, 10),

@@ -214,7 +214,7 @@ export function ResumeButton({ requestId }: { requestId: string }) {
 
 type Mode = "hold" | "reduce" | "job" | null;
 
-// After approval: Tahan, Kurangi jumlah and (Admin SDM / Admin Rekrutmen only) Ubah jabatan. One small form
+// After approval: Tahan, Kurangi jumlah and (Admin Rekrutmen only) Ubah jabatan. One small form
 // at a time. While the request is held only Lanjutkan, Kurangi and Ubah jabatan remain.
 export function ManagePanel({
   requestId,

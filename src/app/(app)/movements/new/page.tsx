@@ -53,7 +53,8 @@ export default async function NewMovementRequestPage({
   }
   // Opened from a recruitment request by Admin SDM ("Isi dengan Mutasi"): a Mutasi into one of its vacant seats.
   let fillRow: { id: string; label: string; requesterEmployeeId: string; jobId: string; jobTitle: string } | null = null;
-  if (recruitmentRequestId && isHrAdminUser) {
+  // Admin Rekrutmen files "Isi dengan Mutasi" (owner, 2026-10-28).
+  if (recruitmentRequestId && canManageRecruitment(session)) {
     const r = await prisma.recruitmentRequest.findUnique({
       where: { id: recruitmentRequestId },
       select: {
@@ -77,7 +78,7 @@ export default async function NewMovementRequestPage({
     }
   }
   const viaCandidateOnly = !isHrAdminUser && level3DepartmentIds.length === 0 && !!candidateRow;
-  if (!isHrAdminUser && level3DepartmentIds.length === 0 && !viaCandidateOnly) {
+  if (!isHrAdminUser && level3DepartmentIds.length === 0 && !viaCandidateOnly && !fillRow) {
     return <AccessDenied />;
   }
 
@@ -85,7 +86,7 @@ export default async function NewMovementRequestPage({
     prisma.employee.findMany({
       where: viaCandidateOnly
         ? { id: candidateRow!.employeeId }
-        : isHrAdminUser
+        : isHrAdminUser || fillRow
         ? {}
         : {
             currentPosition: {

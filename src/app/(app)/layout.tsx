@@ -12,6 +12,7 @@ import {
   canManageGaOperations,
   canManageConsumables,
   canManageRecruitment,
+  canCreateEmployeeFromRequest,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getLevel3DepartmentIds } from "@/lib/level3-scope";
@@ -94,7 +95,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (isHrAdmin(session)) {
     buckets.karyawanOrg.push({ href: "/organization", label: t("nav.organization"), icon: "Building2" });
   }
-  if (canSubmitRecruitmentRequest(session) || canManageRecruitment(session)) {
+  // Admin SDM sees the list only to create an employee from an approved request.
+  if (canSubmitRecruitmentRequest(session) || canManageRecruitment(session) || canCreateEmployeeFromRequest(session)) {
     buckets.rekrutmenMutasi.push({ href: "/recruitment", label: t("recruitment.navLabel"), icon: "FileText" });
   }
   // Applicants across all requests (tests, interviews, offers) belong to HR Admin; anyone

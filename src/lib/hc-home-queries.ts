@@ -10,9 +10,6 @@ import { computeOnboardingStatus, isOnboardingAssetsComplete, isOnboardingTraini
 import { formatCutoffParam, previousCutoffPeriod, resolveCutoffPeriod, type CutoffPeriod } from "@/lib/absence-cutoff";
 import { getUnresolvedDays } from "@/lib/attendance-reconciliation-queue";
 import { buildOrgUnitTree } from "@/lib/org-unit-tree";
-import { findVacantPositionsInDepartment } from "@/lib/recruitment-seats";
-import { listCandidates, waitingApplicantGroups } from "@/lib/recruitment-queries";
-import { ACTIVE_CANDIDATE_STATUSES } from "@/lib/recruitment-candidates";
 import { t } from "@/lib/i18n/id";
 
 export interface SetupWarning {
@@ -55,7 +52,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
   const previous = previousCutoffPeriod(period);
 
   const [
-    recruitment,
     onboarding,
     expiringContracts,
     triggeredCases,
@@ -74,24 +70,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     orgUnits,
     holidayCounts,
     hrManagerSeats,
-    activeCandidates,
   ] = await Promise.all([
-    prisma.recruitmentRequest.findMany({
-      relationLoadStrategy: "join",
-      where: { status: { in: ["APPROVED", "RECRUITMENT_IN_PROGRESS", "PARTIALLY_FILLED"] } },
-      select: {
-        id: true,
-        requestNumber: true,
-        requestDate: true,
-        approvedAt: true,
-        requestedHeadcount: true,
-        departmentId: true,
-        jobId: true,
-        job: { select: { jobTitle: true } },
-        department: { select: { unitName: true } },
-        _count: { select: { fulfillments: true } },
-      },
-    }),
     prisma.onboardingCase.findMany({
       relationLoadStrategy: "join",
       where: { cancelledAt: null, completedAt: null },
@@ -199,52 +178,11 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       prisma.companyHoliday.count({ where: { date: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } })
     )),
     prisma.position.count({ where: { archived: false, grantsHrManagerAccess: true } }),
-    listCandidates({ status: { in: ACTIVE_CANDIDATE_STATUSES } }, 400),
   ]);
 
   const todo: HcTodoRow[] = [];
 
-  // ---- Rekrutmen: approved requests still waiting for people to be hired into them ----
-  const readyRequests: { id: string; requestNumber: string; departmentId: string; jobId: string | null; label: string }[] = [];
-  for (const r of recruitment) {
-    const filled = r._count.fulfillments;
-    if (filled >= r.requestedHeadcount) continue;
-    const age = daysSince(r.approvedAt ?? r.requestDate, now);
-    const label = r.job?.jobTitle ?? r.department.unitName;
-    readyRequests.push({ id: r.id, requestNumber: r.requestNumber, departmentId: r.departmentId, jobId: r.jobId, label });
-    todo.push({
-      kind: "rc",
-      type: "Permintaan Tenaga Kerja",
-      title: `${label}: ${r.requestedHeadcount - filled} orang lagi`,
-      who: `${r.requestNumber} · ${r.department.unitName}`,
-      statusLabel: filled > 0 ? `Terisi ${filled} dari ${r.requestedHeadcount}` : "Siap diisi",
-      severity: waitingSeverity(age),
-      urgency: age,
-      timeLabel: waitingLabel(age),
-      actionLabel: filled > 0 ? "Buka" : "Buat Karyawan",
-      href: `/recruitment/${r.id}`,
-      horizon: horizonForWaiting(age),
-    });
-  }
-
-  // ---- Pelamar: people waiting for Admin SDM (a reviewer to pick, an interview to set, an offer to send ...) ----
-  for (const w of waitingApplicantGroups(activeCandidates)) {
-    const requestId = w.requestId;
-    const age = daysSince(w.oldest, now);
-    todo.push({
-      kind: "rc",
-      type: "Pelamar",
-      title: `${w.count} pelamar menunggu tindakan: ${w.label}`,
-      who: w.requestNumber,
-      statusLabel: w.firstStep,
-      severity: waitingSeverity(age),
-      urgency: age,
-      timeLabel: waitingLabel(age),
-      actionLabel: "Buka",
-      href: `/recruitment/${requestId}`,
-      horizon: horizonForWaiting(age),
-    });
-  }
+  // (Recruitment rows moved to Admin Rekrutmen's own Beranda, 2026-10-28.)
 
   // ---- Onboarding: the contract item is the only one Admin SDM ticks; overdue cases need a nudge ----
   if (onboarding.length > 0) {
@@ -567,22 +505,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
   if (companyDateParts(now).month >= 11 && holidayCounts[1] === 0) {
     warnings.push({ text: `Libur & Cuti Bersama ${year + 1} belum diisi`, actionLabel: "Isi", href: "/admin/absence-settings?tab=libur" });
   }
-  const noSeat = (
-    await Promise.all(
-      readyRequests.map(async (r) => ((await findVacantPositionsInDepartment(r.departmentId, r.jobId ?? undefined)).length === 0 ? r : null))
-    )
-  ).filter((r): r is NonNullable<typeof r> => r !== null);
-  for (const r of noSeat.slice(0, 3)) {
-    warnings.push({
-      text: `Tidak ada posisi Kosong untuk ${r.label}, padahal permintaan ${r.requestNumber} siap diisi`,
-      actionLabel: "Tambah posisi",
-      href: "/admin/positions",
-    });
-  }
-  if (noSeat.length > 3) {
-    warnings.push({ text: `Dan ${noSeat.length - 3} permintaan lain tanpa posisi Kosong`, actionLabel: "Buka", href: "/recruitment" });
-  }
-
   const active = activeByStatus.reduce((sum, g) => sum + g._count._all, 0);
   const segments: HeadcountSegment[] = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"].map((code) => ({
     code,

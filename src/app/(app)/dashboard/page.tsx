@@ -184,7 +184,7 @@ async function ApprovalsSection({ session, pending }: { session: Awaited<ReturnT
               <RecruitmentDecisionButtons
                 requestId={r.id}
                 positions={pending.hrManagerPositions}
-                approveBlockedReason={r.jobId ? undefined : "Menunggu Admin SDM / Admin Rekrutmen menetapkan jabatan standar."}
+                approveBlockedReason={r.jobId ? undefined : "Menunggu Admin Rekrutmen menetapkan jabatan standar."}
               />
             </ApprovalRow>
           ))}

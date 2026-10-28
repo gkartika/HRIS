@@ -21,7 +21,7 @@ export async function notifyRequestParties(args: {
         select: { employeeId: true },
       }),
       prisma.account.findMany({
-        where: { accountStatus: "ACTIVE", roles: { some: { role: { in: ["HR_ADMIN", "RECRUITMENT_ADMIN"] } } } },
+        where: { accountStatus: "ACTIVE", roles: { some: { role: { in: ["RECRUITMENT_ADMIN"] } } } },
         select: { id: true, usernameOrEmail: true },
       }),
     ]);

@@ -70,7 +70,7 @@ export async function submitMovementRequest(
   const proposedJobLevel = ((formData.get("proposedJobLevel") as string) || "").trim() || null;
   let fillRequest: { jobId: string | null; status: RecruitmentRequestStatus; requestedHeadcount: number; requesterEmployeeId: string; filled: number; held: boolean } | null = null;
   if (recruitmentRequestId) {
-    if (!isHrAdmin(session)) return "Hanya Admin SDM yang bisa mengisi permintaan tenaga kerja dengan Mutasi.";
+    if (!canManageRecruitment(session)) return "Hanya Admin Rekrutmen yang bisa mengisi permintaan tenaga kerja dengan Mutasi.";
     const r = await prisma.recruitmentRequest.findUnique({
       where: { id: recruitmentRequestId },
       select: { jobId: true, status: true, requestedHeadcount: true, requesterEmployeeId: true, heldAt: true, _count: { select: { fulfillments: true } } },
@@ -139,7 +139,7 @@ export async function submitMovementRequest(
 
   const eligible = await isMovementSubmitterForEmployeeDepartment(session.user.employeeId, employeeId);
   // Admin Rekrutmen may submit only for an internal applicant (checked against the applicant below).
-  if (!canSubmitMovementRequest(session, eligible) && !(candidateId && canManageRecruitment(session))) {
+  if (!canSubmitMovementRequest(session, eligible) && !((candidateId || recruitmentRequestId) && canManageRecruitment(session))) {
     return "Anda tidak memiliki akses. Hanya pemegang Posisi Level 2C ke atas di department karyawan ini yang dapat mengajukan.";
   }
 
@@ -304,6 +304,8 @@ export async function submitMovementRequest(
     const back = await prisma.recruitmentCandidate.findUnique({ where: { id: candidateId }, select: { requestId: true } });
     if (back) redirect(`/recruitment/${back.requestId}/candidates/${candidateId}`);
   }
+  // Admin Rekrutmen cannot open the Mutasi page; they go back to the request they are filling.
+  if (recruitmentRequestId && !eligible && !isHrAdmin(session)) redirect(`/recruitment/${recruitmentRequestId}`);
   redirect(`/movements/${request.id}`);
 }
 
@@ -506,8 +508,9 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
   // Admin SDM may carry out any approved move; Admin Rekrutmen only one opened from an
   // internal applicant (the applicant's own Perubahan Posisi).
   if (!canExecuteMovementRequest(session)) {
+    // Admin Rekrutmen may carry out an internal applicant's move and a Mutasi that fills one of their requests.
     const linked = canManageRecruitment(session)
-      ? await prisma.recruitmentCandidate.findUnique({ where: { movementRequestId: requestId }, select: { id: true } })
+      ? ((await prisma.recruitmentCandidate.findUnique({ where: { movementRequestId: requestId }, select: { id: true } })) ?? (request.recruitmentRequestId ? { id: "request" } : null))
       : null;
     if (!linked) return t("common.forbidden");
   }

@@ -139,7 +139,7 @@ export function DecisionButtons({
 }: {
   requestId: string;
   positions: DecisionPositionOption[];
-  /** Set while Admin SDM / Admin Rekrutmen have not set the standard Jabatan yet. */
+  /** Set while Admin Rekrutmen have not set the standard Jabatan yet. */
   approveBlockedReason?: string;
 }) {
   return (

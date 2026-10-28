@@ -701,7 +701,7 @@ export const strings = {
     dashboardTitle: "Dashboard HR Manager",
     dashboardPlaceholder: "Dashboard HR Manager akan dibangun pada increment berikutnya.",
     reportsTitle: "Laporan SDM",
-    reportsPlaceholder: "Laporan SDM (headcount, rekrutmen, pemenuhan, onboarding, kontrak, mutasi, keluar) akan dibangun pada increment berikutnya.",
+    reportsPlaceholder: "Laporan SDM (headcount, onboarding, kontrak, mutasi, keluar) akan dibangun pada increment berikutnya.",
     notHrManager: "Halaman ini hanya untuk pemegang Posisi HR Manager aktif.",
   },
   common: {

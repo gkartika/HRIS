@@ -22,12 +22,14 @@ import {
   canExecuteMovementRequestStatus,
   canCancelMovementRequestStatus,
   isPerubahanPosisiType,
+  isAddPositionType,
 } from "@/lib/movement";
 import { isEvaluationGateSatisfied } from "@/lib/evaluation";
 import {
   MovementDecisionButtons,
   DeptHeadDecisionButtons,
   ExecuteMovementButton,
+  ExecuteAddPositionForm,
   CancelMovementForm,
   MovementHrFieldsForm,
 } from "./decision-forms";
@@ -44,6 +46,8 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
       employee: true,
       currentPosition: { include: { job: true, orgUnit: true } },
       proposedPosition: { include: { job: true, orgUnit: true } },
+      proposedJob: { select: { id: true, jobTitle: true } },
+      proposedOrgUnit: { select: { id: true, unitName: true } },
       requesterEmployee: true,
       requesterPosition: { include: { job: true } },
       submittedByAccount: true,
@@ -114,6 +118,21 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
     !isLegacyType &&
     canCancelMovementRequest(session, request.requesterEmployeeId, activeHrManagerPositionIds) &&
     canCancelMovementRequestStatus(request.status);
+  // Tambah Posisi: Admin SDM picks the real seat when carrying it out.
+  const isAddPosition = isAddPositionType(request.movementType);
+  const addCandidates =
+    canExecute && isAddPosition && request.proposedJobId && request.proposedOrgUnitId
+      ? await prisma.position.findMany({
+          where: { jobId: request.proposedJobId, orgUnitId: request.proposedOrgUnitId, archived: false },
+          orderBy: { positionCode: "asc" },
+          select: {
+            id: true,
+            positionCode: true,
+            jobLevel: true,
+            assignments: { where: { status: { in: ["ACTIVE", "SCHEDULED"] } }, select: { employeeId: true, employee: { select: { fullLegalName: true } } } },
+          },
+        })
+      : [];
   const canEditHrFields = !isLegacyType && isHrAdminUser && request.status !== "IMPLEMENTED" && request.status !== "CANCELLED";
 
   // A return/reject reason is meant for the requester to act on — always
@@ -182,6 +201,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
           <div>
             <p className="text-xs text-slate-500">{t("movement.movementType")}</p>
             <p className="text-sm text-slate-900">{t(`movementType.${request.movementType}`)}</p>
+            {request.movementType === "ADD_POSITION" && <p className="mt-1 text-xs text-slate-500">{t("movement.addPositionHint")}</p>}
           </div>
           <div>
             <p className="text-xs text-slate-500">{t("movement.currentPosition")}</p>
@@ -191,14 +211,31 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
             </p>
             <p className="text-xs text-slate-400">{request.currentPosition.orgUnit.unitName}</p>
           </div>
-          <div>
-            <p className="text-xs text-slate-500">{t("movement.proposedPosition")}</p>
-            <p className="text-sm text-slate-900">
-              {request.proposedPosition.jobLevel} {request.proposedPosition.job.jobTitle} (
-              {request.proposedPosition.positionCode})
-            </p>
-            <p className="text-xs text-slate-400">{request.proposedPosition.orgUnit.unitName}</p>
-          </div>
+          {isAddPosition ? (
+            <div>
+              <p className="text-xs text-slate-500">{t("movement.proposedJob")}</p>
+              <p className="text-sm text-slate-900">{request.proposedJob?.jobTitle ?? "—"}</p>
+              <p className="text-xs text-slate-400">
+                {t("movement.proposedUnit")}: {request.proposedOrgUnit?.unitName ?? "—"}
+                {request.status !== "IMPLEMENTED" && " · posisi dipilih saat dilaksanakan"}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-slate-500">{t("movement.proposedPosition")}</p>
+              <p className="text-sm text-slate-900">
+                {request.proposedPosition.jobLevel} {request.proposedPosition.job.jobTitle} (
+                {request.proposedPosition.positionCode})
+              </p>
+              <p className="text-xs text-slate-400">{request.proposedPosition.orgUnit.unitName}</p>
+            </div>
+          )}
+          {isAddPosition && (
+            <div>
+              <p className="text-xs text-slate-500">Persetujuan</p>
+              <p className="text-sm text-slate-900">{t("movement.approvalHrManagerOnly")}</p>
+            </div>
+          )}
           {request.proposedEmploymentStatus && (
             <div>
               <p className="text-xs text-slate-500">{t("movement.proposedEmploymentStatus")}</p>
@@ -351,7 +388,18 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
       {canExecute && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="mb-3 text-sm font-medium text-slate-900">{t("movement.executeButton")}</p>
-          <ExecuteMovementButton requestId={request.id} />
+          {isAddPosition ? (
+            <ExecuteAddPositionForm
+              requestId={request.id}
+              positions={addCandidates.map((p) => ({
+                id: p.id,
+                label: `${p.positionCode} — ${p.jobLevel} ${request.proposedJob?.jobTitle ?? ""} (${request.proposedOrgUnit?.unitName ?? ""})${p.assignments.length ? `, dipegang ${p.assignments.map((a) => a.employee.fullLegalName).join(", ")}` : ", kosong"}`,
+                heldByEmployee: p.assignments.some((a) => a.employeeId === request.employeeId),
+              }))}
+            />
+          ) : (
+            <ExecuteMovementButton requestId={request.id} />
+          )}
         </div>
       )}
       {canCancel && (

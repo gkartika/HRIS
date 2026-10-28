@@ -15,7 +15,7 @@ type EmployeeOption = Employee & {
 // Perubahan Posisi refactor: only these three types are offered here —
 // Rotasi and Perubahan Status remain valid historical types (never removed
 // from the schema/DB) but are no longer creatable through this form.
-const MOVEMENT_TYPES = ["PROMOTION", "MUTATION", "DEMOTION"] as const;
+const MOVEMENT_TYPES = ["PROMOTION", "MUTATION", "DEMOTION", "ADD_POSITION"] as const;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -29,6 +29,8 @@ export function SubmitMovementForm({
   employees,
   defaultEmployeeId,
   positions,
+  jobs,
+  units,
   requesterCandidates,
   currentEmployeeId,
   isHrAdmin,
@@ -38,6 +40,8 @@ export function SubmitMovementForm({
   employees: EmployeeOption[];
   defaultEmployeeId: string;
   positions: PositionOption[];
+  jobs: { id: string; jobTitle: string }[];
+  units: { id: string; unitName: string; unitType: string }[];
   requesterCandidates: CandidateOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
@@ -138,6 +142,9 @@ export function SubmitMovementForm({
             ))}
           </select>
         )}
+        {movementType === "ADD_POSITION" && (
+          <p className="mt-1.5 text-xs text-slate-500">{t("movement.addPositionHint")}</p>
+        )}
       </div>
 
       <div>
@@ -171,17 +178,46 @@ export function SubmitMovementForm({
         )}
       </div>
 
-      <div>
-        <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedPosition")}</label>
-        <select name="proposedPositionId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-          <option value="">— Pilih —</option>
-          {positions.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.positionCode} — {p.jobLevel} {p.job.jobTitle} ({p.orgUnit.unitName})
-            </option>
-          ))}
-        </select>
-      </div>
+      {movementType === "ADD_POSITION" ? (
+        <>
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedJob")}</label>
+            <select name="proposedJobId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <option value="">— Pilih —</option>
+              {jobs.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.jobTitle}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">{t("movement.proposedJobHint")}</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedUnit")}</label>
+            <select name="proposedOrgUnitId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <option value="">— Pilih —</option>
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.unitName}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">{t("movement.proposedUnitHint")}</p>
+          </div>
+        </>
+      ) : (
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedPosition")}</label>
+          <select name="proposedPositionId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">— Pilih —</option>
+            {positions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.positionCode} — {p.jobLevel} {p.job.jobTitle} ({p.orgUnit.unitName})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedEffectiveDate")}</label>

@@ -65,7 +65,29 @@ export function validateProposedPosition(
 // going forward — ROTATION and STATUS_CHANGE remain valid historical
 // movementType values (existing rows are never touched/deleted) but are no
 // longer creatable, and render read-only/archived in the UI.
-export const PERUBAHAN_POSISI_TYPES: MovementType[] = ["PROMOTION", "MUTATION", "DEMOTION"];
+export const PERUBAHAN_POSISI_TYPES: MovementType[] = ["PROMOTION", "MUTATION", "DEMOTION", "ADD_POSITION"];
+
+/**
+ * Tambah Posisi (2026-10-28): nobody is moved. The employee keeps every placement they have and the proposed
+ * position becomes one more (Additional) placement. It follows the same approval steps as a Mutasi and needs
+ * no evaluation.
+ */
+export function isAddPositionType(movementType: MovementType): boolean {
+  return movementType === "ADD_POSITION";
+}
+
+/**
+ * Tambah Posisi goes straight to the HR Manager (owner, 2026-10-28): no Kepala Departemen step. Every other type
+ * starts with the Department Head.
+ */
+export function initialMovementStatus(movementType: MovementType): MovementRequestStatus {
+  return movementType === "ADD_POSITION" ? "SUBMITTED" : "PENDING_DEPT_HEAD";
+}
+
+/** A move into a position needs that position to have no active primary holder; an added or status-only change does not. */
+export function requiresVacantProposedPosition(movementType: MovementType): boolean {
+  return movementType !== "STATUS_CHANGE" && movementType !== "ADD_POSITION";
+}
 
 export function isPerubahanPosisiType(movementType: MovementType): boolean {
   return PERUBAHAN_POSISI_TYPES.includes(movementType);

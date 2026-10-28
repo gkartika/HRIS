@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ReasonForm } from "@/components/reason-form";
 import { useActionState, useState } from "react";
 import {
@@ -193,6 +194,64 @@ export function ExecuteMovementButton({ requestId }: { requestId: string }) {
       </form>
       {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
     </div>
+  );
+}
+
+// Tambah Posisi: Admin SDM picks the real seat (or first creates it) and carries the request out.
+export function ExecuteAddPositionForm({
+  requestId,
+  positions,
+}: {
+  requestId: string;
+  positions: { id: string; label: string; heldByEmployee: boolean }[];
+}) {
+  const [error, setError] = useState<string | undefined>();
+  const [isPending, setIsPending] = useState(false);
+  const [positionId, setPositionId] = useState("");
+  const usable = positions.filter((p) => !p.heldByEmployee);
+  const action = async () => {
+    setIsPending(true);
+    const result = await executeMovementRequest(requestId, positionId);
+    setIsPending(false);
+    setError(result);
+  };
+  return (
+    <form action={action} className="space-y-3">
+      <div>
+        <label htmlFor="added-position" className="mb-1 block text-xs text-slate-500">
+          {t("movement.pickAddedPosition")}
+        </label>
+        <select
+          id="added-position"
+          required
+          value={positionId}
+          onChange={(e) => setPositionId(e.target.value)}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+        >
+          <option value="">— Pilih —</option>
+          {usable.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-slate-500">{t("movement.pickAddedPositionHint")}</p>
+      </div>
+      <p className="text-xs text-slate-600">
+        {t("movement.createPositionFirst")}{" "}
+        <Link href="/admin/positions" className="font-medium text-indigo-600 underline">
+          Buka Struktur Organisasi
+        </Link>
+      </p>
+      <button
+        type="submit"
+        disabled={isPending || !positionId}
+        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+      >
+        {isPending ? t("common.loading") : t("movement.executeButton")}
+      </button>
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+    </form>
   );
 }
 

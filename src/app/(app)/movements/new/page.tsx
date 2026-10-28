@@ -79,7 +79,7 @@ export default async function NewMovementRequestPage({
     return <AccessDenied />;
   }
 
-  const [eligibleEmployees, positions, requesterCandidates] = await Promise.all([
+  const [eligibleEmployees, positions, requesterCandidates, jobs, units] = await Promise.all([
     prisma.employee.findMany({
       where: viaCandidateOnly
         ? { id: candidateRow!.employeeId }
@@ -111,6 +111,9 @@ export default async function NewMovementRequestPage({
       orderBy: { positionCode: "asc" },
     }),
     isHrAdminUser ? prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } }) : Promise.resolve([]),
+    // Tambah Posisi picks a standard Jabatan and a unit (the seat may not exist yet).
+    prisma.job.findMany({ orderBy: { jobTitle: "asc" }, select: { id: true, jobTitle: true } }),
+    prisma.orgUnit.findMany({ where: { activeFlag: true }, orderBy: [{ unitType: "asc" }, { unitName: "asc" }], select: { id: true, unitName: true, unitType: true } }),
   ]);
 
   if (eligibleEmployees.length === 0) {
@@ -135,6 +138,8 @@ export default async function NewMovementRequestPage({
           employees={eligibleEmployees}
           defaultEmployeeId={defaultEmployeeId}
           positions={positions}
+          jobs={jobs}
+          units={units}
           requesterCandidates={requesterCandidates}
           currentEmployeeId={session.user.employeeId}
           isHrAdmin={isHrAdminUser}

@@ -10,7 +10,11 @@ import {
   compareJobLevels,
   validateJobLevelDirection,
   isMovementRequestOpen,
+  isAddPositionType,
+  requiresVacantProposedPosition,
+  initialMovementStatus,
 } from "./movement";
+import { movementNeedsEvaluation } from "./evaluation";
 
 describe("formatMovementRequestNumber", () => {
   it("pads the sequence to 4 digits", () => {
@@ -78,7 +82,8 @@ describe("validateProposedPosition", () => {
 });
 
 describe("isPerubahanPosisiType (Perubahan Posisi refactor)", () => {
-  it("allows only Promosi, Mutasi and Demotasi", () => {
+  it("allows Promosi, Mutasi, Demosi and Tambah Posisi", () => {
+    expect(isPerubahanPosisiType("ADD_POSITION")).toBe(true);
     expect(isPerubahanPosisiType("PROMOTION")).toBe(true);
     expect(isPerubahanPosisiType("MUTATION")).toBe(true);
     expect(isPerubahanPosisiType("DEMOTION")).toBe(true);
@@ -87,6 +92,38 @@ describe("isPerubahanPosisiType (Perubahan Posisi refactor)", () => {
   it("excludes the legacy Rotasi and Perubahan Status types", () => {
     expect(isPerubahanPosisiType("ROTATION")).toBe(false);
     expect(isPerubahanPosisiType("STATUS_CHANGE")).toBe(false);
+  });
+});
+
+describe("Tambah Posisi", () => {
+  it("is its own type", () => {
+    expect(isAddPositionType("ADD_POSITION")).toBe(true);
+    expect(isAddPositionType("MUTATION")).toBe(false);
+  });
+
+  it("does not need the proposed position to be free of a primary holder, a move does", () => {
+    expect(requiresVacantProposedPosition("ADD_POSITION")).toBe(false);
+    expect(requiresVacantProposedPosition("STATUS_CHANGE")).toBe(false);
+    expect(requiresVacantProposedPosition("MUTATION")).toBe(true);
+    expect(requiresVacantProposedPosition("PROMOTION")).toBe(true);
+  });
+
+  it("must still name a position other than the current one, in any department", () => {
+    expect(validateProposedPosition("ADD_POSITION", "pos-a", "pos-a")).not.toBeNull();
+    expect(validateProposedPosition("ADD_POSITION", "pos-a", "pos-b")).toBeNull();
+  });
+
+  it("goes straight to the HR Manager, every other type starts with the Department Head", () => {
+    expect(initialMovementStatus("ADD_POSITION")).toBe("SUBMITTED");
+    expect(initialMovementStatus("MUTATION")).toBe("PENDING_DEPT_HEAD");
+    expect(initialMovementStatus("PROMOTION")).toBe("PENDING_DEPT_HEAD");
+    expect(initialMovementStatus("DEMOTION")).toBe("PENDING_DEPT_HEAD");
+  });
+
+  it("needs no evaluation, like a Mutasi, and has no level direction rule", () => {
+    expect(movementNeedsEvaluation("ADD_POSITION", "MUTASI")).toBe(false);
+    expect(validateJobLevelDirection("ADD_POSITION", "3B", "2A")).toBeNull();
+    expect(validateJobLevelDirection("ADD_POSITION", "2A", "3B")).toBeNull();
   });
 });
 

@@ -352,6 +352,15 @@ export const strings = {
     attendanceIjin: "Ijin",
     attendanceIjinHalfDay: "Ijin 1/2 Hari",
     attendanceCuti: "Cuti",
+    addPositionHint: "Karyawan tetap di posisi saat ini dan mendapat satu posisi tambahan (penempatan Tambahan). Tidak butuh evaluasi dan tidak lewat Kepala Departemen: langsung ke HR Manager, lalu Admin SDM melaksanakan. Posisinya dipilih atau dibuat oleh Admin SDM saat melaksanakan.",
+    proposedJob: "Jabatan (standar) yang diusulkan",
+    proposedJobHint: "Dipilih dari daftar jabatan standar, bukan dari posisi, karena posisinya mungkin belum ada.",
+    proposedUnit: "Unit tujuan",
+    proposedUnitHint: "Boleh di departemen lain.",
+    pickAddedPosition: "Pilih posisi untuk jabatan ini",
+    pickAddedPositionHint: "Daftar berisi posisi dengan jabatan dan unit yang disetujui. Boleh posisi yang sudah ada pemegangnya (penempatan tambahan).",
+    createPositionFirst: "Posisinya belum ada? Buat posisi baru di Struktur Organisasi, lalu kembali ke halaman ini dan pilih.",
+    approvalHrManagerOnly: "HR Manager saja",
     performanceEvaluationRef: "Referensi Tambahan (opsional)",
     performanceEvaluationLinkNotice:
       "Evaluasi Kinerja FR-HC-01-07 dibuat otomatis untuk permintaan ini — kolom ini hanya untuk referensi/tautan tambahan yang bersifat opsional.",
@@ -362,6 +371,7 @@ export const strings = {
     ROTATION: "Rotasi",
     MUTATION: "Mutasi",
     DEMOTION: "Demosi",
+    ADD_POSITION: "Tambah Posisi",
     STATUS_CHANGE: "Perubahan Status",
   },
   movementStatus: {

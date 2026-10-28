@@ -22,7 +22,7 @@ const MOVEMENT_STATUSES: MovementRequestStatus[] = [
   "IMPLEMENTED",
   "CANCELLED",
 ];
-const MOVEMENT_TYPES: MovementType[] = ["PROMOTION", "ROTATION", "MUTATION", "DEMOTION", "STATUS_CHANGE"];
+const MOVEMENT_TYPES: MovementType[] = ["PROMOTION", "ROTATION", "MUTATION", "DEMOTION", "ADD_POSITION", "STATUS_CHANGE"];
 
 export default async function MovementListPage({
   searchParams,
@@ -131,6 +131,8 @@ export default async function MovementListPage({
         employee: true,
         currentPosition: { include: { job: true, orgUnit: true } },
         proposedPosition: { include: { job: true } },
+        proposedJob: { select: { jobTitle: true } },
+        proposedOrgUnit: { select: { unitName: true } },
         // where it came from: the applicant's request, or the request a Mutasi fills
         recruitmentCandidate: { select: { request: { select: { id: true, requestNumber: true } } } },
         recruitmentRequest: { select: { id: true, requestNumber: true } },
@@ -340,7 +342,9 @@ export default async function MovementListPage({
                     {r.origin === "MUTASI" && r.recruitmentRequest && <span className="block text-[11px] text-slate-400">mengisi {r.recruitmentRequest.requestNumber}</span>}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {r.currentPosition.job.jobTitle} → {r.proposedPosition.job.jobTitle}
+                    {r.movementType === "ADD_POSITION"
+                      ? `${r.currentPosition.job.jobTitle} + ${r.proposedJob?.jobTitle ?? "—"} (${r.proposedOrgUnit?.unitName ?? "—"})`
+                      : `${r.currentPosition.job.jobTitle} → ${r.proposedPosition.job.jobTitle}`}
                   </td>
                   <td className="px-4 py-3">
                     <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">

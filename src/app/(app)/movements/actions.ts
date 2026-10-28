@@ -30,13 +30,16 @@ import {
   validateProposedPosition,
   isPerubahanPosisiType,
   validateJobLevelDirection,
+  isAddPositionType,
+  requiresVacantProposedPosition,
+  initialMovementStatus,
 } from "@/lib/movement";
 import { movementNeedsEvaluation, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/lib/evaluation-create";
 import { completeInternalHire, notifyManagersOfInternalHire } from "@/lib/recruitment-flow";
 import { mutationFillProblem } from "@/lib/mutation-fill";
 import { canManageRecruitment } from "@/lib/permissions";
-import type { MovementType, EmploymentStatus, RecruitmentRequestStatus } from "@/generated/prisma/enums";
+import type { MovementType, EmploymentStatus, RecruitmentRequestStatus, PositionStatus } from "@/generated/prisma/enums";
 
 export async function submitMovementRequest(
   _prevState: string | undefined,
@@ -47,7 +50,10 @@ export async function submitMovementRequest(
   const employeeId = formData.get("employeeId") as string;
   const movementType = formData.get("movementType") as MovementType;
   const currentAssignmentId = formData.get("currentAssignmentId") as string;
-  const proposedPositionId = formData.get("proposedPositionId") as string;
+  let proposedPositionId = formData.get("proposedPositionId") as string;
+  // Tambah Posisi names a standard Jabatan and a unit instead of a position.
+  const proposedJobId = ((formData.get("proposedJobId") as string) || "").trim() || null;
+  const proposedOrgUnitId = ((formData.get("proposedOrgUnitId") as string) || "").trim() || null;
   const proposedEmploymentStatus = (formData.get("proposedEmploymentStatus") as string) || null;
   const proposedEffectiveDate = formData.get("proposedEffectiveDate") as string;
   const requestReason = (formData.get("requestReason") as string)?.trim();
@@ -79,12 +85,14 @@ export async function submitMovementRequest(
     !employeeId ||
     !movementType ||
     !currentAssignmentId ||
-    !proposedPositionId ||
+    !(movementType === "ADD_POSITION" ? proposedJobId && proposedOrgUnitId : proposedPositionId) ||
     !proposedEffectiveDate ||
     !requestReason ||
     !requesterEmployeeId
   ) {
-    return "Karyawan, jenis perubahan, Assignment saat ini, posisi yang diusulkan, tanggal efektif, alasan, dan pengaju wajib diisi.";
+    return movementType === "ADD_POSITION"
+      ? "Karyawan, jenis perubahan, Assignment saat ini, jabatan, unit tujuan, tanggal efektif, alasan, dan pengaju wajib diisi."
+      : "Karyawan, jenis perubahan, Assignment saat ini, posisi yang diusulkan, tanggal efektif, alasan, dan pengaju wajib diisi.";
   }
   // Perubahan Posisi refactor: only Promosi/Mutasi/Demotasi are submittable
   // going forward — enforced server-side, not just by the form's dropdown,
@@ -140,27 +148,42 @@ export async function submitMovementRequest(
     return `Karyawan ini masih memiliki permintaan Perubahan Posisi yang berjalan (${openRequest.requestNumber}). Selesaikan atau batalkan permintaan itu terlebih dahulu.`;
   }
 
-  const positionError = validateProposedPosition(movementType, employee.currentPositionId, proposedPositionId);
-  if (positionError) return positionError;
+  // Tambah Posisi: a standard Jabatan in a unit, no seat yet. The proposed position just repeats the current one
+  // (same convention as the legacy Perubahan Status) until Admin SDM picks the real seat at execution.
+  let proposedPosition: { jobId: string; positionStatus: PositionStatus; archived: boolean; jobLevel: string };
+  if (isAddPositionType(movementType)) {
+    const [job, unit] = await Promise.all([
+      prisma.job.findUnique({ where: { id: proposedJobId! }, select: { id: true } }),
+      prisma.orgUnit.findUnique({ where: { id: proposedOrgUnitId! }, select: { id: true, activeFlag: true } }),
+    ]);
+    if (!job) return "Jabatan yang diusulkan tidak ditemukan.";
+    if (!unit || !unit.activeFlag) return "Unit tujuan tidak ditemukan atau tidak aktif.";
+    proposedPositionId = employee.currentPositionId;
+    proposedPosition = { jobId: employee.currentPosition.jobId, positionStatus: employee.currentPosition.positionStatus, archived: false, jobLevel: employee.currentPosition.jobLevel };
+  } else {
+    const positionError = validateProposedPosition(movementType, employee.currentPositionId, proposedPositionId);
+    if (positionError) return positionError;
 
-  const proposedPosition = await prisma.position.findUnique({
-    where: { id: proposedPositionId },
-    include: { job: true },
-  });
-  if (!proposedPosition) return "Posisi yang diusulkan tidak ditemukan.";
+    const found = await prisma.position.findUnique({
+      where: { id: proposedPositionId },
+      include: { job: true },
+    });
+    if (!found) return "Posisi yang diusulkan tidak ditemukan.";
+    proposedPosition = found;
 
-  const levelError = validateJobLevelDirection(
-    movementType,
-    employee.currentPosition.jobLevel,
-    proposedPosition.jobLevel
-  );
-  if (levelError) return levelError;
+    const levelError = validateJobLevelDirection(
+      movementType,
+      employee.currentPosition.jobLevel,
+      proposedPosition.jobLevel
+    );
+    if (levelError) return levelError;
+  }
 
-  if (
-    movementType !== "STATUS_CHANGE" &&
-    (await isPositionOccupiedByPrimary(proposedPositionId, employeeId))
-  ) {
+  if (requiresVacantProposedPosition(movementType) && (await isPositionOccupiedByPrimary(proposedPositionId, employeeId))) {
     return "Posisi yang diusulkan sudah memiliki pemegang Utama aktif — pilih posisi lain.";
+  }
+  if (isAddPositionType(movementType) && candidateId) {
+    return "Tambah Posisi tidak bisa dipakai untuk lamaran internal. Pilih Promosi, Mutasi atau Demosi.";
   }
 
   const requester = await prisma.employee.findUnique({ where: { id: requesterEmployeeId } });
@@ -228,10 +251,12 @@ export async function submitMovementRequest(
       currentPositionId: employee.currentPositionId,
       currentAssignmentId,
       proposedPositionId,
+      proposedJobId: isAddPositionType(movementType) ? proposedJobId : null,
+      proposedOrgUnitId: isAddPositionType(movementType) ? proposedOrgUnitId : null,
       proposedEmploymentStatus: proposedEmploymentStatus ? (proposedEmploymentStatus as EmploymentStatus) : null,
       proposedEffectiveDate: new Date(proposedEffectiveDate),
       requestReason,
-      status: "PENDING_DEPT_HEAD",
+      status: initialMovementStatus(movementType),
       requesterEmployeeId: requester.id,
       requesterPositionId: requester.currentPositionId,
       submittedByAccountId: session.user.id,
@@ -360,7 +385,7 @@ export async function decideMovementRequest(
 
   if (
     decision === "APPROVED" &&
-    request.movementType !== "STATUS_CHANGE" &&
+    requiresVacantProposedPosition(request.movementType) &&
     (await isPositionOccupiedByPrimary(request.proposedPositionId, request.employeeId))
   ) {
     return "Posisi yang diusulkan sudah memiliki pemegang Utama aktif — permintaan ini tidak dapat disetujui.";
@@ -458,7 +483,7 @@ export async function updateMovementHrFields(
 // deliberately not shared code, since that action still owns its own
 // simpler direct-correction path; duplicating a few lines here keeps each
 // action's pre-conditions (approval status vs. none) independently clear.
-export async function executeMovementRequest(requestId: string): Promise<string | undefined> {
+export async function executeMovementRequest(requestId: string, addedPositionId?: string): Promise<string | undefined> {
   const session = await requireSession();
 
   const request = await prisma.movementRequest.findUnique({ where: { id: requestId } });
@@ -475,11 +500,53 @@ export async function executeMovementRequest(requestId: string): Promise<string 
     return "Permintaan ini belum disetujui atau sudah dilaksanakan.";
   }
 
-  if (
-    request.movementType !== "STATUS_CHANGE" &&
-    (await isPositionOccupiedByPrimary(request.proposedPositionId, request.employeeId))
-  ) {
+  if (requiresVacantProposedPosition(request.movementType) && (await isPositionOccupiedByPrimary(request.proposedPositionId, request.employeeId))) {
     return "Posisi yang diusulkan sudah memiliki pemegang Utama aktif — pilih Posisi lain sebelum melaksanakan.";
+  }
+  // Tambah Posisi: nothing is ended or moved; the employee only gets one more placement.
+  if (isAddPositionType(request.movementType)) {
+    if (!addedPositionId) return "Pilih posisi untuk jabatan ini terlebih dahulu. Kalau belum ada, buat dulu di Struktur Organisasi.";
+    const chosen = await prisma.position.findUnique({ where: { id: addedPositionId }, select: { id: true, jobId: true, orgUnitId: true, archived: true } });
+    if (!chosen || chosen.archived) return "Posisi yang dipilih tidak ditemukan atau sudah diarsipkan.";
+    if (chosen.jobId !== request.proposedJobId || chosen.orgUnitId !== request.proposedOrgUnitId) {
+      return "Posisi yang dipilih harus berjabatan dan berunit sama dengan yang disetujui.";
+    }
+    const alreadyHolds = await prisma.assignment.findFirst({
+      where: { employeeId: request.employeeId, positionId: chosen.id, status: { in: ["ACTIVE", "SCHEDULED"] } },
+      select: { id: true },
+    });
+    if (alreadyHolds) return "Karyawan ini sudah memegang posisi tersebut.";
+    const added = await prisma.$transaction(async (tx) => {
+      const assignment = await tx.assignment.create({
+        data: {
+          employeeId: request.employeeId,
+          positionId: chosen.id,
+          assignmentType: "ADDITIONAL",
+          primaryAssignmentFlag: false,
+          status: "ACTIVE",
+          effectiveFrom: request.proposedEffectiveDate,
+        },
+      });
+      await syncPositionStatus(chosen.id);
+      await tx.movementRequest.update({
+        where: { id: requestId },
+        data: { status: "IMPLEMENTED", implementedAt: new Date(), implementedByAccountId: session.user.id, implementedAssignmentId: assignment.id },
+      });
+      return assignment;
+    });
+    await logAudit({
+      actorAccountId: session.user.id,
+      action: "UPDATE",
+      datasetName: "MovementRequest",
+      recordId: requestId,
+      reason: `Executed ${request.requestNumber} (Tambah Posisi, additional assignment ${added.id})`,
+    });
+    revalidatePath(`/movements/${requestId}`);
+    revalidatePath("/movements");
+    revalidatePath(`/employees/${request.employeeId}`);
+    revalidatePath("/organization");
+    revalidatePath("/team");
+    return;
   }
 
   // Perubahan Posisi refactor: end-date exactly the Assignment the request

@@ -295,6 +295,9 @@ enum MovementType {
   MUTATION
   DEMOTION
   STATUS_CHANGE
+  // Tambah Posisi (2026-10-28): the employee keeps their placement and also takes the proposed position as an
+  // Additional placement. Same approval path as a Mutasi, no evaluation.
+  ADD_POSITION
 }
 
 // Perubahan Posisi refactor (2026-07-31): PENDING_DEPT_HEAD and RETURNED
@@ -1161,6 +1164,7 @@ model OrgUnit {
   recruitmentRequests    RecruitmentRequest[]
   absenceApproverConfig  AbsenceApproverConfig?
   jobsWithDefaultOrgUnit Job[]
+  movementRequestsProposed MovementRequest[] @relation("MovementProposedOrgUnit")
 
   competencyAssessments        CompetencyAssessment[]
   trainingRequestsSnapshot     TrainingRequest[]
@@ -1195,6 +1199,7 @@ model Job {
   positions           Position[]
   recruitmentRequests RecruitmentRequest[]
   recruitmentJobTests RecruitmentJobTest[]
+  movementRequestsProposed MovementRequest[] @relation("MovementProposedJob")
 
   competencyRequirements       PositionCompetencyRequirement[]
   competencyAssessments        CompetencyAssessment[]          @relation("CompetencyAssessmentJob")
@@ -1485,6 +1490,13 @@ model MovementRequest {
   // same as currentPositionId — no position change, only employmentStatus).
   proposedPositionId       String
   proposedPosition         Position              @relation("MovementProposedPosition", fields: [proposedPositionId], references: [id])
+  // Tambah Posisi (2026-10-28): the request names a standard Jabatan and a unit, because the seat may not exist
+  // yet. proposedPositionId then just repeats the current position (same convention as STATUS_CHANGE) and the real
+  // position is chosen by Admin SDM when carrying it out (it becomes the new Additional assignment).
+  proposedJobId            String?
+  proposedJob              Job?                  @relation("MovementProposedJob", fields: [proposedJobId], references: [id])
+  proposedOrgUnitId        String?
+  proposedOrgUnit          OrgUnit?              @relation("MovementProposedOrgUnit", fields: [proposedOrgUnitId], references: [id])
   // Only meaningful/required when movementType is STATUS_CHANGE — a legacy
   // type, no longer offered by the Perubahan Posisi submit form.
   proposedEmploymentStatus EmploymentStatus?

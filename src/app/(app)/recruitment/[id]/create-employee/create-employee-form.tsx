@@ -6,7 +6,7 @@ import { t } from "@/lib/i18n/id";
 import { EmployeeCoreFields, EmployeeExtraFields } from "@/components/employee-form-fields";
 import type { Position, Job, OrgUnit, EducationLevel, PtkpStatus } from "@/generated/prisma/client";
 
-type PositionOption = Position & { job: Job; orgUnit: OrgUnit };
+type PositionOption = Position & { job: Job; orgUnit: OrgUnit; leavingLabel?: string | null };
 
 export function CreateEmployeeFromRequestForm({
   requestId,
@@ -43,9 +43,15 @@ export function CreateEmployeeFromRequestForm({
               {candidatePositions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.positionCode} — {p.orgUnit.unitName}
+                  {p.leavingLabel ? ` · ${p.leavingLabel}` : ""}
                 </option>
               ))}
             </select>
+            {candidatePositions.some((p) => p.leavingLabel) && (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Posisi bertanda &quot;akan kosong&quot; masih dipegang karyawan yang sudah mengundurkan diri sampai hari kerja terakhirnya. Karyawan baru boleh langsung ditempatkan di posisi yang sama; untuk beberapa hari ada dua pemegang Utama. Setelah hari kerja terakhir, karyawan yang keluar dinonaktifkan otomatis.
+              </p>
+            )}
             {candidatePositions.length === 0 && (
               <p className="mt-1 text-xs text-amber-700">
                 Belum ada Posisi kosong untuk Jabatan/Department ini — buat terlebih dahulu di Pengaturan &gt; Posisi Organisasi.

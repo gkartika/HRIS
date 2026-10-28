@@ -208,6 +208,22 @@ export async function cancelOffboardingCase(
   const cancellationReason = (formData.get("cancellationReason") as string)?.trim();
   if (!cancellationReason) return "Alasan pembatalan wajib diisi.";
 
+  // A replacement may already sit in the leaver's seat (the two overlap until the last working day). Cancelling the
+  // exit now would leave two permanent main holders in one seat, so it is refused until that is sorted out.
+  const mySeats = await prisma.assignment.findMany({
+    where: { employeeId: offboardingCase.employeeId, assignmentType: "PRIMARY", status: { in: ["ACTIVE", "SCHEDULED"] } },
+    select: { positionId: true, position: { select: { positionCode: true } } },
+  });
+  for (const seat of mySeats) {
+    const replacement = await prisma.assignment.findFirst({
+      where: { positionId: seat.positionId, assignmentType: "PRIMARY", status: { in: ["ACTIVE", "SCHEDULED"] }, employeeId: { not: offboardingCase.employeeId } },
+      select: { employee: { select: { fullLegalName: true } } },
+    });
+    if (replacement) {
+      return `Posisi ${seat.position.positionCode} sudah diisi pengganti (${replacement.employee.fullLegalName}). Pindahkan atau akhiri penempatan pengganti dulu, baru batalkan kasus ini.`;
+    }
+  }
+
   await prisma.offboardingCase.update({
     where: { id: caseId },
     data: {

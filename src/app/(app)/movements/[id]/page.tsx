@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AccessDenied } from "@/components/access-denied";
 import { notFound } from "next/navigation";
-import { formatDateLong } from "@/lib/format";
+import { formatDateLong, formatDateMedium } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import {
   canApproveMovementRequest,
@@ -131,7 +131,14 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
             id: true,
             positionCode: true,
             jobLevel: true,
-            assignments: { where: { status: { in: ["ACTIVE", "SCHEDULED"] } }, select: { employeeId: true, assignmentType: true, employee: { select: { fullLegalName: true } } } },
+            assignments: {
+              where: { status: { in: ["ACTIVE", "SCHEDULED"] } },
+              select: {
+                employeeId: true,
+                assignmentType: true,
+                employee: { select: { fullLegalName: true, offboardingCases: { where: { status: "PENDING_CLEARANCE" }, select: { lastWorkingDay: true } } } },
+              },
+            },
           },
         })
       : [];
@@ -397,10 +404,11 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
               mode={isAddPosition ? "ADD_POSITION" : "MUTATION"}
               positions={addCandidates
                 // a Mutasi moves the employee into a seat nobody holds as their main placement
-                .filter((p) => isAddPosition || (!p.assignments.some((a) => a.assignmentType === "PRIMARY") && (!request.proposedJobLevel || p.jobLevel === request.proposedJobLevel)))
+                // a holder who is leaving (exit case waiting for clearance) does not block the seat
+                .filter((p) => isAddPosition || (!p.assignments.some((a) => a.assignmentType === "PRIMARY" && a.employee.offboardingCases.length === 0) && (!request.proposedJobLevel || p.jobLevel === request.proposedJobLevel)))
                 .map((p) => ({
                 id: p.id,
-                label: `${p.positionCode} — ${p.jobLevel} ${request.proposedJob?.jobTitle ?? ""} (${request.proposedOrgUnit?.unitName ?? ""})${p.assignments.length ? `, dipegang ${p.assignments.map((a) => a.employee.fullLegalName).join(", ")}` : ", kosong"}`,
+                label: `${p.positionCode} — ${p.jobLevel} ${request.proposedJob?.jobTitle ?? ""} (${request.proposedOrgUnit?.unitName ?? ""})${p.assignments.length ? `, dipegang ${p.assignments.map((a) => a.employee.fullLegalName + (a.employee.offboardingCases[0]?.lastWorkingDay ? ` (keluar ${formatDateMedium(a.employee.offboardingCases[0].lastWorkingDay)})` : "")).join(", ")}` : ", kosong"}`,
                 heldByEmployee: p.assignments.some((a) => a.employeeId === request.employeeId),
               }))}
             />

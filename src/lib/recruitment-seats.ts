@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { buildOrgUnitTree } from "@/lib/org-unit-tree";
+import { STAYING_HOLDER, leavingHoldersOf } from "@/lib/position-occupancy";
+import { leavingSeatLabel } from "@/lib/leaving-holder";
 
 // Vacant seats a recruitment request can be filled from. A seat belongs to a
 // Department when it sits in that Department itself or anywhere below it
@@ -13,7 +15,8 @@ export async function countVacantSeatsByJob(departmentId: string): Promise<Recor
   const [orgUnits, positions] = await Promise.all([
     prisma.orgUnit.findMany({ select: { id: true, unitName: true, unitType: true, parentUnitId: true } }),
     prisma.position.findMany({
-      where: { archived: false, assignments: { none: { status: { in: ["ACTIVE", "SCHEDULED"] }, assignmentType: "PRIMARY" } } },
+      // a seat whose holder is leaving counts as (about to be) free, so the replacement can be placed in it
+      where: { archived: false, assignments: { none: { status: { in: ["ACTIVE", "SCHEDULED"] }, assignmentType: "PRIMARY", employee: STAYING_HOLDER } } },
       select: { jobId: true, orgUnitId: true },
     }),
   ]);
@@ -32,12 +35,18 @@ export async function findVacantPositionsInDepartment(departmentId: string, jobI
       where: {
         archived: false,
         ...(jobId ? { jobId } : {}),
-        assignments: { none: { status: { in: ["ACTIVE", "SCHEDULED"] }, assignmentType: "PRIMARY" } },
+        assignments: { none: { status: { in: ["ACTIVE", "SCHEDULED"] }, assignmentType: "PRIMARY", employee: STAYING_HOLDER } },
       },
       include: { job: true, orgUnit: true },
       orderBy: { positionCode: "asc" },
     }),
   ]);
   const tree = buildOrgUnitTree(orgUnits);
-  return positions.filter((p) => tree.departmentOf(p.orgUnitId)?.id === departmentId);
+  const inDepartment = positions.filter((p) => tree.departmentOf(p.orgUnitId)?.id === departmentId);
+  // seats whose holder is leaving carry a label for the picker ("akan kosong: Nama keluar 29 Okt")
+  const leaving = await leavingHoldersOf(inDepartment.map((p) => p.id));
+  return inDepartment.map((p) => {
+    const l = leaving.get(p.id);
+    return { ...p, leavingLabel: l ? leavingSeatLabel(l.name, l.lastWorkingDay) : null };
+  });
 }

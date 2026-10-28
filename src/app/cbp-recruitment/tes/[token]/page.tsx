@@ -15,7 +15,7 @@ export default async function PublicTestPage({ params }: { params: Promise<{ tok
     return (
       <div className="rounded-xl border border-[#e6dcea] bg-white p-6">
         <h1 className="text-lg font-bold text-[#231a28]">Tautan tes tidak ditemukan</h1>
-        <p className="mt-1 text-sm text-[#6a5f72]">Periksa kembali tautan yang Anda buka, atau lamar ulang dari halaman lowongan.</p>
+        <p className="mt-1 text-sm text-[#6a5f72]">Periksa kembali tautan yang Anda buka. Jika tautan hilang, hubungi HR PT CBP untuk meminta tautan baru.</p>
       </div>
     );
   }

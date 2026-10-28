@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccessDenied } from "@/components/access-denied";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { ReasonForm } from "@/components/reason-form";
 import { StatusChip } from "@/components/status-chip";
 import { CopyTextButton } from "@/components/copy-text-button";
 import { formatMobile } from "@/lib/mobile-number";
@@ -26,19 +25,21 @@ import {
 import { progressOf } from "@/lib/recruitment-queries";
 import { getRecruitmentSettings } from "@/lib/recruitment-service";
 import { listSelectableStaff } from "@/lib/recruitment-flow";
-import { rejectCandidateAction } from "../../../candidate-actions";
 import { ExecuteMovementButton } from "./execute-movement-button";
 import { ExecuteAddPositionForm } from "../../../../movements/[id]/decision-forms";
 import { listMovementSeatChoices } from "@/lib/movement-seats";
 import { t } from "@/lib/i18n/id";
 import {
   DecisionForm,
+  EndProcessForm,
   HrNotesForm,
   OfferSendPanel,
   OfferUploadForm,
   ReviewerPicker,
   ScheduleInterviewForm,
+  TestLinkPanel,
   type InterviewDefaults,
+  type TestRowInfo,
 } from "../../../candidate-forms";
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -69,6 +70,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
       request: { include: { job: true, department: true } },
       cvFile: true,
       supportingFile: true,
+      assessment: { select: { status: true, screeningStatus: true } },
       employee: { select: { id: true, fullLegalName: true, employeeNumber: true } },
       tests: {
         orderBy: { sortOrder: "asc" },
@@ -123,6 +125,45 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
     : null;
   const canSchedule = candidate.status === "TEST_PASSED" || (candidate.status === "INTERVIEWING" && !candidate.interviewDecision);
   const canDecide = candidate.status === "INTERVIEWING" && !candidate.interviewDecision && submittedInterviewers.length > 0;
+  // Tautan tes and a second try for a test whose time ran out (the server checks the same rules again).
+  const inTestPhase = ["TESTING", "AWAITING_REVIEW", "TEST_PASSED", "TEST_FAILED"].includes(candidate.status);
+  const assessment = candidate.assessment;
+  const assessmentTimedOut = assessment?.status === "SUBMITTED" && assessment.screeningStatus === "INCOMPLETE";
+  const anyCatalogStarted = candidate.tests.some((x) => x.status !== "NOT_STARTED");
+  const testRows: TestRowInfo[] = [
+    {
+      target: "assessment",
+      name: t("assessment.name"),
+      meta: "",
+      state: !assessment ? "Belum dimulai" : assessment.status === "IN_PROGRESS" ? "Sedang dikerjakan" : assessmentTimedOut ? "Waktu habis, ditutup tanpa nilai" : "Selesai",
+      tone: !assessment ? "muted" : assessmentTimedOut ? "warn" : "ok",
+      canReopen: inTestPhase && assessmentTimedOut && !anyCatalogStarted,
+    },
+    ...candidate.tests.map((x, i): TestRowInfo => ({
+      target: x.id,
+      name: x.testType.name,
+      meta: `${TEST_FORM_LABEL[x.testType.form]} · ${x.testType.timeLimitMinutes} menit`,
+      state:
+        x.status === "NOT_STARTED"
+          ? "Belum dimulai"
+          : x.status === "IN_PROGRESS"
+            ? "Sedang dikerjakan"
+            : x.autoSubmitted
+              ? "Waktu habis, terkirim otomatis"
+              : x.passed === null
+                ? "Selesai, menunggu review"
+                : x.passed
+                  ? "Selesai, lulus"
+                  : "Selesai, tidak lulus",
+      tone: x.status === "NOT_STARTED" ? "muted" : x.autoSubmitted ? "warn" : "ok",
+      canReopen:
+        inTestPhase &&
+        x.status === "SUBMITTED" &&
+        x.autoSubmitted &&
+        candidate.tests.slice(i + 1).every((y) => y.status === "NOT_STARTED") &&
+        !candidate.tests.some((y) => y.id !== x.id && y.passed === false),
+    })),
+  ];
   const movement = candidate.movementRequest;
   // an approved move that named a Jabatan and a unit: the seat is picked when it is carried out
   const movementSeats =
@@ -226,6 +267,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
           <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
             {candidate.closeReason}
             {candidate.closedAt && ` · ${formatDateLong(candidate.closedAt)}`}
+            {candidate.status === "WITHDRAWN" && <> · tidak ada masa tunggu, boleh melamar lagi kapan saja</>}
             {(candidate.status === "TEST_FAILED" || candidate.status === "REJECTED") && candidate.closedAt && (
               <> · boleh melamar lagi setelah {formatDateLong(new Date(candidate.closedAt.getTime() + settings.retakeDays * 24 * 60 * 60 * 1000))}</>
             )}
@@ -245,6 +287,15 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
             Lihat hasil Tes Situasi Kerja
           </Link>
         </p>
+      )}
+
+      {inTestPhase && (
+        <Section
+          title="Tautan tes dan buka ulang tes"
+          hint={isInternal ? "Pelamar internal mengerjakan tes dari akun SAPA mereka. Tes yang waktunya habis bisa dibuka ulang." : "Pelamar mengerjakan tes lewat tautan pribadi. Kalau tautan hilang, buat yang baru. Tes yang waktunya habis bisa dibuka ulang untuk kesempatan kedua."}
+        >
+          <TestLinkPanel candidateId={candidate.id} canIssueLink={!isInternal && candidate.status === "TESTING"} tests={testRows} />
+        </Section>
       )}
 
       <Section title="Tes" hint="Tes Situasi Kerja dikerjakan pertama dan tidak punya lulus atau tidak lulus. Tes pilihan ganda dan skala dinilai otomatis begitu dikirim atau waktu habis.">
@@ -509,15 +560,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
 
       {isActiveCandidateStatus(candidate.status) && (
         <div>
-          <ReasonForm
-            action={rejectCandidateAction.bind(null, candidate.id)}
-            triggerLabel="Akhiri proses pelamar ini"
-            reasonLabel="Alasan (wajib)"
-            submitLabel="Akhiri proses"
-            fieldName="reason"
-            required
-            variant="slate"
-          />
+          <EndProcessForm candidateId={candidate.id} />
         </div>
       )}
     </div>

@@ -10,6 +10,8 @@ import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-
 import { applyOnboardingTrainingIfFirstPlacement } from "@/lib/onboarding-placement";
 import { shouldScheduleMove } from "@/lib/placement-timing";
 import { companyToday } from "@/lib/company-time";
+import { reverseFillingOfAssignment } from "@/lib/recruitment-flow";
+import { notifyRequestParties } from "@/lib/recruitment-request-notify";
 import type { AssignmentType } from "@/generated/prisma/enums";
 
 export async function addAssignment(
@@ -254,7 +256,7 @@ export async function cancelScheduledPlacement(
   if (!scheduled || scheduled.employeeId !== employeeId) return "Penempatan tidak ditemukan.";
   if (scheduled.status !== "SCHEDULED") return "Perpindahan ini sudah berlaku atau sudah dibatalkan.";
 
-  await prisma.$transaction(async (tx) => {
+  const reversed = await prisma.$transaction(async (tx) => {
     // The placement it was going to replace: still ACTIVE, with its end date
     // set to this move's start date.
     const replaced = await tx.assignment.findFirst({
@@ -270,6 +272,8 @@ export async function cancelScheduledPlacement(
       where: { id: assignmentId },
       data: { status: "ENDED", effectiveTo: scheduled.effectiveFrom },
     });
+    // If this move had been counted as filling a recruitment request, the filling is taken back.
+    return reverseFillingOfAssignment(tx, assignmentId);
   });
 
   await logAudit({
@@ -277,8 +281,21 @@ export async function cancelScheduledPlacement(
     action: "UPDATE",
     datasetName: "Assignment",
     recordId: assignmentId,
-    reason: `Scheduled move to ${scheduled.position.positionCode} cancelled before it took effect`,
+    reason: `Scheduled move to ${scheduled.position.positionCode} cancelled before it took effect${reversed ? `. Filling of ${reversed.requestNumber} reversed` : ""}`,
   });
+  if (reversed) {
+    await notifyRequestParties({
+      requestId: reversed.requestId,
+      requestNumber: reversed.requestNumber,
+      requesterEmployeeId: reversed.requesterEmployeeId,
+      actorAccountId: session.user.id,
+      actorEmployeeId: session.user.employeeId,
+      subject: `${reversed.requestNumber} dibuka lagi (perpindahan dibatalkan)`,
+      text: `Perpindahan terjadwal yang mengisi ${reversed.requestNumber} dibatalkan sebelum berlaku. Pengisiannya dibalik dan permintaan kembali terbuka dengan ${reversed.reopenedSeats} posisi kosong.${reversed.closedAtFull > 0 ? ` ${reversed.closedAtFull} pelamar yang tadi ditutup karena lowongan penuh tetap tertutup. Daftarnya ada di halaman permintaan, boleh dikabari.` : ""}`,
+    });
+    revalidatePath(`/recruitment/${reversed.requestId}`);
+    revalidatePath("/recruitment");
+  }
 
   revalidatePath(`/employees/${employeeId}`);
   revalidatePath("/organization");

@@ -13,7 +13,7 @@ export const STAGE_FILTERS: { key: string; label: string; statuses: RecruitmentC
   { key: "interview", label: "Interview", statuses: ["INTERVIEWING"] },
   { key: "offering", label: "Offering / perubahan posisi", statuses: ["OFFERING", "MOVEMENT"] },
   { key: "selesai", label: "Diterima", statuses: ["HIRED"] },
-  { key: "gugur", label: "Tidak lolos / ditolak", statuses: ["TEST_FAILED", "REJECTED", "OFFER_DECLINED", "NOT_SELECTED"] },
+  { key: "gugur", label: "Tidak lolos / ditolak", statuses: ["TEST_FAILED", "REJECTED", "OFFER_DECLINED", "NOT_SELECTED", "WITHDRAWN"] },
 ];
 
 export function statusesForStage(key: string | undefined): RecruitmentCandidateStatus[] | null {

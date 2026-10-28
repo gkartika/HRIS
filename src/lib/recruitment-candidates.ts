@@ -27,6 +27,7 @@ export const CANDIDATE_STATUS_LABEL: Record<RecruitmentCandidateStatus, string> 
   REJECTED: "Ditolak",
   OFFER_DECLINED: "Menolak offering",
   NOT_SELECTED: "Tidak terpilih",
+  WITHDRAWN: "Mengundurkan diri",
 };
 
 export const CANDIDATE_STATUS_TONE: Record<RecruitmentCandidateStatus, string> = {
@@ -41,6 +42,7 @@ export const CANDIDATE_STATUS_TONE: Record<RecruitmentCandidateStatus, string> =
   REJECTED: "bg-rose-50 text-rose-700",
   OFFER_DECLINED: "bg-rose-50 text-rose-700",
   NOT_SELECTED: "bg-slate-100 text-slate-500",
+  WITHDRAWN: "bg-slate-100 text-slate-600",
 };
 
 export const OPEN_FOR_LABEL: Record<RecruitmentOpenFor, string> = {
@@ -96,7 +98,14 @@ export const CLOSED_WITHOUT_HIRE_STATUSES: RecruitmentCandidateStatus[] = [
   "REJECTED",
   "OFFER_DECLINED",
   "NOT_SELECTED",
+  "WITHDRAWN",
 ];
+
+// Why an applicant was closed when the request itself ended. Applicants closed this way did nothing wrong: they never wait
+// before applying again, and HR can (optionally) tell them.
+export const REQUEST_FILLED_REASON = "Lowongan sudah terisi penuh";
+export const requestClosedReason = (reason: string) => `Lowongan ditutup: ${reason}`;
+export const requestCancelledReason = (reason: string) => `Lowongan dibatalkan: ${reason}`;
 
 // ---------- applying ----------
 

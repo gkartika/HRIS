@@ -342,7 +342,7 @@ export function isOptionOfQuestion(question: { options: { id: string }[] }, opti
 
 // ---------- who may take the assessment, and when ----------
 
-const CLOSED_CANDIDATE_STATUSES = ["TEST_FAILED", "REJECTED", "OFFER_DECLINED", "NOT_SELECTED", "HIRED"];
+const CLOSED_CANDIDATE_STATUSES = ["TEST_FAILED", "REJECTED", "OFFER_DECLINED", "NOT_SELECTED", "WITHDRAWN", "HIRED"];
 
 /**
  * Tes Situasi Kerja is the first test everyone takes (it replaced Cultural Fit), so it is open for every

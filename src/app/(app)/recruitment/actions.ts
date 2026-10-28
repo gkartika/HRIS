@@ -38,6 +38,7 @@ import { createOnboardingCase } from "@/lib/onboarding-create";
 import { allocateEmployeeNumber } from "@/lib/employee-number-allocate";
 import { applyOnboardingMandatoryTrainingForEmployee } from "@/lib/mandatory-training";
 import { closeRemainingCandidates, markCandidateHired, validateCandidateForHire } from "@/lib/recruitment-flow";
+import { requestCancelledReason, requestClosedReason } from "@/lib/recruitment-candidates";
 import { validateNoKk } from "@/lib/validation/employee-fields";
 import type {
   RecruitmentReasonCode,
@@ -390,7 +391,7 @@ export async function decideRecruitmentRequest(
   // name), since hiring needs it to filter the seats. Not required for Reject/Return.
   const jobId = request.jobId;
   if (decision === "APPROVED" && !jobId) {
-    return "Menunggu Admin Rekrutmen menetapkan jabatan standar sebelum permintaan ini bisa disetujui.";
+    return "Jabatan standar belum ditetapkan. Tetapkan dulu di kotak Jabatan standar sebelum menyetujui.";
   }
 
   await prisma.recruitmentRequest.update({
@@ -452,17 +453,21 @@ export async function cancelRecruitmentRequest(
       ? "REQUESTER"
       : "HR_ADMIN";
 
-  await prisma.recruitmentRequest.update({
-    where: { id: requestId },
-    data: {
-      status: "CANCELLED",
-      previousStatus: request.status,
-      cancelledAt: new Date(),
-      cancelledByAccountId: session.user.id,
-      cancelledByEmployeeId: session.user.employeeId,
-      cancellationAuthority,
-      cancellationReason,
-    },
+  // The applicants still in the pipeline end with the request (Tidak terpilih, no waiting period, offer links off).
+  const closedApplicants = await prisma.$transaction(async (tx) => {
+    await tx.recruitmentRequest.update({
+      where: { id: requestId },
+      data: {
+        status: "CANCELLED",
+        previousStatus: request.status,
+        cancelledAt: new Date(),
+        cancelledByAccountId: session.user.id,
+        cancelledByEmployeeId: session.user.employeeId,
+        cancellationAuthority,
+        cancellationReason,
+      },
+    });
+    return closeRemainingCandidates(tx, requestId, null, requestCancelledReason(cancellationReason), session.user.id);
   });
 
   await logAudit({
@@ -470,7 +475,7 @@ export async function cancelRecruitmentRequest(
     action: "UPDATE",
     datasetName: "RecruitmentRequest",
     recordId: requestId,
-    reason: `Cancelled ${request.requestNumber} (was ${request.status}, authority: ${cancellationAuthority}): ${cancellationReason}`,
+    reason: `Cancelled ${request.requestNumber} (was ${request.status}, authority: ${cancellationAuthority}): ${cancellationReason}. Applicants closed: ${closedApplicants}`,
   });
 
   revalidatePath(`/recruitment/${requestId}`);
@@ -500,9 +505,12 @@ export async function closeRecruitmentRequest(
   const closeReason = (formData.get("closeReason") as string)?.trim();
   if (!closeReason) return "Alasan penutupan wajib diisi.";
 
-  await prisma.recruitmentRequest.update({
-    where: { id: requestId },
-    data: { status: "CLOSED", closedAt: new Date(), closedByAccountId: session.user.id, closeReason },
+  const closedApplicants = await prisma.$transaction(async (tx) => {
+    await tx.recruitmentRequest.update({
+      where: { id: requestId },
+      data: { status: "CLOSED", closedAt: new Date(), closedByAccountId: session.user.id, closeReason },
+    });
+    return closeRemainingCandidates(tx, requestId, null, requestClosedReason(closeReason), session.user.id);
   });
 
   await logAudit({
@@ -510,7 +518,7 @@ export async function closeRecruitmentRequest(
     action: "UPDATE",
     datasetName: "RecruitmentRequest",
     recordId: requestId,
-    reason: `Closed ${request.requestNumber} (was ${request.status}): ${closeReason}`,
+    reason: `Closed ${request.requestNumber} (was ${request.status}): ${closeReason}. Applicants closed: ${closedApplicants}`,
   });
 
   revalidatePath(`/recruitment/${requestId}`);

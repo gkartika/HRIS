@@ -13,7 +13,8 @@ import {
 } from "@/lib/recruitment-candidates";
 import { readApplicantUpload } from "@/lib/applicant-uploads";
 import { createCandidate, getRecruitmentSettings, loadPlanContext, readinessProblems } from "@/lib/recruitment-service";
-import { respondToOffer } from "@/lib/recruitment-flow";
+import { respondToOffer, trySendToApplicant } from "@/lib/recruitment-flow";
+import { appBaseUrl } from "@/lib/mailer";
 
 // Public "Lamar" form: no sign-in. The request's access code is what keeps strangers
 // from filling the applicant list; the answer for a wrong code or a closed vacancy is
@@ -90,6 +91,12 @@ export async function applyExternalAction(
     recordId: created.id,
     reason: `External applicant applied for ${request.requestNumber}`,
   });
+  // A copy of the private test link by email, so a closed tab or a new phone does not lock the applicant out. Sent only
+  // while applicant email is switched on (see applicant-email.ts); the redirect below works either way.
+  const testUrl = `${appBaseUrl()}/cbp-recruitment/tes/${created.rawToken}`;
+  await trySendToApplicant(email, "Tautan tes lamaran PT CBP", `Yth. ${fullName},
+
+Terima kasih sudah melamar di PT Cahaya Bukit Perunggu. Simpan email ini: tautan di bawah adalah satu-satunya cara masuk ke tes Anda dan hanya untuk Anda.`, { url: testUrl, label: "Buka tes" });
   redirect(`/cbp-recruitment/tes/${created.rawToken}`);
 }
 

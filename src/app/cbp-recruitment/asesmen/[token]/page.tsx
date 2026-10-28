@@ -19,7 +19,7 @@ export default async function PublicAssessmentPage({ params }: { params: Promise
   const candidate = await findCandidateByToken(token);
   const state = candidate ? await loadAssessmentRunner(candidate.id) : null;
 
-  if (!state) return <Notice title="Tautan tidak ditemukan" body="Periksa kembali tautan yang Anda buka, atau lamar ulang dari halaman lowongan." />;
+  if (!state) return <Notice title="Tautan tidak ditemukan" body="Periksa kembali tautan yang Anda buka. Jika tautan hilang, hubungi HR PT CBP untuk meminta tautan baru." />;
   if (state.kind === "closed") {
     return <Notice title={t("assessment.name")} body={state.reason === "NOT_OPEN" ? t("assessment.candidate.closedNotOpen") : t("assessment.candidate.closedNoRubric")} />;
   }

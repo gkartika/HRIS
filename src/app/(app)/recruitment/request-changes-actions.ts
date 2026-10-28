@@ -196,15 +196,18 @@ export async function reduceRecruitmentHeadcountAction(requestId: string, _prev:
 
 // ---------- Jabatan ----------
 
-// Admin Rekrutmen pick the standard Jabatan (or create it) and the level. Before approval that is
-// the normal step; after approval it is a change and needs a reason.
+// Admin Rekrutmen or the active HR Manager pick the standard Jabatan (or create it) and the level. Before approval that
+// is the normal step; after approval it is a change (Admin Rekrutmen only) and needs a reason.
 export async function setRecruitmentRequestJobAction(requestId: string, _prev: string | undefined, formData: FormData): Promise<string | undefined> {
   const session = await requireSession();
-  if (!canManageRecruitment(session)) return t("common.forbidden");
+  const asRecruiter = canManageRecruitment(session);
+  const asHrManager = !asRecruiter && (await getActiveHrManagerPositions(session.user.employeeId)).length > 0;
+  if (!asRecruiter && !asHrManager) return t("common.forbidden");
   const request = await loadRequest(requestId);
   if (!request) return "Permintaan tidak ditemukan.";
   if (!canSetJobStatus(request.status)) return "Jabatan tidak bisa diubah pada status ini.";
-  const roleLabel = isHrAdmin(session) ? "Admin SDM" : "Admin Rekrutmen";
+  if (asHrManager && jobChangeNeedsReason(request.status)) return "Jabatan setelah persetujuan hanya bisa diubah Admin Rekrutmen.";
+  const roleLabel = asHrManager ? "HR Manager" : isHrAdmin(session) ? "Admin SDM" : "Admin Rekrutmen";
 
   const choice = ((formData.get("jobId") as string) ?? "").trim();
   const level = (formData.get("level") as string) as RequestedJobLevel;

@@ -3421,7 +3421,8 @@ enum RecruitmentCandidateStatus {
   HIRED // employee created (external) or movement implemented (internal)
   REJECTED
   OFFER_DECLINED
-  NOT_SELECTED // the request got filled by someone else
+  NOT_SELECTED // the request got filled by someone else, or was closed or cancelled
+  WITHDRAWN // the applicant withdrew or did not show up: no waiting period before applying again
 }
 
 enum RecruitmentTestForm {
@@ -3579,6 +3580,8 @@ model RecruitmentCandidate {
   // re-apply waiting time and the clean-up of old data.
   closedAt           DateTime?
   closeReason        String?
+  // Closed because the request was closed, cancelled or filled: when HR told the applicant (optional).
+  closureNotifiedAt  DateTime?
   movementRequestId  String?                       @unique
   movementRequest    MovementRequest?              @relation("RecruitmentCandidateMovement", fields: [movementRequestId], references: [id])
   createdAt          DateTime                      @default(now())

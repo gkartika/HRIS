@@ -9,7 +9,8 @@ import { APPLICANT_EMAILS_ENABLED } from "@/lib/applicant-email";
 import { randomStorageKey } from "@/lib/file-storage";
 import { nextStatusAfterFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
 import { HELD_MESSAGE } from "@/lib/recruitment-request-changes";
-import { fillTemplate, isValidSignatureDataUrl, fileExtension, validateOfferFile } from "@/lib/recruitment-candidates";
+import { fillTemplate, isValidSignatureDataUrl, fileExtension, validateOfferFile, REQUEST_FILLED_REASON } from "@/lib/recruitment-candidates";
+import { isMovementRequestOpen } from "@/lib/movement";
 import { FULFILLABLE_STATUSES, getRecruitmentSettings, refreshCandidateStatus, setCandidateStatus, type EngineResult } from "@/lib/recruitment-service";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
@@ -314,8 +315,34 @@ export async function saveHrInterviewNotes(
   return res.count === 1 ? { ok: true } : { ok: false, error: "Interview belum dijadwalkan." };
 }
 
-// HR Admin ends an applicant's process at any point before the hire.
-export async function rejectCandidate(candidateId: string, reason: string): Promise<EngineResult> {
+// The applicant's Perubahan Posisi stops with the applicant: it only exists after an internal applicant was accepted at
+// the interview, and it must not be approved or carried out for someone who is no longer in the process.
+export async function cancelMovementOfCandidates(tx: Prisma.TransactionClient, candidateIds: string[], reason: string, accountId: string | null) {
+  if (candidateIds.length === 0) return 0;
+  const movements = await tx.movementRequest.findMany({
+    where: { recruitmentCandidate: { is: { id: { in: candidateIds } } } },
+    select: { id: true, status: true },
+  });
+  const open = movements.filter((m) => isMovementRequestOpen(m.status));
+  for (const m of open) {
+    await tx.movementRequest.update({
+      where: { id: m.id },
+      data: {
+        status: "CANCELLED",
+        previousStatus: m.status,
+        cancelledAt: new Date(),
+        cancelledByAccountId: accountId,
+        cancellationAuthority: "HR_ADMIN",
+        cancellationReason: `Pelamar tidak lagi dalam proses rekrutmen: ${reason}`,
+      },
+    });
+  }
+  return open.length;
+}
+
+// Admin Rekrutmen ends an applicant's process at any point before the hire. "REJECTED" is HR's decision and makes the
+// person wait before applying again; "WITHDRAWN" (the applicant withdrew or did not show up) does not.
+export async function rejectCandidate(candidateId: string, reason: string, kind: "REJECTED" | "WITHDRAWN" = "REJECTED", accountId: string | null = null): Promise<EngineResult> {
   const candidate = await prisma.recruitmentCandidate.findUnique({ where: { id: candidateId }, select: { status: true } });
   if (!candidate) return { ok: false, error: "Pelamar tidak ditemukan." };
   if (!["TESTING", "AWAITING_REVIEW", "TEST_PASSED", "INTERVIEWING", "OFFERING", "MOVEMENT"].includes(candidate.status)) {
@@ -324,9 +351,10 @@ export async function rejectCandidate(candidateId: string, reason: string): Prom
   const text = reason.trim();
   if (!text) return { ok: false, error: "Alasan wajib diisi." };
   await prisma.$transaction(async (tx) => {
-    await setCandidateStatus(tx, candidateId, "REJECTED", { closeReason: text });
-    // A rejected applicant's offer link stops working.
+    await setCandidateStatus(tx, candidateId, kind, { closeReason: text });
+    // The applicant's offer link stops working, and so does their Perubahan Posisi.
     await tx.recruitmentOffer.updateMany({ where: { candidateId, response: null }, data: { tokenHash: null } });
+    await cancelMovementOfCandidates(tx, [candidateId], text, accountId);
   });
   return { ok: true };
 }
@@ -463,8 +491,15 @@ export async function validateCandidateForHire(candidateId: string, requestId: s
   return null;
 }
 
-// When a request has reached its headcount, everyone still in the pipeline is closed.
-export async function closeRemainingCandidates(tx: Prisma.TransactionClient, requestId: string, exceptCandidateId: string | null) {
+// When a request is full, closed or cancelled, everyone still in the pipeline is closed (Tidak terpilih: no waiting period
+// before applying again). Their offer links stop working and an open Perubahan Posisi is cancelled with them.
+export async function closeRemainingCandidates(
+  tx: Prisma.TransactionClient,
+  requestId: string,
+  exceptCandidateId: string | null,
+  reason: string = REQUEST_FILLED_REASON,
+  accountId: string | null = null
+) {
   const open = await tx.recruitmentCandidate.findMany({
     where: {
       requestId,
@@ -477,10 +512,39 @@ export async function closeRemainingCandidates(tx: Prisma.TransactionClient, req
   const ids = open.map((c) => c.id);
   await tx.recruitmentCandidate.updateMany({
     where: { id: { in: ids } },
-    data: { status: "NOT_SELECTED", statusChangedAt: new Date(), closedAt: new Date(), closeReason: "Lowongan sudah terisi penuh" },
+    data: { status: "NOT_SELECTED", statusChangedAt: new Date(), closedAt: new Date(), closeReason: reason },
   });
   await tx.recruitmentOffer.updateMany({ where: { candidateId: { in: ids }, response: null }, data: { tokenHash: null } });
+  await cancelMovementOfCandidates(tx, ids, reason, accountId);
   return ids.length;
+}
+
+// Applicants of a request who are still in the pipeline: what closing, cancelling or filling the last seat would end.
+export async function listOpenApplicantsOfRequest(requestId: string, exceptCandidateId: string | null = null) {
+  const rows = await prisma.recruitmentCandidate.findMany({
+    where: {
+      requestId,
+      id: exceptCandidateId ? { not: exceptCandidateId } : undefined,
+      status: { in: ["TESTING", "AWAITING_REVIEW", "TEST_PASSED", "INTERVIEWING", "OFFERING", "MOVEMENT"] },
+    },
+    orderBy: { statusChangedAt: "asc" },
+    select: { id: true, fullName: true, status: true, source: true, offer: { select: { response: true } } },
+  });
+  return rows.map((c) => ({ id: c.id, fullName: c.fullName, status: c.status, acceptedOffer: c.offer?.response === "ACCEPTED" }));
+}
+
+// Applicants closed because the request ended, for HR to tell them if wanted (never a to-do).
+export async function listClosureNotices(requestId: string) {
+  return prisma.recruitmentCandidate.findMany({
+    where: { requestId, status: "NOT_SELECTED", closureNotifiedAt: null },
+    orderBy: { closedAt: "desc" },
+    select: { id: true, fullName: true, mobileNumber: true, closeReason: true, offer: { select: { response: true } } },
+  });
+}
+
+export async function markClosureNotified(candidateId: string): Promise<EngineResult> {
+  const res = await prisma.recruitmentCandidate.updateMany({ where: { id: candidateId, status: "NOT_SELECTED", closureNotifiedAt: null }, data: { closureNotifiedAt: new Date() } });
+  return res.count === 1 ? { ok: true } : { ok: false, error: "Pelamar ini tidak perlu ditandai." };
 }
 
 export async function markCandidateHired(
@@ -570,4 +634,121 @@ export async function notifyManagersOfInternalHire(args: { source: "RECRUITMENT_
       `${employee.fullLegalName} resmi pindah dari ${oldPos?.job.jobTitle ?? "posisi lama"} ke ${newPos?.job.jobTitle ?? "posisi baru"} mulai ${when}, melalui ${args.source === "MUTASI" ? "mutasi untuk mengisi permintaan tenaga kerja" : "rekrutmen internal"}.`
     );
   }
+}
+
+// ---------- the applicant's test link and a second try ----------
+
+// Makes a fresh private test link (the old one stops working) and returns it once: only its hash is stored, so HR cannot
+// look it up later. Tests are not touched: finished stay finished, running keep running, unstarted stay available.
+export async function reissueTestLink(candidateId: string): Promise<
+  { ok: true; url: string; emailed: boolean; applicantEmailOff: boolean; candidateName: string; mobileNumber: string | null } | { ok: false; error: string }
+> {
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { id: candidateId },
+    select: { fullName: true, email: true, mobileNumber: true, source: true, status: true, request: { select: { heldAt: true, job: { select: { jobTitle: true } } } } },
+  });
+  if (!candidate) return { ok: false, error: "Pelamar tidak ditemukan." };
+  if (candidate.source !== "EXTERNAL") return { ok: false, error: "Pelamar internal masuk ke tesnya lewat akun SAPA, bukan tautan." };
+  if (candidate.status !== "TESTING") return { ok: false, error: "Pelamar ini sudah tidak di tahap tes." };
+  if (candidate.request.heldAt) return { ok: false, error: HELD_MESSAGE };
+  const raw = randomBytes(24).toString("base64url");
+  await prisma.recruitmentCandidate.update({ where: { id: candidateId }, data: { tokenHash: hashToken(raw) } });
+  const url = `${appBaseUrl()}/cbp-recruitment/tes/${raw}`;
+  const emailed = await trySendToApplicant(
+    candidate.email,
+    "Tautan tes lamaran PT CBP",
+    `Yth. ${candidate.fullName},\n\nBerikut tautan baru untuk mengerjakan tes lamaran ${candidate.request.job?.jobTitle ?? "Anda"} di PT Cahaya Bukit Perunggu. Tautan lama tidak berlaku lagi. Tes yang sudah Anda kerjakan tetap tersimpan.`,
+    { url, label: "Buka tes" }
+  );
+  return { ok: true, url, emailed, applicantEmailOff: !APPLICANT_EMAILS_ENABLED, candidateName: candidate.fullName, mobileNumber: candidate.mobileNumber };
+}
+
+// A test whose time ran out (and was handed in by the clock) can be opened again for a second try: its answers are
+// cleared and the applicant starts over with the full time. A test the applicant handed in themselves cannot, so a
+// graded test is never repeated to improve a score. "assessment" is Tes Situasi Kerja; otherwise the id of a catalog test.
+export async function reopenCandidateTest(candidateId: string, target: string, reason: string): Promise<EngineResult> {
+  const text = reason.trim();
+  if (!text) return { ok: false, error: "Alasan wajib diisi." };
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { id: candidateId },
+    select: {
+      status: true,
+      request: { select: { heldAt: true } },
+      assessment: { select: { id: true, status: true, screeningStatus: true } },
+      tests: { orderBy: { sortOrder: "asc" }, select: { id: true, status: true, autoSubmitted: true, passed: true } },
+    },
+  });
+  if (!candidate) return { ok: false, error: "Pelamar tidak ditemukan." };
+  if (!["TESTING", "AWAITING_REVIEW", "TEST_PASSED", "TEST_FAILED"].includes(candidate.status)) return { ok: false, error: "Pelamar ini sudah melewati tahap tes." };
+  if (candidate.request.heldAt) return { ok: false, error: HELD_MESSAGE };
+
+  if (target === "assessment") {
+    const a = candidate.assessment;
+    if (!a || a.status !== "SUBMITTED" || a.screeningStatus !== "INCOMPLETE") return { ok: false, error: "Tes Situasi Kerja ini tidak habis waktu, jadi tidak bisa dibuka ulang." };
+    if (candidate.tests.some((t) => t.status !== "NOT_STARTED")) return { ok: false, error: "Tes lain sudah dimulai, jadi Tes Situasi Kerja tidak bisa dibuka ulang." };
+    await prisma.$transaction(async (tx) => {
+      await tx.recruitmentAssessmentSubmission.delete({ where: { id: a.id } });
+      await tx.recruitmentCandidate.update({ where: { id: candidateId }, data: { status: "TESTING", statusChangedAt: new Date(), closedAt: null, closeReason: null } });
+    });
+    return { ok: true };
+  }
+
+  const index = candidate.tests.findIndex((t) => t.id === target);
+  if (index < 0) return { ok: false, error: "Tes tidak ditemukan." };
+  const test = candidate.tests[index];
+  if (test.status !== "SUBMITTED" || !test.autoSubmitted) return { ok: false, error: "Tes ini tidak habis waktu, jadi tidak bisa dibuka ulang." };
+  if (candidate.tests.slice(index + 1).some((t) => t.status !== "NOT_STARTED")) return { ok: false, error: "Tes sesudahnya sudah dimulai, jadi tes ini tidak bisa dibuka ulang." };
+  if (candidate.tests.some((t) => t.id !== test.id && t.passed === false)) return { ok: false, error: "Pelamar tidak lolos di tes lain, jadi membuka ulang tes ini tidak mengubah hasilnya." };
+  await prisma.$transaction(async (tx) => {
+    // Answers and the essay reviewers of the old attempt go with it.
+    await tx.recruitmentCandidateAnswer.deleteMany({ where: { candidateTestId: test.id } });
+    await tx.recruitmentTestReviewer.deleteMany({ where: { candidateTestId: test.id } });
+    await tx.recruitmentCandidateTest.update({
+      where: { id: test.id },
+      data: {
+        status: "NOT_STARTED",
+        startedAt: null,
+        deadlineAt: null,
+        submittedAt: null,
+        autoSubmitted: false,
+        scorePercent: null,
+        passed: null,
+        passScoreSnapshot: null,
+        reviewNote: null,
+        reviewedAt: null,
+        reviewedByEmployeeId: null,
+      },
+    });
+    await tx.recruitmentCandidate.update({ where: { id: candidateId }, data: { status: "TESTING", statusChangedAt: new Date(), closedAt: null, closeReason: null } });
+  });
+  return { ok: true };
+}
+
+// ---------- a scheduled move that fills a request is called off ----------
+
+// Carrying out a move dated in the future already counted it as a filling of the request. When that scheduled placement is
+// cancelled, the filling goes away, the request is open again and an internal applicant whose move it was is closed
+// (Tidak terpilih, no waiting period). Applicants closed earlier because the seat looked full stay closed: their previous
+// step is not kept, so HR sees them in the list of applicants to tell instead.
+export async function reverseFillingOfAssignment(
+  tx: Prisma.TransactionClient,
+  assignmentId: string
+): Promise<{ requestId: string; requestNumber: string; requesterEmployeeId: string; reopenedSeats: number; closedAtFull: number } | null> {
+  const fulfillment = await tx.recruitmentRequestFulfillment.findUnique({
+    where: { assignmentId },
+    include: { recruitmentRequest: { select: { id: true, requestNumber: true, requesterEmployeeId: true, requestedHeadcount: true, status: true } } },
+  });
+  if (!fulfillment) return null;
+  const request = fulfillment.recruitmentRequest;
+  await tx.recruitmentRequestFulfillment.delete({ where: { id: fulfillment.id } });
+  const filled = await tx.recruitmentRequestFulfillment.count({ where: { recruitmentRequestId: request.id } });
+  if (["RECRUITMENT_IN_PROGRESS", "PARTIALLY_FILLED", "FILLED"].includes(request.status)) {
+    await tx.recruitmentRequest.update({ where: { id: request.id }, data: { status: nextStatusAfterFulfillment(request.requestedHeadcount, filled) } });
+  }
+  await tx.recruitmentCandidate.updateMany({
+    where: { requestId: request.id, employeeId: fulfillment.employeeId, source: "INTERNAL", status: "HIRED" },
+    data: { status: "NOT_SELECTED", statusChangedAt: new Date(), closedAt: new Date(), closeReason: "Perpindahan terjadwal dibatalkan sebelum berlaku" },
+  });
+  const closedAtFull = await tx.recruitmentCandidate.count({ where: { requestId: request.id, status: "NOT_SELECTED", closeReason: REQUEST_FILLED_REASON } });
+  return { requestId: request.id, requestNumber: request.requestNumber, requesterEmployeeId: request.requesterEmployeeId, reopenedSeats: request.requestedHeadcount - filled, closedAtFull };
 }

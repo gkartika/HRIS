@@ -32,6 +32,9 @@ import {
   possibleTestsForJob,
   testDisplayName,
   reapplyBlock,
+  CLOSED_WITHOUT_HIRE_STATUSES,
+  RETAKE_WAIT_STATUSES,
+  CANDIDATE_STATUS_LABEL,
   scoreTest,
   secondsLeft,
   validateCvFile,
@@ -130,6 +133,15 @@ describe("re-applying", () => {
       { requestId: "r1", status: "NOT_SELECTED" as const, closedAt: daysAgo(1) },
     ];
     expect(reapplyBlock(prior, "r1", NOW, 30).blocked).toBe(false);
+  });
+
+  it("does not make anyone wait after withdrawing or not showing up, and counts it as closed", () => {
+    const prior = [{ requestId: "r1", status: "WITHDRAWN" as const, closedAt: daysAgo(1) }];
+    expect(reapplyBlock(prior, "r1", NOW, 30).blocked).toBe(false);
+    expect(reapplyBlock(prior, "r2", NOW, 30).blocked).toBe(false);
+    expect(CLOSED_WITHOUT_HIRE_STATUSES).toContain("WITHDRAWN");
+    expect(RETAKE_WAIT_STATUSES).not.toContain("WITHDRAWN");
+    expect(CANDIDATE_STATUS_LABEL.WITHDRAWN).toBe("Mengundurkan diri");
   });
 
   it("uses the longest remaining wait when there are several", () => {

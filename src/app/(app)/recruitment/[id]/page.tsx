@@ -24,6 +24,9 @@ import {
   canResubmitRequestStatus,
 } from "@/lib/recruitment";
 import { countVacantSeatsByJob } from "@/lib/recruitment-seats";
+import { listClosureNotices, listOpenApplicantsOfRequest } from "@/lib/recruitment-flow";
+import { CANDIDATE_STATUS_LABEL, whatsappLink } from "@/lib/recruitment-candidates";
+import { ClosureNoticeRow } from "../candidate-forms";
 import { listMovementSeatChoices, type SeatChoice } from "@/lib/movement-seats";
 import { ExecuteAddPositionForm, ExecuteMovementButton } from "../../movements/[id]/decision-forms";
 import {
@@ -115,7 +118,7 @@ export default async function RecruitmentDetailPage({
   const isHeld = request.heldAt !== null;
   // The requester only types a Jabatan name. Admin Rekrutmen pick or create the standard Jabatan and
   // the level before the HR Manager approves, and can still change it after approval (with a reason).
-  const canSetJobBeforeApproval = manageRecruitment && (request.status === "PENDING_DEPT_HEAD" || request.status === "SUBMITTED" || request.status === "UNDER_REVIEW");
+  const canSetJobBeforeApproval = (manageRecruitment || isHrManagerNow) && (request.status === "PENDING_DEPT_HEAD" || request.status === "SUBMITTED" || request.status === "UNDER_REVIEW");
   const canChangeJobAfterApproval = manageRecruitment && canHoldStatus(request.status);
   const canKeepRequest = canHoldStatus(request.status) && (manageRecruitment || isHrManagerNow || isOwnRequest);
   const needsJobData = canSetJobBeforeApproval || canChangeJobAfterApproval || (canApprove && !!request.jobId);
@@ -142,7 +145,7 @@ export default async function RecruitmentDetailPage({
     headcount: request.requestedHeadcount,
     needsReason: jobChangeNeedsReason(request.status),
   };
-  const approveBlockedReason = request.jobId ? undefined : "Menunggu Admin Rekrutmen menetapkan jabatan standar.";
+  const approveBlockedReason = request.jobId ? undefined : "Tetapkan jabatan standar dulu di kotak Jabatan standar di atas.";
   const canFulfill =
     canCreateEmployeeFromRequest(session) && canRequestAcceptFulfillment(request.status) && !counts.isFull && !isHeld;
   const mutationsUnderway = request.movementRequests.filter((m) => OPEN_MOVEMENT_STATUSES.includes(m.status)).length;
@@ -180,6 +183,18 @@ export default async function RecruitmentDetailPage({
   const canCancel =
     canCancelRecruitmentRequest(session, request.requesterEmployeeId, activeHrManagerPositionIds) &&
     canCancelRequestStatus(request.status);
+
+  // What closing, cancelling or filling the last seat ends: applicants still in the pipeline. Names are for Admin Rekrutmen only.
+  const seatsLeft = request.requestedHeadcount - request.fulfillments.length;
+  const needsApplicantInfo = canClose || canCancel || (canFulfill && seatsLeft === 1);
+  const [openApplicants, closureNotices] = await Promise.all([
+    needsApplicantInfo ? listOpenApplicantsOfRequest(request.id) : Promise.resolve([]),
+    manageRecruitment ? listClosureNotices(request.id) : Promise.resolve([]),
+  ]);
+  const acceptedOpen = openApplicants.filter((a) => a.acceptedOffer);
+  const endsApplicants = canClose || canCancel;
+  const lastSeatWarning = canFulfill && seatsLeft === 1 && openApplicants.length >= 2;
+  const requestJobTitle = request.job?.jobTitle ?? request.requestedJobText ?? "";
 
   return (
     <div className="space-y-6">
@@ -384,7 +399,7 @@ export default async function RecruitmentDetailPage({
             {!request.jobId && <span className="ml-1 text-xs font-normal text-amber-700">belum ditetapkan</span>}
           </h2>
           <p className="mb-3 mt-1 text-sm text-slate-600">
-            Ditulis pengaju: <b>&quot;{request.requestedJobText ?? "—"}&quot;</b>. HR Manager baru bisa menyetujui setelah jabatan ditetapkan.
+            Ditulis pengaju: <b>&quot;{request.requestedJobText ?? "—"}&quot;</b>. Persetujuan HR Manager baru bisa dilakukan setelah jabatan ditetapkan, oleh Admin Rekrutmen atau HR Manager.
           </p>
           <JobForm key={request.jobId ?? "none"} {...jobFormProps} submitLabel={request.jobId ? "Simpan perubahan" : "Simpan jabatan"} />
         </div>
@@ -410,7 +425,7 @@ export default async function RecruitmentDetailPage({
       {canApprove && (request.status === "SUBMITTED" || request.status === "UNDER_REVIEW") && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="rounded-lg bg-slate-50 p-4 text-sm">
-            <p className="text-xs text-slate-500">Jabatan standar (ditetapkan Admin Rekrutmen)</p>
+            <p className="text-xs text-slate-500">Jabatan standar (ditetapkan Admin Rekrutmen atau HR Manager)</p>
             {request.job ? (
               <>
                 <p className="font-medium text-slate-900">
@@ -420,7 +435,7 @@ export default async function RecruitmentDetailPage({
                 <p className="mt-0.5 text-xs text-slate-500">Ditulis pengaju: &quot;{request.requestedJobText ?? "—"}&quot;</p>
               </>
             ) : (
-              <p className="text-amber-800">Menunggu Admin Rekrutmen menetapkan jabatan. Tombol Setujui aktif setelah itu.</p>
+              <p className="text-amber-800">Jabatan standar belum ditetapkan. Tetapkan di kotak Jabatan standar di atas, lalu tombol Setujui aktif.</p>
             )}
           </div>
           {request.status === "SUBMITTED" && (
@@ -443,6 +458,28 @@ export default async function RecruitmentDetailPage({
           jobForm={canChangeJobAfterApproval ? { ...jobFormProps, submitLabel: "Ubah jabatan" } : null}
         />
       )}
+      {endsApplicants && openApplicants.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          <p className="font-medium">
+            Jika permintaan ini ditutup atau dibatalkan, {openApplicants.length} pelamar yang masih berjalan ikut ditutup (Tidak terpilih, tanpa masa tunggu) dan tautan offering mereka dimatikan.
+          </p>
+          {manageRecruitment && (
+            <ul className="mt-2 space-y-0.5 text-xs">
+              {openApplicants.map((a) => (
+                <li key={a.id}>
+                  {a.fullName} · {CANDIDATE_STATUS_LABEL[a.status]}
+                  {a.acceptedOffer && <b className="text-rose-700"> · offering sudah diterima</b>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {acceptedOpen.length > 0 && (
+            <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-800">
+              <b>Perhatian:</b> {acceptedOpen.length} pelamar sudah menerima offering. Menutup permintaan membatalkannya. Pastikan mereka sudah dihubungi.
+            </p>
+          )}
+        </div>
+      )}
       {canClose && (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="mb-1 text-sm font-medium text-slate-900">{t("recruitment.closeRequestTitle")}</p>
@@ -454,6 +491,30 @@ export default async function RecruitmentDetailPage({
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="mb-3 text-sm font-medium text-slate-900">{t("recruitment.cancelRequestButton")}</p>
           <CancelRequestForm requestId={request.id} />
+        </div>
+      )}
+
+      {closureNotices.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <p className="text-sm font-semibold text-slate-900">
+            Pelamar yang ditutup bersama permintaan <span className="ml-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{closureNotices.length}</span>
+          </p>
+          <p className="text-xs text-slate-500">Boleh dikabari kalau Anda mau, tidak wajib. Email ke pelamar masih dimatikan, jadi kabari lewat WhatsApp. Mereka boleh melamar lagi tanpa masa tunggu.</p>
+          <div className="mt-2 divide-y divide-slate-100">
+            {closureNotices.map((c) => (
+              <ClosureNoticeRow
+                key={c.id}
+                candidateId={c.id}
+                name={c.fullName}
+                note={c.offer?.response === "ACCEPTED" ? "offering diterima" : null}
+                whatsappUrl={
+                  c.mobileNumber
+                    ? whatsappLink(c.mobileNumber, `Halo ${c.fullName}, ini HR PT CBP. Kami kabarkan bahwa lowongan ${requestJobTitle} yang Anda lamar sudah ditutup. Terima kasih atas minat dan waktu Anda. Anda boleh melamar lowongan PT CBP lainnya kapan saja.`)
+                    : null
+                }
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -492,6 +553,15 @@ export default async function RecruitmentDetailPage({
           filledCount={counts.filledCount}
           stage={stage}
         />
+      )}
+
+      {lastSeatWarning && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
+          <p>
+            <b>Kursi ini yang terakhir.</b> Saat terisi (buat karyawan atau Mutasi), {openApplicants.length - 1} pelamar lain yang masih berjalan ikut ditutup
+            {acceptedOpen.length > 1 ? `, termasuk ${acceptedOpen.length - 1} yang sudah menerima offering` : ""}. Lanjutkan hanya bila Anda sudah memutuskan.
+          </p>
+        </div>
       )}
 
       {readyToHire.length > 0 && (

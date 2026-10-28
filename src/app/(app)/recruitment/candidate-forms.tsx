@@ -7,7 +7,11 @@ import { SignaturePad } from "@/components/signature-pad";
 import { DocumentFileInput } from "@/components/document-file-input";
 import {
   decideCandidateAction,
+  markClosureNotifiedAction,
   recordOfferResponseAction,
+  reissueTestLinkAction,
+  rejectCandidateAction,
+  reopenTestAction,
   saveHrNotesAction,
   scheduleInterviewAction,
   sendOfferAction,
@@ -19,6 +23,7 @@ import {
   purgeOldCandidatesAction,
   type ScheduleResult,
   type SendOfferResult,
+  type TestLinkResult,
 } from "./candidate-actions";
 import { OPEN_FOR_LABEL } from "@/lib/recruitment-candidates";
 import type { RecruitmentInterviewDecision, RecruitmentOpenFor } from "@/generated/prisma/enums";
@@ -621,6 +626,220 @@ export function PurgeButton({ count }: { count: number }) {
         }
       />
       {message && <span className="text-xs text-slate-600">{message}</span>}
+    </div>
+  );
+}
+
+// ---------- end an applicant's process ----------
+
+// Two ways out: HR rejects (the person waits before applying again) or the applicant withdrew or did not show up (no waiting).
+export function EndProcessForm({ candidateId }: { candidateId: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"REJECTED" | "WITHDRAWN">("REJECTED");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, run] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-sm text-slate-500 hover:text-slate-700 hover:underline">
+        Akhiri proses pelamar ini
+      </button>
+    );
+  }
+  function submit() {
+    setError(null);
+    const data = new FormData();
+    data.set("kind", kind);
+    data.set("reason", reason);
+    run(async () => {
+      const message = await rejectCandidateAction(candidateId, undefined, data);
+      if (message) setError(message);
+      else router.refresh();
+    });
+  }
+  const choice = (value: "REJECTED" | "WITHDRAWN", title: string, who: string, hint: string) => (
+    <label className={`block cursor-pointer rounded-lg border p-3 ${kind === value ? "border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500" : "border-slate-200"}`}>
+      <input type="radio" name="end-kind" checked={kind === value} onChange={() => setKind(value)} className="sr-only" />
+      <p className="text-sm font-medium text-slate-900">
+        {title} <span className="font-normal text-slate-400">· {who}</span>
+      </p>
+      <p className="text-xs text-slate-500">{hint}</p>
+    </label>
+  );
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <p className="text-sm font-semibold text-slate-900">Akhiri proses pelamar ini</p>
+      <div className="space-y-2">
+        {choice("REJECTED", "Ditolak", "HR yang memutuskan", "Pelamar baru bisa melamar lagi setelah masa tunggu.")}
+        {choice("WITHDRAWN", "Mengundurkan diri atau tidak hadir", "pelamar yang memutuskan", "Tidak ada masa tunggu. Pelamar bisa melamar lagi kapan saja.")}
+      </div>
+      <div>
+        <label className={label} htmlFor="end-reason">Alasan (wajib)</label>
+        <textarea id="end-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Misalnya: tidak hadir di jadwal interview" className={input} />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={pending} onClick={submit} className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60">
+          {pending ? "Menyimpan..." : "Akhiri proses"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className={ghost}>
+          Batal
+        </button>
+        {error && <span className="text-xs text-rose-600">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---------- test link and second try ----------
+
+export interface TestRowInfo {
+  /** "assessment" for Tes Situasi Kerja, otherwise the applicant's test id. */
+  target: string;
+  name: string;
+  meta: string;
+  state: string;
+  tone: "ok" | "warn" | "muted";
+  /** Time ran out and it was handed in by the clock: can be opened for a second try. */
+  canReopen: boolean;
+}
+
+export function TestLinkPanel({ candidateId, canIssueLink, tests }: { candidateId: string; canIssueLink: boolean; tests: TestRowInfo[] }) {
+  const router = useRouter();
+  const [pending, run] = useTransition();
+  const [result, setResult] = useState<TestLinkResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reopening, setReopening] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+
+  function issue() {
+    setError(null);
+    run(async () => {
+      const res = await reissueTestLinkAction(candidateId);
+      if (res.error) setError(res.error);
+      else {
+        setResult(res);
+        router.refresh();
+      }
+    });
+  }
+  function reopen(target: string) {
+    setError(null);
+    const data = new FormData();
+    data.set("reason", reason);
+    run(async () => {
+      const message = await reopenTestAction(candidateId, target, undefined, data);
+      if (message) setError(message);
+      else {
+        setReopening(null);
+        setReason("");
+        router.refresh();
+      }
+    });
+  }
+  const tone = { ok: "text-emerald-700", warn: "text-amber-700", muted: "text-slate-400" };
+
+  return (
+    <div className="space-y-3">
+      {canIssueLink && (
+        <div className="flex flex-wrap items-center gap-2">
+          <ConfirmButton
+            label="Terbitkan tautan tes baru"
+            confirmLabel="Ya, buat tautan baru (tautan lama mati)"
+            pending={pending}
+            onConfirm={issue}
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+          />
+          <span className="text-xs text-slate-500">Tes yang sudah dikerjakan tidak berubah.</span>
+        </div>
+      )}
+      {result?.url && (
+        <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+          Tautan tes baru dibuat. Tautan lama sudah tidak berlaku.{" "}
+          {result.emailed ? "Email berisi tautan sudah terkirim." : result.applicantEmailOff ? "Email ke pelamar masih dimatikan, jadi kirim tautan ini lewat WhatsApp. Tautan hanya tampil sekarang." : "Email tidak terkirim. Kirim tautan ini lewat WhatsApp. Tautan hanya tampil sekarang."}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <code className="min-w-0 truncate rounded bg-white px-2 py-1 font-mono text-xs">{result.url}</code>
+            <CopyButton text={result.url} />
+            {result.whatsappUrl && (
+              <a href={result.whatsappUrl} target="_blank" rel="noopener noreferrer" className={`${ghost} bg-white`}>
+                Buka WhatsApp
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+        {tests.map((t) => (
+          <div key={t.target} className="px-4 py-2.5 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium text-slate-900">
+                  {t.name} <span className="font-normal text-slate-400">{t.meta}</span>
+                </p>
+                <p className={`text-xs ${tone[t.tone]}`}>{t.state}</p>
+              </div>
+              {t.canReopen && reopening !== t.target && (
+                <button type="button" onClick={() => setReopening(t.target)} className={ghost}>
+                  Buka ulang tes
+                </button>
+              )}
+            </div>
+            {reopening === t.target && (
+              <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs text-slate-600">Jawaban lama dihapus dan pelamar mengulang dari awal dengan waktu penuh. Tercatat siapa yang membuka dan alasannya.</p>
+                <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Alasan (wajib), misalnya: sinyal pelamar terputus" aria-label="Alasan membuka ulang tes" className={input} />
+                <div className="flex gap-2">
+                  <button type="button" disabled={pending} onClick={() => reopen(t.target)} className={primary}>
+                    {pending ? "Menyimpan..." : "Buka ulang tes"}
+                  </button>
+                  <button type="button" onClick={() => setReopening(null)} className={ghost}>
+                    Batal
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
+// ---------- applicants closed because the request ended ----------
+
+export function ClosureNoticeRow({ candidateId, name, note, whatsappUrl }: { candidateId: string; name: string; note: string | null; whatsappUrl: string | null }) {
+  const router = useRouter();
+  const [pending, run] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+      <span>
+        {name} {note && <span className="text-xs text-rose-700">({note})</span>}
+      </span>
+      <span className="flex items-center gap-2">
+        {whatsappUrl && (
+          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className={ghost}>
+            Kirim WhatsApp
+          </a>
+        )}
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            run(async () => {
+              const message = await markClosureNotifiedAction(candidateId);
+              if (message) setError(message);
+              else router.refresh();
+            })
+          }
+          className="text-xs text-indigo-600 hover:underline disabled:opacity-60"
+        >
+          Tandai sudah dikabari
+        </button>
+      </span>
+      {error && <span className="w-full text-xs text-rose-600">{error}</span>}
     </div>
   );
 }

@@ -9,8 +9,11 @@ import { t } from "@/lib/i18n/id";
 import {
   createOffer,
   decideCandidate,
+  markClosureNotified,
   recordOfferResponseByHr,
   rejectCandidate,
+  reissueTestLink,
+  reopenCandidateTest,
   reviewEssayTest,
   saveHrInterviewNotes,
   scheduleInterview,
@@ -202,12 +205,67 @@ export async function decideCandidateAction(candidateId: string, decision: Recru
   if (requestId) refresh(requestId, candidateId);
 }
 
+// "kind" is HR's own decision (Ditolak: the person waits before applying again) or the applicant's (Mengundurkan diri
+// atau tidak hadir: no waiting period).
 export async function rejectCandidateAction(candidateId: string, _prev: Result, formData: FormData): Promise<Result> {
   const auth = await hrAdminOr();
   if ("error" in auth) return auth.error;
-  const res = await rejectCandidate(candidateId, (formData.get("reason") as string) ?? "");
+  const kind = formData.get("kind") === "WITHDRAWN" ? "WITHDRAWN" : "REJECTED";
+  const res = await rejectCandidate(candidateId, (formData.get("reason") as string) ?? "", kind, auth.session.user.id);
   if (!res.ok) return res.error;
-  await logAudit({ actorAccountId: auth.session.user.id, action: "REJECT", datasetName: "RecruitmentCandidate", recordId: candidateId, reason: "Applicant ended by HR Admin" });
+  await logAudit({
+    actorAccountId: auth.session.user.id,
+    action: "REJECT",
+    datasetName: "RecruitmentCandidate",
+    recordId: candidateId,
+    reason: kind === "WITHDRAWN" ? "Applicant recorded as withdrawn or not attending by Admin Rekrutmen" : "Applicant ended by Admin Rekrutmen",
+  });
+  const requestId = await requestIdOf(candidateId);
+  if (requestId) refresh(requestId, candidateId);
+}
+
+// ---------- the applicant's test link and a second try ----------
+
+export type TestLinkResult = { error?: string; url?: string; emailed?: boolean; applicantEmailOff?: boolean; whatsappUrl?: string };
+
+export async function reissueTestLinkAction(candidateId: string): Promise<TestLinkResult> {
+  const auth = await hrAdminOr();
+  if ("error" in auth) return { error: auth.error };
+  const res = await reissueTestLink(candidateId);
+  if (!res.ok) return { error: res.error };
+  await logAudit({ actorAccountId: auth.session.user.id, action: "UPDATE", datasetName: "RecruitmentCandidate", recordId: candidateId, reason: "New test link issued (the old one stopped working)" });
+  const requestId = await requestIdOf(candidateId);
+  if (requestId) refresh(requestId, candidateId);
+  const whatsappUrl = res.mobileNumber
+    ? whatsappLink(res.mobileNumber, `Halo ${res.candidateName}, ini HR PT CBP. Berikut tautan baru untuk mengerjakan tes lamaran Anda (tautan lama tidak berlaku lagi): ${res.url}`)
+    : undefined;
+  return { url: res.url, emailed: res.emailed, applicantEmailOff: res.applicantEmailOff, whatsappUrl };
+}
+
+export async function reopenTestAction(candidateId: string, target: string, _prev: Result, formData: FormData): Promise<Result> {
+  const auth = await hrAdminOr();
+  if ("error" in auth) return auth.error;
+  const reason = ((formData.get("reason") as string) ?? "").trim();
+  const res = await reopenCandidateTest(candidateId, target, reason);
+  if (!res.ok) return res.error;
+  await logAudit({
+    actorAccountId: auth.session.user.id,
+    action: "UPDATE",
+    datasetName: "RecruitmentCandidate",
+    recordId: candidateId,
+    reason: `Test reopened for a second try (${target === "assessment" ? "Tes Situasi Kerja" : target}): ${reason}`,
+  });
+  const requestId = await requestIdOf(candidateId);
+  if (requestId) refresh(requestId, candidateId);
+}
+
+// ---------- applicants closed because the request ended ----------
+
+export async function markClosureNotifiedAction(candidateId: string): Promise<Result> {
+  const auth = await hrAdminOr();
+  if ("error" in auth) return auth.error;
+  const res = await markClosureNotified(candidateId);
+  if (!res.ok) return res.error;
   const requestId = await requestIdOf(candidateId);
   if (requestId) refresh(requestId, candidateId);
 }

@@ -374,7 +374,7 @@ export default async function DashboardPage({
   const session = await requireSession();
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
   const { ga: gaParam, rec: recParam } = await searchParams;
-  const recFilter: RecKind | "all" = (["es", "iv", "of", "mv"] as const).find((k) => k === recParam) ?? "all";
+  const recFilter: RecKind | "all" = (["vc", "es", "iv", "of", "mv"] as const).find((k) => k === recParam) ?? "all";
   const gaFilter: TodoKind | "all" = (["ga", "wo", "dp", "of", "st"] as const).find((k) => k === gaParam) ?? "all";
 
   // Simple Karyawan home: decided from cheap, already-necessary checks only

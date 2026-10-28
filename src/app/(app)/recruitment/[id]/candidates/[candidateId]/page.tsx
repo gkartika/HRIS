@@ -111,7 +111,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
     progressOf({
       ...candidate,
       tests: candidate.tests.map((t) => ({ id: t.id, status: t.status, passed: t.passed, scorePercent: t.scorePercent, testType: { name: t.testType.name, form: t.testType.form, excellentScore: t.testType.excellentScore }, _count: { reviewers: t.reviewers.length } })),
-      interview: candidate.interview ? { id: candidate.interview.id, scheduledAt: candidate.interview.scheduledAt, interviewers: candidate.interview.interviewers.map((i) => ({ submittedAt: i.submittedAt })) } : null,
+      interview: candidate.interview ? { id: candidate.interview.id, scheduledAt: candidate.interview.scheduledAt, mode: candidate.interview.mode, interviewers: candidate.interview.interviewers.map((i) => ({ submittedAt: i.submittedAt })) } : null,
       offer: candidate.offer ? { sentAt: candidate.offer.sentAt, response: candidate.offer.response } : null,
     })
   );

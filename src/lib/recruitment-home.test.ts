@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { ASSESSMENT_NOT_ACTIVE_PROBLEM } from "./recruitment-candidates";
-import { actionableCount, buildRecruitmentRows, buildRecruitmentTiles, buildSetupWarnings, buildUnopenedRequests, recRowCounts, type HomeCandidate, type HomeVacancy } from "./recruitment-home";
+import {
+  buildHomeStats,
+  buildRecruitmentRows,
+  buildSetupWarnings,
+  buildUpcomingInterviews,
+  buildVacancyProgress,
+  buildWaitingItems,
+  recRowCounts,
+  type HomeCandidate,
+  type HomeRequest,
+} from "./recruitment-home";
 import type { CandidateProgress } from "./recruitment-candidates";
 
 const now = new Date("2026-10-20T05:00:00Z"); // 12:00 WIB
 const ago = (days: number) => new Date(now.getTime() - days * 86400000);
+const at = (hours: number) => new Date(now.getTime() + hours * 3600000);
 
 function progress(over: Partial<CandidateProgress> = {}): CandidateProgress {
   return {
@@ -34,11 +45,29 @@ function cand(id: string, status: HomeCandidate["status"], over: Partial<HomeCan
     statusChangedAt: ago(1),
     progress: progress({ status, ...p }),
     interviewAt: null,
+    interviewMode: null,
+    offerSentAt: null,
     movementStatus: null,
     excellent: false,
     ...rest,
   };
 }
+
+const request = (id: string, over: Partial<HomeRequest> = {}): HomeRequest => ({
+  id,
+  requestNumber: `REQ-${id}`,
+  jobLabel: `Job ${id}`,
+  department: "Produksi",
+  headcount: 2,
+  filled: 0,
+  approvedAt: ago(1),
+  heldAt: null,
+  opened: true,
+  hasDetail: true,
+  problems: [],
+  totalApplicants: 0,
+  ...over,
+});
 
 describe("buildRecruitmentRows", () => {
   it("groups applicants waiting in the same step of the same request", () => {
@@ -48,13 +77,13 @@ describe("buildRecruitmentRows", () => {
     );
     expect(rows).toHaveLength(2);
     const group = rows.find((r) => r.who.startsWith("REQ-0042"));
-    expect(group?.title).toBe("2 pelamar lolos tes, siap diundang interview");
+    expect(group).toMatchObject({ kind: "iv", type: "Undang interview", title: "2 pelamar lolos tes", requestId: "r1" });
     expect(group?.who).toContain("1 berpredikat istimewa");
     expect(group?.statusLabel).toBe("Menunggu 4 hari");
     expect(group?.severity).toBe("amber");
     expect(group?.href).toBe("/recruitment/r1?stage=lolos");
     const single = rows.find((r) => r.who.startsWith("REQ-0044"));
-    expect(single?.title).toBe("Pelamar c lolos tes, siap diundang interview");
+    expect(single?.title).toBe("Pelamar c");
     expect(single?.href).toBe("/recruitment/r2/candidates/c");
   });
 
@@ -64,24 +93,18 @@ describe("buildRecruitmentRows", () => {
     expect(rows[0]).toMatchObject({ kind: "es", severity: "rose", actionLabel: "Pilih penilai" });
   });
 
-  it("interview steps: schedule, wait, decide, and an upcoming one", () => {
+  it("interview steps: schedule and decide; a scheduled or running interview is not a task", () => {
     const rows = buildRecruitmentRows(
       [
         cand("a", "INTERVIEWING"),
         cand("b", "INTERVIEWING", { p: { hasInterview: true, interviewersTotal: 2, interviewersSubmitted: 2 } }),
-        cand("c", "INTERVIEWING", { p: { hasInterview: true, interviewersTotal: 2, interviewersSubmitted: 0 }, interviewAt: new Date(now.getTime() + 20 * 3600000) }),
+        cand("c", "INTERVIEWING", { p: { hasInterview: true, interviewersTotal: 2, interviewersSubmitted: 0 }, interviewAt: at(20) }),
         // interview is done, but interviewers still have to fill in: nothing for the recruiter
         cand("d", "INTERVIEWING", { p: { hasInterview: true, interviewersTotal: 2, interviewersSubmitted: 1 }, interviewAt: ago(1) }),
-        // too far away to list
-        cand("e", "INTERVIEWING", { p: { hasInterview: true, interviewersTotal: 2, interviewersSubmitted: 0 }, interviewAt: new Date(now.getTime() + 20 * 86400000) }),
       ],
       now
     );
-    expect(rows.map((r) => r.actionLabel).sort()).toEqual(["Buka", "Jadwalkan", "Putuskan"]);
-    const upcoming = rows.find((r) => r.statusLabel === "Terjadwal");
-    expect(upcoming?.title).toBe("Interview Rabu, 21 Okt 08.00 — Pelamar c");
-    expect(upcoming?.severity).toBe("slate");
-    expect(actionableCount(rows)).toBe(2);
+    expect(rows.map((r) => r.actionLabel).sort()).toEqual(["Jadwalkan", "Putuskan"]);
   });
 
   it("offering and internal move rows", () => {
@@ -99,85 +122,133 @@ describe("buildRecruitmentRows", () => {
       now
     );
     expect(rows.map((r) => r.actionLabel).sort()).toEqual(["Ajukan", "Buat karyawan", "Buka", "Jalankan", "Kirim surat", "Unggah surat"]);
-    expect(recRowCounts(rows)).toEqual({ all: 6, es: 0, iv: 0, of: 3, mv: 3 });
+    expect(recRowCounts(rows)).toEqual({ all: 6, vc: 0, es: 0, iv: 0, of: 3, mv: 3 });
   });
 
   it("puts the longest wait first", () => {
     const rows = buildRecruitmentRows([cand("a", "OFFERING", { statusChangedAt: ago(1) }), cand("b", "OFFERING", { statusChangedAt: ago(9) })], now);
-    expect(rows[0].title).toContain("Pelamar b");
+    expect(rows[0].title).toBe("Pelamar b");
     expect(rows[0].severity).toBe("rose");
+  });
+
+  it("approved requests that are not open yet: write the detail first, then open; held and full ones are skipped", () => {
+    const rows = buildRecruitmentRows(
+      [],
+      now,
+      [
+        request("a", { opened: false, hasDetail: false, approvedAt: ago(5) }),
+        request("b", { opened: false, hasDetail: true, approvedAt: ago(1) }),
+        request("c", { opened: false, heldAt: ago(1) }),
+        request("d", { opened: false, filled: 2 }),
+        request("e", { opened: true }),
+      ]
+    );
+    expect(rows.map((r) => [r.requestId, r.type, r.kind])).toEqual([
+      ["a", "Tulis detail lowongan", "vc"],
+      ["b", "Buka lowongan", "vc"],
+    ]);
+    expect(rows[0]).toMatchObject({ severity: "amber", statusLabel: "Menunggu 5 hari", href: "/recruitment/a", title: "Job a" });
   });
 });
 
-describe("buildRecruitmentTiles", () => {
-  const vacancy = (id: string, openFor: HomeVacancy["openFor"], problems: string[] = []): HomeVacancy => ({
-    id,
-    requestNumber: `REQ-${id}`,
-    jobLabel: "Operator",
-    openFor,
-    accessCode: null,
-    applicants: 0,
-    seatsLeft: 1,
-    problems,
+describe("buildWaitingItems", () => {
+  it("lists what waits for someone else, oldest first, and groups applicants still testing", () => {
+    const items = buildWaitingItems(
+      [
+        cand("a", "OFFERING", { p: { hasOffer: true, offerSent: true }, offerSentAt: ago(4) }),
+        cand("b", "AWAITING_REVIEW", { p: { hasReviewer: true }, statusChangedAt: ago(2) }),
+        cand("c", "INTERVIEWING", { p: { hasInterview: true, interviewersTotal: 2, interviewersSubmitted: 1 }, interviewAt: ago(3) }),
+        cand("d", "TESTING", { statusChangedAt: ago(1) }),
+        cand("e", "TESTING", { statusChangedAt: ago(6) }),
+        cand("f", "MOVEMENT", { p: { hasMovement: true, movementOpen: true }, movementStatus: "SUBMITTED" }),
+        // a task for the recruiter, not a wait
+        cand("g", "OFFERING", { p: { hasOffer: true } }),
+      ],
+      now
+    );
+    expect(items.map((i) => i.title)).toEqual([
+      "Pelamar belum selesai mengerjakan tes",
+      "Offering menunggu jawaban",
+      "Pewawancara belum mengisi penilaian",
+      "Penilai esai belum selesai menilai",
+      "Perubahan Posisi menunggu persetujuan",
+    ]);
+    expect(items[0]).toMatchObject({ detail: "2 pelamar · REQ-0042 · Operator Produksi", severity: "amber", age: 6 });
+    expect(items[2].detail).toContain("1 dari 2 pewawancara sudah mengisi");
   });
+});
 
+describe("buildUpcomingInterviews", () => {
+  it("lists the coming 7 days in time order with day label and interviewers", () => {
+    const list = buildUpcomingInterviews(
+      [
+        cand("far", "INTERVIEWING", { interviewAt: at(24 * 9), p: { hasInterview: true } }),
+        cand("tomorrow", "INTERVIEWING", { interviewAt: at(20), interviewMode: "ONLINE", p: { hasInterview: true, interviewersTotal: 2 } }),
+        cand("today", "INTERVIEWING", { interviewAt: at(2), p: { hasInterview: true } }),
+        cand("past", "INTERVIEWING", { interviewAt: ago(1), p: { hasInterview: true } }),
+        cand("later", "INTERVIEWING", { interviewAt: at(24 * 3), p: { hasInterview: true, interviewersTotal: 1 } }),
+      ],
+      now
+    );
+    expect(list.map((i) => i.id)).toEqual(["today", "tomorrow", "later"]);
+    expect(list[0]).toMatchObject({ dayLabel: "Hari ini · Selasa, 20 Okt", time: "14.00", needsInterviewer: true, interviewersLabel: "Belum ada pewawancara", modeLabel: null });
+    expect(list[1]).toMatchObject({ dayLabel: "Besok · Rabu, 21 Okt", time: "08.00", modeLabel: "Online", interviewersLabel: "2 pewawancara", needsInterviewer: false });
+    expect(list[2].dayLabel).toBe("Jumat, 23 Okt");
+  });
+});
+
+describe("buildVacancyProgress and buildHomeStats", () => {
   const candidates = [
     cand("a", "TESTING"),
-    cand("b", "AWAITING_REVIEW", { statusChangedAt: ago(6) }),
-    cand("c", "AWAITING_REVIEW", { p: { hasReviewer: true } }),
-    cand("d", "TEST_PASSED"),
-    cand("e", "INTERVIEWING", { p: { hasInterview: true, interviewersTotal: 2, interviewersSubmitted: 2 } }),
-    cand("f", "OFFERING", { p: { hasOffer: true, offerSent: true } }),
+    cand("b", "TEST_PASSED"),
+    cand("c", "INTERVIEWING"),
+    cand("d", "OFFERING", { p: { hasOffer: true, offerSent: true } }),
+    cand("e", "MOVEMENT", { p: { hasMovement: true, movementOpen: true }, movementStatus: "SUBMITTED" }),
+    cand("x", "TESTING", { requestId: "r2", requestNumber: "REQ-0050" }),
   ];
-  const rows = buildRecruitmentRows(candidates, now);
-  const tiles = buildRecruitmentTiles({
-    candidates,
-    rows,
-    vacancies: [vacancy("1", "EXTERNAL"), vacancy("2", "BOTH", ["Tes X belum punya soal."]), vacancy("3", "NONE")],
-    unopened: 1,
-    lastMonth: { hiredExternal: 5, hiredInternal: 2, avgDaysToHire: 27.2 },
-    now,
-  });
-  const tile = (title: string) => tiles.find((t) => t.title === title)!;
+  const requests = [
+    request("r1", { filled: 1, totalApplicants: 9, approvedAt: ago(12) }),
+    request("r2", { totalApplicants: 1 }),
+    request("r3", { opened: false, hasDetail: false, headcount: 1 }),
+    request("r4", { heldAt: ago(2), headcount: 5 }),
+    request("r5", { problems: ["Kode akses untuk pelamar eksternal belum dibuat."] }),
+  ];
+  const rows = buildRecruitmentRows(candidates, now, requests);
+  const waiting = buildWaitingItems(candidates, now);
+  const progressList = buildVacancyProgress({ requests, candidates, rows, waiting, now });
+  const byId = (id: string) => progressList.find((v) => v.id === id)!;
 
-  it("has the six tiles in order", () => {
-    expect(tiles.map((t) => t.title)).toEqual(["Lowongan dibuka", "Tes & penilaian", "Interview", "Offering", "Perubahan Posisi (internal)", "Diterima 30 hari terakhir"]);
-  });
-
-  it("vacancies: counts the open ones and says what is off", () => {
-    const t = tile("Lowongan dibuka");
-    expect(t.total).toBe(2);
-    expect(t.severity).toBe("amber");
-    expect(t.note).toContain("1 lowongan disetujui tapi belum dibuka");
-    expect(t.note).toContain("1 lowongan belum siap");
-  });
-
-  it("tests: splits the steps and hides empty ones", () => {
-    const t = tile("Tes & penilaian");
-    expect(t.total).toBe(4);
-    expect(t.parts.map((p) => [p.label, p.count])).toEqual([
-      ["Sedang mengerjakan tes", 1],
-      ["Esai menunggu penilai", 1],
-      ["Esai sedang dinilai", 1],
-      ["Lolos tes, siap diundang interview", 1],
+  it("counts the applicants in each step and the seats filled", () => {
+    expect(byId("r1").stages).toEqual([
+      { label: "Tes", count: 1 },
+      { label: "Review", count: 0 },
+      { label: "Lolos tes", count: 1 },
+      { label: "Interview", count: 1 },
+      { label: "Offering", count: 2 },
+      { label: "Terisi", count: 1 },
     ]);
-    expect(t.parts[1].hint).toBe("terlama 6 hari");
-    expect(t.note).toBe("1 esai belum punya penilai lebih dari 5 hari.");
-    expect(t.severity).toBe("amber"); // waiting 6 days: red starts at 7
-    expect(t.noteSevere).toBe(false);
+    expect(byId("r1")).toMatchObject({ filled: 1, headcount: 2, totalApplicants: 9, state: "open", approvedDays: 12 });
   });
 
-  it("offering waiting for the applicant is counted but quiet", () => {
-    const t = tile("Offering");
-    expect(t.total).toBe(1);
-    expect(t.parts).toEqual([{ label: "Menunggu jawaban pelamar", count: 1 }]);
-    expect(t.severity).toBe("slate");
+  it("says the next step from the recruiter's own tasks first, then what blocks it, then what is awaited", () => {
+    // r1 has two tasks (invite the passed applicant, schedule the interview): the longest waiting comes first
+    expect(byId("r1").next.text).toMatch(/^2 hal perlu Anda kerjakan\. Mulai dari: /);
+    expect(byId("r3").next).toMatchObject({ text: "Tulis detail lowongan: Job r3", severity: "slate" });
+    expect(byId("r4").next.text).toContain("Ditahan");
+    expect(byId("r5").next).toMatchObject({ text: "Belum siap menerima pelamar: Kode akses untuk pelamar eksternal belum dibuat.", severity: "amber" });
+    expect(byId("r2").next.text).toBe("Menunggu pihak lain: pelamar belum selesai mengerjakan tes");
   });
 
-  it("hired tile", () => {
-    const t = tile("Diterima 30 hari terakhir");
-    expect(t.total).toBe(7);
-    expect(t.note).toContain("27,2");
+  it("puts held vacancies last", () => {
+    expect(progressList[progressList.length - 1].id).toBe("r4");
+  });
+
+  it("the four numbers leave out held vacancies", () => {
+    const upcoming = buildUpcomingInterviews([cand("t", "INTERVIEWING", { interviewAt: at(20), p: { hasInterview: true } })], now);
+    const stats = buildHomeStats({ rows, upcoming, waiting, vacancies: progressList, now });
+    expect(stats).toMatchObject({ todo: rows.length, interviews: 1, interviewsToday: 0, interviewsTomorrow: 1, waiting: waiting.length });
+    expect(stats.headcount).toBe(2 + 2 + 1 + 2);
+    expect(stats.filled).toBe(1);
   });
 });
 
@@ -221,39 +292,5 @@ describe("buildSetupWarnings", () => {
     const out = buildSetupWarnings({ types: [], openVacancies: many });
     expect(out.shown).toHaveLength(4);
     expect(out.hidden).toBe(3);
-  });
-});
-
-describe("buildUnopenedRequests", () => {
-  const req = (id: string, approvedDaysAgo: number | null, held = false) => ({
-    id,
-    requestNumber: `REQ-${id}`,
-    jobLabel: `Job ${id}`,
-    department: "Produksi",
-    seatsLeft: 1,
-    approvedAt: approvedDaysAgo === null ? null : ago(approvedDaysAgo),
-    heldAt: held ? ago(1) : null,
-  });
-
-  it("puts the longest waiting first and shows how long", () => {
-    const list = buildUnopenedRequests([req("a", 1), req("b", 5), req("c", 0)], now);
-    expect(list.map((r) => r.id)).toEqual(["b", "a", "c"]);
-    expect(list[0].waitingLabel).toBe("menunggu 5 hari");
-    expect(list[2].waitingLabel).toBe("baru hari ini");
-  });
-
-  it("colours by waiting time: quiet, amber from 3 days, rose from 7", () => {
-    const [a, b, c] = buildUnopenedRequests([req("a", 7), req("b", 3), req("c", 1)], now);
-    expect([a.severity, b.severity, c.severity]).toEqual(["rose", "amber", "slate"]);
-  });
-
-  it("held requests go last, quiet and marked held", () => {
-    const list = buildUnopenedRequests([req("held", 9, true), req("open", 1)], now);
-    expect(list.map((r) => r.id)).toEqual(["open", "held"]);
-    expect(list[1]).toMatchObject({ held: true, severity: "slate" });
-  });
-
-  it("a request without an approval date counts as new", () => {
-    expect(buildUnopenedRequests([req("x", null)], now)[0].waitingLabel).toBe("baru hari ini");
   });
 });

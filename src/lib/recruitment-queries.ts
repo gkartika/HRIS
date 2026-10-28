@@ -44,7 +44,7 @@ const candidateRowSelect = {
     },
   },
   assessment: { select: { status: true, totalScore: true } },
-  interview: { select: { id: true, scheduledAt: true, interviewers: { select: { submittedAt: true } } } },
+  interview: { select: { id: true, scheduledAt: true, mode: true, interviewers: { select: { submittedAt: true } } } },
   offer: { select: { sentAt: true, response: true } },
   movementRequest: { select: { id: true, requestNumber: true, status: true } },
 } satisfies Prisma.RecruitmentCandidateSelect;

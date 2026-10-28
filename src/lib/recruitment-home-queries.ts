@@ -5,7 +5,17 @@ import { FULFILLABLE_STATUSES, loadPlanContext, possibleTests, readinessProblems
 import { loadDashboardData } from "@/lib/recruitment-dashboard-data";
 import { computeDashboard, parseDashboardFilters } from "@/lib/recruitment-dashboard";
 import { DAY_MS } from "@/lib/company-time";
-import { buildRecruitmentRows, buildRecruitmentTiles, buildSetupWarnings, buildUnopenedRequests, recRowCounts, type HomeCandidate, type HomeVacancy } from "@/lib/recruitment-home";
+import {
+  buildHomeStats,
+  buildRecruitmentRows,
+  buildSetupWarnings,
+  buildUpcomingInterviews,
+  buildVacancyProgress,
+  buildWaitingItems,
+  recRowCounts,
+  type HomeCandidate,
+  type HomeRequest,
+} from "@/lib/recruitment-home";
 
 function toHomeCandidate(c: CandidateRow): HomeCandidate {
   return {
@@ -18,6 +28,8 @@ function toHomeCandidate(c: CandidateRow): HomeCandidate {
     statusChangedAt: c.statusChangedAt,
     progress: progressOf(c),
     interviewAt: c.interview?.scheduledAt ?? null,
+    interviewMode: c.interview?.mode ?? null,
+    offerSentAt: c.offer?.sentAt ?? null,
     movementStatus: c.movementRequest?.status ?? null,
     excellent: c.tests.some((t) => t.passed === true && isExcellent(t.scorePercent, t.testType.excellentScore)),
   };
@@ -29,7 +41,7 @@ export async function getRecruitmentHomeData() {
   const monthAgo = new Date(now.getTime() - 30 * DAY_MS);
   const lastMonthFilters = parseDashboardFilters({}, []);
 
-  const [active, ctx, requests, month] = await Promise.all([
+  const [active, ctx, requests, month, applicantTotals] = await Promise.all([
     listCandidates({ status: { in: ACTIVE_CANDIDATE_STATUSES } }, 400),
     loadPlanContext(),
     prisma.recruitmentRequest.findMany({
@@ -55,58 +67,56 @@ export async function getRecruitmentHomeData() {
       },
     }),
     loadDashboardData(lastMonthFilters, { from: monthAgo, to: now }),
+    prisma.recruitmentCandidate.groupBy({ by: ["requestId"], _count: { _all: true } }),
   ]);
 
   const candidates = active.map(toHomeCandidate);
-  const applicantsPerRequest = new Map<string, number>();
-  for (const c of candidates) applicantsPerRequest.set(c.requestId, (applicantsPerRequest.get(c.requestId) ?? 0) + 1);
+  const totalByRequest = new Map(applicantTotals.map((t) => [t.requestId, t._count._all]));
 
-  const vacancies: (HomeVacancy & { testTypeIds: string[] })[] = requests.map((r) => ({
+  const homeRequests: HomeRequest[] = requests.map((r) => ({
     id: r.id,
     requestNumber: r.requestNumber,
     jobLabel: r.job?.jobTitle ?? r.department.unitName,
-    openFor: r.openFor,
-    accessCode: r.accessCode,
-    applicants: applicantsPerRequest.get(r.id) ?? 0,
-    seatsLeft: Math.max(0, r.requestedHeadcount - r._count.fulfillments),
+    department: r.department.unitName,
+    headcount: r.requestedHeadcount,
+    filled: r._count.fulfillments,
+    approvedAt: r.approvedAt,
+    heldAt: r.heldAt,
+    opened: r.openFor !== "NONE",
+    hasDetail: !!r.publicDescription?.trim(),
     problems: readinessProblems(ctx, r, r._count.fulfillments),
-    testTypeIds: possibleTests(ctx, r).map((t) => t.id),
+    totalApplicants: totalByRequest.get(r.id) ?? 0,
   }));
-  const open = vacancies.filter((v) => v.openFor !== "NONE");
-  const unopenedRequests = buildUnopenedRequests(
-    requests
-      .filter((r) => r.openFor === "NONE")
-      .map((r) => ({
-        id: r.id,
-        requestNumber: r.requestNumber,
-        jobLabel: r.job?.jobTitle ?? r.department.unitName,
-        department: r.department.unitName,
-        seatsLeft: Math.max(0, r.requestedHeadcount - r._count.fulfillments),
-        approvedAt: r.approvedAt,
-        heldAt: r.heldAt,
-      })),
-    now
-  );
+  const openVacancies = requests
+    .filter((r) => r.openFor !== "NONE")
+    .map((r) => ({
+      id: r.id,
+      requestNumber: r.requestNumber,
+      testTypeIds: possibleTests(ctx, r).map((t) => t.id),
+      problems: homeRequests.find((h) => h.id === r.id)?.problems ?? [],
+    }));
 
   const result = computeDashboard({ candidates: month.candidates, requests: month.requests, range: { from: monthAgo, to: now }, now });
   const hiredBy = (source: "EXTERNAL" | "INTERNAL") => result.bySource.find((s) => s.source === source)?.hired ?? 0;
-  const lastMonth = { hiredExternal: hiredBy("EXTERNAL"), hiredInternal: hiredBy("INTERNAL"), avgDaysToHire: result.timeToHire.days };
 
-  const rows = buildRecruitmentRows(candidates, now);
-  const tiles = buildRecruitmentTiles({ candidates, rows, vacancies, unopened: vacancies.length - open.length, lastMonth, now });
-  const warnings = buildSetupWarnings({ types: ctx.types, openVacancies: open, assessmentActive: ctx.assessment !== null });
+  const rows = buildRecruitmentRows(candidates, now, homeRequests);
+  const waiting = buildWaitingItems(candidates, now);
+  const upcoming = buildUpcomingInterviews(candidates, now);
+  const vacancies = buildVacancyProgress({ requests: homeRequests, candidates, rows, waiting, now });
+  const warnings = buildSetupWarnings({ types: ctx.types, openVacancies, assessmentActive: ctx.assessment !== null });
 
   return {
     rows,
     counts: recRowCounts(rows),
-    tiles,
+    stats: buildHomeStats({ rows, upcoming, waiting, vacancies, now }),
+    waiting,
+    upcoming,
+    vacancies,
     warnings,
-    vacancies: open,
-    unopenedRequests,
     summary: {
       applicants: result.funnel[0].count,
       passed: result.funnel[1].count,
-      hired: lastMonth.hiredExternal + lastMonth.hiredInternal,
+      hired: hiredBy("EXTERNAL") + hiredBy("INTERNAL"),
       hiringRate: result.hiringRate.percent,
       avgDaysToHire: result.timeToHire.days,
     },

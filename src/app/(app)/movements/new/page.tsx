@@ -5,7 +5,7 @@ import { getMovementSubmitDepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { canRequestAcceptFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
-import { OPEN_MOVEMENT_STATUSES } from "@/lib/movement";
+import { OPEN_MOVEMENT_STATUSES, compareJobLevels } from "@/lib/movement";
 import Link from "next/link";
 import { SubmitMovementForm } from "./submit-movement-form";
 
@@ -33,6 +33,7 @@ export default async function NewMovementRequestPage({
     label: string;
     requesterEmployeeId: string;
     jobId: string | null;
+    jobTitle: string;
   } | null = null;
   if (candidateId && canManageRecruitment(session)) {
     const c = await prisma.recruitmentCandidate.findUnique({
@@ -45,6 +46,7 @@ export default async function NewMovementRequestPage({
         employeeId: c.employeeId,
         requesterEmployeeId: c.request.requesterEmployeeId,
         jobId: c.request.jobId,
+        jobTitle: c.request.job?.jobTitle ?? "",
         label: `${c.fullName}, ${c.request.job?.jobTitle ?? "lowongan"} (${c.request.requestNumber})`,
       };
     }
@@ -79,7 +81,7 @@ export default async function NewMovementRequestPage({
     return <AccessDenied />;
   }
 
-  const [eligibleEmployees, positions, requesterCandidates, jobs, units] = await Promise.all([
+  const [eligibleEmployees, levelRows, requesterCandidates, jobs, units] = await Promise.all([
     prisma.employee.findMany({
       where: viaCandidateOnly
         ? { id: candidateRow!.employeeId }
@@ -101,20 +103,15 @@ export default async function NewMovementRequestPage({
       },
       orderBy: { fullLegalName: "asc" },
     }),
-    prisma.position.findMany({
-      where: fillRow
-        ? { archived: false, positionStatus: "VACANT", jobId: fillRow.jobId }
-        : viaCandidateOnly
-        ? { archived: false, positionStatus: "VACANT", jobId: candidateRow!.jobId ?? "__none__" }
-        : { archived: false },
-      include: { job: true, orgUnit: true },
-      orderBy: { positionCode: "asc" },
-    }),
+    // The levels that exist, for Promosi and Demosi ("level yang dituju").
+    prisma.position.findMany({ where: { archived: false }, distinct: ["jobLevel"], select: { jobLevel: true } }),
     isHrAdminUser ? prisma.employee.findMany({ orderBy: { fullLegalName: "asc" }, select: { id: true, fullLegalName: true, employeeNumber: true } }) : Promise.resolve([]),
     // Tambah Posisi picks a standard Jabatan and a unit (the seat may not exist yet).
     prisma.job.findMany({ orderBy: { jobTitle: "asc" }, select: { id: true, jobTitle: true } }),
     prisma.orgUnit.findMany({ where: { activeFlag: true }, orderBy: [{ unitType: "asc" }, { unitName: "asc" }], select: { id: true, unitName: true, unitType: true } }),
   ]);
+
+  const levels = levelRows.map((l) => l.jobLevel).sort((a, b) => compareJobLevels(a, b) ?? a.localeCompare(b));
 
   if (eligibleEmployees.length === 0) {
     return <p className="text-sm text-rose-600">{t("movement.noEligibleEmployees")}</p>;
@@ -127,7 +124,7 @@ export default async function NewMovementRequestPage({
   const defaultEmployeeId = wantedEmployeeId && eligibleEmployees.some((e) => e.id === wantedEmployeeId) ? wantedEmployeeId : "";
   const candidate =
     candidateRow && defaultEmployeeId === candidateRow.employeeId
-      ? { id: candidateRow.id, label: candidateRow.label, requesterEmployeeId: candidateRow.requesterEmployeeId }
+      ? { id: candidateRow.id, label: candidateRow.label, requesterEmployeeId: candidateRow.requesterEmployeeId, jobId: candidateRow.jobId ?? "", jobTitle: candidateRow.jobTitle }
       : null;
 
   return (
@@ -137,7 +134,7 @@ export default async function NewMovementRequestPage({
         <SubmitMovementForm
           employees={eligibleEmployees}
           defaultEmployeeId={defaultEmployeeId}
-          positions={positions}
+          levels={levels}
           jobs={jobs}
           units={units}
           requesterCandidates={requesterCandidates}

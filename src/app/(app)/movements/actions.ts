@@ -34,6 +34,7 @@ import {
   requiresVacantProposedPosition,
   initialMovementStatus,
   usesStandardJabatan,
+  requiresProposedLevel,
 } from "@/lib/movement";
 import { movementNeedsEvaluation, movementTypeToEvaluationPurpose, isEvaluationGateSatisfied } from "@/lib/evaluation";
 import { createDraftEvaluation } from "@/lib/evaluation-create";
@@ -65,7 +66,8 @@ export async function submitMovementRequest(
   // Set when Admin SDM filed this Mutasi to fill a recruitment request ("Isi dengan Mutasi").
   const recruitmentRequestId = (formData.get("recruitmentRequestId") as string) || null;
   // Mutasi and Tambah Posisi name a standard Jabatan and a unit (not a position); an internal applicant's move keeps naming a position.
-  const jobBased = usesStandardJabatan(movementType) && !candidateId;
+  const jobBased = usesStandardJabatan(movementType);
+  const proposedJobLevel = ((formData.get("proposedJobLevel") as string) || "").trim() || null;
   let fillRequest: { jobId: string | null; status: RecruitmentRequestStatus; requestedHeadcount: number; requesterEmployeeId: string; filled: number; held: boolean } | null = null;
   if (recruitmentRequestId) {
     if (!isHrAdmin(session)) return "Hanya Admin SDM yang bisa mengisi permintaan tenaga kerja dengan Mutasi.";
@@ -88,13 +90,13 @@ export async function submitMovementRequest(
     !employeeId ||
     !movementType ||
     !currentAssignmentId ||
-    !(jobBased ? proposedJobId && proposedOrgUnitId : proposedPositionId) ||
+    !(jobBased ? proposedJobId && proposedOrgUnitId && (!requiresProposedLevel(movementType) || proposedJobLevel) : proposedPositionId) ||
     !proposedEffectiveDate ||
     !requestReason ||
     !requesterEmployeeId
   ) {
     return jobBased
-      ? "Karyawan, jenis perubahan, Assignment saat ini, jabatan, unit tujuan, tanggal efektif, alasan, dan pengaju wajib diisi."
+      ? "Karyawan, jenis perubahan, Assignment saat ini, jabatan, unit tujuan (dan level untuk Promosi/Demosi), tanggal efektif, alasan, dan pengaju wajib diisi."
       : "Karyawan, jenis perubahan, Assignment saat ini, posisi yang diusulkan, tanggal efektif, alasan, dan pengaju wajib diisi.";
   }
   // Perubahan Posisi refactor: only Promosi/Mutasi/Demotasi are submittable
@@ -163,6 +165,11 @@ export async function submitMovementRequest(
     if (!unit || !unit.activeFlag) return "Unit tujuan tidak ditemukan atau tidak aktif.";
     proposedPositionId = employee.currentPositionId;
     // For a Mutasi that fills a recruitment request, the request's own Jabatan must match; the seat itself is checked at execution.
+    // Promosi and Demosi: the direction is checked against the level named on the request (a Jabatan has none).
+    if (requiresProposedLevel(movementType)) {
+      const directionError = validateJobLevelDirection(movementType, employee.currentPosition.jobLevel, proposedJobLevel!);
+      if (directionError) return directionError;
+    }
     proposedPosition = { jobId: proposedJobId!, positionStatus: "VACANT", archived: false, jobLevel: employee.currentPosition.jobLevel };
   } else {
     const positionError = validateProposedPosition(movementType, employee.currentPositionId, proposedPositionId);
@@ -206,11 +213,13 @@ export async function submitMovementRequest(
   if (candidateId) {
     const candidate = await prisma.recruitmentCandidate.findUnique({
       where: { id: candidateId },
-      select: { source: true, status: true, employeeId: true, requestId: true },
+      select: { source: true, status: true, employeeId: true, requestId: true, request: { select: { jobId: true } } },
     });
     if (!canManageRecruitment(session) || !candidate || candidate.source !== "INTERNAL" || candidate.status !== "MOVEMENT" || candidate.employeeId !== employeeId) {
       return "Lamaran internal ini tidak bisa dihubungkan ke Perubahan Posisi.";
     }
+    // An internal applicant applied to one vacancy, so the Jabatan is that vacancy's own.
+    if (jobBased && proposedJobId !== candidate.request.jobId) return "Jabatan harus sama dengan jabatan lowongan yang dilamar.";
   }
 
   // A move already scheduled for the future is still pending on the old
@@ -257,10 +266,11 @@ export async function submitMovementRequest(
       proposedPositionId,
       proposedJobId: jobBased ? proposedJobId : null,
       proposedOrgUnitId: jobBased ? proposedOrgUnitId : null,
+      proposedJobLevel: jobBased && requiresProposedLevel(movementType) ? proposedJobLevel : null,
       proposedEmploymentStatus: proposedEmploymentStatus ? (proposedEmploymentStatus as EmploymentStatus) : null,
       proposedEffectiveDate: new Date(proposedEffectiveDate),
       requestReason,
-      status: initialMovementStatus(movementType),
+      status: initialMovementStatus(),
       requesterEmployeeId: requester.id,
       requesterPositionId: requester.currentPositionId,
       submittedByAccountId: session.user.id,
@@ -558,10 +568,13 @@ export async function executeMovementRequest(requestId: string, addedPositionId?
   let targetPositionId = request.proposedPositionId;
   if (request.proposedJobId && !isAddPositionType(request.movementType)) {
     if (!addedPositionId) return "Pilih posisi untuk jabatan ini terlebih dahulu. Kalau belum ada, buat dulu di Struktur Organisasi.";
-    const chosen = await prisma.position.findUnique({ where: { id: addedPositionId }, select: { id: true, jobId: true, orgUnitId: true, archived: true } });
+    const chosen = await prisma.position.findUnique({ where: { id: addedPositionId }, select: { id: true, jobId: true, orgUnitId: true, archived: true, jobLevel: true } });
     if (!chosen || chosen.archived) return "Posisi yang dipilih tidak ditemukan atau sudah diarsipkan.";
     if (chosen.jobId !== request.proposedJobId || chosen.orgUnitId !== request.proposedOrgUnitId) {
       return "Posisi yang dipilih harus berjabatan dan berunit sama dengan yang disetujui.";
+    }
+    if (request.proposedJobLevel && chosen.jobLevel !== request.proposedJobLevel) {
+      return `Posisi yang dipilih harus berlevel ${request.proposedJobLevel}, sesuai yang disetujui.`;
     }
     if (await isPositionOccupiedByPrimary(chosen.id, request.employeeId)) {
       return "Posisi yang dipilih sudah memiliki pemegang Utama aktif — pilih posisi lain.";

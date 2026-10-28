@@ -28,7 +28,7 @@ function todayIso() {
 export function SubmitMovementForm({
   employees,
   defaultEmployeeId,
-  positions,
+  levels,
   jobs,
   units,
   requesterCandidates,
@@ -39,14 +39,14 @@ export function SubmitMovementForm({
 }: {
   employees: EmployeeOption[];
   defaultEmployeeId: string;
-  positions: PositionOption[];
+  levels: string[];
   jobs: { id: string; jobTitle: string }[];
   units: { id: string; unitName: string; unitType: string }[];
   requesterCandidates: CandidateOption[];
   currentEmployeeId: string | null;
   isHrAdmin: boolean;
   /** Set when HR Admin opened this form from an internal applicant. */
-  candidate?: { id: string; label: string; requesterEmployeeId: string } | null;
+  candidate?: { id: string; label: string; requesterEmployeeId: string; jobId: string; jobTitle: string } | null;
   /** Set when Admin SDM opened this form from a recruitment request to fill it with a Mutasi. */
   fillRequest?: { id: string; label: string; requesterEmployeeId: string; jobId: string; jobTitle: string } | null;
 }) {
@@ -59,8 +59,10 @@ export function SubmitMovementForm({
   const primaryAssignment = assignments.find((a) => a.assignmentType === "PRIMARY");
   // a Mutasi needs no evaluation, so there is nothing to reference for it
   const needsEvaluation = movementType === "PROMOTION" || movementType === "DEMOTION";
-  // Mutasi and Tambah Posisi name a standard Jabatan and a unit; an internal applicant's move keeps naming a position.
-  const jobBased = (movementType === "MUTATION" || movementType === "ADD_POSITION") && !candidate;
+  // Every type names a standard Jabatan and a unit (the seat may not exist yet); Promosi and Demosi also name the level.
+  const jobBased = movementType !== "";
+  const needsLevel = movementType === "PROMOTION" || movementType === "DEMOTION";
+  const fixedJob = fillRequest ?? candidate ?? null;
   const requesterDefault = fillRequest?.requesterEmployeeId ?? candidate?.requesterEmployeeId ?? currentEmployeeId ?? "";
 
   return (
@@ -150,6 +152,7 @@ export function SubmitMovementForm({
         {movementType === "MUTATION" && !candidate && (
           <p className="mt-1.5 text-xs text-slate-500">{t("movement.mutationJobHint")}</p>
         )}
+        {needsLevel && <p className="mt-1.5 text-xs text-slate-500">{t("movement.levelJobHint")}</p>}
       </div>
 
       <div>
@@ -187,10 +190,10 @@ export function SubmitMovementForm({
         <>
           <div>
             <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedJob")}</label>
-            {fillRequest ? (
+            {fixedJob ? (
               <>
-                <input type="hidden" name="proposedJobId" value={fillRequest.jobId} />
-                <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">{fillRequest.jobTitle}</p>
+                <input type="hidden" name="proposedJobId" value={fixedJob.jobId} />
+                <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-600">{fixedJob.jobTitle}</p>
               </>
             ) : (
               <select name="proposedJobId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
@@ -202,7 +205,7 @@ export function SubmitMovementForm({
                 ))}
               </select>
             )}
-            <p className="mt-1 text-xs text-slate-500">{fillRequest ? "Jabatan mengikuti permintaan tenaga kerja yang diisi." : t("movement.proposedJobHint")}</p>
+            <p className="mt-1 text-xs text-slate-500">{fixedJob ? "Jabatan mengikuti lowongan atau permintaan tenaga kerja yang bersangkutan." : t("movement.proposedJobHint")}</p>
           </div>
           <div>
             <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedUnit")}</label>
@@ -216,18 +219,28 @@ export function SubmitMovementForm({
             </select>
             <p className="mt-1 text-xs text-slate-500">{t("movement.proposedUnitHint")}</p>
           </div>
+          {needsLevel && (
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedLevel")}</label>
+              <select name="proposedJobLevel" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <option value="">— Pilih —</option>
+                {levels.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                {employee?.currentPosition ? `Level sekarang: ${employee.currentPosition.jobLevel}. ` : ""}
+                {movementType === "PROMOTION" ? "Harus lebih tinggi." : "Harus lebih rendah."}
+              </p>
+            </div>
+          )}
         </>
       ) : (
         <div>
-          <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedPosition")}</label>
-          <select name="proposedPositionId" required defaultValue="" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">— Pilih —</option>
-            {positions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.positionCode} — {p.jobLevel} {p.job.jobTitle} ({p.orgUnit.unitName})
-              </option>
-            ))}
-          </select>
+          <label className="mb-1 block text-xs text-slate-500">{t("movement.proposedJob")}</label>
+          <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-400">— Pilih jenis perubahan dulu —</p>
         </div>
       )}
 

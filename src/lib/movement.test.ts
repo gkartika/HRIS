@@ -15,6 +15,7 @@ import {
   initialMovementStatus,
   isMovementSubmitLevel,
   usesStandardJabatan,
+  requiresProposedLevel,
 } from "./movement";
 import { movementNeedsEvaluation } from "./evaluation";
 
@@ -111,12 +112,21 @@ describe("who may file a Perubahan Posisi: job level 2C and above", () => {
 });
 
 describe("which types name a standard Jabatan instead of a position", () => {
-  it("Mutasi and Tambah Posisi do, Promosi and Demosi do not (they are checked against the seat's level)", () => {
-    expect(usesStandardJabatan("MUTATION")).toBe(true);
-    expect(usesStandardJabatan("ADD_POSITION")).toBe(true);
-    expect(usesStandardJabatan("PROMOTION")).toBe(false);
-    expect(usesStandardJabatan("DEMOTION")).toBe(false);
+  it("every Perubahan Posisi type does, the legacy status change does not", () => {
+    for (const type of ["PROMOTION", "MUTATION", "DEMOTION", "ADD_POSITION"] as const) expect(usesStandardJabatan(type)).toBe(true);
     expect(usesStandardJabatan("STATUS_CHANGE")).toBe(false);
+    expect(usesStandardJabatan("ROTATION")).toBe(false);
+  });
+
+  it("only Promosi and Demosi also name the level they go to, so the direction can still be checked", () => {
+    expect(requiresProposedLevel("PROMOTION")).toBe(true);
+    expect(requiresProposedLevel("DEMOTION")).toBe(true);
+    expect(requiresProposedLevel("MUTATION")).toBe(false);
+    expect(requiresProposedLevel("ADD_POSITION")).toBe(false);
+    expect(validateJobLevelDirection("PROMOTION", "2C", "3A")).toBeNull();
+    expect(validateJobLevelDirection("PROMOTION", "2C", "2B")).not.toBeNull();
+    expect(validateJobLevelDirection("DEMOTION", "3A", "2C")).toBeNull();
+    expect(validateJobLevelDirection("DEMOTION", "2C", "3A")).not.toBeNull();
   });
 });
 
@@ -138,11 +148,8 @@ describe("Tambah Posisi", () => {
     expect(validateProposedPosition("ADD_POSITION", "pos-a", "pos-b")).toBeNull();
   });
 
-  it("goes straight to the HR Manager, every other type starts with the Department Head", () => {
-    expect(initialMovementStatus("ADD_POSITION")).toBe("SUBMITTED");
-    expect(initialMovementStatus("MUTATION")).toBe("PENDING_DEPT_HEAD");
-    expect(initialMovementStatus("PROMOTION")).toBe("PENDING_DEPT_HEAD");
-    expect(initialMovementStatus("DEMOTION")).toBe("PENDING_DEPT_HEAD");
+  it("every type goes straight to the HR Manager, with no Department Head step", () => {
+    expect(initialMovementStatus()).toBe("SUBMITTED");
   });
 
   it("needs no evaluation, like a Mutasi, and has no level direction rule", () => {

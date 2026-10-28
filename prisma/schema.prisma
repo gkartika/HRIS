@@ -1497,6 +1497,8 @@ model MovementRequest {
   proposedJob              Job?                  @relation("MovementProposedJob", fields: [proposedJobId], references: [id])
   proposedOrgUnitId        String?
   proposedOrgUnit          OrgUnit?              @relation("MovementProposedOrgUnit", fields: [proposedOrgUnitId], references: [id])
+  // Promosi and Demosi also name the level they go to (a Jabatan has no level), so the direction can still be checked.
+  proposedJobLevel         String?
   // Only meaningful/required when movementType is STATUS_CHANGE — a legacy
   // type, no longer offered by the Perubahan Posisi submit form.
   proposedEmploymentStatus EmploymentStatus?

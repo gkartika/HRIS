@@ -121,7 +121,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
   // Tambah Posisi: Admin SDM picks the real seat when carrying it out.
   const isAddPosition = isAddPositionType(request.movementType);
   // A Mutasi or Tambah Posisi that named a Jabatan and a unit: the seat is picked when it is carried out.
-  const isJobBased = !!request.proposedJobId && !(request.movementType === "MUTATION" && request.status === "IMPLEMENTED");
+  const isJobBased = !!request.proposedJobId && !(request.movementType !== "ADD_POSITION" && request.status === "IMPLEMENTED");
   const addCandidates =
     canExecute && request.proposedJobId && request.proposedOrgUnitId
       ? await prisma.position.findMany({
@@ -219,6 +219,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
               <p className="text-sm text-slate-900">{request.proposedJob?.jobTitle ?? "—"}</p>
               <p className="text-xs text-slate-400">
                 {t("movement.proposedUnit")}: {request.proposedOrgUnit?.unitName ?? "—"}
+                {request.proposedJobLevel && ` · level yang dituju: ${request.proposedJobLevel}`}
                 {request.status !== "IMPLEMENTED" && " · posisi dipilih saat dilaksanakan"}
               </p>
             </div>
@@ -232,7 +233,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
               <p className="text-xs text-slate-400">{request.proposedPosition.orgUnit.unitName}</p>
             </div>
           )}
-          {isAddPosition && (
+          {!isLegacyType && !request.deptHeadDecisionAt && request.status !== "PENDING_DEPT_HEAD" && (
             <div>
               <p className="text-xs text-slate-500">Persetujuan</p>
               <p className="text-sm text-slate-900">{t("movement.approvalHrManagerOnly")}</p>
@@ -396,7 +397,7 @@ export default async function MovementDetailPage({ params }: { params: Promise<{
               mode={isAddPosition ? "ADD_POSITION" : "MUTATION"}
               positions={addCandidates
                 // a Mutasi moves the employee into a seat nobody holds as their main placement
-                .filter((p) => isAddPosition || !p.assignments.some((a) => a.assignmentType === "PRIMARY"))
+                .filter((p) => isAddPosition || (!p.assignments.some((a) => a.assignmentType === "PRIMARY") && (!request.proposedJobLevel || p.jobLevel === request.proposedJobLevel)))
                 .map((p) => ({
                 id: p.id,
                 label: `${p.positionCode} — ${p.jobLevel} ${request.proposedJob?.jobTitle ?? ""} (${request.proposedOrgUnit?.unitName ?? ""})${p.assignments.length ? `, dipegang ${p.assignments.map((a) => a.employee.fullLegalName).join(", ")}` : ", kosong"}`,

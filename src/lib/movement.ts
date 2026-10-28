@@ -77,20 +77,26 @@ export function isAddPositionType(movementType: MovementType): boolean {
 }
 
 /**
- * Tambah Posisi goes straight to the HR Manager (owner, 2026-10-28): no Kepala Departemen step. Every other type
- * starts with the Department Head.
+ * A new Perubahan Posisi goes straight to the HR Manager (owner, 2026-10-28): no Kepala Departemen approval for any
+ * type. (Tambah Posisi was first; Promosi, Mutasi and Demosi followed the same day.) A request that is already waiting
+ * for the Department Head, from before this, can still be decided there.
  */
-export function initialMovementStatus(movementType: MovementType): MovementRequestStatus {
-  return movementType === "ADD_POSITION" ? "SUBMITTED" : "PENDING_DEPT_HEAD";
+export function initialMovementStatus(): MovementRequestStatus {
+  return "SUBMITTED";
 }
 
 /**
- * Mutasi and Tambah Posisi name a standard Jabatan and a unit instead of a position (owner, 2026-10-28), because the
- * seat may not exist yet; Admin SDM picks or creates the seat when carrying the request out. Promosi and Demosi still
- * name a position, because they are checked against the seat's job level.
+ * Every Perubahan Posisi (Promosi, Mutasi, Demosi, Tambah Posisi) names a standard Jabatan and a unit instead of a
+ * position (owner, 2026-10-28), because the seat may not exist yet; Admin SDM picks or creates the seat when carrying
+ * the request out. Promosi and Demosi also name the level, so the direction can still be checked.
  */
 export function usesStandardJabatan(movementType: MovementType): boolean {
-  return movementType === "MUTATION" || movementType === "ADD_POSITION";
+  return movementType === "PROMOTION" || movementType === "MUTATION" || movementType === "DEMOTION" || movementType === "ADD_POSITION";
+}
+
+/** Promosi and Demosi also name the level they go to, since a Jabatan has no level and the direction is still checked. */
+export function requiresProposedLevel(movementType: MovementType): boolean {
+  return movementType === "PROMOTION" || movementType === "DEMOTION";
 }
 
 /** A move into a position needs that position to have no active primary holder; an added or status-only change does not. */

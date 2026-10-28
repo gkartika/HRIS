@@ -2853,3 +2853,14 @@ Owner supplied the master data (folder GPT-module: question bank JSON, HR rubric
 - **Isi dengan Mutasi:** the Jabatan is fixed to the recruitment request's own Jabatan; Admin SDM only picks the unit. The vacant-seat check moves from filing to the moment of carrying it out.
 - **Promosi and Demosi still name a position**, because they are checked against the seat's job level (a promotion must go up, a demotion down) and a Jabatan has no level. Say so if they should change too. An internal applicant's move (from Rekrutmen) also still names a position, as the applicant applied to a specific vacancy. Mutasi requests that the renewal flow creates still carry a position and execute as before.
 - No new database fields: it reuses `proposedJobId` and `proposedOrgUnitId` from Tambah Posisi.
+
+### Every Perubahan Posisi names a standard Jabatan (owner request 2026-10-28, supersedes the Promosi and Demosi exception above)
+- **All four types** (Promosi, Mutasi, Demosi, Tambah Posisi) now ask for a **Jabatan (standar)** and a **Unit tujuan**, not a position. Admin SDM picks (or first creates) the seat when carrying the request out.
+- **Promosi and Demosi also ask for "Level yang dituju"** (the level codes that exist, such as 2C or 3A), because a Jabatan has no level and "a promotion goes up, a demotion goes down" is still checked at filing (`validateJobLevelDirection`). At execution the chosen seat must have exactly that level. New nullable column `proposedJobLevel` (migration 20261028110000).
+- **An internal applicant's move** (from Rekrutmen) also names a Jabatan, fixed to the vacancy's own Jabatan, plus a unit; Admin Rekrutmen/Admin SDM picks the unit. **Isi dengan Mutasi** works the same (Jabatan fixed to the request's).
+- Requests already open, and the Mutasi/Demosi that the contract renewal flow creates, still carry a position and finish the old way.
+
+### No Kepala Departemen approval for any Perubahan Posisi (owner request 2026-10-28)
+- A new Perubahan Posisi of **any type** (Promosi, Mutasi, Demosi, Tambah Posisi) starts at "Diajukan" and goes straight to the **HR Manager**, then Admin SDM carries it out. `initialMovementStatus` always returns SUBMITTED. This replaces the Kepala Departemen first step (it was already skipped for Tambah Posisi).
+- Promosi and Demosi still need their evaluation completed before the HR Manager can decide. Who may file is unchanged (level 2C and above).
+- The Kepala Departemen decision screen is kept only for a request that was already waiting there (none at the time of this change). The Perpanjangan Kontrak flow is separate and keeps its own Kepala Departemen recommendation.

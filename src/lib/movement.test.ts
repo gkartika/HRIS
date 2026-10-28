@@ -13,6 +13,7 @@ import {
   isAddPositionType,
   requiresVacantProposedPosition,
   initialMovementStatus,
+  isMovementSubmitLevel,
 } from "./movement";
 import { movementNeedsEvaluation } from "./evaluation";
 
@@ -92,6 +93,19 @@ describe("isPerubahanPosisiType (Perubahan Posisi refactor)", () => {
   it("excludes the legacy Rotasi and Perubahan Status types", () => {
     expect(isPerubahanPosisiType("ROTATION")).toBe(false);
     expect(isPerubahanPosisiType("STATUS_CHANGE")).toBe(false);
+  });
+});
+
+describe("who may file a Perubahan Posisi: job level 2C and above", () => {
+  it("allows 2C, 3A, 3B, 4A and 5A", () => {
+    for (const level of ["2C", "3A", "3B", "4A", "5A"]) expect(isMovementSubmitLevel(level)).toBe(true);
+  });
+  it("does not allow the levels below 2C", () => {
+    for (const level of ["1A", "1B", "1C", "2A", "2B"]) expect(isMovementSubmitLevel(level)).toBe(false);
+  });
+  it("does not guess when the level code cannot be read", () => {
+    expect(isMovementSubmitLevel("")).toBe(false);
+    expect(isMovementSubmitLevel("Manager")).toBe(false);
   });
 });
 

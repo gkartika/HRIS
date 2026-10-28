@@ -1,7 +1,7 @@
 import { AccessDenied } from "@/components/access-denied";
 import { requireSession } from "@/lib/require-session";
 import { canManageRecruitment, isHrAdmin } from "@/lib/permissions";
-import { getLevel3DepartmentIds } from "@/lib/level3-scope";
+import { getMovementSubmitDepartmentIds } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { canRequestAcceptFulfillment, computeFulfillmentCounts } from "@/lib/recruitment";
@@ -21,9 +21,9 @@ export default async function NewMovementRequestPage({
   // same form, not a separate picker/page — scoped to whoever this viewer
   // is actually eligible to submit for: every employee for HR Admin, or
   // everyone in a Department this viewer holds a Level-3 (3A/3B) Position
-  // in.
+  // in (job level 2C or above).
   const isHrAdminUser = isHrAdmin(session);
-  const level3DepartmentIds = isHrAdminUser ? [] : await getLevel3DepartmentIds(session.user.employeeId);
+  const level3DepartmentIds = isHrAdminUser ? [] : await getMovementSubmitDepartmentIds(session.user.employeeId);
 
   // Opened from an internal applicant's page by Admin SDM or Admin Rekrutmen. Admin Rekrutmen
   // gets this form for that one applicant only, nobody else's record.

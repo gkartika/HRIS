@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getActiveAssignmentsOf, getOrgUnitMap } from "@/lib/active-assignments";
+import { isMovementSubmitLevel } from "@/lib/movement";
 import type { OrgUnit } from "@/generated/prisma/client";
 
 // Perubahan Posisi refactor: "Level 3" submit eligibility is broader than
@@ -98,6 +99,50 @@ export async function getLevel3DepartmentIds(
   const positions = await getActiveLevel3Positions(employeeId, asOf);
   const departmentIds = await Promise.all(positions.map((p) => resolveDepartmentId(p.orgUnitId)));
   return [...new Set(departmentIds.filter((id): id is string => id !== null))];
+}
+
+// ---------- Perubahan Posisi: job level 2C and above (owner, 2026-10-28) ----------
+// Same department scope as the Level 3 rules above, but the threshold is a job level of 2C or higher, so that Group and
+// Section leaders below 3A can file too. Only Perubahan Posisi uses these; shift, training and the other modules keep
+// their Level 3 rules.
+
+export async function getActiveMovementSubmitPositions(employeeId: string | null | undefined, asOf?: Date): Promise<Level3Position[]> {
+  const assignments = await getActiveAssignmentsOf(employeeId, asOf);
+  return assignments
+    .filter((a) => isMovementSubmitLevel(a.position.jobLevel))
+    .map((a) => ({
+      assignmentId: a.id,
+      positionId: a.positionId,
+      positionCode: a.position.positionCode,
+      jobTitle: a.position.job.jobTitle,
+      jobLevel: a.position.jobLevel,
+      orgUnitId: a.position.orgUnitId,
+    }));
+}
+
+export async function getMovementSubmitDepartmentIds(employeeId: string | null | undefined, asOf?: Date): Promise<string[]> {
+  const positions = await getActiveMovementSubmitPositions(employeeId, asOf);
+  const departmentIds = await Promise.all(positions.map((p) => resolveDepartmentId(p.orgUnitId)));
+  return [...new Set(departmentIds.filter((id): id is string => id !== null))];
+}
+
+export async function isMovementSubmitterForEmployeeDepartment(
+  requesterEmployeeId: string | null | undefined,
+  targetEmployeeId: string,
+  knownTargetOrgUnitId?: string | null
+): Promise<boolean> {
+  const ownDepartmentIds = await getMovementSubmitDepartmentIds(requesterEmployeeId);
+  if (ownDepartmentIds.length === 0) return false;
+  let targetOrgUnitId: string | null;
+  if (knownTargetOrgUnitId !== undefined) {
+    targetOrgUnitId = knownTargetOrgUnitId;
+  } else {
+    const target = await prisma.employee.findUnique({ where: { id: targetEmployeeId }, select: { currentPosition: { select: { orgUnitId: true } } } });
+    targetOrgUnitId = target?.currentPosition?.orgUnitId ?? null;
+  }
+  if (!targetOrgUnitId) return false;
+  const targetDepartmentId = await resolveDepartmentId(targetOrgUnitId);
+  return !!targetDepartmentId && ownDepartmentIds.includes(targetDepartmentId);
 }
 
 /**

@@ -110,6 +110,17 @@ function parseJobLevel(jobLevel: string): [number, string] | null {
 }
 
 /**
+ * Who may file a Perubahan Posisi (owner, 2026-10-28): a holder of a position at job level 2C or above
+ * (2C, 3A, 3B, 4A, 5A ...), for employees of their own department. Before this it was only 3A and 3B.
+ */
+export const MOVEMENT_SUBMIT_MIN_LEVEL = "2C";
+
+export function isMovementSubmitLevel(jobLevel: string): boolean {
+  const comparison = compareJobLevels(jobLevel, MOVEMENT_SUBMIT_MIN_LEVEL);
+  return comparison !== null && comparison >= 0;
+}
+
+/**
  * Positive if `a` is a higher tier than `b`, negative if lower, 0 if equal,
  * null if either code doesn't parse (direction can't be determined).
  */

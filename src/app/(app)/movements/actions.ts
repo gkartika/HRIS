@@ -16,7 +16,7 @@ import {
   isHrManager,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
-import { isLevel3ForEmployeeDepartment, resolveDepartmentId } from "@/lib/level3-scope";
+import { isMovementSubmitterForEmployeeDepartment, resolveDepartmentId } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { isPositionOccupiedByPrimary, syncPositionStatus } from "@/lib/position-occupancy";
 import { shouldScheduleMove } from "@/lib/placement-timing";
@@ -132,10 +132,10 @@ export async function submitMovementRequest(
     return "Assignment saat ini yang dipilih tidak valid atau tidak lagi aktif.";
   }
 
-  const eligible = await isLevel3ForEmployeeDepartment(session.user.employeeId, employeeId);
+  const eligible = await isMovementSubmitterForEmployeeDepartment(session.user.employeeId, employeeId);
   // Admin Rekrutmen may submit only for an internal applicant (checked against the applicant below).
   if (!canSubmitMovementRequest(session, eligible) && !(candidateId && canManageRecruitment(session))) {
-    return "Anda tidak memiliki akses. Hanya pemegang Posisi Level 3 (3A/3B) di department karyawan ini yang dapat mengajukan.";
+    return "Anda tidak memiliki akses. Hanya pemegang Posisi Level 2C ke atas di department karyawan ini yang dapat mengajukan.";
   }
 
   // One open request per employee: a second one could be approved alongside

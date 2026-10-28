@@ -28,7 +28,7 @@ import {
   canManageAttendanceMasterData,
 } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
-import { isLevel3ForEmployeeDepartment } from "@/lib/level3-scope";
+import { isLevel3ForEmployeeDepartment, isMovementSubmitterForEmployeeDepartment } from "@/lib/level3-scope";
 import { logAudit } from "@/lib/audit";
 import { t } from "@/lib/i18n/id";
 import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
@@ -133,14 +133,15 @@ export default async function EmployeeDetailPage({
   const canViewBpjs = canViewBpjsCard(session, employee.id);
   const canEdit = isSelf || isHrAdmin(session);
   const canManage = canManageAssignments(session);
-  const [hrManagerPositions, isLevel3InDepartment] = await Promise.all([
+  const [hrManagerPositions, isLevel3InDepartment, isMovementSubmitter] = await Promise.all([
     getActiveHrManagerPositions(session.user.employeeId),
     isLevel3ForEmployeeDepartment(session.user.employeeId, employee.id, employee.currentPosition?.orgUnitId ?? null),
+    isMovementSubmitterForEmployeeDepartment(session.user.employeeId, employee.id, employee.currentPosition?.orgUnitId ?? null),
   ]);
   const canHoldAccount = canManageAccountHold(session, hrManagerPositions.map((p) => p.positionId));
   const canUploadDocs = canUploadEmployeeDocument(session);
   const canSubmitMovement =
-    !!employee.currentPositionId && canSubmitMovementRequest(session, isLevel3InDepartment);
+    !!employee.currentPositionId && canSubmitMovementRequest(session, isMovementSubmitter);
   const canReportThisResignation = canStartOffboarding(session);
   const canSetShift = !!employee.currentPositionId && canSubmitShiftAssignment(session, isLevel3InDepartment);
   const canManageAttendance = canManageAttendanceAssignment(session);

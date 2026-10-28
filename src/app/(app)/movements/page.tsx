@@ -7,7 +7,7 @@ import { requireSession } from "@/lib/require-session";
 import { isHrAdmin, canSubmitMovementRequest } from "@/lib/permissions";
 import { getActiveHrManagerPositions } from "@/lib/hr-manager";
 import { getDeptHeadDepartmentIds } from "@/lib/dept-head";
-import { getActiveLevel3Positions } from "@/lib/level3-scope";
+import { getActiveMovementSubmitPositions } from "@/lib/level3-scope";
 import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
@@ -48,8 +48,8 @@ export default async function MovementListPage({
   const deptHeadDepartmentIds = await getDeptHeadDepartmentIds(session.user.employeeId);
   const isHrAdminUser = isHrAdmin(session);
   const seesAll = isHrAdminUser || isHrManagerNow;
-  const level3Positions = await getActiveLevel3Positions(session.user.employeeId);
-  const canSubmit = canSubmitMovementRequest(session, level3Positions.length > 0);
+  const submitPositions = await getActiveMovementSubmitPositions(session.user.employeeId);
+  const canSubmit = canSubmitMovementRequest(session, submitPositions.length > 0);
 
   const {
     requestNumber,

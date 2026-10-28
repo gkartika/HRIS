@@ -1,11 +1,10 @@
-// Everything the Admin HC Beranda needs: one combined list of what is waiting
-// for Admin SDM (the "Perlu ditindak" list, grouped by time in the UI), the
-// payroll-period card, the headcount card and the setup warnings. Reads only;
-// the caller gates on HR Admin.
+// Everything the Admin SDM Beranda needs: one combined list of what is waiting for Admin SDM (grouped by kind of
+// work in the UI), a short outlook of the organisation (employment status, departments, seats, movement), the
+// payroll-period card and the setup warnings. Reads only; the caller gates on HR Admin.
 import { prisma } from "@/lib/db";
 import { companyDateParts, companyToday, companyYear, DAY_MS } from "@/lib/company-time";
 import { daysSince, daysUntil, deadlineLabel, deadlineSeverity, waitingLabel, waitingSeverity, type Severity } from "@/lib/ga-home";
-import { horizonForDeadline, horizonForWaiting, payrollProgress, type HcTodoRow, type PayrollProgress } from "@/lib/hc-home";
+import { departmentBreakdown, onboardingContractSeverity, payrollProgress, startLabel, type HcTodoRow, type PayrollProgress } from "@/lib/hc-home";
 import { computeOnboardingStatus, isOnboardingAssetsComplete, isOnboardingTrainingComplete } from "@/lib/onboarding";
 import { formatCutoffParam, previousCutoffPeriod, resolveCutoffPeriod, type CutoffPeriod } from "@/lib/absence-cutoff";
 import { getUnresolvedDays } from "@/lib/attendance-reconciliation-queue";
@@ -34,7 +33,19 @@ export interface HcHomeData {
     reconciliationHref: string;
     exportHref: string;
   };
-  headcount: { active: number; vacantPositions: number; withoutAccount: number; segments: HeadcountSegment[] };
+  outlook: {
+    active: number;
+    segments: HeadcountSegment[];
+    departments: { name: string; count: number }[];
+    /** Active employees without a seat. */
+    withoutPosition: number;
+    positionsTotal: number;
+    positionsFilled: number;
+    vacantPositions: number;
+    joinedThisMonth: number;
+    leaving: number;
+    contractsEnding90: number;
+  };
   warnings: SetupWarning[];
 }
 
@@ -70,6 +81,9 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     orgUnits,
     holidayCounts,
     hrManagerSeats,
+    positionsTotal,
+    joinedThisMonth,
+    contractsEnding90,
   ] = await Promise.all([
     prisma.onboardingCase.findMany({
       relationLoadStrategy: "join",
@@ -178,6 +192,9 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       prisma.companyHoliday.count({ where: { date: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) } } })
     )),
     prisma.position.count({ where: { archived: false, grantsHrManagerAccess: true } }),
+    prisma.position.count({ where: { archived: false } }),
+    prisma.employee.count({ where: { activeFlag: true, hireDate: { gte: new Date(Date.UTC(companyDateParts(now).year, companyDateParts(now).month - 1, 1)) } } }),
+    prisma.contract.count({ where: { status: "ACTIVE", endDate: { not: null, gte: today, lte: new Date(today.getTime() + 90 * DAY_MS) } } }),
   ]);
 
   const todo: HcTodoRow[] = [];
@@ -229,22 +246,21 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
           timeLabel: deadlineLabel(left),
           actionLabel: "Buka kasus",
           href: `/onboarding/${c.id}`,
-          horizon: "late",
         });
       } else if (!c.contractComplete) {
-        const age = daysSince(c.createdAt, now);
+        const startsIn = daysUntil(c.plannedStartDate, now);
         todo.push({
           kind: "ob",
           type: "Onboarding",
-          title: `${c.employee.fullLegalName}: kontrak belum dicentang`,
+          title: c.employee.fullLegalName,
           who: `${c.caseNumber} · rencana masuk ${c.plannedStartDate.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short" })}`,
-          statusLabel: "Kontrak belum dicentang",
-          severity: waitingSeverity(age),
-          urgency: age,
-          timeLabel: waitingLabel(age),
+          statusLabel: startLabel(startsIn),
+          severity: onboardingContractSeverity(startsIn),
+          // The one who starts first comes first, a start already passed most of all.
+          urgency: 100 - startsIn,
+          timeLabel: "",
           actionLabel: "Centang kontrak",
           href: `/onboarding/${c.id}`,
-          horizon: horizonForWaiting(age),
         });
       }
     }
@@ -261,7 +277,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: "",
       actionLabel: "Undang semua",
       href: "/employees",
-      horizon: "upcoming",
     });
   }
 
@@ -282,7 +297,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
         timeLabel: deadlineLabel(left),
         actionLabel: "Buka kontrak",
         href: `/contracts/${c.id}`,
-        horizon: "late",
       });
     } else if (left <= 30) {
       // The nightly job normally opens the case; until it has, Admin SDM can start it here.
@@ -297,7 +311,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
         timeLabel: deadlineLabel(left),
         actionLabel: "Mulai Evaluasi",
         href: `/contracts/${c.id}`,
-        horizon: horizonForDeadline(left),
         startEvaluationContractId: c.id,
       });
     } else {
@@ -312,7 +325,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
         timeLabel: deadlineLabel(left),
         actionLabel: "Buka kontrak",
         href: `/contracts/${c.id}`,
-        horizon: "upcoming",
       });
     }
   }
@@ -330,7 +342,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: left === null ? waitingLabel(age) : `kontrak ${deadlineLabel(left)}`,
       actionLabel: "Buka kasus",
       href: `/contracts/${c.currentContractId}`,
-      horizon: horizonForWaiting(age) === "late" || (left !== null && horizonForDeadline(left) === "late") ? "late" : "today",
     });
   }
   for (const c of signedContracts) {
@@ -346,7 +357,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: waitingLabel(age),
       actionLabel: "Aktifkan Kontrak",
       href: `/contracts/${c.id}`,
-      horizon: horizonForWaiting(age),
     });
   }
   for (const c of decidedCases) {
@@ -365,7 +375,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
         timeLabel: waitingLabel(age),
         actionLabel: "Buat Proses Offboarding",
         href: `/contracts/${c.currentContractId}`,
-        horizon: horizonForWaiting(age),
       });
     } else if ((c.finalRecommendation === "MUTASI" || c.finalRecommendation === "DEMOSI") && !c.generatedContractId) {
       // Only once the linked movement has actually been carried out.
@@ -381,7 +390,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
         timeLabel: waitingLabel(age),
         actionLabel: "Buka kasus",
         href: `/contracts/${c.currentContractId}`,
-        horizon: horizonForWaiting(age),
       });
     }
   }
@@ -400,7 +408,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: waitingLabel(age),
       actionLabel: "Jalankan",
       href: `/movements/${m.id}`,
-      horizon: horizonForWaiting(age),
     });
   }
 
@@ -419,7 +426,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: waitingLabel(oldest),
       actionLabel: "Atur penyetuju",
       href: "/admin/absence-settings?tab=penyetuju",
-      horizon: "late",
     });
   }
   if (unresolvedBefore.days > 0) {
@@ -434,7 +440,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: "lewat batas payroll",
       actionLabel: "Buka Rekonsiliasi",
       href: `/attendance/reconciliation?cutoff=${formatCutoffParam(previous.start)}`,
-      horizon: "late",
     });
   }
   const payrollLeft = daysUntil(period.end, now);
@@ -450,7 +455,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: payrollLeft === 0 ? "batas payroll hari ini" : `${payrollLeft} hari ke batas payroll`,
       actionLabel: "Buka Rekonsiliasi",
       href: `/attendance/reconciliation?cutoff=${formatCutoffParam(period.start)}`,
-      horizon: horizonForDeadline(payrollLeft),
     });
   }
 
@@ -469,7 +473,6 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: deadlineLabel(left),
       actionLabel: assetsDone ? "Selesaikan" : "Buka kasus",
       href: `/offboarding/${o.id}`,
-      horizon: horizonForDeadline(left),
     });
   }
 
@@ -506,6 +509,14 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     warnings.push({ text: `Libur & Cuti Bersama ${year + 1} belum diisi`, actionLabel: "Isi", href: "/admin/absence-settings?tab=libur" });
   }
   const active = activeByStatus.reduce((sum, g) => sum + g._count._all, 0);
+  // Employees per department (the Production floor, Quality Development ...), by the department above their seat.
+  const departmentCounts = new Map<string, number>();
+  for (const e of activeEmployeeUnits) {
+    const unitId = e.currentPosition?.orgUnitId;
+    if (!unitId) continue;
+    const name = tree.departmentOf(unitId)?.unitName ?? tree.ancestorChain(unitId)[0]?.unitName ?? "—";
+    departmentCounts.set(name, (departmentCounts.get(name) ?? 0) + 1);
+  }
   const segments: HeadcountSegment[] = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"].map((code) => ({
     code,
     label: EMPLOYMENT_LABEL[code],
@@ -522,7 +533,18 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       reconciliationHref: `/attendance/reconciliation?cutoff=${formatCutoffParam(period.start)}`,
       exportHref: `/api/attendance/reconciliation-export?cutoff=${formatCutoffParam(period.start)}`,
     },
-    headcount: { active, vacantPositions, withoutAccount, segments },
+    outlook: {
+      active,
+      segments,
+      departments: departmentBreakdown(departmentCounts),
+      withoutPosition: Math.max(0, active - activeEmployeeUnits.filter((e) => e.currentPosition).length),
+      positionsTotal,
+      positionsFilled: Math.max(0, positionsTotal - vacantPositions),
+      vacantPositions,
+      joinedThisMonth,
+      leaving: offboarding.length,
+      contractsEnding90,
+    },
     warnings,
   };
 }

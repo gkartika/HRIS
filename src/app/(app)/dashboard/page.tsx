@@ -14,6 +14,7 @@ import { ApprovalCategory } from "./approval-category";
 import { InternalJobsCard } from "./internal-jobs-card";
 import { RecruitmentAdminHome } from "./recruitment-admin-home";
 import type { RecKind } from "@/lib/recruitment-home";
+import type { HcCategory } from "@/lib/hc-home";
 import { FirstApproverDecisionButtons, SecondApproverDecisionButtons, HrAdminDecisionButtons } from "../absences/[id]/decision-forms";
 import {
   MovementDecisionButtons,
@@ -369,11 +370,12 @@ async function StatCards({ session }: { session: Awaited<ReturnType<typeof requi
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ga?: string; rec?: string }>;
+  searchParams: Promise<{ ga?: string; rec?: string; hc?: string }>;
 }) {
   const session = await requireSession();
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
-  const { ga: gaParam, rec: recParam } = await searchParams;
+  const { ga: gaParam, rec: recParam, hc: hcParam } = await searchParams;
+  const hcFilter: HcCategory | "all" = (["ob", "of", "ct", "mv", "ab", "data"] as const).find((k) => k === hcParam) ?? "all";
   const recFilter: RecKind | "all" = (["vc", "es", "iv", "of", "mv"] as const).find((k) => k === recParam) ?? "all";
   const gaFilter: TodoKind | "all" = (["ga", "wo", "dp", "of", "st"] as const).find((k) => k === gaParam) ?? "all";
 
@@ -437,7 +439,7 @@ export default async function DashboardPage({
 
       {isHrAdminUser && (
         <Suspense fallback={<SectionSkeleton rows={4} />}>
-          <HcHome />
+          <HcHome filter={hcFilter} />
         </Suspense>
       )}
 

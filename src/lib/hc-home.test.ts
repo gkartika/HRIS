@@ -47,7 +47,7 @@ describe("groupByCategory", () => {
 
   it("counts per kind and in total", () => {
     const counts = categoryCounts([row({ kind: "ct" }), row({ kind: "rc" }), row({ kind: "ob", type: "Akun login" })]);
-    expect(counts).toEqual({ all: 3, ob: 0, of: 0, ct: 2, mv: 0, ab: 0, data: 1, pf: 0 });
+    expect(counts).toEqual({ all: 3, ob: 0, of: 0, ct: 2, mv: 0, ab: 0, data: 1, pf: 0, bp: 0 });
   });
 });
 

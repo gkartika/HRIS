@@ -4166,3 +4166,25 @@ model ProductionFormEvent {
 
   @@index([formKind, formId])
 }
+
+// BPJS reminders on the Admin SDM Beranda (registration, deactivation, monthly list, payment). The tasks themselves are
+// derived from live data; only the "Sudah" mark is stored: one row per task, identified by taskKey
+// (for example "PAY_KES:2026-12" or "DEACTIVATE_TK:<offboarding case id>").
+enum BpjsTaskKind {
+  REGISTER_NEW
+  MONTHLY_LIST
+  DEACTIVATE_KES
+  DEACTIVATE_TK
+  PAY_KES
+  PAY_TK
+}
+
+model BpjsTaskDone {
+  id                String        @id @default(cuid())
+  taskKey           String        @unique
+  kind              BpjsTaskKind
+  markedAt          DateTime      @default(now())
+  markedByAccountId String
+
+  @@index([kind])
+}

@@ -379,7 +379,7 @@ export default async function DashboardPage({
   const session = await requireSession();
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
   const { ga: gaParam, rec: recParam, hc: hcParam, pf: pfParam } = await searchParams;
-  const hcFilter: HcCategory | "all" = (["ob", "of", "ct", "mv", "ab", "data", "pf"] as const).find((k) => k === hcParam) ?? "all";
+  const hcFilter: HcCategory | "all" = (["ob", "of", "ct", "mv", "ab", "data", "pf", "bp"] as const).find((k) => k === hcParam) ?? "all";
   const pfTab: PfTab = (["perlu", "selesai", "semua"] as const).find((k) => k === pfParam) ?? "proses";
   const recFilter: RecKind | "all" = (["vc", "es", "iv", "of", "mv"] as const).find((k) => k === recParam) ?? "all";
   const gaFilter: TodoKind | "all" = (["ga", "wo", "dp", "of", "st"] as const).find((k) => k === gaParam) ?? "all";

@@ -2932,3 +2932,11 @@ Owner supplied the master data (folder GPT-module: question bank JSON, HR rubric
 - **Where it shows:** Production Department Beranda (greeting, forms to fix, three big cards, own forms, department outlook); a card on the 3A/3B Beranda; group "Formulir Produksi" on the Admin SDM Beranda (disetujui atasan, menunggu Admin SDM). No email notifications for now.
 - **Data:** migration 20261102090000 (additive): enum value, 5 enums, tables ExtraWorkRequest, ExtraWorkLine, LeaveWorkRequest, DisciplinaryAction, ProductionFormEvent (timeline). Number counters `PF-<KIND>-<year>`.
 - **Not in this build:** filing rights for Permintaan Tenaga Kerja and Jadwal Shift, copy-as-new for Izin and SP, attachments.
+
+### BPJS reminders on the Admin SDM Beranda (2026-11-02)
+- **Group "BPJS"** in "Kerjakan sekarang" (filter `?hc=bp`), each reminder closed with a **Sudah** button; the page `/bpjs` (menu "BPJS", Admin SDM only) holds the monthly list, the missing start dates and the latest marks with "Batalkan".
+- **Registration BPJS TK:** a new harian lepas or magang is due 7 days after the start date (grey, amber from 3 days before, red after). Monthly list of all active harian lepas and magang for next month shows from the 25th, due the last day of the month; Excel and print; closed with "Sudah didaftarkan semua". Start date = Employee.hireDate, else the earliest contract start; people with none show as one row "belum ada tanggal masuk" and are filled in on `/bpjs`.
+- **Leavers:** BPJS goes off on the first day of a month on or after the last working day (OffboardingCase.lastWorkingDay, not cancelled). Kesehatan must be reported by the 18th of the month before, Ketenagakerjaan by the 5th of the month it goes off. Two rows per leaver.
+- **Payment:** BPJS Kesehatan and Ketenagakerjaan on the 8th, two rows, shown from the 5th, red after the 8th until marked; last month's unmarked rows stay.
+- **Go-live rule:** a task whose deadline is before 2026-11-01 is not shown (`BPJS_REMINDERS_FROM`), so nothing old turns red on day one. Registered status is NOT read from `bpjsEmploymentNumber` (nobody has one filled); only the Sudah mark counts.
+- **Data:** migration 20261103090000, one table `BpjsTaskDone` (taskKey unique: kind + employee/case id or month, who, when). Rules are pure in `src/lib/bpjs-reminders.ts` with tests.

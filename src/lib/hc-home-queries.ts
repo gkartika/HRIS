@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { companyDateParts, companyToday, companyYear, DAY_MS } from "@/lib/company-time";
 import { daysSince, daysUntil, deadlineLabel, deadlineSeverity, waitingLabel, waitingSeverity, type Severity } from "@/lib/ga-home";
 import { getFormsForAdminSdm } from "@/lib/production-forms-queries";
+import { getBpjsRows } from "@/lib/bpjs-queries";
 import { FORM_LABEL, formHref, sdmActionLabel, sdmWaitingText } from "@/lib/production-forms";
 import { departmentBreakdown, onboardingContractSeverity, payrollProgress, startLabel, type HcTodoRow, type PayrollProgress } from "@/lib/hc-home";
 import { computeOnboardingStatus, isOnboardingAssetsComplete, isOnboardingTrainingComplete } from "@/lib/onboarding";
@@ -88,6 +89,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     joinedThisMonth,
     contractsEnding90,
     productionForms,
+    bpjsRows,
   ] = await Promise.all([
     prisma.onboardingCase.findMany({
       relationLoadStrategy: "join",
@@ -200,6 +202,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     prisma.employee.count({ where: { activeFlag: true, hireDate: { gte: new Date(Date.UTC(companyDateParts(now).year, companyDateParts(now).month - 1, 1)) } } }),
     prisma.contract.count({ where: { status: "ACTIVE", endDate: { not: null, gte: today, lte: new Date(today.getTime() + 90 * DAY_MS) } } }),
     getFormsForAdminSdm(),
+    getBpjsRows(now),
   ]);
 
   const todo: HcTodoRow[] = [];
@@ -479,6 +482,9 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       href: formHref(f.kind, f.id),
     });
   }
+
+  // ---- BPJS: registration, deactivation, monthly list, payment (rules in bpjs-reminders.ts) ----
+  todo.push(...bpjsRows);
 
   // ---- Offboarding ----
   for (const o of offboarding) {

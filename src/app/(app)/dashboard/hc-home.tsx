@@ -3,6 +3,7 @@ import { getHcHomeData, type HcHomeData } from "@/lib/hc-home-queries";
 import { categoryCounts, groupByCategory, HC_FILTERS, type HcCategory, type HcTodoRow } from "@/lib/hc-home";
 import type { Severity } from "@/lib/ga-home";
 import { TriggerEvaluationButton } from "./trigger-evaluation-button";
+import { BpjsDoneButton } from "./bpjs-done-button";
 
 const STRIPE: Record<Severity, string> = { rose: "bg-rose-500", amber: "bg-amber-400", slate: "bg-slate-300" };
 const PILL: Record<Severity, string> = {
@@ -39,6 +40,8 @@ function TodoItem({ row }: { row: HcTodoRow }) {
       <div className="shrink-0 self-center">
         {row.startEvaluationContractId ? (
           <TriggerEvaluationButton contractId={row.startEvaluationContractId} />
+        ) : row.bpjsTaskKey ? (
+          <BpjsDoneButton taskKey={row.bpjsTaskKey} label={row.actionLabel} />
         ) : (
           <Link href={row.href} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">
             {row.actionLabel}

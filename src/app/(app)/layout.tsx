@@ -161,6 +161,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // direct request — HR-Admin-only, same as the rest of Absensi & Cuti now.
   if (isHrAdmin(session)) {
     buckets.absensiCuti.push({ href: "/attendance/reconciliation", label: "Rekonsiliasi Absensi", icon: "ListChecks" });
+    buckets.absensiCuti.push({ href: "/bpjs", label: "BPJS", icon: "ListChecks" });
   }
   // Absence (Cuti/Izin/Sakit/Lainnya) list/detail — per direct request,
   // narrowed to HR Admin only (was HR Admin or any employee-linked account,

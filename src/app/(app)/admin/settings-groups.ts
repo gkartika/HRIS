@@ -69,6 +69,13 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     pages: [{ href: "/admin/recruitment-admins", label: "Kelola Akun" }],
   },
   {
+    id: "akun-produksi",
+    title: "Akun Production Department",
+    desc: "Login terpisah untuk staf produksi yang memasukkan formulir departemen Production.",
+    icon: ShieldCheck,
+    pages: [{ href: "/admin/production-admins", label: "Kelola Akun" }],
+  },
+  {
     id: "evaluasi",
     title: "Evaluasi Kinerja",
     desc: "Pedoman PDF dan kriteria matriks penilaian (Performance dan Tata Nilai).",

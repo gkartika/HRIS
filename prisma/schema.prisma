@@ -81,6 +81,9 @@ enum AppRole {
   // the applicant pipeline. Created by Admin SDM under Pengaturan > Akun Admin Rekrutmen;
   // Admin SDM keeps the same access.
   RECRUITMENT_ADMIN
+  // Stand-alone login (no employee record) for the Production clerk: enters Tambahan jam kerja, Izin meninggalkan
+  // pekerjaan and Surat Peringatan for the Production department. Created by Admin SDM.
+  PRODUCTION_ADMIN
 }
 
 enum Gender {
@@ -1116,6 +1119,10 @@ model Employee {
   mandatoryTrainingRuleTargets                MandatoryTrainingRule[]     @relation("MandatoryTrainingRuleTargetEmployee")
 
   gaRequests GaRequest[] @relation("GaRequestRequester")
+
+  extraWorkLines      ExtraWorkLine[]      @relation("ExtraWorkLineEmployee")
+  leaveWorkRequests   LeaveWorkRequest[]   @relation("LeaveWorkRequestEmployee")
+  disciplinaryActions DisciplinaryAction[] @relation("DisciplinaryActionEmployee")
 
   @@index([currentPositionId])
   @@index([activeFlag])
@@ -3985,4 +3992,177 @@ model RecruitmentAssessmentResultItem {
   @@unique([submissionId, questionNo])
   @@index([rubricId])
   @@index([interpretationId])
+}
+
+// ---------- Admin Produksi: Tambahan jam kerja, Izin meninggalkan pekerjaan, Surat Peringatan ----------
+// Entered by the stand-alone Admin Produksi login for Production employees, approved by 3A or 3B of the department,
+// then handled by Admin SDM. One status list for the three forms so one stepper fits all of them:
+// DRAFT -> SUBMITTED (waits for 3A/3B) -> LEADER_APPROVED (waits for Admin SDM) -> COMPLETED, or REJECTED / RETURNED / CANCELLED.
+// COMPLETED means: payroll approval (Tambahan jam kerja), the half/full day decision (Izin), handed to the employee (SP).
+enum ProductionFormStatus {
+  DRAFT
+  SUBMITTED
+  LEADER_APPROVED
+  COMPLETED
+  REJECTED
+  RETURNED
+  CANCELLED
+}
+
+enum ProductionFormKind {
+  EXTRA_WORK
+  LEAVE_WORK
+  DISCIPLINE
+}
+
+enum ExtraWorkUnit {
+  HOURS
+  WORKDAYS
+}
+
+enum LeaveWorkDecision {
+  HALF_DAY
+  FULL_DAY
+}
+
+enum DisciplineKind {
+  WARNING
+  SP1
+  SP2
+  SP3
+}
+
+// Tambahan jam kerja: one form for several employees on one date with one reason.
+model ExtraWorkRequest {
+  id            String               @id @default(cuid())
+  requestNumber String               @unique
+  workDate      DateTime
+  unit          ExtraWorkUnit
+  reason        String
+  status        ProductionFormStatus @default(DRAFT)
+  departmentId  String
+
+  createdByAccountId String
+  createdAt          DateTime  @default(now())
+  submittedAt        DateTime?
+
+  // The 3A or 3B who approved it (name kept as text so the history reads the same later).
+  leaderDecidedAt           DateTime?
+  leaderDecidedByName       String?
+  leaderDecidedByEmployeeId String?
+  leaderNote                String?
+
+  // Admin SDM's payroll approval; the final amounts are on the lines.
+  payrollDecidedAt          DateTime?
+  payrollDecidedByAccountId String?
+  payrollNote               String?
+
+  updatedAt DateTime @updatedAt
+
+  lines ExtraWorkLine[]
+
+  @@index([status])
+  @@index([workDate])
+  @@index([departmentId, status])
+}
+
+model ExtraWorkLine {
+  id         String           @id @default(cuid())
+  requestId  String
+  request    ExtraWorkRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee         @relation("ExtraWorkLineEmployee", fields: [employeeId], references: [id])
+  // "HH:mm", only when the amount was worked out from a start and an end time.
+  startTime  String?
+  endTime    String?
+  // Hours or workdays (see the request's unit). Fractions allowed (1.5), at least 1 hour for HOURS.
+  requestedAmount Decimal  @db.Decimal(6, 2)
+  // Admin SDM has the final say; empty = same as requested.
+  finalAmount     Decimal? @db.Decimal(6, 2)
+
+  @@unique([requestId, employeeId])
+  @@index([employeeId])
+}
+
+// Izin meninggalkan pekerjaan: one employee, one date, leaving work during the shift. Not an absence type.
+model LeaveWorkRequest {
+  id            String               @id @default(cuid())
+  requestNumber String               @unique
+  employeeId    String
+  employee      Employee             @relation("LeaveWorkRequestEmployee", fields: [employeeId], references: [id])
+  workDate      DateTime
+  leaveTime     String
+  // Empty = does not come back that day.
+  returnTime    String?
+  reason        String
+  status        ProductionFormStatus @default(DRAFT)
+  departmentId  String
+
+  createdByAccountId String
+  createdAt          DateTime  @default(now())
+  submittedAt        DateTime?
+
+  leaderDecidedAt           DateTime?
+  leaderDecidedByName       String?
+  leaderDecidedByEmployeeId String?
+  leaderNote                String?
+
+  // Admin SDM: counts as half a day (absence code SH) or a full day (code I). Written to the day's attendance record.
+  decision          LeaveWorkDecision?
+  decidedAt         DateTime?
+  decidedByAccountId String?
+  decisionNote      String?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([workDate])
+  @@index([employeeId, workDate])
+  @@index([departmentId, status])
+}
+
+// Surat Peringatan (Teguran, SP 1, SP 2, SP 3), all valid 6 months from the day it is handed to the employee.
+model DisciplinaryAction {
+  id            String               @id @default(cuid())
+  requestNumber String               @unique
+  employeeId    String
+  employee      Employee             @relation("DisciplinaryActionEmployee", fields: [employeeId], references: [id])
+  kind          DisciplineKind
+  incidentDate  DateTime
+  description   String
+  status        ProductionFormStatus @default(DRAFT)
+  departmentId  String
+
+  createdByAccountId String
+  createdAt          DateTime  @default(now())
+  submittedAt        DateTime?
+
+  leaderDecidedAt           DateTime?
+  leaderDecidedByName       String?
+  leaderDecidedByEmployeeId String?
+  leaderNote                String?
+
+  // Admin SDM hands the SP to the employee (who signs the paper) and records it; validity runs from this date.
+  handedOverAt          DateTime?
+  handedOverByAccountId String?
+  validUntil            DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([employeeId, validUntil])
+  @@index([departmentId, status])
+}
+
+// The story of a form (submitted, approved, returned...) for the timeline. One table for the three forms.
+model ProductionFormEvent {
+  id        String             @id @default(cuid())
+  formKind  ProductionFormKind
+  formId    String
+  event     String
+  actorName String
+  note      String?
+  createdAt DateTime           @default(now())
+
+  @@index([formKind, formId])
 }

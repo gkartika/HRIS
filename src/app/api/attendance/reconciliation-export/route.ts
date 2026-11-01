@@ -8,6 +8,8 @@ import { resolveCutoffPeriod, parseCutoffParam, formatCutoffParam } from "@/lib/
 import { getReconciliationGrid } from "@/lib/attendance-reconciliation-queue";
 import { filterGridRows, parseShiftParam, parseTypesParam } from "@/lib/attendance-grid-filter";
 import { buildReconciliationExportSheet } from "@/lib/attendance-reconciliation-export";
+import { buildExtraWorkSheet, buildLeaveWorkSheet, EXTRA_WORK_SHEET_NAME, LEAVE_WORK_SHEET_NAME } from "@/lib/production-forms-export";
+import { loadProductionExportRows } from "@/lib/production-forms-queries";
 
 // Excel export for Rekonsiliasi Grid (Opsi B), per direct request — same
 // employee scope (activeFlag + Departemen/Cari Nama filters) and same
@@ -54,13 +56,17 @@ export async function GET(request: Request) {
   const workbook = XLSX.utils.book_new();
   const worksheet = XLSX.utils.aoa_to_sheet(sheet);
   XLSX.utils.book_append_sheet(workbook, worksheet, "Rekonsiliasi");
+  // The approved Tambahan jam kerja and the Izin meninggalkan pekerjaan decisions of this period, for payroll in the same file.
+  const production = await loadProductionExportRows(period);
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(buildExtraWorkSheet(production.extraWork)), EXTRA_WORK_SHEET_NAME);
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(buildLeaveWorkSheet(production.leaveWork)), LEAVE_WORK_SHEET_NAME);
   const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
 
   await logAudit({
     actorAccountId: session.user.id,
     action: "EXPORT",
     datasetName: "DailyAttendanceRecord",
-    reason: `Exported Rekonsiliasi Grid for periode ${period.label} (${rows.length} karyawan)`,
+    reason: `Exported Rekonsiliasi Grid for periode ${period.label} (${rows.length} karyawan, ${production.extraWork.length} baris tambahan jam kerja, ${production.leaveWork.length} izin)`,
   });
 
   return new NextResponse(new Uint8Array(buffer), {

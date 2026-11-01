@@ -5,6 +5,8 @@ export const EMPLOYEE_TABS = [
   { id: "profil", label: "Profil" },
   { id: "penempatan", label: "Penempatan" },
   { id: "akun", label: "Akun & Absensi" },
+  // Surat Peringatan: Admin SDM only (the page hides the tab for everyone else).
+  { id: "disiplin", label: "Tindakan disiplin" },
 ] as const;
 export type EmployeeTabId = (typeof EMPLOYEE_TABS)[number]["id"];
 
@@ -14,11 +16,11 @@ export function parseEmployeeTab(value: string | undefined): EmployeeTabId {
 
 // The tab is in the URL (?tab=penempatan), and the server only renders and
 // queries the tab that is open — the other two are never loaded until asked for.
-export function EmployeeTabs({ active, children }: { active: EmployeeTabId; children: ReactNode }) {
+export function EmployeeTabs({ active, hidden = [], children }: { active: EmployeeTabId; hidden?: EmployeeTabId[]; children: ReactNode }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white">
       <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 px-2" role="tablist">
-        {EMPLOYEE_TABS.map((tab) => (
+        {EMPLOYEE_TABS.filter((tab) => !hidden.includes(tab.id)).map((tab) => (
           <Link
             key={tab.id}
             href={tab.id === "profil" ? "?" : `?tab=${tab.id}`}

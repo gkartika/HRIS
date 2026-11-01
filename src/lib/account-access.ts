@@ -201,3 +201,65 @@ export async function sendRecruitmentAdminLink(accountId: string, actorAccountId
   });
   return { ok: true, kind };
 }
+
+// Admin Produksi: the same kind of stand-alone login (no employee record), for the Production
+// staff who enter the extra-hours, leave-the-job and warning-letter forms for their department.
+function isProductionAdminAccount(account: { accountType: string; employeeId: string | null; roles: { role: string }[] }): boolean {
+  return account.accountType === "ADMIN" && account.employeeId === null && account.roles.some((r) => r.role === "PRODUCTION_ADMIN");
+}
+
+export async function inviteProductionAdmin(emailInput: string, actorAccountId: string): Promise<InviteResult> {
+  const email = emailInput.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return { ok: false, error: "Alamat email tidak valid." };
+
+  const existing = await prisma.account.findFirst({
+    where: { usernameOrEmail: { equals: email, mode: "insensitive" } },
+    include: { roles: true },
+  });
+  if (existing) {
+    if (!isProductionAdminAccount(existing)) return { ok: false, error: "Email ini sudah dipakai akun lain." };
+    return sendProductionAdminLink(existing.id, actorAccountId);
+  }
+
+  const account = await prisma.account.create({
+    data: {
+      usernameOrEmail: email,
+      // No password exists until the person sets one; this random hash can't be logged in with.
+      passwordHash: await bcrypt.hash(randomBytes(24).toString("hex"), 10),
+      accountType: "ADMIN",
+      adminScope: "NONE",
+      accountStatus: "INVITED",
+      roles: { create: { role: "PRODUCTION_ADMIN" } },
+    },
+  });
+  await logAudit({
+    actorAccountId,
+    action: "CREATE",
+    datasetName: "Account",
+    recordId: account.id,
+    reason: `Production Department login created for ${email} (invitation)`,
+  });
+  return sendProductionAdminLink(account.id, actorAccountId);
+}
+
+export async function sendProductionAdminLink(accountId: string, actorAccountId: string): Promise<InviteResult> {
+  const account = await prisma.account.findUnique({ where: { id: accountId }, include: { roles: true } });
+  if (!account || !isProductionAdminAccount(account)) return { ok: false, error: "Akun tidak ditemukan." };
+  if (account.accountStatus === "DISABLED") return { ok: false, error: "Akun ini sedang ditahan. Aktifkan kembali dulu sebelum mengirim tautan." };
+
+  const kind: AccountTokenPurpose = account.accountStatus === "INVITED" ? "INVITE" : "RESET";
+  try {
+    await sendLink(account, account.usernameOrEmail, account.usernameOrEmail, kind);
+  } catch (error) {
+    console.error("sendProductionAdminLink failed", error);
+    return { ok: false, error: "Email gagal dikirim. Periksa pengaturan email lalu coba lagi." };
+  }
+  await logAudit({
+    actorAccountId,
+    action: "UPDATE",
+    datasetName: "Account",
+    recordId: account.id,
+    reason: kind === "INVITE" ? "Invitation email sent" : "Password reset link sent by Admin SDM",
+  });
+  return { ok: true, kind };
+}

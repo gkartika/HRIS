@@ -4,6 +4,8 @@
 import { prisma } from "@/lib/db";
 import { companyDateParts, companyToday, companyYear, DAY_MS } from "@/lib/company-time";
 import { daysSince, daysUntil, deadlineLabel, deadlineSeverity, waitingLabel, waitingSeverity, type Severity } from "@/lib/ga-home";
+import { getFormsForAdminSdm } from "@/lib/production-forms-queries";
+import { FORM_LABEL, formHref, sdmActionLabel, sdmWaitingText } from "@/lib/production-forms";
 import { departmentBreakdown, onboardingContractSeverity, payrollProgress, startLabel, type HcTodoRow, type PayrollProgress } from "@/lib/hc-home";
 import { computeOnboardingStatus, isOnboardingAssetsComplete, isOnboardingTrainingComplete } from "@/lib/onboarding";
 import { formatCutoffParam, previousCutoffPeriod, resolveCutoffPeriod, type CutoffPeriod } from "@/lib/absence-cutoff";
@@ -50,6 +52,7 @@ export interface HcHomeData {
 }
 
 const EMPLOYMENT_LABEL: Record<string, string> = { PKWTT: "PKWTT", PKWT: "PKWT", HARIAN_LEPAS: "Harian lepas", MAGANG: "Magang" };
+const capitalizeFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const worse = (a: Severity, b: Severity): Severity => (a === "rose" || b === "rose" ? "rose" : a === "amber" || b === "amber" ? "amber" : "slate");
 
 async function unresolvedFor(period: CutoffPeriod) {
@@ -84,6 +87,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     positionsTotal,
     joinedThisMonth,
     contractsEnding90,
+    productionForms,
   ] = await Promise.all([
     prisma.onboardingCase.findMany({
       relationLoadStrategy: "join",
@@ -195,6 +199,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     prisma.position.count({ where: { archived: false } }),
     prisma.employee.count({ where: { activeFlag: true, hireDate: { gte: new Date(Date.UTC(companyDateParts(now).year, companyDateParts(now).month - 1, 1)) } } }),
     prisma.contract.count({ where: { status: "ACTIVE", endDate: { not: null, gte: today, lte: new Date(today.getTime() + 90 * DAY_MS) } } }),
+    getFormsForAdminSdm(),
   ]);
 
   const todo: HcTodoRow[] = [];
@@ -455,6 +460,23 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
       timeLabel: payrollLeft === 0 ? "batas payroll hari ini" : `${payrollLeft} hari ke batas payroll`,
       actionLabel: "Buka Rekonsiliasi",
       href: `/attendance/reconciliation?cutoff=${formatCutoffParam(period.start)}`,
+    });
+  }
+
+  // ---- Formulir Produksi: approved by 3A/3B, waiting for Admin SDM (payroll approval, half or full day, hand over the SP) ----
+  for (const f of productionForms) {
+    const age = daysSince(f.leaderDecidedAt ?? f.updatedAt, now);
+    todo.push({
+      kind: "pf",
+      type: FORM_LABEL[f.kind],
+      title: f.title,
+      who: `${f.subtitle} · ${sdmWaitingText(f.kind)}`,
+      statusLabel: capitalizeFirst(waitingLabel(age)),
+      severity: waitingSeverity(age),
+      urgency: age,
+      timeLabel: "",
+      actionLabel: sdmActionLabel(f.kind),
+      href: formHref(f.kind, f.id),
     });
   }
 

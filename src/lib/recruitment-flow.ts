@@ -317,7 +317,7 @@ export async function saveHrInterviewNotes(
 
 // The applicant's Perubahan Posisi stops with the applicant: it only exists after an internal applicant was accepted at
 // the interview, and it must not be approved or carried out for someone who is no longer in the process.
-export async function cancelMovementOfCandidates(tx: Prisma.TransactionClient, candidateIds: string[], reason: string, accountId: string | null) {
+async function cancelMovementOfCandidates(tx: Prisma.TransactionClient, candidateIds: string[], reason: string, accountId: string | null) {
   if (candidateIds.length === 0) return 0;
   const movements = await tx.movementRequest.findMany({
     where: { recruitmentCandidate: { is: { id: { in: candidateIds } } } },

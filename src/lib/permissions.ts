@@ -16,6 +16,9 @@ export const isHrAdmin = (session: Session) => hasRole(session, "HR_ADMIN");
 export const isTrainingAdmin = (session: Session) => hasRole(session, "TRAINING_ADMIN");
 export const isGaAdmin = (session: Session) => hasRole(session, "GA_ADMIN");
 export const isRecruitmentAdmin = (session: Session) => hasRole(session, "RECRUITMENT_ADMIN");
+// Stand-alone login of the Production clerk (no employee record): enters Tambahan jam kerja, Izin meninggalkan pekerjaan
+// and Surat Peringatan for the Production department. It never approves anything.
+export const isProductionAdmin = (session: Session) => hasRole(session, "PRODUCTION_ADMIN");
 
 // The applicant pipeline (Pelamar, tests, question banks, interviews, offers, hiring an
 // applicant): Admin Rekrutmen, and Admin SDM who keeps the same access.

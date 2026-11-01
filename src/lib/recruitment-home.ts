@@ -83,17 +83,13 @@ function wibParts(d: Date) {
 }
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const WEEKDAYS = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-export function shortDate(d: Date): string {
+function shortDate(d: Date): string {
   const w = wibParts(d);
   return `${w.getUTCDate()} ${MONTHS[w.getUTCMonth()]}`;
 }
-export function timeOfDay(d: Date): string {
+function timeOfDay(d: Date): string {
   const w = wibParts(d);
   return `${String(w.getUTCHours()).padStart(2, "0")}.${String(w.getUTCMinutes()).padStart(2, "0")}`;
-}
-export function interviewWhen(d: Date): string {
-  const w = wibParts(d);
-  return `${WEEKDAYS[w.getUTCDay()]}, ${shortDate(d)} ${timeOfDay(d)}`;
 }
 
 const candidateHref = (c: { requestId: string; id: string }) => `/recruitment/${c.requestId}/candidates/${c.id}`;

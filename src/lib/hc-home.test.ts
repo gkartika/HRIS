@@ -24,6 +24,7 @@ describe("categoryOf", () => {
     expect(categoryOf({ kind: "mv", type: "Perubahan Posisi" })).toBe("mv");
     expect(categoryOf({ kind: "ab", type: "Absensi & cuti" })).toBe("ab");
     expect(categoryOf({ kind: "of", type: "Offboarding" })).toBe("of");
+    expect(categoryOf({ kind: "pf", type: "Tambahan jam kerja" })).toBe("pf");
   });
 });
 
@@ -46,7 +47,7 @@ describe("groupByCategory", () => {
 
   it("counts per kind and in total", () => {
     const counts = categoryCounts([row({ kind: "ct" }), row({ kind: "rc" }), row({ kind: "ob", type: "Akun login" })]);
-    expect(counts).toEqual({ all: 3, ob: 0, of: 0, ct: 2, mv: 0, ab: 0, data: 1 });
+    expect(counts).toEqual({ all: 3, ob: 0, of: 0, ct: 2, mv: 0, ab: 0, data: 1, pf: 0 });
   });
 });
 

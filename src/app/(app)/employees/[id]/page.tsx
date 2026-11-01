@@ -39,6 +39,7 @@ import { BpjsCardsPanel } from "./bpjs-cards-panel";
 import { AccountHoldPanel } from "./account-panel";
 import { PenempatanTabContent } from "./penempatan-tab";
 import { AkunTabContent } from "./akun-tab";
+import { DisiplinTabContent } from "./disiplin-tab";
 import { isEmployeeProfileIncomplete, missingFieldLabels } from "@/lib/employee-completeness";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -251,7 +252,7 @@ export default async function EmployeeDetailPage({
         </div>
       </div>
 
-      <EmployeeTabs active={activeTab}>
+      <EmployeeTabs active={activeTab} hidden={isHrAdmin(session) ? [] : ["disiplin"]}>
         {activeTab === "profil" && (
           <div className={SECTION_DIVIDERS}>
             <EmployeeProfileFields employee={projected} educationLevelLabel={educationLevelLabel} ptkpLabel={ptkpLabel} />
@@ -302,6 +303,11 @@ export default async function EmployeeDetailPage({
               canViewContracts={canViewContracts}
               canCreateContract={canCreateContract}
             />
+          </Suspense>
+        )}
+        {activeTab === "disiplin" && isHrAdmin(session) && (
+          <Suspense fallback={<TabSkeleton />}>
+            <DisiplinTabContent employeeId={employee.id} />
           </Suspense>
         )}
         {activeTab === "akun" && (

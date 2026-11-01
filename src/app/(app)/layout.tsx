@@ -2,6 +2,7 @@
 import {
   canManageAssessmentRubric,
   isHrAdmin,
+  isProductionAdmin,
   isTrainingAdmin,
   isGaAdmin,
   canSubmitRecruitmentRequest,
@@ -140,6 +141,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     buckets.rekrutmenMutasi.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: "UserMinus" });
   } else if (ownOffboardingCase) {
     buckets.rekrutmenMutasi.push({ href: "/offboarding", label: t("offboarding.navLabel"), icon: "UserMinus" });
+  }
+  // Admin Produksi enters the Production forms; Admin SDM sees them all. A 3A or 3B decides from the Beranda card.
+  if (isProductionAdmin(session) || isHrAdmin(session)) {
+    buckets.absensiCuti.push({ href: "/production-forms", label: "Formulir Produksi", icon: "FileText" });
   }
   // New Shift Assignment module, per direct user request — HR Admin or any
   // active Level-3 (3A/3B) holder (same eligibility as Perubahan Posisi

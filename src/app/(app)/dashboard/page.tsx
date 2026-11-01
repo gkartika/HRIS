@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/require-session";
-import { isHrAdmin, isTrainingAdmin, isGaAdmin, isRecruitmentAdmin, canListEmployees } from "@/lib/permissions";
+import { isHrAdmin, isTrainingAdmin, isGaAdmin, isRecruitmentAdmin, isProductionAdmin, canListEmployees } from "@/lib/permissions";
 import { scheduledDayCountsForRequests } from "@/lib/leave-days";
 import { isManagerOfAnyPosition } from "@/lib/manager-scope";
 import { getActiveDeptHeadPositions, getDeptHeadDepartmentIds } from "@/lib/dept-head";
@@ -13,6 +13,8 @@ import { SimpleKaryawanHome } from "./simple-karyawan-home";
 import { ApprovalCategory } from "./approval-category";
 import { InternalJobsCard } from "./internal-jobs-card";
 import { RecruitmentAdminHome } from "./recruitment-admin-home";
+import { ProductionAdminHome, type PfTab } from "./production-admin-home";
+import { ProductionApprovalsCard } from "./production-approvals-card";
 import type { RecKind } from "@/lib/recruitment-home";
 import type { HcCategory } from "@/lib/hc-home";
 import { FirstApproverDecisionButtons, SecondApproverDecisionButtons, HrAdminDecisionButtons } from "../absences/[id]/decision-forms";
@@ -347,6 +349,8 @@ async function StatCards({ session }: { session: Awaited<ReturnType<typeof requi
   if (isHrAdmin(session) || (isGaAdminUser && !isTrainingAdminUser)) return null;
   // Admin Rekrutmen has its own Pelamar block instead of the generic number cards.
   if (isRecruitmentAdmin(session) && !isTrainingAdminUser && !isGaAdminUser) return null;
+  // Admin Produksi has its own Beranda too.
+  if (isProductionAdmin(session) && !isTrainingAdminUser && !isGaAdminUser) return null;
 
   const [employeeCount, filledPositions] = await Promise.all([
     canListEmployees(session) ? prisma.employee.count({ where: { activeFlag: true } }) : Promise.resolve(null),
@@ -370,12 +374,13 @@ async function StatCards({ session }: { session: Awaited<ReturnType<typeof requi
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ga?: string; rec?: string; hc?: string }>;
+  searchParams: Promise<{ ga?: string; rec?: string; hc?: string; pf?: string }>;
 }) {
   const session = await requireSession();
   const roleLabels = session.user.roles.map((r) => t(`roles.${r}`)).join(", ");
-  const { ga: gaParam, rec: recParam, hc: hcParam } = await searchParams;
-  const hcFilter: HcCategory | "all" = (["ob", "of", "ct", "mv", "ab", "data"] as const).find((k) => k === hcParam) ?? "all";
+  const { ga: gaParam, rec: recParam, hc: hcParam, pf: pfParam } = await searchParams;
+  const hcFilter: HcCategory | "all" = (["ob", "of", "ct", "mv", "ab", "data", "pf"] as const).find((k) => k === hcParam) ?? "all";
+  const pfTab: PfTab = (["perlu", "selesai", "semua"] as const).find((k) => k === pfParam) ?? "proses";
   const recFilter: RecKind | "all" = (["vc", "es", "iv", "of", "mv"] as const).find((k) => k === recParam) ?? "all";
   const gaFilter: TodoKind | "all" = (["ga", "wo", "dp", "of", "st"] as const).find((k) => k === gaParam) ?? "all";
 
@@ -386,6 +391,7 @@ export default async function DashboardPage({
   const isTrainingAdminUser = isTrainingAdmin(session);
   const isGaAdminUser = isGaAdmin(session);
   const isRecruitmentAdminUser = isRecruitmentAdmin(session);
+  const isProductionAdminUser = isProductionAdmin(session);
 
   if (!isHrAdminUser && !isTrainingAdminUser && !isGaAdminUser && !isRecruitmentAdminUser && !isManagerNow) {
     const [hrManagerPositions, deptHeadDepartmentIds] = await Promise.all([
@@ -446,6 +452,18 @@ export default async function DashboardPage({
       {isRecruitmentAdminUser && !isHrAdminUser && (
         <Suspense fallback={<SectionSkeleton rows={3} />}>
           <RecruitmentAdminHome filter={recFilter} />
+        </Suspense>
+      )}
+
+      {isProductionAdminUser && (
+        <Suspense fallback={<SectionSkeleton rows={4} />}>
+          <ProductionAdminHome tab={pfTab} name={session.user.name ?? ""} />
+        </Suspense>
+      )}
+
+      {session.user.employeeId && !isProductionAdminUser && (
+        <Suspense fallback={null}>
+          <ProductionApprovalsCard employeeId={session.user.employeeId} />
         </Suspense>
       )}
 

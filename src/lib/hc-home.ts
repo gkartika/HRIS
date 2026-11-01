@@ -5,8 +5,8 @@
 import { DAY_MS } from "@/lib/company-time";
 import { SEVERITY_RANK, sortTodo, type Severity } from "@/lib/ga-home";
 
-export type HcKind = "rc" | "ob" | "ct" | "mv" | "ab" | "of";
-export type HcCategory = "ob" | "of" | "ct" | "mv" | "ab" | "data";
+export type HcKind = "rc" | "ob" | "ct" | "mv" | "ab" | "of" | "pf";
+export type HcCategory = "ob" | "of" | "ct" | "mv" | "ab" | "data" | "pf";
 
 export interface HcTodoRow {
   kind: HcKind;
@@ -31,6 +31,7 @@ export const HC_CATEGORIES: { key: HcCategory; label: string; hint: string }[] =
   { key: "ct", label: "Kontrak dan perpanjangan", hint: "kontrak yang berakhir dan perpanjangan yang berjalan" },
   { key: "mv", label: "Perubahan Posisi", hint: "sudah disetujui, tinggal dijalankan" },
   { key: "ab", label: "Absensi dan cuti", hint: "payroll dan penyetuju cuti" },
+  { key: "pf", label: "Formulir Produksi", hint: "disetujui atasan, menunggu Admin SDM" },
   { key: "data", label: "Data dan akun", hint: "kelengkapan yang menghambat modul lain" },
 ];
 
@@ -39,6 +40,7 @@ export const HC_FILTERS: { key: HcCategory | "all"; label: string }[] = [{ key: 
 export function categoryOf(row: Pick<HcTodoRow, "kind" | "type">): HcCategory {
   if (row.kind === "ob") return row.type === "Akun login" ? "data" : "ob";
   if (row.kind === "rc") return "ct";
+  if (row.kind === "pf") return "pf";
   return row.kind;
 }
 
@@ -58,7 +60,7 @@ export function groupByCategory(rows: HcTodoRow[]): HcGroup[] {
 }
 
 export function categoryCounts(rows: HcTodoRow[]): Record<HcCategory | "all", number> {
-  const out: Record<HcCategory | "all", number> = { all: rows.length, ob: 0, of: 0, ct: 0, mv: 0, ab: 0, data: 0 };
+  const out: Record<HcCategory | "all", number> = { all: rows.length, ob: 0, of: 0, ct: 0, mv: 0, ab: 0, data: 0, pf: 0 };
   for (const r of rows) out[categoryOf(r)] += 1;
   return out;
 }

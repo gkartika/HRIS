@@ -10,6 +10,7 @@ import type { ProductionFormStatus } from "@/generated/prisma/enums";
 
 const TABS: { key: string; label: string; statuses: ProductionFormStatus[] | null }[] = [
   { key: "proses", label: "Sedang diproses", statuses: ["DRAFT", "RETURNED", "SUBMITTED", "LEADER_APPROVED"] },
+  { key: "menunggu", label: "Menunggu persetujuan", statuses: ["SUBMITTED", "LEADER_APPROVED"] },
   { key: "selesai", label: "Selesai", statuses: ["COMPLETED"] },
   { key: "ditutup", label: "Ditolak atau dibatalkan", statuses: ["REJECTED", "CANCELLED"] },
   { key: "semua", label: "Semua", statuses: null },
@@ -31,8 +32,10 @@ function Steps({ status }: { status: ProductionFormStatus }) {
 
 // All Admin Produksi forms in one list: the Production clerk and Admin SDM see every form, a 3A or 3B the ones of their
 // own department.
-export default async function ProductionFormsPage({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string }> }) {
-  const { tab, q } = await searchParams;
+export default async function ProductionFormsPage({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string; jenis?: string }> }) {
+  const { tab, q, jenis } = await searchParams;
+  // Opened from the Beranda card of one form: only that kind of form.
+  const kindFilter = (["EXTRA_WORK", "LEAVE_WORK", "DISCIPLINE"] as const).find((k) => k === jenis) ?? null;
   const session = await requireSession();
   const clerk = isProductionAdmin(session);
   const sdm = isHrAdmin(session);
@@ -51,6 +54,7 @@ export default async function ProductionFormsPage({ searchParams }: { searchPara
   } else if (!clerk && !sdm) {
     return <AccessDenied />;
   }
+  if (kindFilter) rows = rows.filter((r) => r.kind === kindFilter);
   const approvers = dept ? await getDepartmentApprovers(dept.id) : [];
   const now = new Date();
 
@@ -72,12 +76,18 @@ export default async function ProductionFormsPage({ searchParams }: { searchPara
       </div>
       <form className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="tab" value={active.key} />
+        {kindFilter && <input type="hidden" name="jenis" value={kindFilter} />}
         <input name="q" defaultValue={q ?? ""} placeholder="Cari nama karyawan atau nomor formulir" aria-label="Cari formulir" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
         <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">Cari</button>
       </form>
       <div className="flex flex-wrap gap-1.5 text-xs">
+        {kindFilter && (
+          <Link href={`/production-forms?tab=${active.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-indigo-700 hover:bg-indigo-100">
+            {FORM_LABEL[kindFilter]} ✕
+          </Link>
+        )}
         {TABS.map((t) => (
-          <Link key={t.key} href={`/production-forms?tab=${t.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={`rounded-full border px-3 py-1.5 ${active.key === t.key ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+          <Link key={t.key} href={`/production-forms?tab=${t.key}${q ? `&q=${encodeURIComponent(q)}` : ""}${kindFilter ? `&jenis=${kindFilter}` : ""}`} className={`rounded-full border px-3 py-1.5 ${active.key === t.key ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
             {t.label}
           </Link>
         ))}

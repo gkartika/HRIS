@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import { computeExpiryUrgency } from "@/lib/contract";
+import { companyToday, DAY_MS } from "@/lib/company-time";
+import { unitAndDescendantIds } from "@/lib/org-unit-tree";
 import type { Prisma, ContractStatus } from "@/generated/prisma/client";
 
 const CONTRACT_STATUSES: ContractStatus[] = [
@@ -24,16 +26,26 @@ const CONTRACT_STATUSES: ContractStatus[] = [
 export default async function ContractListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; status?: string; orgUnitId?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; orgUnitId?: string; berakhir?: string }>;
 }) {
   const session = await requireSession();
-  const { status, orgUnitId, page: pageRaw } = await searchParams;
+  const { status, orgUnitId, berakhir, page: pageRaw } = await searchParams;
 
   const where: Prisma.ContractWhereInput = isHrAdmin(session)
     ? {}
     : { employeeId: session.user.employeeId ?? "__none__" };
   if (status) where.status = status as ContractStatus;
-  if (orgUnitId) where.employee = { currentPosition: { orgUnitId } };
+  if (orgUnitId) {
+    // A department means everyone below it too (Section, Group, Team).
+    const units = await prisma.orgUnit.findMany({ select: { id: true, unitName: true, unitType: true, parentUnitId: true } });
+    where.employee = { currentPosition: { orgUnitId: { in: unitAndDescendantIds(units, orgUnitId) } } };
+  }
+  // Active contracts ending within 90 days (opened from the Beranda; the same rule as its count).
+  if (berakhir === "90") {
+    const today = companyToday();
+    where.status = "ACTIVE";
+    where.endDate = { not: null, gte: today, lte: new Date(today.getTime() + 90 * DAY_MS) };
+  }
 
   const { page, skip, take } = pageParams(pageRaw);
   const [total, contracts, orgUnits] = await Promise.all([
@@ -55,7 +67,7 @@ export default async function ContractListPage({
       : Promise.resolve([]),
   ]);
 
-  const hasFilters = !!(status || orgUnitId);
+  const hasFilters = !!(status || orgUnitId || berakhir === "90");
 
   return (
     <div>
@@ -84,6 +96,13 @@ export default async function ContractListPage({
                 {t(`contractStatus.${s}`)}
               </option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Berakhir</label>
+          <select name="berakhir" defaultValue={berakhir === "90" ? "90" : ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            <option value="90">Dalam 90 hari (kontrak aktif)</option>
           </select>
         </div>
         {isHrAdmin(session) && (
@@ -185,7 +204,7 @@ export default async function ContractListPage({
           </table>
         </div>
       )}
-      <Pager page={page} total={total} basePath="/contracts" params={{ status, orgUnitId }} />
+      <Pager page={page} total={total} basePath="/contracts" params={{ status, orgUnitId, berakhir: berakhir === "90" ? "90" : undefined }} />
     </div>
   );
 }

@@ -11,6 +11,8 @@ import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import { isEmployeeProfileIncomplete } from "@/lib/employee-completeness";
 import { deriveEmployeeLifecycleStatus } from "@/lib/employee-lifecycle";
+import { companyMonthStart } from "@/lib/company-time";
+import { unitAndDescendantIds } from "@/lib/org-unit-tree";
 import type { Prisma } from "@/generated/prisma/client";
 
 const EMPLOYMENT_STATUSES = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"] as const;
@@ -25,6 +27,10 @@ export default async function EmployeesPage({
     jobLevel?: string;
     employmentStatus?: string;
     activeFlag?: string;
+    /** "1": only employees without a seat (opened from the Beranda). */
+    tanpaPosisi?: string;
+    /** "bulan-ini": only employees whose start date is this month (opened from the Beranda). */
+    masuk?: string;
     page?: string;
   }>;
 }) {
@@ -33,7 +39,7 @@ export default async function EmployeesPage({
     return <AccessDenied />;
   }
 
-  const { q, orgUnitId, jobLevel, employmentStatus, activeFlag, page: pageRaw } = await searchParams;
+  const { q, orgUnitId, jobLevel, employmentStatus, activeFlag, tanpaPosisi, masuk, page: pageRaw } = await searchParams;
   const page = Math.max(1, Number(pageRaw) || 1);
 
   const where: Prisma.EmployeeWhereInput = {};
@@ -49,7 +55,11 @@ export default async function EmployeesPage({
     ];
   }
   const positionFilter: Prisma.PositionWhereInput = {};
-  if (orgUnitId) positionFilter.orgUnitId = orgUnitId;
+  // A department means everyone below it too (Section, Group, Team), the same way the Beranda counts them.
+  if (orgUnitId) {
+    const units = await prisma.orgUnit.findMany({ select: { id: true, unitName: true, unitType: true, parentUnitId: true } });
+    positionFilter.orgUnitId = { in: unitAndDescendantIds(units, orgUnitId) };
+  }
   if (jobLevel) positionFilter.jobLevel = jobLevel;
   if (Object.keys(positionFilter).length > 0) where.currentPosition = positionFilter;
   if (employmentStatus) {
@@ -58,6 +68,8 @@ export default async function EmployeesPage({
   if (activeFlag === "true" || activeFlag === "false") {
     where.activeFlag = activeFlag === "true";
   }
+  if (tanpaPosisi === "1") where.currentPositionId = null;
+  if (masuk === "bulan-ini") where.hireDate = { gte: companyMonthStart() };
 
   const [employees, filteredCount, orgUnits, jobLevels, totalCount] = await Promise.all([
     prisma.employee.findMany({
@@ -76,7 +88,7 @@ export default async function EmployeesPage({
   ]);
 
   const rows = employees.map((e) => projectEmployee(e, session));
-  const hasFilters = !!(q || orgUnitId || jobLevel || employmentStatus || activeFlag);
+  const hasFilters = !!(q || orgUnitId || jobLevel || employmentStatus || activeFlag || tanpaPosisi === "1" || masuk === "bulan-ini");
   const totalPages = Math.max(1, Math.ceil(filteredCount / PAGE_SIZE));
   const carryParams = {
     ...(q ? { q } : {}),
@@ -84,6 +96,8 @@ export default async function EmployeesPage({
     ...(jobLevel ? { jobLevel } : {}),
     ...(employmentStatus ? { employmentStatus } : {}),
     ...(activeFlag ? { activeFlag } : {}),
+    ...(tanpaPosisi === "1" ? { tanpaPosisi } : {}),
+    ...(masuk === "bulan-ini" ? { masuk } : {}),
   };
 
   return (
@@ -173,6 +187,20 @@ export default async function EmployeesPage({
             <option value="">{t("common.allOption")}</option>
             <option value="true">{t("common.active")}</option>
             <option value="false">{t("common.inactive")}</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Posisi</label>
+          <select name="tanpaPosisi" defaultValue={tanpaPosisi === "1" ? "1" : ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            <option value="1">Belum punya posisi</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-slate-500">Tanggal Masuk</label>
+          <select name="masuk" defaultValue={masuk === "bulan-ini" ? "bulan-ini" : ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">{t("common.allOption")}</option>
+            <option value="bulan-ini">Bulan ini</option>
           </select>
         </div>
         <div className="flex gap-2">

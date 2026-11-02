@@ -54,14 +54,14 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <Link href="#rec-todo" scroll className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300">
           <p className="text-xs text-slate-500">Perlu Anda kerjakan</p>
           <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{stats.todo}</p>
           <p className={`mt-1 text-[11px] ${stats.overdue > 0 ? "text-rose-600" : "text-slate-500"}`}>
             {stats.overdue > 0 ? `${stats.overdue} sudah menunggu 3 hari atau lebih` : "Tidak ada yang menunggu lama"}
           </p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        </Link>
+        <Link href="#rec-interviews" scroll className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300">
           <p className="text-xs text-slate-500">Interview 7 hari ke depan</p>
           <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{stats.interviews}</p>
           <p className="mt-1 text-[11px] text-slate-500">
@@ -69,13 +69,13 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
               ? "Belum ada yang terjadwal"
               : [stats.interviewsToday > 0 ? `${stats.interviewsToday} hari ini` : null, stats.interviewsTomorrow > 0 ? `${stats.interviewsTomorrow} besok` : null].filter(Boolean).join(", ") || "Mulai lusa"}
           </p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        </Link>
+        <Link href="#rec-waiting" scroll className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300">
           <p className="text-xs text-slate-500">Menunggu pihak lain</p>
           <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{stats.waiting}</p>
           <p className="mt-1 text-[11px] text-slate-500">bukan tugas Anda, tapi perlu dipantau</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        </Link>
+        <Link href="/recruitment" className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300">
           <p className="text-xs text-slate-500">Posisi terisi (semua lowongan)</p>
           <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">
             {stats.filled}
@@ -84,12 +84,12 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200" role="presentation">
             <div className="h-2 rounded-full bg-brand" style={{ width: `${fillPercent}%` }} />
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-3">
         <div className="min-w-0 space-y-5 xl:col-span-2">
-          <div>
+          <div id="rec-todo" className="scroll-mt-4">
             <p className="text-sm font-semibold text-slate-900">
               Kerjakan sekarang <span className="font-normal text-slate-400">· dikelompokkan per jenis pekerjaan, yang paling lama menunggu di atas</span>
             </p>
@@ -126,7 +126,9 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
                             <span className={`w-1 shrink-0 rounded-full ${STRIPE[r.severity]}`} />
                             <div className="min-w-0 flex-1">
                               <p className="text-[11px] font-medium text-slate-500">{r.type}</p>
-                              <p className="truncate text-sm font-medium text-slate-900">{r.title}</p>
+                              <Link href={r.href} className="block truncate text-sm font-medium text-slate-900 hover:text-indigo-700 hover:underline">
+                                {r.title}
+                              </Link>
                               <p className="text-xs text-slate-500">{r.who}</p>
                             </div>
                             <div className="hidden shrink-0 flex-col items-end justify-center gap-1 text-right sm:flex">
@@ -205,7 +207,7 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div id="rec-interviews" className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-5">
             <p className="text-sm font-semibold text-slate-900">Interview 7 hari ke depan</p>
             {data.upcoming.length === 0 ? (
               <p className="mt-2 text-sm text-slate-400">Belum ada interview yang terjadwal minggu ini.</p>
@@ -230,7 +232,7 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
             )}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div id="rec-waiting" className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-5">
             <p className="text-sm font-semibold text-slate-900">Menunggu pihak lain</p>
             <p className="text-xs text-slate-500">Bukan tugas Anda sekarang. Disorot kalau sudah terlalu lama.</p>
             {data.waiting.length === 0 ? (
@@ -261,20 +263,20 @@ function RecruitmentHomeView({ data, filter }: { data: RecruitmentHomeData; filt
                 Dasbor →
               </Link>
             </div>
-            <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg bg-slate-50 p-2">
-                <dd className="text-xl font-semibold tabular-nums text-slate-900">{summary.applicants}</dd>
-                <dt className="text-[11px] text-slate-500">Pelamar baru</dt>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <dd className="text-xl font-semibold tabular-nums text-slate-900">{summary.passed}</dd>
-                <dt className="text-[11px] text-slate-500">Lolos tes</dt>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <dd className="text-xl font-semibold tabular-nums text-slate-900">{summary.hired}</dd>
-                <dt className="text-[11px] text-slate-500">Diterima</dt>
-              </div>
-            </dl>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <Link href="/recruitment/applicants?view=all" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+                <p className="text-xl font-semibold tabular-nums text-slate-900">{summary.applicants}</p>
+                <p className="text-[11px] text-slate-500">Pelamar baru</p>
+              </Link>
+              <Link href="/recruitment/dashboard" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+                <p className="text-xl font-semibold tabular-nums text-slate-900">{summary.passed}</p>
+                <p className="text-[11px] text-slate-500">Lolos tes</p>
+              </Link>
+              <Link href="/recruitment/dashboard" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+                <p className="text-xl font-semibold tabular-nums text-slate-900">{summary.hired}</p>
+                <p className="text-[11px] text-slate-500">Diterima</p>
+              </Link>
+            </div>
             {summary.applicants > 0 && (
               <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-200" role="presentation">
                 <div className="bg-brand" style={{ width: `${Math.min(100, (summary.hired / barTotal) * 100)}%` }} />

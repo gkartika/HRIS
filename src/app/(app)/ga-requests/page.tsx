@@ -49,6 +49,7 @@ export default async function GaRequestsPage({
 
   const { requestType, status, page: pageRaw, menunggu } = await searchParams;
   const waitingOnly = menunggu === "1" && isGaAdminUser;
+  const approvedOpenOnly = menunggu === "0" && isGaAdminUser;
 
   // "Requester sees only own requests" — GA Admin sees everything, anyone
   // else sees only what they submitted themselves. Approvers reach a
@@ -58,6 +59,8 @@ export default async function GaRequestsPage({
   if (status) where.status = status as GaRequestStatus;
   // Asked from Procurement (SL written down) and not yet made into an asset: same rule as isWaitingForGoods.
   if (waitingOnly) Object.assign(where, { requestType: "NEW_ASSET_NEED", status: "APPROVED", assetId: null, procurementReference: { not: null } });
+  // Approved but not waiting for goods: no SL number yet, or the asset was already made (the Beranda's "Disetujui").
+  if (approvedOpenOnly) Object.assign(where, { status: "APPROVED", NOT: { procurementReference: { not: null }, assetId: null } });
 
   const { page, skip, take } = pageParams(pageRaw);
   const [total, requests] = await Promise.all([
@@ -73,7 +76,7 @@ export default async function GaRequestsPage({
     orderBy: { submittedAt: "desc" },
   })]);
 
-  const hasFilters = !!(requestType || status || waitingOnly);
+  const hasFilters = !!(requestType || status || waitingOnly || approvedOpenOnly);
   const now = new Date();
 
   return (
@@ -83,7 +86,7 @@ export default async function GaRequestsPage({
         <div className="flex gap-2">
           {isGaAdminUser && (
             <a
-              href={`/api/ga-requests/export?${new URLSearchParams({ ...(requestType ? { requestType } : {}), ...(status ? { status } : {}), ...(waitingOnly ? { menunggu: "1" } : {}) }).toString()}`}
+              href={`/api/ga-requests/export?${new URLSearchParams({ ...(requestType ? { requestType } : {}), ...(status ? { status } : {}), ...(waitingOnly ? { menunggu: "1" } : approvedOpenOnly ? { menunggu: "0" } : {}) }).toString()}`}
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               Ekspor
@@ -123,9 +126,10 @@ export default async function GaRequestsPage({
         {isGaAdminUser && (
           <div>
             <label className="mb-1 block text-xs text-slate-500">Pengadaan</label>
-            <select name="menunggu" defaultValue={waitingOnly ? "1" : ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <select name="menunggu" defaultValue={waitingOnly ? "1" : approvedOpenOnly ? "0" : ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
               <option value="">{t("common.allOption")}</option>
               <option value="1">Menunggu barang dari Procurement</option>
+              <option value="0">Disetujui, belum diproses</option>
             </select>
           </div>
         )}
@@ -182,7 +186,7 @@ export default async function GaRequestsPage({
           </table>
         </div>
       )}
-      <Pager page={page} total={total} basePath="/ga-requests" params={{ requestType, status, menunggu: waitingOnly ? "1" : undefined }} />
+      <Pager page={page} total={total} basePath="/ga-requests" params={{ requestType, status, menunggu: waitingOnly ? "1" : approvedOpenOnly ? "0" : undefined }} />
     </div>
   );
 }

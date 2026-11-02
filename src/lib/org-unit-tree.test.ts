@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildOrgUnitTree, type OrgUnitNode } from "./org-unit-tree";
+import { buildOrgUnitTree, unitAndDescendantIds, type OrgUnitNode } from "./org-unit-tree";
 
 const units: OrgUnitNode[] = [
   { id: "d1", unitName: "Produksi", unitType: "DEPARTMENT", parentUnitId: null },
@@ -44,5 +44,30 @@ describe("buildOrgUnitTree", () => {
     ]);
     expect(loop.ancestorChain("a").map((u) => u.id)).toEqual(["a", "b"]);
     expect(loop.departmentOf("a")).toBeNull();
+  });
+});
+
+describe("unitAndDescendantIds", () => {
+  const units: OrgUnitNode[] = [
+    { id: "d1", unitName: "Production", unitType: "DEPARTMENT", parentUnitId: null },
+    { id: "s1", unitName: "Machining", unitType: "SECTION", parentUnitId: "d1" },
+    { id: "g1", unitName: "CNC", unitType: "GROUP", parentUnitId: "s1" },
+    { id: "d2", unitName: "Quality", unitType: "DEPARTMENT", parentUnitId: null },
+    { id: "s2", unitName: "QC", unitType: "SECTION", parentUnitId: "d2" },
+  ];
+  it("returns the unit and everything below it, not other departments", () => {
+    expect(unitAndDescendantIds(units, "d1").sort()).toEqual(["d1", "g1", "s1"]);
+    expect(unitAndDescendantIds(units, "s2")).toEqual(["s2"]);
+  });
+  it("a unit without children is just itself, an unknown id too", () => {
+    expect(unitAndDescendantIds(units, "g1")).toEqual(["g1"]);
+    expect(unitAndDescendantIds(units, "nope")).toEqual(["nope"]);
+  });
+  it("stops on a circular parent chain", () => {
+    const loop: OrgUnitNode[] = [
+      { id: "a", unitName: "A", unitType: "SECTION", parentUnitId: "b" },
+      { id: "b", unitName: "B", unitType: "SECTION", parentUnitId: "a" },
+    ];
+    expect(unitAndDescendantIds(loop, "a").sort()).toEqual(["a", "b"]);
   });
 });

@@ -30,7 +30,9 @@ function TodoItem({ row }: { row: HcTodoRow }) {
       <span className={`w-1 shrink-0 rounded-full ${STRIPE[row.severity]}`} />
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium text-slate-500">{row.type}</p>
-        <p className="text-sm font-medium text-slate-900">{row.title}</p>
+        <Link href={row.href} className="text-sm font-medium text-slate-900 hover:text-indigo-700 hover:underline">
+          {row.title}
+        </Link>
         <p className="text-xs text-slate-500">{row.who}</p>
       </div>
       <div className="hidden shrink-0 flex-col items-end justify-center gap-1 text-right sm:flex">
@@ -96,9 +98,9 @@ function OutlookCard({ outlook }: { outlook: HcHomeData["outlook"] }) {
           Data Karyawan →
         </Link>
       </div>
-      <p className="mt-2 text-3xl font-semibold tabular-nums text-slate-900">
+      <Link href="/employees?activeFlag=true" className="mt-2 block text-3xl font-semibold tabular-nums text-slate-900 hover:text-indigo-700">
         {outlook.active} <span className="text-sm font-normal text-slate-500">karyawan aktif</span>
-      </p>
+      </Link>
 
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Status kepegawaian</p>
       <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-slate-200" role="presentation">
@@ -110,13 +112,13 @@ function OutlookCard({ outlook }: { outlook: HcHomeData["outlook"] }) {
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-700">
         {outlook.segments.map((s) => (
-          <span key={s.code} className="flex items-center justify-between">
+          <Link key={s.code} href={`/employees?employmentStatus=${s.code}&activeFlag=true`} className="flex items-center justify-between rounded px-1 hover:bg-slate-50 hover:text-indigo-700">
             <span>
               <i className={`mr-1.5 inline-block h-2 w-2 rounded-sm ${SEGMENT_COLOR[s.code]}`} />
               {s.label}
             </span>
             <b className="tabular-nums">{s.count}</b>
-          </span>
+          </Link>
         ))}
       </div>
 
@@ -124,43 +126,58 @@ function OutlookCard({ outlook }: { outlook: HcHomeData["outlook"] }) {
         <>
           <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Per departemen</p>
           <div className="mt-2 space-y-1.5">
-            {outlook.departments.map((d) => (
-              <div key={d.name} className="flex items-center gap-2 text-xs">
-                <span className="w-36 shrink-0 truncate text-slate-700" title={d.name}>
-                  {d.name}
-                </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200" role="presentation">
-                  <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.max(3, Math.round((d.count / biggest) * 100))}%` }} />
+            {outlook.departments.map((d) => {
+              const row = (
+                <>
+                  <span className="w-36 shrink-0 truncate text-slate-700" title={d.name}>
+                    {d.name}
+                  </span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200" role="presentation">
+                    <div className="h-1.5 rounded-full bg-indigo-500" style={{ width: `${Math.max(3, Math.round((d.count / biggest) * 100))}%` }} />
+                  </div>
+                  <b className="w-8 text-right tabular-nums text-slate-900">{d.count}</b>
+                </>
+              );
+              return d.id ? (
+                <Link key={d.name} href={`/employees?orgUnitId=${d.id}&activeFlag=true`} className="flex items-center gap-2 rounded text-xs hover:bg-slate-50">
+                  {row}
+                </Link>
+              ) : (
+                <div key={d.name} className="flex items-center gap-2 text-xs">
+                  {row}
                 </div>
-                <b className="w-8 text-right tabular-nums text-slate-900">{d.count}</b>
-              </div>
-            ))}
-            {outlook.withoutPosition > 0 && <p className="text-[11px] text-slate-400">{outlook.withoutPosition} karyawan belum punya posisi.</p>}
+              );
+            })}
+            {outlook.withoutPosition > 0 && (
+              <Link href="/employees?tanpaPosisi=1&activeFlag=true" className="block text-[11px] text-slate-400 hover:text-indigo-700 hover:underline">
+                {outlook.withoutPosition} karyawan belum punya posisi →
+              </Link>
+            )}
           </div>
         </>
       )}
 
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Pergerakan</p>
-      <dl className="mt-2 grid grid-cols-2 gap-2 text-center">
-        <div className="rounded-lg bg-slate-50 p-2">
-          <dd className="text-lg font-semibold tabular-nums text-slate-900">
+      <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+        <Link href="/admin/positions?positionStatus=VACANT" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+          <p className="text-lg font-semibold tabular-nums text-slate-900">
             {outlook.positionsFilled} <span className="text-xs font-normal text-slate-400">/ {outlook.positionsTotal}</span>
-          </dd>
-          <dt className="text-[11px] text-slate-500">Posisi terisi ({outlook.vacantPositions} kosong)</dt>
-        </div>
-        <div className="rounded-lg bg-slate-50 p-2">
-          <dd className="text-lg font-semibold tabular-nums text-slate-900">{outlook.joinedThisMonth}</dd>
-          <dt className="text-[11px] text-slate-500">Masuk bulan ini</dt>
-        </div>
-        <div className="rounded-lg bg-slate-50 p-2">
-          <dd className="text-lg font-semibold tabular-nums text-slate-900">{outlook.leaving}</dd>
-          <dt className="text-[11px] text-slate-500">Sedang keluar</dt>
-        </div>
-        <div className="rounded-lg bg-slate-50 p-2">
-          <dd className="text-lg font-semibold tabular-nums text-slate-900">{outlook.contractsEnding90}</dd>
-          <dt className="text-[11px] text-slate-500">Kontrak berakhir 90 hari</dt>
-        </div>
-      </dl>
+          </p>
+          <p className="text-[11px] text-slate-500">Posisi terisi ({outlook.vacantPositions} kosong)</p>
+        </Link>
+        <Link href="/employees?masuk=bulan-ini&activeFlag=true" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+          <p className="text-lg font-semibold tabular-nums text-slate-900">{outlook.joinedThisMonth}</p>
+          <p className="text-[11px] text-slate-500">Masuk bulan ini</p>
+        </Link>
+        <Link href="/offboarding?status=PENDING_CLEARANCE" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+          <p className="text-lg font-semibold tabular-nums text-slate-900">{outlook.leaving}</p>
+          <p className="text-[11px] text-slate-500">Sedang keluar</p>
+        </Link>
+        <Link href="/contracts?berakhir=90" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+          <p className="text-lg font-semibold tabular-nums text-slate-900">{outlook.contractsEnding90}</p>
+          <p className="text-[11px] text-slate-500">Kontrak berakhir 90 hari</p>
+        </Link>
+      </div>
     </div>
   );
 }

@@ -55,20 +55,35 @@ export async function GaHome({ filter }: { filter: TodoKind | "all" }) {
                 <p className="text-xs font-medium text-slate-500">{tile.title}</p>
                 {tile.total > 0 && <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${tag.tone}`}>{tag.label}</span>}
               </div>
-              <p className="mt-1 text-3xl font-semibold tabular-nums text-slate-900">{tile.total}</p>
+              <Link href={tile.openHref} className="mt-1 block w-fit text-3xl font-semibold tabular-nums text-slate-900 hover:text-indigo-700">
+                {tile.total}
+              </Link>
               {tile.total === 0 ? (
                 <p className="mt-2 text-xs text-slate-400">Tidak ada yang terbuka.</p>
               ) : (
                 <ul className="mt-2 space-y-0.5 text-xs text-slate-600">
-                  {tile.parts.map((p) => (
-                    <li key={p.label} className="flex justify-between gap-2">
-                      <span>
-                        {p.label}
-                        {p.hint && <span className="text-slate-400"> · {p.hint}</span>}
-                      </span>
-                      <b className="tabular-nums">{p.count}</b>
-                    </li>
-                  ))}
+                  {tile.parts.map((p) => {
+                    const inner = (
+                      <>
+                        <span>
+                          {p.label}
+                          {p.hint && <span className="text-slate-400"> · {p.hint}</span>}
+                        </span>
+                        <b className="tabular-nums">{p.count}</b>
+                      </>
+                    );
+                    return (
+                      <li key={p.label}>
+                        {p.href && p.count > 0 ? (
+                          <Link href={p.href} className="-mx-1 flex justify-between gap-2 rounded px-1 hover:bg-slate-50 hover:text-indigo-700">
+                            {inner}
+                          </Link>
+                        ) : (
+                          <span className="flex justify-between gap-2">{inner}</span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {tile.note && (
@@ -119,7 +134,9 @@ export async function GaHome({ filter }: { filter: TodoKind | "all" }) {
                   <span className={`w-1 shrink-0 rounded-full ${STRIPE[r.severity]}`} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] text-slate-400">{r.type}</p>
-                    <p className="truncate text-sm font-medium text-slate-900">{r.title}</p>
+                    <Link href={r.href} className="block truncate text-sm font-medium text-slate-900 hover:text-indigo-700 hover:underline">
+                      {r.title}
+                    </Link>
                     <p className="text-xs text-slate-500">{r.who}</p>
                   </div>
                   <div className="hidden shrink-0 flex-col items-end justify-center gap-1 text-right sm:flex">
@@ -138,20 +155,20 @@ export async function GaHome({ filter }: { filter: TodoKind | "all" }) {
         <div className="space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <p className="text-sm font-semibold text-slate-900">Ringkasan aset</p>
-            <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg bg-slate-50 p-2">
-                <dd className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.totalAssets}</dd>
-                <dt className="text-[11px] text-slate-500">Aset aktif</dt>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <dd className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.inUse}</dd>
-                <dt className="text-[11px] text-slate-500">Digunakan</dt>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <dd className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.activeCustodies}</dd>
-                <dt className="text-[11px] text-slate-500">Penguasaan aktif</dt>
-              </div>
-            </dl>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <Link href="/assets" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+                <p className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.totalAssets}</p>
+                <p className="text-[11px] text-slate-500">Aset aktif</p>
+              </Link>
+              <Link href="/assets?status=IN_USE" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+                <p className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.inUse}</p>
+                <p className="text-[11px] text-slate-500">Digunakan</p>
+              </Link>
+              <Link href="/assets?status=IN_USE" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+                <p className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.activeCustodies}</p>
+                <p className="text-[11px] text-slate-500">Penguasaan aktif</p>
+              </Link>
+            </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <div className="flex items-center justify-between">
@@ -165,7 +182,7 @@ export async function GaHome({ filter }: { filter: TodoKind | "all" }) {
             ) : (
               <div className="mt-2 divide-y divide-slate-100 text-sm">
                 {data.lowStock.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between gap-2 py-2">
+                  <Link key={s.id} href={`/consumables/stock?q=${encodeURIComponent(s.itemCode)}`} className="flex items-center justify-between gap-2 py-2 hover:bg-slate-50">
                     <span className="min-w-0 truncate text-slate-900">{s.itemName}</span>
                     <span className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
                       {s.stock} / {s.minStock}
@@ -173,7 +190,7 @@ export async function GaHome({ filter }: { filter: TodoKind | "all" }) {
                         {s.status === "HABIS" ? "Habis" : "Menipis"}
                       </span>
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

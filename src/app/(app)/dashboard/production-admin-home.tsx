@@ -98,7 +98,13 @@ export async function ProductionAdminHome({ tab, name }: { tab: PfTab; name: str
               </div>
             </div>
             <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-slate-500">{data.counts[c.kind] === 0 ? "tidak ada yang menunggu" : `${data.counts[c.kind]} menunggu`}</span>
+              {data.counts[c.kind] === 0 ? (
+                <span className="text-xs text-slate-500">tidak ada yang menunggu</span>
+              ) : (
+                <Link href={`/production-forms?tab=menunggu&jenis=${c.kind}`} className="text-xs text-indigo-600 hover:underline">
+                  {data.counts[c.kind]} menunggu →
+                </Link>
+              )}
               <Link href={c.href} className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">
                 + Buat baru
               </Link>

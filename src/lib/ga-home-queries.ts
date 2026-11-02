@@ -23,6 +23,8 @@ export interface TilePart {
   label: string;
   count: number;
   hint?: string;
+  /** Where the people behind this number are listed. */
+  href?: string;
 }
 
 export interface GaTile {
@@ -307,11 +309,11 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Permintaan GA terbuka",
       total: requests.length,
       parts: [
-        { label: "Diajukan", count: requestStatus.SUBMITTED ?? 0, hint: "perlu diputuskan atau diverifikasi" },
-        { label: "Menunggu Persetujuan", count: requestStatus.PENDING_APPROVAL ?? 0 },
-        { label: "Menunggu Peninjauan", count: requestStatus.PENDING_LOSS_REVIEW ?? 0 },
-        { label: "Disetujui", count: approvedOpen, hint: "belum diproses" },
-        { label: "Menunggu barang", count: waitingGoods, hint: "sudah diminta ke Procurement" },
+        { label: "Diajukan", count: requestStatus.SUBMITTED ?? 0, hint: "perlu diputuskan atau diverifikasi", href: "/ga-requests?status=SUBMITTED" },
+        { label: "Menunggu Persetujuan", count: requestStatus.PENDING_APPROVAL ?? 0, href: "/ga-requests?status=PENDING_APPROVAL" },
+        { label: "Menunggu Peninjauan", count: requestStatus.PENDING_LOSS_REVIEW ?? 0, href: "/ga-requests?status=PENDING_LOSS_REVIEW" },
+        { label: "Disetujui", count: approvedOpen, hint: "belum diproses", href: "/ga-requests?menunggu=0" },
+        { label: "Menunggu barang", count: waitingGoods, hint: "sudah diminta ke Procurement", href: "/ga-requests?menunggu=1" },
       ],
       note: requestOldest === null ? null : `Tertua ${requestOldest} hari`,
       severity: requestOldest === null ? "slate" : waitingSeverity(requestOldest),
@@ -322,8 +324,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Work Order terbuka",
       total: workOrders.length,
       parts: [
-        { label: "Korektif", count: woBySource.CORRECTIVE ?? 0 },
-        { label: "Preventif", count: woBySource.PREVENTIVE ?? 0 },
+        { label: "Korektif", count: woBySource.CORRECTIVE ?? 0, href: "/maintenance/work-orders" },
+        { label: "Preventif", count: woBySource.PREVENTIVE ?? 0, href: "/maintenance/work-orders" },
       ],
       note: woOldest === null ? null : `Tertua ${woOldest} hari`,
       severity: woOldest === null ? "slate" : waitingSeverity(woOldest),
@@ -334,8 +336,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Perawatan jatuh tempo",
       total: pmRows.length,
       parts: [
-        { label: "Terlambat", count: pmOverdue },
-        { label: `Dalam ${PLAN_DUE_SOON_DAYS} hari`, count: pmSoon },
+        { label: "Terlambat", count: pmOverdue, href: "/maintenance/plans" },
+        { label: `Dalam ${PLAN_DUE_SOON_DAYS} hari`, count: pmSoon, href: "/maintenance/plans" },
       ],
       note: pmOverdue > 0 ? `${pmOverdue} rencana belum punya work order` : null,
       severity: pmOverdue > 0 ? "rose" : pmSoon > 0 ? "amber" : "slate",
@@ -346,9 +348,9 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Kasus Disposal aktif",
       total: disposals.length,
       parts: [
-        { label: "Draf", count: disposalStatus.DRAFT ?? 0, hint: "perlu disetujui" },
-        { label: "Menunggu Persetujuan", count: disposalStatus.PENDING_APPROVAL ?? 0 },
-        { label: "Disetujui", count: disposalStatus.APPROVED ?? 0, hint: "belum dilaksanakan" },
+        { label: "Draf", count: disposalStatus.DRAFT ?? 0, hint: "perlu disetujui", href: "/disposal-cases" },
+        { label: "Menunggu Persetujuan", count: disposalStatus.PENDING_APPROVAL ?? 0, href: "/disposal-cases" },
+        { label: "Disetujui", count: disposalStatus.APPROVED ?? 0, hint: "belum dilaksanakan", href: "/disposal-cases" },
       ],
       note: disposalOldest === null ? null : `Tertua ${disposalOldest} hari`,
       severity: disposalOldest === null ? "slate" : waitingSeverity(disposalOldest),
@@ -359,8 +361,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Klirens aset offboarding",
       total: offboardingCases.length,
       parts: [
-        { label: "Menunggu konfirmasi GA", count: offboardingCases.length },
-        { label: "Punya aset belum kembali", count: casesWithAssets },
+        { label: "Menunggu konfirmasi GA", count: offboardingCases.length, href: "/offboarding/asset-clearance" },
+        { label: "Punya aset belum kembali", count: casesWithAssets, href: "/offboarding/asset-clearance" },
       ],
       note:
         nearest && nearestLeft !== null
@@ -374,8 +376,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Aset bermasalah",
       total: underRepair + lostPending,
       parts: [
-        { label: "Dalam Perbaikan", count: underRepair },
-        { label: "Menunggu Disposal", count: lostPending },
+        { label: "Dalam Perbaikan", count: underRepair, href: "/assets?status=UNDER_REPAIR" },
+        { label: "Menunggu Disposal", count: lostPending, href: "/assets?status=PENDING_DISPOSAL" },
       ],
       note: null,
       severity: lostPending > 0 ? "amber" : "slate",
@@ -386,8 +388,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       title: "Barang Habis Pakai",
       total: lowStock.length,
       parts: [
-        { label: "Menipis", count: menipis.length },
-        { label: "Habis", count: habis.length },
+        { label: "Menipis", count: menipis.length, href: "/consumables/stock?status=MENIPIS" },
+        { label: "Habis", count: habis.length, href: "/consumables/stock?status=HABIS" },
       ],
       note: habis.length > 0 ? `${habis[0].itemName} sudah habis` : null,
       severity: habis.length > 0 ? "rose" : menipis.length > 0 ? "amber" : "slate",

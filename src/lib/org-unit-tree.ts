@@ -23,6 +23,28 @@ export interface OrgUnitTree {
   groupOf(orgUnitId: string): OrgUnitNode | null;
 }
 
+// The unit and every unit below it (Department -> Section -> Group -> Team), for "everyone in this department".
+export function unitAndDescendantIds(units: OrgUnitNode[], rootId: string): string[] {
+  const childrenOf = new Map<string, string[]>();
+  for (const u of units) {
+    if (!u.parentUnitId) continue;
+    const list = childrenOf.get(u.parentUnitId) ?? [];
+    list.push(u.id);
+    childrenOf.set(u.parentUnitId, list);
+  }
+  const result: string[] = [];
+  const seen = new Set<string>();
+  const queue = [rootId];
+  while (queue.length > 0) {
+    const id = queue.shift() as string;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+    queue.push(...(childrenOf.get(id) ?? []));
+  }
+  return result;
+}
+
 export function buildOrgUnitTree(units: OrgUnitNode[]): OrgUnitTree {
   const byId = new Map(units.map((u) => [u.id, u]));
 

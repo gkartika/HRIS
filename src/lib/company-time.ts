@@ -58,6 +58,12 @@ export function companyToday(date: Date = new Date()): Date {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
+// First day of the company-local month of `date`, as a UTC-midnight date-only value.
+export function companyMonthStart(date: Date = new Date()): Date {
+  const { year, month } = companyDateParts(date);
+  return new Date(Date.UTC(year, month - 1, 1));
+}
+
 // The real instant at which the company-local day of `date` begins (00:00 WIB)
 // — for querying timestamps (check-in events) that fall on "today".
 export function startOfCompanyDay(date: Date = new Date()): Date {

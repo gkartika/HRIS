@@ -2,7 +2,7 @@
 // work in the UI), a short outlook of the organisation (employment status, departments, seats, movement), the
 // payroll-period card and the setup warnings. Reads only; the caller gates on HR Admin.
 import { prisma } from "@/lib/db";
-import { companyDateParts, companyToday, companyYear, DAY_MS } from "@/lib/company-time";
+import { companyDateParts, companyMonthStart, companyToday, companyYear, DAY_MS } from "@/lib/company-time";
 import { daysSince, daysUntil, deadlineLabel, deadlineSeverity, waitingLabel, waitingSeverity, type Severity } from "@/lib/ga-home";
 import { getFormsForAdminSdm } from "@/lib/production-forms-queries";
 import { getBpjsRows } from "@/lib/bpjs-queries";
@@ -39,7 +39,8 @@ export interface HcHomeData {
   outlook: {
     active: number;
     segments: HeadcountSegment[];
-    departments: { name: string; count: number }[];
+    /** id is the department's id so the card can open its employees; null for the "Lainnya" total. */
+    departments: { id: string | null; name: string; count: number }[];
     /** Active employees without a seat. */
     withoutPosition: number;
     positionsTotal: number;
@@ -199,7 +200,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     )),
     prisma.position.count({ where: { archived: false, grantsHrManagerAccess: true } }),
     prisma.position.count({ where: { archived: false } }),
-    prisma.employee.count({ where: { activeFlag: true, hireDate: { gte: new Date(Date.UTC(companyDateParts(now).year, companyDateParts(now).month - 1, 1)) } } }),
+    prisma.employee.count({ where: { activeFlag: true, hireDate: { gte: companyMonthStart(now) } } }),
     prisma.contract.count({ where: { status: "ACTIVE", endDate: { not: null, gte: today, lte: new Date(today.getTime() + 90 * DAY_MS) } } }),
     getFormsForAdminSdm(),
     getBpjsRows(now),
@@ -539,10 +540,13 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
   const active = activeByStatus.reduce((sum, g) => sum + g._count._all, 0);
   // Employees per department (the Production floor, Quality Development ...), by the department above their seat.
   const departmentCounts = new Map<string, number>();
+  const departmentIds = new Map<string, string>();
   for (const e of activeEmployeeUnits) {
     const unitId = e.currentPosition?.orgUnitId;
     if (!unitId) continue;
-    const name = tree.departmentOf(unitId)?.unitName ?? tree.ancestorChain(unitId)[0]?.unitName ?? "—";
+    const dept = tree.departmentOf(unitId);
+    const name = dept?.unitName ?? tree.ancestorChain(unitId)[0]?.unitName ?? "—";
+    if (dept) departmentIds.set(name, dept.id);
     departmentCounts.set(name, (departmentCounts.get(name) ?? 0) + 1);
   }
   const segments: HeadcountSegment[] = ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG"].map((code) => ({
@@ -564,7 +568,7 @@ export async function getHcHomeData(now: Date = new Date()): Promise<HcHomeData>
     outlook: {
       active,
       segments,
-      departments: departmentBreakdown(departmentCounts),
+      departments: departmentBreakdown(departmentCounts).map((d) => ({ ...d, id: departmentIds.get(d.name) ?? null })),
       withoutPosition: Math.max(0, active - activeEmployeeUnits.filter((e) => e.currentPosition).length),
       positionsTotal,
       positionsFilled: Math.max(0, positionsTotal - vacantPositions),

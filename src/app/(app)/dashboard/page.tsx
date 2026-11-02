@@ -40,12 +40,19 @@ import { GaHome } from "./ga-home";
 import { HcHome } from "./hc-home";
 import type { TodoKind } from "@/lib/ga-home";
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
+function StatCard({ label, value, href }: { label: string; value: string | number; href?: string }) {
+  const body = (
+    <>
       <p className="text-xs text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-medium text-slate-900">{value}</p>
-    </div>
+    </>
+  );
+  return href ? (
+    <Link href={href} className="block rounded-xl border border-slate-200 bg-white p-5 hover:border-slate-300">
+      {body}
+    </Link>
+  ) : (
+    <div className="rounded-xl border border-slate-200 bg-white p-5">{body}</div>
   );
 }
 
@@ -357,14 +364,14 @@ async function StatCards({ session }: { session: Awaited<ReturnType<typeof requi
     isTrainingAdminUser ? prisma.position.count({ where: { positionStatus: "FILLED" } }) : Promise.resolve(null),
   ]);
 
-  const cards: { label: string; value: string | number }[] = [];
-  if (employeeCount !== null) cards.push({ label: "Total Karyawan Aktif", value: employeeCount });
+  const cards: { label: string; value: string | number; href?: string }[] = [];
+  if (employeeCount !== null) cards.push({ label: "Total Karyawan Aktif", value: employeeCount, href: "/employees?activeFlag=true" });
   if (filledPositions !== null) cards.push({ label: "Posisi Terisi", value: filledPositions });
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
       {cards.map((c) => (
-        <StatCard key={c.label} label={c.label} value={c.value} />
+        <StatCard key={c.label} label={c.label} value={c.value} href={c.href} />
       ))}
       {cards.length === 0 && <p className="col-span-full text-sm text-slate-400">Tidak ada data ringkasan untuk peran ini.</p>}
     </div>

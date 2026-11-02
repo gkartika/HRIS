@@ -6,8 +6,9 @@ import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { rowsToCsv } from "@/lib/import-export/csv";
 import type { GaRequestType, GaRequestStatus } from "@/generated/prisma/enums";
+import { isWaitingForGoods } from "@/lib/ga-operations";
 
-const HEADERS = ["requestNumber", "requestType", "status", "urgency", "requester", "asset", "submittedAt", "processedAt"];
+const HEADERS = ["requestNumber", "requestType", "status", "urgency", "requester", "asset", "submittedAt", "processedAt", "slNumber", "slRequestedAt", "waitingForGoods"];
 
 // GA-Admin-only, matching the /ga-requests list page's own gate —
 // "permission-scoped exports" per the Phase 4B spec.
@@ -19,11 +20,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const requestType = searchParams.get("requestType");
   const status = searchParams.get("status");
+  const waitingOnly = searchParams.get("menunggu") === "1";
 
   const requests = await prisma.gaRequest.findMany({
     where: {
       ...(requestType ? { requestType: requestType as GaRequestType } : {}),
       ...(status ? { status: status as GaRequestStatus } : {}),
+      ...(waitingOnly ? { requestType: "NEW_ASSET_NEED" as const, status: "APPROVED" as const, assetId: null, procurementReference: { not: null } } : {}),
     },
     include: {
       requester: { select: { employeeNumber: true, fullLegalName: true } },
@@ -43,6 +46,9 @@ export async function GET(request: Request) {
       asset: r.asset ? `${r.asset.assetCode} — ${r.asset.assetName}` : "",
       submittedAt: r.submittedAt.toISOString().slice(0, 10),
       processedAt: r.processedAt ? r.processedAt.toISOString().slice(0, 10) : "",
+      slNumber: r.procurementReference ?? "",
+      slRequestedAt: r.procurementRequestedAt ? r.procurementRequestedAt.toISOString().slice(0, 10) : "",
+      waitingForGoods: isWaitingForGoods(r) ? "ya" : "",
     }))
   );
 

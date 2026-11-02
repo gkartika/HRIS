@@ -5,7 +5,15 @@ import { createFixedAsset } from "./actions";
 import { t } from "@/lib/i18n/id";
 import { ASSET_CATEGORIES } from "@/lib/asset-categories";
 
-export function CreateAssetForm() {
+export interface AssetFromRequest {
+  id: string;
+  number: string;
+  requester: string;
+  sl: string;
+  assetName: string;
+}
+
+export function CreateAssetForm({ fromRequest = null }: { fromRequest?: AssetFromRequest | null }) {
   const [error, formAction, isPending] = useActionState(createFixedAsset, undefined);
   const [trackingType, setTrackingType] = useState("INDIVIDUAL");
 
@@ -19,6 +27,12 @@ export function CreateAssetForm() {
         startTransition(() => formAction(data));
       }}
       className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-5 md:grid-cols-4">
+      {fromRequest && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-800 md:col-span-4">
+          <input type="hidden" name="gaRequestId" value={fromRequest.id} />
+          Aset ini dibuat dari permintaan <b>{fromRequest.number}</b> (Kebutuhan Aset Baru, {fromRequest.requester}, No. SL {fromRequest.sl}). Setelah disimpan Anda kembali ke permintaan untuk menyerahkannya.
+        </div>
+      )}
       {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700 md:col-span-4">{error}</p>}
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.assetCode")}</label>
@@ -26,7 +40,7 @@ export function CreateAssetForm() {
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.assetName")}</label>
-        <input name="assetName" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+        <input name="assetName" required defaultValue={fromRequest?.assetName ?? ""} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
       </div>
       <div>
         <label className="mb-1 block text-xs text-slate-500">{t("asset.category")}</label>

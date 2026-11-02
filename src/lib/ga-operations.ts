@@ -94,6 +94,54 @@ export function canCancelGaRequestStatus(status: GaRequestStatus): boolean {
   return status === "SUBMITTED" || status === "PENDING_APPROVAL" || status === "PENDING_LOSS_REVIEW";
 }
 
+// ---------- New-asset purchase tracking ----------
+// Procurement buys through Odoo, outside SAPA. GA Admin only writes down the SL number once the
+// purchase is asked for, so GA can see which approved needs are still waiting for the goods.
+// Nothing is stored for "waiting": it is derived from the SL number and the missing asset.
+
+export const SL_MAX_CHARS = 60;
+
+interface NewAssetRequestShape {
+  requestType: GaRequestType;
+  status: GaRequestStatus;
+  procurementReference: string | null;
+  assetId: string | null;
+}
+
+export function slProblem(raw: string): string | null {
+  const sl = raw.trim();
+  if (!sl) return "No. SL wajib diisi.";
+  if (sl.length > SL_MAX_CHARS) return `No. SL terlalu panjang (maksimal ${SL_MAX_CHARS} karakter).`;
+  return null;
+}
+
+// The SL number can be written (or corrected) while the need is approved and no asset was made from it yet.
+export function canRecordProcurement(r: Pick<NewAssetRequestShape, "requestType" | "status" | "assetId">): boolean {
+  return r.requestType === "NEW_ASSET_NEED" && r.status === "APPROVED" && !r.assetId;
+}
+
+// Asked from Procurement, goods not registered as an asset yet.
+export function isWaitingForGoods(r: NewAssetRequestShape): boolean {
+  return canRecordProcurement(r) && !!r.procurementReference?.trim();
+}
+
+// "Buat aset baru dari permintaan ini" appears once the SL number is written down.
+export function canCreateAssetFromRequest(r: NewAssetRequestShape): boolean {
+  return isWaitingForGoods(r);
+}
+
+export function waitingForGoodsText(requestedAt: Date | null, now: Date): string {
+  if (!requestedAt) return "Menunggu barang dari Procurement";
+  const days = Math.max(0, Math.floor((now.getTime() - requestedAt.getTime()) / (24 * 60 * 60 * 1000)));
+  return days === 0 ? "Menunggu barang dari Procurement, diminta hari ini" : `Menunggu barang dari Procurement, sudah ${days} hari`;
+}
+
+// Name suggested for the new asset: the first line of the need, kept short.
+export function suggestedAssetName(description: string): string {
+  const line = description.trim().split(/\r?\n/)[0]?.trim() ?? "";
+  return line.length > 80 ? `${line.slice(0, 77).trimEnd()}...` : line;
+}
+
 // ---------- Asset status side effects ----------
 
 export function computeAssetStatusAfterLossReview(confirmed: boolean, hasOpenCustody: boolean): AssetStatusValue {

@@ -7,6 +7,7 @@ import {
   verifyGaRequest,
   decideGaRequestAsApprover,
   processGaRequest,
+  recordProcurementRequest,
   reviewGaRequestLoss,
   cancelGaRequest,
   acceptDamageRequest,
@@ -99,6 +100,7 @@ export function ProcessForm({
   orgUnits,
   locations,
   defaultEmployeeId,
+  defaultAssetId,
 }: {
   requestId: string;
   assets: AssetOption[];
@@ -106,40 +108,17 @@ export function ProcessForm({
   orgUnits: EmployeeOption[];
   locations: EmployeeOption[];
   defaultEmployeeId: string;
+  /** The asset made from this request, chosen for the hand-over when it is available. */
+  defaultAssetId: string | null;
 }) {
-  const [mode, setMode] = useState<"ALLOCATE" | "PROCUREMENT">("ALLOCATE");
   const [targetType, setTargetType] = useState<"EMPLOYEE" | "DEPARTMENT">("EMPLOYEE");
-  const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [selectedAssetId, setSelectedAssetId] = useState(defaultAssetId && assets.some((a) => a.id === defaultAssetId) ? defaultAssetId : "");
   const [error, formAction, isPending] = useActionState(processGaRequest.bind(null, requestId), undefined);
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
 
   return (
     <form action={formAction} className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <input type="hidden" name="processingMode" value={mode} />
-      <div className="flex gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setMode("ALLOCATE")}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium ${mode === "ALLOCATE" ? "bg-indigo-600 text-white" : "text-slate-600"}`}
-        >
-          Alokasikan Aset Tersedia
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("PROCUREMENT")}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium ${mode === "PROCUREMENT" ? "bg-indigo-600 text-white" : "text-slate-600"}`}
-        >
-          Referensi Pengadaan
-        </button>
-      </div>
-
-      {mode === "PROCUREMENT" ? (
-        <div>
-          <label className="mb-1 block text-xs text-slate-500">Referensi Pengadaan (wajib)</label>
-          <input name="procurementReference" required className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-        </div>
-      ) : (
-        <>
+      <>
           <div>
             <label className="mb-1 block text-xs text-slate-500">Aset yang Dialokasikan</label>
             <select
@@ -235,8 +214,7 @@ export function ProcessForm({
             <label className="mb-1 block text-xs text-slate-500">Bukti Serah Terima</label>
             <DocumentFileInput name="handoverEvidenceFile" accept=".pdf,.jpg,.jpeg,.png" className="text-sm" />
           </div>
-        </>
-      )}
+      </>
 
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <button
@@ -245,6 +223,26 @@ export function ProcessForm({
         className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
       >
         {isPending ? t("common.loading") : "Proses Permintaan"}
+      </button>
+    </form>
+  );
+}
+
+// Procurement buys through Odoo. GA writes the SL number here when it asks Procurement, so the need shows
+// as waiting for goods. The same box corrects the number later.
+export function ProcurementSlForm({ requestId, currentSl }: { requestId: string; currentSl: string | null }) {
+  const [error, formAction, isPending] = useActionState(recordProcurementRequest.bind(null, requestId), undefined);
+  return (
+    <form action={formAction} className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <label className="block text-xs text-slate-500">{currentSl ? "No. SL (bisa diperbaiki)" : "No. SL (wajib)"}</label>
+      <input name="slNumber" required defaultValue={currentSl ?? ""} maxLength={60} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+      {error && <p className="text-xs text-rose-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={isPending}
+        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+      >
+        {isPending ? t("common.loading") : currentSl ? "Simpan No. SL" : "Catat permintaan ke Procurement"}
       </button>
     </form>
   );

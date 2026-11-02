@@ -12,18 +12,42 @@ import { EmptyState } from "@/components/empty-state";
 import type { Prisma } from "@/generated/prisma/client";
 import { CreateAssetForm } from "./create-form";
 import { ASSET_CATEGORIES } from "@/lib/asset-categories";
+import { canCreateAssetFromRequest, suggestedAssetName } from "@/lib/ga-operations";
 
 export default async function AssetsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; trackingType?: string; status?: string; category?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; trackingType?: string; status?: string; category?: string; dariPermintaan?: string }>;
 }) {
   const session = await requireSession();
   if (!canViewAssetMaster(session)) {
     return <AccessDenied />;
   }
 
-  const { q, trackingType, status, category, page: pageRaw } = await searchParams;
+  const { q, trackingType, status, category, page: pageRaw, dariPermintaan } = await searchParams;
+
+  // "Buat aset baru dari permintaan ini": the form opens filled from an approved new-asset need
+  // that is waiting for goods. Anything else opens the normal empty form.
+  const sourceRequest =
+    dariPermintaan && canManageAssets(session)
+      ? await prisma.gaRequest.findUnique({
+          where: { id: dariPermintaan },
+          select: {
+            id: true,
+            requestNumber: true,
+            requestType: true,
+            status: true,
+            procurementReference: true,
+            assetId: true,
+            description: true,
+            requester: { select: { fullLegalName: true } },
+          },
+        })
+      : null;
+  const fromRequest =
+    sourceRequest && canCreateAssetFromRequest(sourceRequest)
+      ? { id: sourceRequest.id, number: sourceRequest.requestNumber, requester: sourceRequest.requester.fullLegalName, sl: sourceRequest.procurementReference ?? "", assetName: suggestedAssetName(sourceRequest.description) }
+      : null;
 
   const where: Prisma.FixedAssetWhereInput = {};
   if (q?.trim()) {
@@ -86,7 +110,7 @@ export default async function AssetsPage({
 
       {canManageAssets(session) && (
         <div className="mb-4">
-          <CreateAssetForm />
+          <CreateAssetForm fromRequest={fromRequest} />
         </div>
       )}
 

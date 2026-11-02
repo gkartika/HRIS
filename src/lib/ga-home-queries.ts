@@ -2,7 +2,7 @@
 // (the "status tiles") and one combined list of what is waiting for GA (the
 // "Perlu ditindak" list). Reads only; GA Admin gates the caller.
 import { prisma } from "@/lib/db";
-import { planDueState, PLAN_DUE_SOON_DAYS } from "@/lib/ga-operations";
+import { planDueState, PLAN_DUE_SOON_DAYS, isWaitingForGoods } from "@/lib/ga-operations";
 import { listItemsWithStock } from "@/lib/consumables-queries";
 import {
   countBy,
@@ -73,6 +73,9 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
         requestType: true,
         status: true,
         submittedAt: true,
+        procurementReference: true,
+        procurementRequestedAt: true,
+        assetId: true,
         requester: { select: { fullLegalName: true } },
         asset: { select: { assetName: true, assetCode: true } },
       },
@@ -146,15 +149,26 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
 
   // ---- Permintaan GA ----
   const requestStatus = countBy(requests, (r) => r.status);
+  const waitingGoods = requests.filter((r) => r.status === "APPROVED" && isWaitingForGoods(r)).length;
+  const approvedOpen = (requestStatus.APPROVED ?? 0) - waitingGoods;
   for (const r of requests.filter((x) => x.status === "SUBMITTED" || x.status === "APPROVED" || x.status === "PENDING_LOSS_REVIEW")) {
-    const age = daysSince(r.submittedAt, now);
+    const waiting = isWaitingForGoods(r);
+    const age = daysSince(waiting && r.procurementRequestedAt ? r.procurementRequestedAt : r.submittedAt, now);
     const verifying = r.status === "SUBMITTED";
     todo.push({
       kind: "ga",
       type: `Permintaan GA · ${GA_REQUEST_TYPE[r.requestType] ?? r.requestType}`,
       title: r.asset ? `${r.asset.assetName} (${r.asset.assetCode})` : r.requestNumber,
       who: `${r.requester.fullLegalName} · ${r.requestNumber}`,
-      statusLabel: verifying ? "Diajukan" : r.status === "PENDING_LOSS_REVIEW" ? "Menunggu peninjauan" : "Disetujui, belum diproses",
+      statusLabel: verifying
+        ? "Diajukan"
+        : r.status === "PENDING_LOSS_REVIEW"
+          ? "Menunggu peninjauan"
+          : waiting
+            ? `Menunggu barang dari Procurement (SL ${r.procurementReference})`
+            : r.requestType === "NEW_ASSET_NEED" && r.assetId
+              ? "Aset sudah dibuat, tinggal diserahkan"
+              : "Disetujui, belum diproses",
       severity: waitingSeverity(age),
       urgency: age,
       timeLabel: waitingLabel(age),
@@ -164,7 +178,11 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
           ? "Konfirmasi"
           : verifying
             ? "Verifikasi"
-            : "Proses",
+            : waiting
+              ? "Buat aset"
+              : r.requestType === "NEW_ASSET_NEED" && r.assetId
+                ? "Serahkan"
+                : "Proses",
       href: `/ga-requests/${r.id}`,
     });
   }
@@ -292,7 +310,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
         { label: "Diajukan", count: requestStatus.SUBMITTED ?? 0, hint: "perlu diputuskan atau diverifikasi" },
         { label: "Menunggu Persetujuan", count: requestStatus.PENDING_APPROVAL ?? 0 },
         { label: "Menunggu Peninjauan", count: requestStatus.PENDING_LOSS_REVIEW ?? 0 },
-        { label: "Disetujui", count: requestStatus.APPROVED ?? 0, hint: "belum diproses" },
+        { label: "Disetujui", count: approvedOpen, hint: "belum diproses" },
+        { label: "Menunggu barang", count: waitingGoods, hint: "sudah diminta ke Procurement" },
       ],
       note: requestOldest === null ? null : `Tertua ${requestOldest} hari`,
       severity: requestOldest === null ? "slate" : waitingSeverity(requestOldest),

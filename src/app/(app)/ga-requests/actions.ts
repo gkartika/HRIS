@@ -18,6 +18,8 @@ import {
   decideGaRequestLossStatus,
   canCancelGaRequestStatus,
   computeAssetStatusAfterLossReview,
+  canRecordProcurement,
+  slProblem,
 } from "@/lib/ga-operations";
 import { logAudit } from "@/lib/audit";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
@@ -119,7 +121,46 @@ export async function decideGaRequestAsApprover(
   return undefined;
 }
 
-// PDF: "Allocate available asset or record procurement reference" — the
+// Procurement buys through Odoo, outside SAPA. GA Admin writes down the SL number when the purchase is
+// asked for, so the need shows as "waiting for goods" until the asset is made from it. The SL number can
+// be corrected later; the first date stays.
+export async function recordProcurementRequest(requestId: string, _prevState: string | undefined, formData: FormData): Promise<string | undefined> {
+  const session = await requireSession();
+  if (!canManageGaOperations(session)) return t("common.forbidden");
+
+  const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
+  if (!request) return "Permintaan tidak ditemukan.";
+  if (!canRecordProcurement(request)) return "No. SL hanya bisa dicatat untuk kebutuhan aset baru yang sudah disetujui dan belum dibuatkan asetnya.";
+
+  const sl = ((formData.get("slNumber") as string) ?? "").trim();
+  const problem = slProblem(sl);
+  if (problem) return problem;
+  if (sl === request.procurementReference) return undefined;
+
+  await prisma.gaRequest.update({
+    where: { id: requestId },
+    data: { procurementReference: sl, procurementRequestedAt: request.procurementRequestedAt ?? new Date() },
+  });
+
+  await logAudit({
+    actorAccountId: session.user.id,
+    action: "UPDATE",
+    datasetName: "GaRequest",
+    recordId: requestId,
+    fieldName: "procurementReference",
+    newValueMasked: sl,
+    reason: request.procurementReference
+      ? `${request.requestNumber} SL number corrected (was ${request.procurementReference})`
+      : `${request.requestNumber} asked from Procurement, SL ${sl}`,
+  });
+
+  revalidatePath(`/ga-requests/${requestId}`);
+  revalidatePath("/ga-requests");
+  revalidatePath("/dashboard");
+  return undefined;
+}
+
+// PDF: "Allocate available asset" — the
 // hand-off to Phase 4A custody. Reuses the existing, unmodified assign*
 // actions in assets/actions.ts rather than duplicating custody-creation
 // logic; the created custody's id is looked up afterward (most recent for
@@ -131,32 +172,6 @@ export async function processGaRequest(requestId: string, _prevState: string | u
   const request = await prisma.gaRequest.findUnique({ where: { id: requestId } });
   if (!request) return "Permintaan tidak ditemukan.";
   if (!canProcessGaRequest(request.status)) return "Permintaan ini belum disetujui atau sudah diproses.";
-
-  const processingMode = formData.get("processingMode") as string;
-
-  if (processingMode === "PROCUREMENT") {
-    const procurementReference = (formData.get("procurementReference") as string)?.trim();
-    if (!procurementReference) return "Referensi pengadaan wajib diisi.";
-
-    await prisma.gaRequest.update({
-      where: { id: requestId },
-      data: { status: "PROCESSED", processedAt: new Date(), processedByAccountId: session.user.id, procurementReference },
-    });
-
-    await logAudit({
-      actorAccountId: session.user.id,
-      action: "UPDATE",
-      datasetName: "GaRequest",
-      recordId: requestId,
-      reason: `${request.requestNumber} processed via procurement reference ${procurementReference}`,
-    });
-
-    revalidatePath(`/ga-requests/${requestId}`);
-    revalidatePath("/ga-requests");
-    return undefined;
-  }
-
-  if (processingMode !== "ALLOCATE") return "Mode pemrosesan tidak valid.";
 
   const assetId = (formData.get("allocateAssetId") as string)?.trim();
   if (!assetId) return "Aset yang akan dialokasikan wajib dipilih.";

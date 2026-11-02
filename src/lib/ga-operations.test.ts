@@ -24,6 +24,13 @@ import {
   canExecuteDisposalCase,
   disposalReasonForMaintenanceOutcome,
   blocksOffboardingGaRequest,
+  slProblem,
+  SL_MAX_CHARS,
+  canRecordProcurement,
+  isWaitingForGoods,
+  canCreateAssetFromRequest,
+  waitingForGoodsText,
+  suggestedAssetName,
 } from "./ga-operations";
 
 describe("numbering", () => {
@@ -213,5 +220,52 @@ describe("planDueState", () => {
     expect(planDueState(0)).toBe("SOON");
     expect(planDueState(7)).toBe("SOON");
     expect(planDueState(8)).toBe("LATER");
+  });
+});
+
+describe("new-asset purchase tracking (SL number)", () => {
+  const approved = { requestType: "NEW_ASSET_NEED" as const, status: "APPROVED" as const, procurementReference: null, assetId: null };
+
+  it("the SL number is required and kept short", () => {
+    expect(slProblem("")).toContain("wajib");
+    expect(slProblem("   ")).toContain("wajib");
+    expect(slProblem("SL-2026-0045")).toBeNull();
+    expect(slProblem("x".repeat(SL_MAX_CHARS + 1))).toContain("terlalu panjang");
+  });
+
+  it("the SL number can be written only for an approved new-asset need without an asset", () => {
+    expect(canRecordProcurement(approved)).toBe(true);
+    expect(canRecordProcurement({ ...approved, assetId: "a1" })).toBe(false);
+    expect(canRecordProcurement({ ...approved, status: "PROCESSED" })).toBe(false);
+    expect(canRecordProcurement({ ...approved, status: "PENDING_APPROVAL" })).toBe(false);
+    expect(canRecordProcurement({ ...approved, requestType: "LOSS" })).toBe(false);
+  });
+
+  it("waiting for goods = SL written, no asset yet", () => {
+    expect(isWaitingForGoods(approved)).toBe(false);
+    expect(isWaitingForGoods({ ...approved, procurementReference: "  " })).toBe(false);
+    expect(isWaitingForGoods({ ...approved, procurementReference: "SL-1" })).toBe(true);
+    expect(isWaitingForGoods({ ...approved, procurementReference: "SL-1", assetId: "a1" })).toBe(false);
+    expect(isWaitingForGoods({ ...approved, procurementReference: "SL-1", status: "PROCESSED" })).toBe(false);
+  });
+
+  it("the new asset can be made only while waiting for goods", () => {
+    expect(canCreateAssetFromRequest(approved)).toBe(false);
+    expect(canCreateAssetFromRequest({ ...approved, procurementReference: "SL-1" })).toBe(true);
+    expect(canCreateAssetFromRequest({ ...approved, procurementReference: "SL-1", assetId: "a1" })).toBe(false);
+  });
+
+  it("says how long it has been waiting", () => {
+    const now = new Date("2026-11-10T08:00:00Z");
+    expect(waitingForGoodsText(null, now)).toBe("Menunggu barang dari Procurement");
+    expect(waitingForGoodsText(new Date("2026-11-10T01:00:00Z"), now)).toContain("diminta hari ini");
+    expect(waitingForGoodsText(new Date("2026-11-03T08:00:00Z"), now)).toBe("Menunggu barang dari Procurement, sudah 7 hari");
+  });
+
+  it("suggests the first line of the need as the asset name", () => {
+    expect(suggestedAssetName("  Laptop untuk staf baru\nSpesifikasi i5 16GB ")).toBe("Laptop untuk staf baru");
+    expect(suggestedAssetName("a".repeat(100)).length).toBe(80);
+    expect(suggestedAssetName("a".repeat(100)).endsWith("...")).toBe(true);
+    expect(suggestedAssetName("")).toBe("");
   });
 });

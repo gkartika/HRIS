@@ -12,9 +12,11 @@ import {
   canReviewGaRequestLoss,
   canCancelGaRequestStatus,
   canDecideDamageRequest,
+  isWaitingForGoods,
+  waitingForGoodsText,
 } from "@/lib/ga-operations";
 import { prisma } from "@/lib/db";
-import { VerifyForm, ApproverDecisionButtons, ProcessForm, LossReviewButtons, CancelRequestForm, DamageDecisionPanel } from "./decision-forms";
+import { VerifyForm, ApproverDecisionButtons, ProcessForm, ProcurementSlForm,LossReviewButtons, CancelRequestForm, DamageDecisionPanel } from "./decision-forms";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -60,6 +62,7 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
       : null;
   const canDecideApprover = isGaAdminUser && canDecideGaRequest(request.status);
   const canProcess = isGaAdminUser && canProcessGaRequest(request.status);
+  const waitingForGoods = isWaitingForGoods(request);
   const canReviewLoss = isGaAdminUser && canReviewGaRequestLoss(request.status);
   const canCancel = canCancelGaRequest(session, request.requesterEmployeeId) && canCancelGaRequestStatus(request.status);
 
@@ -181,21 +184,54 @@ export default async function GaRequestDetailPage({ params }: { params: Promise<
               {request.processedAt ? (
                 <p className="mt-2 text-xs text-slate-500">
                   {formatDateLong(request.processedAt)} — {request.processedByAccount?.usernameOrEmail ?? "—"}
-                  {request.procurementReference && ` — Referensi: ${request.procurementReference}`}
+                  {request.procurementReference && ` — No. SL: ${request.procurementReference}`}
                   {request.resultingCustodyId && ` — Custody: ${request.resultingCustodyId}`}
                 </p>
               ) : (
-                canProcess &&
-                processFormData && (
-                  <ProcessForm
-                    requestId={request.id}
-                    assets={processFormData.assets}
-                    employees={processFormData.employees}
-                    orgUnits={processFormData.orgUnits}
-                    locations={processFormData.locations}
-                    defaultEmployeeId={request.requesterEmployeeId}
-                  />
-                )
+                <>
+                  {request.procurementReference && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Diminta ke Procurement{request.procurementRequestedAt ? ` ${formatDateLong(request.procurementRequestedAt)}` : ""}, No. SL: {request.procurementReference}
+                    </p>
+                  )}
+                  {waitingForGoods && <p className="mt-1 text-xs font-medium text-amber-700">{waitingForGoodsText(request.procurementRequestedAt, new Date())}</p>}
+                  {canProcess && !request.assetId && (
+                    <div className="mt-3 space-y-1">
+                      <p className="text-sm font-medium text-slate-900">Perlu beli baru</p>
+                      <p className="text-xs text-slate-500">
+                        Procurement membeli lewat Odoo, di luar SAPA. Tulis No. SL saat meminta ke Procurement agar kita tahu mana yang belum datang. Setelah barang datang, daftarkan sebagai aset baru.
+                      </p>
+                      <ProcurementSlForm requestId={request.id} currentSl={request.procurementReference} />
+                      {waitingForGoods && (
+                        <Link
+                          href={`/assets?dariPermintaan=${request.id}`}
+                          className="mt-2 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                        >
+                          Buat aset baru dari permintaan ini
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                  {request.assetId && request.asset && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Aset baru {request.asset.assetName} ({request.asset.assetCode}) sudah dibuat dari permintaan ini. Serahkan ke penerima di bawah.
+                    </p>
+                  )}
+                  {canProcess && processFormData && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium text-slate-900">{request.assetId ? "Serahkan aset" : "Ada stok, alokasikan aset yang tersedia"}</p>
+                      <ProcessForm
+                        requestId={request.id}
+                        assets={processFormData.assets}
+                        employees={processFormData.employees}
+                        orgUnits={processFormData.orgUnits}
+                        locations={processFormData.locations}
+                        defaultEmployeeId={request.requesterEmployeeId}
+                        defaultAssetId={request.assetId}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

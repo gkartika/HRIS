@@ -3192,11 +3192,14 @@ model GaRequest {
   decisionByAccountId  String?
   decisionByAccount    Account?  @relation("GaRequestDecidedBy", fields: [decisionByAccountId], references: [id])
   decisionNote         String?
-  // Exactly one of these two is set once PROCESSED — "Allocate available
-  // asset or record procurement reference" (PDF). Plain informational
-  // pointer (no Prisma relation), same convention as
-  // AssetCustody.transferredToCustodyId already uses in this schema.
-  procurementReference String?
+  // New-asset need: the SL number written down when Procurement is asked (they buy through
+  // Odoo, outside SAPA) and when it was written. "Waiting for goods" = SL set, no asset yet
+  // (assetId stays empty until the asset is made from the request). Older PROCESSED rows may
+  // hold a procurement reference typed under the previous flow.
+  procurementReference   String?
+  procurementRequestedAt DateTime?
+  // The custody made when the asset is handed over. Plain informational pointer (no Prisma
+  // relation), same convention as AssetCustody.transferredToCustodyId.
   resultingCustodyId   String?
   processedAt          DateTime?
   processedByAccountId String?

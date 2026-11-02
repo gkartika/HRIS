@@ -10,6 +10,7 @@ import { prisma } from "@/lib/db";
 import { t } from "@/lib/i18n/id";
 import { EmptyState } from "@/components/empty-state";
 import type { Prisma, GaRequestStatus, GaRequestType } from "@/generated/prisma/client";
+import { isWaitingForGoods, waitingForGoodsText } from "@/lib/ga-operations";
 
 const REQUEST_TYPES: GaRequestType[] = ["NEW_ASSET_NEED", "DAMAGE_OR_ABNORMAL_CONDITION", "LOSS"];
 const REQUEST_STATUSES: GaRequestStatus[] = [
@@ -36,7 +37,7 @@ const TYPE_LABEL: Record<GaRequestType, string> = {
 export default async function GaRequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; requestType?: string; status?: string }>;
+  searchParams: Promise<{ page?: string; requestType?: string; status?: string; menunggu?: string }>;
 }) {
   const session = await requireSession();
   const isGaAdminUser = canManageGaOperations(session);
@@ -46,7 +47,8 @@ export default async function GaRequestsPage({
     return <AccessDenied />;
   }
 
-  const { requestType, status, page: pageRaw } = await searchParams;
+  const { requestType, status, page: pageRaw, menunggu } = await searchParams;
+  const waitingOnly = menunggu === "1" && isGaAdminUser;
 
   // "Requester sees only own requests" — GA Admin sees everything, anyone
   // else sees only what they submitted themselves. Approvers reach a
@@ -54,6 +56,8 @@ export default async function GaRequestsPage({
   const where: Prisma.GaRequestWhereInput = isGaAdminUser ? {} : { requesterEmployeeId: session.user.employeeId ?? "__none__" };
   if (requestType) where.requestType = requestType as GaRequestType;
   if (status) where.status = status as GaRequestStatus;
+  // Asked from Procurement (SL written down) and not yet made into an asset: same rule as isWaitingForGoods.
+  if (waitingOnly) Object.assign(where, { requestType: "NEW_ASSET_NEED", status: "APPROVED", assetId: null, procurementReference: { not: null } });
 
   const { page, skip, take } = pageParams(pageRaw);
   const [total, requests] = await Promise.all([
@@ -69,7 +73,8 @@ export default async function GaRequestsPage({
     orderBy: { submittedAt: "desc" },
   })]);
 
-  const hasFilters = !!(requestType || status);
+  const hasFilters = !!(requestType || status || waitingOnly);
+  const now = new Date();
 
   return (
     <div>
@@ -78,7 +83,7 @@ export default async function GaRequestsPage({
         <div className="flex gap-2">
           {isGaAdminUser && (
             <a
-              href={`/api/ga-requests/export?${new URLSearchParams({ ...(requestType ? { requestType } : {}), ...(status ? { status } : {}) }).toString()}`}
+              href={`/api/ga-requests/export?${new URLSearchParams({ ...(requestType ? { requestType } : {}), ...(status ? { status } : {}), ...(waitingOnly ? { menunggu: "1" } : {}) }).toString()}`}
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               Ekspor
@@ -115,6 +120,15 @@ export default async function GaRequestsPage({
             ))}
           </select>
         </div>
+        {isGaAdminUser && (
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Pengadaan</label>
+            <select name="menunggu" defaultValue={waitingOnly ? "1" : ""} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <option value="">{t("common.allOption")}</option>
+              <option value="1">Menunggu barang dari Procurement</option>
+            </select>
+          </div>
+        )}
         <div className="flex gap-2">
           <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
             {t("common.applyFilter")}
@@ -156,6 +170,11 @@ export default async function GaRequestsPage({
                   <td className="px-4 py-3 text-slate-600">{r.urgency}</td>
                   <td className="px-4 py-3">
                     <StatusChip tone={GA_REQUEST_STATUS_TONE[r.status]}>{GA_REQUEST_STATUS_LABEL[r.status]}</StatusChip>
+                    {isWaitingForGoods(r) && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        {waitingForGoodsText(r.procurementRequestedAt, now)} · SL {r.procurementReference}
+                      </p>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -163,7 +182,7 @@ export default async function GaRequestsPage({
           </table>
         </div>
       )}
-      <Pager page={page} total={total} basePath="/ga-requests" params={{ requestType, status }} />
+      <Pager page={page} total={total} basePath="/ga-requests" params={{ requestType, status, menunggu: waitingOnly ? "1" : undefined }} />
     </div>
   );
 }

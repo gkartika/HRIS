@@ -10,6 +10,7 @@ import { canManageAssets } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { ASSET_CATEGORIES, normalizeAssetCategory } from "@/lib/asset-categories";
 import { parseExitReturnCondition } from "@/lib/offboarding";
+import { canCreateAssetFromRequest } from "@/lib/ga-operations";
 import { createDisposalCaseInternal } from "@/lib/disposal-create";
 import { openRepairForReturnedAsset } from "@/lib/maintenance-create";
 import { savePrivateFile, randomStorageKey } from "@/lib/file-storage";
@@ -56,6 +57,14 @@ export async function createFixedAsset(_prevState: string | undefined, formData:
   const existing = await prisma.fixedAsset.findUnique({ where: { assetCode } });
   if (existing) return `Kode aset "${assetCode}" sudah digunakan.`;
 
+  // "Buat aset baru dari permintaan ini": the asset is made from an approved new-asset need that is
+  // waiting for goods from Procurement, and is tied to that need so it can be handed over.
+  const gaRequestId = (formData.get("gaRequestId") as string)?.trim() || null;
+  const sourceRequest = gaRequestId ? await prisma.gaRequest.findUnique({ where: { id: gaRequestId } }) : null;
+  if (gaRequestId && (!sourceRequest || !canCreateAssetFromRequest(sourceRequest))) {
+    return "Permintaan GA ini sudah tidak menunggu aset baru. Buka lagi dari halaman permintaannya.";
+  }
+
   const asset = await prisma.fixedAsset.create({
     data: {
       assetCode,
@@ -81,6 +90,27 @@ export async function createFixedAsset(_prevState: string | undefined, formData:
     recordId: asset.id,
     reason: `Created asset "${assetName}" (${assetCode})`,
   });
+
+  if (sourceRequest) {
+    // Only the first asset made from the need is tied to it (assetId must still be empty).
+    const linked = await prisma.gaRequest.updateMany({ where: { id: sourceRequest.id, assetId: null }, data: { assetId: asset.id } });
+    if (linked.count > 0) {
+      await logAudit({
+        actorAccountId: session.user.id,
+        action: "UPDATE",
+        datasetName: "GaRequest",
+        recordId: sourceRequest.id,
+        fieldName: "assetId",
+        newValueMasked: assetCode,
+        reason: `${sourceRequest.requestNumber} asset ${assetCode} created from the request, ready to hand over`,
+      });
+    }
+    revalidatePath("/assets");
+    revalidatePath(`/ga-requests/${sourceRequest.id}`);
+    revalidatePath("/ga-requests");
+    revalidatePath("/dashboard");
+    redirect(`/ga-requests/${sourceRequest.id}`);
+  }
 
   revalidatePath("/assets");
   redirect(`/assets/${asset.id}`);

@@ -6,6 +6,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { SignaturePad } from "@/components/signature-pad";
 import { DocumentFileInput } from "@/components/document-file-input";
 import {
+  cancelInterviewAction,
   decideCandidateAction,
   markClosureNotifiedAction,
   recordOfferResponseAction,
@@ -26,7 +27,8 @@ import {
   type TestLinkResult,
 } from "./candidate-actions";
 import { OPEN_FOR_LABEL } from "@/lib/recruitment-candidates";
-import type { RecruitmentInterviewDecision, RecruitmentOpenFor } from "@/generated/prisma/enums";
+import { CANCEL_KIND_HINT, CANCEL_KIND_LABEL, CANCEL_QUICK_REASONS } from "@/lib/interview-cancel";
+import type { InterviewCancelKind, RecruitmentInterviewDecision, RecruitmentOpenFor } from "@/generated/prisma/enums";
 
 const input = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const label = "mb-1 block text-xs text-slate-500";
@@ -685,6 +687,94 @@ export function EndProcessForm({ candidateId }: { candidateId: string }) {
         </button>
         <button type="button" onClick={() => setOpen(false)} className={ghost}>
           Batal
+        </button>
+        {error && <span className="text-xs text-rose-600">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---------- the applicant will not come to the interview ----------
+
+// Admin Rekrutmen records that the applicant said (WhatsApp, phone) they will not come, or did not show up. The interview
+// is cancelled, the applicant ends as Mengundurkan diri and the interviewers are told.
+export function CancelInterviewPanel({ candidateId, interviewers, interviewTimePassed, requestNumber }: { candidateId: string; interviewers: number; interviewTimePassed: boolean; requestNumber: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<InterviewCancelKind>(interviewTimePassed ? "NO_SHOW" : "WITHDREW");
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, run] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50">
+        Pelamar tidak datang...
+      </button>
+    );
+  }
+  function submit() {
+    setError(null);
+    const data = new FormData();
+    data.set("kind", kind);
+    data.set("reason", reason);
+    data.set("note", note);
+    run(async () => {
+      const result = await cancelInterviewAction(candidateId, data);
+      if (result.error) setError(result.error);
+      else router.refresh();
+    });
+  }
+  const choice = (value: InterviewCancelKind, disabled: boolean) => (
+    <label className={`block rounded-lg border p-3 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${kind === value ? "border-rose-500 bg-white ring-1 ring-rose-500" : "border-slate-200 bg-white"}`}>
+      <input type="radio" name="cancel-kind" checked={kind === value} disabled={disabled} onChange={() => setKind(value)} className="sr-only" />
+      <span className="text-sm font-medium text-slate-900">{CANCEL_KIND_LABEL[value]}</span>
+      <span className="block text-xs text-slate-500">{disabled ? "Baru bisa dipilih setelah jam interview lewat." : CANCEL_KIND_HINT[value]}</span>
+    </label>
+  );
+  return (
+    <div className="space-y-4 rounded-xl border border-rose-200 bg-rose-50/40 p-4">
+      <p className="text-sm font-semibold text-slate-900">Catat bahwa pelamar tidak akan datang</p>
+      <div>
+        <p className="text-xs font-medium text-slate-600">Apa yang pelamar sampaikan?</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {choice("WITHDREW", false)}
+          {choice("NO_SHOW", !interviewTimePassed)}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-slate-600">Alasan (pilih satu atau tulis sendiri di catatan)</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {CANCEL_QUICK_REASONS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setReason(reason === r ? "" : r)}
+              className={`rounded-full border px-3 py-1 text-xs ${reason === r ? "border-rose-500 bg-white font-medium text-rose-700 ring-1 ring-rose-500" : "border-slate-300 bg-white text-slate-700"}`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <label className={`${label} mt-2`} htmlFor="cancel-note">Catatan (wajib)</label>
+        <textarea id="cancel-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Misalnya: pelamar mengabari lewat WhatsApp tanggal 3 Nov" className={input} />
+      </div>
+      <div className="rounded-lg bg-white p-3 text-sm text-slate-700">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Yang akan terjadi</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-5">
+          <li>Status pelamar menjadi <b>Mengundurkan diri</b> (tanpa masa tunggu, boleh melamar lagi).</li>
+          <li>Jadwal interview ditandai <b>Dibatalkan</b>, hilang dari daftar interview dan tugas pewawancara.</li>
+          <li><b>{interviewers} pewawancara</b> diberi email dan keterangan di SAPA.</li>
+          <li>Lowongan {requestNumber} tetap berjalan, pelamar lain tidak terpengaruh.</li>
+        </ul>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={pending} onClick={submit} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60">
+          {pending ? "Menyimpan..." : "Catat dan batalkan interview"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className={ghost}>
+          Kembali
         </button>
         {error && <span className="text-xs text-rose-600">{error}</span>}
       </div>

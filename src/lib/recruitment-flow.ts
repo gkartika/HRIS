@@ -11,9 +11,11 @@ import { nextStatusAfterFulfillment, computeFulfillmentCounts } from "@/lib/recr
 import { HELD_MESSAGE } from "@/lib/recruitment-request-changes";
 import { fillTemplate, isValidSignatureDataUrl, fileExtension, validateOfferFile, REQUEST_FILLED_REASON } from "@/lib/recruitment-candidates";
 import { isMovementRequestOpen } from "@/lib/movement";
+import { cancelEmail, cancelProblem, closeReasonText } from "@/lib/interview-cancel";
 import { FULFILLABLE_STATUSES, getRecruitmentSettings, refreshCandidateStatus, setCandidateStatus, type EngineResult } from "@/lib/recruitment-service";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
+  InterviewCancelKind,
   RecruitmentInterviewDecision,
   RecruitmentInterviewMode,
   RecruitmentOfferResponse,
@@ -249,6 +251,7 @@ export async function submitInterviewerForm(args: {
   if (!interviewer || interviewer.employeeId !== args.employeeId) return { ok: false, error: "Anda tidak ditunjuk untuk interview ini." };
   if (interviewer.submittedAt) return { ok: false, error: "Penilaian Anda sudah terkirim dan tidak bisa diubah." };
   const candidate = interviewer.interview.candidate;
+  if (interviewer.interview.cancelledAt) return { ok: false, error: "Interview ini dibatalkan karena pelamar tidak datang. Tidak perlu mengisi penilaian." };
   if (candidate.status !== "INTERVIEWING" || candidate.interviewDecision) return { ok: false, error: "Interview ini sudah selesai." };
 
   const aspects = await prisma.recruitmentInterviewAspect.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } });
@@ -357,6 +360,61 @@ export async function rejectCandidate(candidateId: string, reason: string, kind:
     await cancelMovementOfCandidates(tx, [candidateId], text, accountId);
   });
   return { ok: true };
+}
+
+// The applicant told Admin Rekrutmen they will not come (or did not show up): the interview is marked cancelled (the row
+// stays), the applicant ends as WITHDRAWN (no waiting period) and the interviewers are told.
+export async function cancelInterviewByCandidate(args: {
+  candidateId: string;
+  kind: string;
+  reason: string | null;
+  note: string;
+  accountId: string;
+}): Promise<EngineResult & { interviewersEmailed?: number; interviewers?: number }> {
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { id: args.candidateId },
+    include: {
+      request: { select: { job: { select: { jobTitle: true } } } },
+      interview: { include: { interviewers: { select: { employeeId: true, submittedAt: true } } } },
+    },
+  });
+  if (!candidate) return { ok: false, error: "Pelamar tidak ditemukan." };
+  const interview = candidate.interview;
+  const problem = cancelProblem(
+    {
+      candidateStatus: candidate.status,
+      interviewDecision: candidate.interviewDecision,
+      hasInterview: !!interview,
+      alreadyCancelled: !!interview?.cancelledAt,
+      submittedInterviewers: interview?.interviewers.filter((i) => i.submittedAt).length ?? 0,
+    },
+    { kind: args.kind, note: args.note },
+    interview?.scheduledAt ?? null,
+    new Date()
+  );
+  if (problem || !interview) return { ok: false, error: problem ?? "Pelamar ini belum punya jadwal interview." };
+
+  const kind = args.kind as InterviewCancelKind;
+  const reason = args.reason?.trim() || null;
+  const note = args.note.trim();
+  const closeReason = closeReasonText(kind, reason, note);
+  await prisma.$transaction(async (tx) => {
+    await tx.recruitmentInterview.update({
+      where: { id: interview.id },
+      data: { cancelledAt: new Date(), cancelledByAccountId: args.accountId, cancelKind: kind, cancelReason: reason, cancelNote: note },
+    });
+    await setCandidateStatus(tx, candidate.id, "WITHDRAWN", { closeReason });
+    await tx.recruitmentOffer.updateMany({ where: { candidateId: candidate.id, response: null }, data: { tokenHash: null } });
+    await cancelMovementOfCandidates(tx, [candidate.id], closeReason, args.accountId);
+  });
+
+  const vars = interviewMessageVars({ fullName: candidate.fullName, positionTitle: candidate.request.job?.jobTitle ?? "posisi yang dilamar", scheduledAt: interview.scheduledAt, location: interview.location });
+  const mail = cancelEmail({ candidateName: candidate.fullName, positionTitle: vars.posisi, tanggal: vars.tanggal, jam: vars.jam, kind });
+  let interviewersEmailed = 0;
+  for (const i of interview.interviewers) {
+    if (await mailEmployee(i.employeeId, mail.subject, mail.text)) interviewersEmailed++;
+  }
+  return { ok: true, interviewersEmailed, interviewers: interview.interviewers.length };
 }
 
 // ---------- offering letter ----------

@@ -5,6 +5,7 @@ import { StatusChip } from "@/components/status-chip";
 import { prisma } from "@/lib/db";
 import { formatDateTimeMedium } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
+import { cancelledLabel } from "@/lib/interview-cancel";
 import { DECISION_LABEL, DECISION_TONE } from "@/lib/recruitment-candidates";
 import { testSummary } from "@/lib/recruitment-queries";
 import { InterviewerForm } from "../../task-forms";
@@ -88,7 +89,14 @@ export default async function InterviewerPage({ params }: { params: Promise<{ in
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-5">
-        {open ? (
+        {interview.cancelledAt ? (
+          <div className="space-y-1 text-sm">
+            <p className="font-medium text-slate-900">
+              Interview dibatalkan <StatusChip tone="bg-rose-50 text-rose-700">{cancelledLabel(interview.cancelKind)}</StatusChip>
+            </p>
+            <p className="text-slate-600">Dicatat {formatDateTimeMedium(interview.cancelledAt)} WIB. Anda tidak perlu mengisi penilaian.</p>
+          </div>
+        ) : open ? (
           <InterviewerForm interviewerId={mine.id} aspects={aspects} />
         ) : mine.submittedAt ? (
           <div className="space-y-3 text-sm">

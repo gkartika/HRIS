@@ -4,6 +4,7 @@ import { StatusChip } from "@/components/status-chip";
 import { prisma } from "@/lib/db";
 import { formatDateTimeMedium } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
+import { cancelledLabel, cancelNoticeVisible } from "@/lib/interview-cancel";
 
 export default async function RecruitmentTasksPage() {
   const session = await requireSession();
@@ -39,6 +40,8 @@ export default async function RecruitmentTasksPage() {
             id: true,
             scheduledAt: true,
             location: true,
+            cancelledAt: true,
+            cancelKind: true,
             candidate: { select: { fullName: true, status: true, interviewDecision: true, request: { select: { job: { select: { jobTitle: true } } } } } },
           },
         },
@@ -48,9 +51,12 @@ export default async function RecruitmentTasksPage() {
 
   const pendingReviews = reviews.filter((r) => r.candidateTest.status === "SUBMITTED" && r.candidateTest.passed === null);
   const doneReviews = reviews.filter((r) => !(r.candidateTest.status === "SUBMITTED" && r.candidateTest.passed === null));
-  const isOpenInterview = (i: (typeof interviews)[number]) => !i.submittedAt && i.interview.candidate.status === "INTERVIEWING" && !i.interview.candidate.interviewDecision;
+  const now = new Date();
+  const isOpenInterview = (i: (typeof interviews)[number]) => !i.interview.cancelledAt && !i.submittedAt && i.interview.candidate.status === "INTERVIEWING" && !i.interview.candidate.interviewDecision;
   const pendingInterviews = interviews.filter(isOpenInterview);
-  const doneInterviews = interviews.filter((i) => !isOpenInterview(i));
+  // A cancelled interview (the applicant will not come) stays visible for a week, with the reason, then disappears.
+  const cancelledInterviews = interviews.filter((i) => cancelNoticeVisible(i.interview.cancelledAt, now));
+  const doneInterviews = interviews.filter((i) => !isOpenInterview(i) && !i.interview.cancelledAt);
 
   return (
     <div className="space-y-6">
@@ -91,6 +97,25 @@ export default async function RecruitmentTasksPage() {
           {pendingReviews.length + pendingInterviews.length === 0 && <p className="py-3 text-sm text-slate-400">Tidak ada tugas yang menunggu.</p>}
         </div>
       </section>
+
+      {cancelledInterviews.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="text-sm font-medium text-slate-900">Interview dibatalkan</h2>
+          <div className="mt-2 divide-y divide-slate-100">
+            {cancelledInterviews.map((i) => (
+              <div key={i.id} className="py-2.5 text-sm opacity-70">
+                <p className="font-medium text-slate-900">
+                  <s>Interview {i.interview.candidate.fullName}</s>{" "}
+                  <StatusChip tone="bg-rose-50 text-rose-700">Dibatalkan</StatusChip>
+                </p>
+                <p className="text-xs text-slate-500">
+                  {cancelledLabel(i.interview.cancelKind)} · {formatDateTimeMedium(i.interview.scheduledAt)} WIB. Anda tidak perlu mengisi penilaian.
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {(doneReviews.length > 0 || doneInterviews.length > 0) && (
         <section className="rounded-xl border border-slate-200 bg-white p-5">

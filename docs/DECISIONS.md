@@ -2940,3 +2940,10 @@ Owner supplied the master data (folder GPT-module: question bank JSON, HR rubric
 - **Payment:** BPJS Kesehatan and Ketenagakerjaan on the 8th, two rows, shown from the 5th, red after the 8th until marked; last month's unmarked rows stay.
 - **Go-live rule:** a task whose deadline is before 2026-11-01 is not shown (`BPJS_REMINDERS_FROM`), so nothing old turns red on day one. Registered status is NOT read from `bpjsEmploymentNumber` (nobody has one filled); only the Sudah mark counts.
 - **Data:** migration 20261103090000, one table `BpjsTaskDone` (taskKey unique: kind + employee/case id or month, who, when). Rules are pure in `src/lib/bpjs-reminders.ts` with tests.
+
+### Applicant will not come to the interview (2026-11-02)
+- **Who and how:** Admin Rekrutmen records it on the applicant page (button "Pelamar tidak datang..." in the Interview section) after the applicant tells them by WhatsApp or phone, or after a no-show. Two kinds: Mengundurkan diri (`WITHDREW`) and Tidak datang tanpa kabar (`NO_SHOW`, only once the interview time has passed); quick-pick reasons plus a required note.
+- **Result:** the applicant ends as WITHDRAWN (no waiting period, may apply again; the close reason keeps the story); the interview row is kept and marked cancelled (`cancelledAt`, `cancelledByAccountId`, `cancelKind`, `cancelReason`, `cancelNote`); the applicant's open offer link and any open Perubahan Posisi end; every interviewer gets an e-mail "Interview dibatalkan (SAPA)". The vacancy and other applicants are not affected.
+- **Interviewers:** the cancelled interview shows on Tugas Rekrutmen under "Interview dibatalkan" for 7 days, the interview page shows a cancelled notice, and a penilaian can no longer be submitted. It drops out of "Interview 7 hari" and the Beranda to-dos because those already require status INTERVIEWING.
+- **Only before any penilaian:** once an interviewer has submitted, the button is hidden and "Akhiri proses pelamar ini" stays the way to end the applicant.
+- **Data:** migration 20261103120000 (one enum, five nullable columns on RecruitmentInterview). Rules, wording and e-mail text in `src/lib/interview-cancel.ts` with tests.

@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageRecruitment } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
 import {
+  cancelInterviewByCandidate,
   createOffer,
   decideCandidate,
   markClosureNotified,
@@ -222,6 +223,36 @@ export async function rejectCandidateAction(candidateId: string, _prev: Result, 
   });
   const requestId = await requestIdOf(candidateId);
   if (requestId) refresh(requestId, candidateId);
+}
+
+// The applicant said they will not come to the interview (or did not show up). Result: an error text, or a short
+// message about what happened (how many interviewers were told).
+export type CancelInterviewResult = { error?: string; message?: string };
+
+export async function cancelInterviewAction(candidateId: string, formData: FormData): Promise<CancelInterviewResult> {
+  const auth = await hrAdminOr();
+  if ("error" in auth) return { error: auth.error };
+  const kind = (formData.get("kind") as string) ?? "";
+  const res = await cancelInterviewByCandidate({
+    candidateId,
+    kind,
+    reason: ((formData.get("reason") as string) ?? "").slice(0, 200),
+    note: ((formData.get("note") as string) ?? "").slice(0, 1000),
+    accountId: auth.session.user.id,
+  });
+  if (!res.ok) return { error: res.error };
+  await logAudit({
+    actorAccountId: auth.session.user.id,
+    action: "UPDATE",
+    datasetName: "RecruitmentInterview",
+    recordId: candidateId,
+    reason: `Interview cancelled, applicant ${kind === "NO_SHOW" ? "did not show up" : "withdrew"} (applicant ended as WITHDRAWN); ${res.interviewersEmailed}/${res.interviewers} interviewers emailed`,
+  });
+  const requestId = await requestIdOf(candidateId);
+  if (requestId) refresh(requestId, candidateId);
+  revalidatePath("/recruitment/tasks");
+  revalidatePath("/dashboard");
+  return { message: `Interview dibatalkan. ${res.interviewers} pewawancara diberi tahu${res.interviewers ? ` (${res.interviewersEmailed} email terkirim)` : ""}.` };
 }
 
 // ---------- the applicant's test link and a second try ----------

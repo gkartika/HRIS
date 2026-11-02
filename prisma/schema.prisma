@@ -3694,11 +3694,23 @@ model RecruitmentInterview {
   hrAttendanceNote   String?
   hrDocumentsNote    String?
   hrProcessNote      String?
+  // Set by Admin Rekrutmen when the applicant says they will not come (or does not show up). The row stays for the history;
+  // the applicant ends as WITHDRAWN.
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelKind           InterviewCancelKind?
+  cancelReason         String?
+  cancelNote           String?
   createdByAccountId String
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
 
   interviewers RecruitmentInterviewer[]
+}
+
+enum InterviewCancelKind {
+  WITHDREW // the applicant withdrew before the interview
+  NO_SHOW // the interview time passed and the applicant did not come
 }
 
 model RecruitmentInterviewer {

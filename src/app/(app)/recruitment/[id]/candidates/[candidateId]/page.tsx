@@ -25,11 +25,13 @@ import {
 import { progressOf } from "@/lib/recruitment-queries";
 import { getRecruitmentSettings } from "@/lib/recruitment-service";
 import { listSelectableStaff } from "@/lib/recruitment-flow";
+import { canCancelInterview, CANCEL_KIND_LABEL, cancelledLabel } from "@/lib/interview-cancel";
 import { ExecuteMovementButton } from "./execute-movement-button";
 import { ExecuteAddPositionForm } from "../../../../movements/[id]/decision-forms";
 import { listMovementSeatChoices } from "@/lib/movement-seats";
 import { t } from "@/lib/i18n/id";
 import {
+  CancelInterviewPanel,
   DecisionForm,
   EndProcessForm,
   HrNotesForm,
@@ -124,6 +126,14 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
     ? { ...wibParts(interview.scheduledAt), mode: interview.mode, location: interview.location, employeeIds: interview.interviewers.map((i) => i.employeeId) }
     : null;
   const canSchedule = candidate.status === "TEST_PASSED" || (candidate.status === "INTERVIEWING" && !candidate.interviewDecision);
+  const interviewCancelled = !!interview?.cancelledAt;
+  const canCancelInterviewNow = canCancelInterview({
+    candidateStatus: candidate.status,
+    interviewDecision: candidate.interviewDecision,
+    hasInterview: !!interview,
+    alreadyCancelled: interviewCancelled,
+    submittedInterviewers: submittedInterviewers.length,
+  });
   const canDecide = candidate.status === "INTERVIEWING" && !candidate.interviewDecision && submittedInterviewers.length > 0;
   // Tautan tes and a second try for a test whose time ran out (the server checks the same rules again).
   const inTestPhase = ["TESTING", "AWAITING_REVIEW", "TEST_PASSED", "TEST_FAILED"].includes(candidate.status);
@@ -365,6 +375,30 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
 
       {(canSchedule || interview) && (
         <Section title="Interview" hint="HR Admin menunjuk pewawancara. Tiap pewawancara mengisi penilaiannya sendiri dari akun masing-masing.">
+          {interviewCancelled && interview && (
+            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-medium text-slate-900">Interview dibatalkan: {cancelledLabel(interview.cancelKind).toLowerCase()}</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Dicatat {formatDateTimeMedium(interview.cancelledAt)} WIB · {interview.cancelKind ? CANCEL_KIND_LABEL[interview.cancelKind] : ""}
+                {interview.cancelReason ? ` · ${interview.cancelReason}` : ""}
+              </p>
+              {interview.cancelNote && <p className="mt-1 text-xs text-slate-600">{interview.cancelNote}</p>}
+              <p className="mt-2 text-xs text-slate-400">
+                <s>{formatDateTimeMedium(interview.scheduledAt)} WIB · {interview.mode === "ONLINE" ? "Online" : "Offline"} · {interview.location}</s>
+                {" "}· pewawancara dikabari: {interview.interviewers.map((i) => i.employee.fullLegalName).join(", ")}
+              </p>
+            </div>
+          )}
+          {canCancelInterviewNow && interview && (
+            <div className="mb-4">
+              <CancelInterviewPanel
+                candidateId={candidate.id}
+                interviewers={interview.interviewers.length}
+                interviewTimePassed={interview.scheduledAt.getTime() <= new Date().getTime()}
+                requestNumber={candidate.request.requestNumber}
+              />
+            </div>
+          )}
           {canSchedule && (
             <ScheduleInterviewForm
               candidateId={candidate.id}
@@ -374,18 +408,18 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
               existing={interviewDefaults}
             />
           )}
-          {interview && !canSchedule && (
+          {interview && !canSchedule && !interviewCancelled && (
             <p className="text-sm text-slate-700">
               {formatDateTimeMedium(interview.scheduledAt)} WIB · {interview.mode === "ONLINE" ? "Online" : "Offline"} · {interview.location}
             </p>
           )}
-          {interview && (
+          {interview && !interviewCancelled && (
             <p className="mt-2 text-xs text-slate-500">
               {interview.invitationSentAt ? `Email undangan ke pelamar terkirim ${formatDateTimeMedium(interview.invitationSentAt)}.` : "Email undangan ke pelamar belum terkirim. Kirim lewat WhatsApp atau simpan jadwal lagi."}
             </p>
           )}
 
-          {interview && (
+          {interview && !interviewCancelled && (
             <div className="mt-5">
               <h3 className="text-sm font-medium text-slate-900">Penilaian pewawancara</h3>
               <div className="mt-2 overflow-x-auto">

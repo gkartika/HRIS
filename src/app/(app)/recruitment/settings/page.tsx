@@ -11,6 +11,8 @@ import {
   deleteAspectAction,
   deleteTestTypeAction,
   saveAspectAction,
+  saveAspectStandardAction,
+  saveStandardHeaderAction,
   saveRecruitmentSettingsAction,
   saveTestTypeAction,
 } from "./actions";
@@ -288,7 +290,7 @@ async function JobTestsTab({ q }: { q: string }) {
 
 async function InterviewTab() {
   const [aspects, settings] = await Promise.all([
-    prisma.recruitmentInterviewAspect.findMany({ orderBy: { sortOrder: "asc" }, include: { _count: { select: { scores: true, hrScores: true } } } }),
+    prisma.recruitmentInterviewAspect.findMany({ orderBy: { sortOrder: "asc" }, include: { _count: { select: { scores: true, hrScores: true } }, levels: true, standardOf: { select: { label: true } } } }),
     getRecruitmentSettings(),
   ]);
   const group = (audience: "USER" | "HR", title: string, hint: string) => (
@@ -318,6 +320,39 @@ async function InterviewTab() {
                   Boleh dikosongkan
                 </label>
               </ActionForm>
+              {a.active && (
+                <details className="mt-2 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-medium text-indigo-700">
+                    Standar penilaian{a.standardOf ? " (sama dengan aspek user)" : a.levels.length > 0 || a.definition ? "" : " (belum diisi)"}
+                  </summary>
+                  {a.standardOf ? (
+                    <p className="mt-2 text-xs text-slate-500">Form HR memakai standar aspek &quot;{a.standardOf.label}&quot; dari daftar user, supaya cukup diisi sekali. Ubah standarnya di aspek itu.</p>
+                  ) : (
+                    <div className="mt-3">
+                      <ActionForm action={saveAspectStandardAction.bind(null, a.id)} submitLabel="Simpan standar">
+                        <div>
+                          <label className={lab} htmlFor={`sd-${a.id}`}>Definisi</label>
+                          <textarea id={`sd-${a.id}`} name="definition" rows={2} defaultValue={a.definition ?? ""} className={field} />
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {[2, 4, 6, 8, 10].map((n) => (
+                            <div key={n}>
+                              <label className={lab} htmlFor={`sl-${a.id}-${n}`}>
+                                Nilai {n} · {n === 2 ? "Sangat kurang" : n === 4 ? "Kurang" : n === 6 ? "Cukup" : n === 8 ? "Baik" : "Sangat baik"}
+                              </label>
+                              <textarea id={`sl-${a.id}-${n}`} name={`level_${n}`} rows={4} defaultValue={a.levels.find((l) => l.score === n)?.description ?? ""} className={field} />
+                            </div>
+                          ))}
+                          <div>
+                            <label className={lab} htmlFor={`sn-${a.id}`}>Catatan khusus aspek ini (opsional)</label>
+                            <textarea id={`sn-${a.id}`} name="note" rows={4} defaultValue={a.note ?? ""} placeholder="mis. skor berdasarkan 5 nilai budaya CBP" className={field} />
+                          </div>
+                        </div>
+                      </ActionForm>
+                    </div>
+                  )}
+                </details>
+              )}
               <div className="mt-1">
                 <ConfirmAction label="Hapus" confirmLabel="Ya, hapus aspek" action={deleteAspectAction.bind(null, a.id)} />
                 {a._count.scores + a._count.hrScores > 0 && <span className="ml-2 text-[11px] text-slate-400">Sudah dipakai {a._count.scores + a._count.hrScores} penilaian, nonaktifkan saja.</span>}
@@ -342,6 +377,34 @@ async function InterviewTab() {
   );
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="text-sm font-medium text-slate-900">Dokumen standar penilaian</h2>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Standar tiap aspek (arti nilai 2, 4, 6, 8, 10) tampil di form penilaian. Isinya diubah di tiap aspek di bawah. Pewawancara dan Admin Rekrutmen juga bisa membukanya sebagai halaman untuk dicetak:{" "}
+          <Link href="/recruitment/standar-penilaian" className="font-medium text-indigo-600 hover:underline">
+            Standar penilaian interview
+          </Link>
+          .
+        </p>
+        <div className="mt-3">
+          <ActionForm action={saveStandardHeaderAction} submitLabel="Simpan">
+            <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
+              <div>
+                <label className={lab} htmlFor="st-doc">No. Dokumen</label>
+                <input id="st-doc" name="docNumber" defaultValue={settings.standardDocNumber ?? ""} className={field} />
+              </div>
+              <div>
+                <label className={lab} htmlFor="st-rev">No. Revisi</label>
+                <input id="st-rev" name="revision" defaultValue={settings.standardRevision ?? ""} className={field} />
+              </div>
+              <div>
+                <label className={lab} htmlFor="st-eff">Tgl Berlaku</label>
+                <input id="st-eff" name="effectiveDate" defaultValue={settings.standardEffectiveDate ?? ""} placeholder="mis. 1 Desember 2026" className={field} />
+              </div>
+            </div>
+          </ActionForm>
+        </div>
+      </div>
       {group("USER", "Aspek penilaian interview user", "Dinilai pewawancara user. Nilainya 2 (sangat kurang), 4, 6, 8, sampai 10 (sangat baik) untuk setiap aspek aktif; aspek yang boleh dikosongkan (mis. Tes Lapangan) tidak ikut rata-rata kalau kosong. Mengubah nama tidak mengubah penilaian yang sudah masuk.")}
       {group("HR", "Aspek penilaian interview HR", "Dinilai Admin Rekrutmen pada interview HR, dengan nilai yang sama. Aspek yang sudah dipakai tidak bisa dihapus, cukup dinonaktifkan.")}
 

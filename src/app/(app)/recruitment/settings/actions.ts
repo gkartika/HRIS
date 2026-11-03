@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/require-session";
 import { canManageRecruitment } from "@/lib/permissions";
 import { t } from "@/lib/i18n/id";
 import { MAX_OPTIONS, parseBulkQuestions, TEMPLATE_PLACEHOLDERS } from "@/lib/recruitment-candidates";
+import { levelsFromForm, standardProblem } from "@/lib/interview-standard";
 import type { RecruitmentTestForm } from "@/generated/prisma/enums";
 
 type Result = string | undefined;
@@ -198,11 +199,51 @@ export async function saveAspectAction(aspectId: string | null, audience: "USER"
   done();
 }
 
+// The standard shown to the scorer: what the aspect means, a note for this aspect, and what 2, 4, 6, 8 and 10 each mean.
+// An aspect that shares its standard (the HR copy of a user aspect) is changed through the aspect it shares with.
+export async function saveAspectStandardAction(aspectId: string, _prev: Result, formData: FormData): Promise<Result> {
+  const auth = await adminId();
+  if ("error" in auth) return auth.error;
+  const aspect = await prisma.recruitmentInterviewAspect.findUnique({ where: { id: aspectId }, select: { label: true, standardOfId: true } });
+  if (!aspect) return "Aspek tidak ditemukan.";
+  if (aspect.standardOfId) return "Aspek ini memakai standar aspek lain. Ubah standarnya di aspek itu.";
+  const definition = ((formData.get("definition") as string) ?? "").trim();
+  const note = ((formData.get("note") as string) ?? "").trim();
+  const levels = levelsFromForm((score) => ((formData.get(`level_${score}`) as string) ?? ""));
+  const problem = standardProblem({ definition, note, levels });
+  if (problem) return problem;
+  await prisma.$transaction([
+    prisma.recruitmentInterviewAspect.update({ where: { id: aspectId }, data: { definition: definition || null, note: note || null } }),
+    prisma.recruitmentAspectLevel.deleteMany({ where: { aspectId } }),
+    prisma.recruitmentAspectLevel.createMany({ data: levels.map((l) => ({ aspectId, score: l.score, description: l.description })) }),
+  ]);
+  await logAudit({ actorAccountId: auth.id, action: "UPDATE", datasetName: "RecruitmentInterviewAspect", recordId: aspectId, reason: `Standard of "${aspect.label}" changed (${levels.length} score texts)` });
+  revalidatePath("/recruitment/standar-penilaian");
+  done();
+}
+
+// No. Dokumen, No. Revisi and Tgl Berlaku of the standard document.
+export async function saveStandardHeaderAction(_prev: Result, formData: FormData): Promise<Result> {
+  const auth = await adminId();
+  if ("error" in auth) return auth.error;
+  const field = (name: string) => (((formData.get(name) as string) ?? "").trim().slice(0, 80) || null);
+  const data = { standardDocNumber: field("docNumber"), standardRevision: field("revision"), standardEffectiveDate: field("effectiveDate") };
+  await prisma.recruitmentSetting.upsert({ where: { id: "default" }, update: data, create: { id: "default", ...data } });
+  await logAudit({ actorAccountId: auth.id, action: "UPDATE", datasetName: "RecruitmentSetting", recordId: "default", reason: "Header of the interview standard changed" });
+  revalidatePath("/recruitment/standar-penilaian");
+  done();
+}
+
 export async function deleteAspectAction(aspectId: string): Promise<Result> {
   const auth = await adminId();
   if ("error" in auth) return auth.error;
-  const [used, usedByHr] = await Promise.all([prisma.recruitmentInterviewScore.count({ where: { aspectId } }), prisma.recruitmentHrScore.count({ where: { aspectId } })]);
+  const [used, usedByHr, shared] = await Promise.all([
+    prisma.recruitmentInterviewScore.count({ where: { aspectId } }),
+    prisma.recruitmentHrScore.count({ where: { aspectId } }),
+    prisma.recruitmentInterviewAspect.count({ where: { standardOfId: aspectId } }),
+  ]);
   if (used + usedByHr > 0) return "Aspek ini sudah dipakai menilai pelamar. Nonaktifkan saja.";
+  if (shared > 0) return "Standar aspek ini dipakai aspek lain (form HR). Nonaktifkan saja.";
   await prisma.recruitmentInterviewAspect.delete({ where: { id: aspectId } });
   await logAudit({ actorAccountId: auth.id, action: "DELETE", datasetName: "RecruitmentInterviewAspect", recordId: aspectId });
   done();

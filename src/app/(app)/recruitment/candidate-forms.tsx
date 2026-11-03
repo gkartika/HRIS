@@ -31,6 +31,7 @@ import {
 } from "./candidate-actions";
 import { OPEN_FOR_LABEL } from "@/lib/recruitment-candidates";
 import { ScoreMatrix, type MatrixAspectInfo } from "./score-matrix";
+import type { GuideData } from "@/lib/interview-standard-queries";
 import { CANCEL_KIND_HINT, CANCEL_KIND_LABEL, CANCEL_QUICK_REASONS } from "@/lib/interview-cancel";
 import type { InterviewCancelKind, RecruitmentInterviewDecision, RecruitmentOpenFor } from "@/generated/prisma/enums";
 
@@ -1014,10 +1015,12 @@ export function ScheduleHrInterviewForm({ candidateId, existing }: { candidateId
 export function HrInterviewForm({
   candidateId,
   aspects,
+  guide,
   userInterview,
 }: {
   candidateId: string;
   aspects: MatrixAspectInfo[];
+  guide?: GuideData | null;
   userInterview: { when: string; interviewers: number } | null;
 }) {
   const router = useRouter();
@@ -1040,7 +1043,7 @@ export function HrInterviewForm({
       className="space-y-4"
     >
       <p className={label}>Nilai tiap aspek: 2 (sangat kurang) sampai 10 (sangat baik)</p>
-      <ScoreMatrix aspects={aspects} scores={scores} onChange={setScores} />
+      <ScoreMatrix aspects={aspects} scores={scores} onChange={setScores} guide={guide} />
 
       <fieldset>
         <legend className={label}>Rekomendasi HR</legend>

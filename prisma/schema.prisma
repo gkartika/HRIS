@@ -3555,9 +3555,29 @@ model RecruitmentInterviewAspect {
   active    Boolean                   @default(true)
   audience  RecruitmentAspectAudience @default(USER)
   optional  Boolean                   @default(false)
+  // The standard shown to the scorer (from the "Matriks Penilaian Hasil Wawancara"): what the aspect means, a note for
+  // this aspect, and what 2, 4, 6, 8 and 10 each mean (RecruitmentAspectLevel). An aspect with standardOfId set (the HR
+  // copy of a user aspect) uses the standard of that aspect, so it is written once.
+  definition   String?
+  note         String?
+  standardOfId String?
+  standardOf   RecruitmentInterviewAspect?  @relation("AspectStandard", fields: [standardOfId], references: [id], onDelete: Restrict)
+  sharedBy     RecruitmentInterviewAspect[] @relation("AspectStandard")
+  levels       RecruitmentAspectLevel[]
 
   scores   RecruitmentInterviewScore[]
   hrScores RecruitmentHrScore[]
+}
+
+// What one score (2, 4, 6, 8 or 10) means for one aspect.
+model RecruitmentAspectLevel {
+  id          String                     @id @default(cuid())
+  aspectId    String
+  aspect      RecruitmentInterviewAspect @relation(fields: [aspectId], references: [id], onDelete: Cascade)
+  score       Int
+  description String
+
+  @@unique([aspectId, score])
 }
 
 enum RecruitmentAspectAudience {
@@ -3574,6 +3594,10 @@ model RecruitmentSetting {
   retentionDays           Int      @default(180)
   invitationEmailTemplate String   @default("Yth. {nama}, kami mengundang Anda interview untuk posisi {posisi} pada {tanggal} pukul {jam} di {lokasi}. Mohon konfirmasi kehadiran dengan membalas pesan ini.")
   invitationWaTemplate    String   @default("Halo {nama}, ini HR PT CBP. Interview untuk posisi {posisi}: {tanggal}, pukul {jam}, di {lokasi}. Mohon balas pesan ini untuk konfirmasi.")
+  // Header of the interview standard document, filled in on screen.
+  standardDocNumber       String?
+  standardRevision        String?
+  standardEffectiveDate   String?
   updatedAt               DateTime @updatedAt
 }
 

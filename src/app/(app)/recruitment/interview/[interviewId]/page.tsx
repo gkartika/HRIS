@@ -7,6 +7,7 @@ import { formatDateTimeMedium } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import { cancelledLabel } from "@/lib/interview-cancel";
 import { scoreText } from "@/lib/interview-matrix";
+import { loadAspectsWithStandard, loadGuide } from "@/lib/interview-standard-queries";
 import { DECISION_LABEL, DECISION_TONE } from "@/lib/recruitment-candidates";
 import { testSummary } from "@/lib/recruitment-queries";
 import { InterviewerForm } from "../../task-forms";
@@ -40,7 +41,7 @@ export default async function InterviewerPage({ params }: { params: Promise<{ in
   if (!mine) return <AccessDenied />;
 
   const c = interview.candidate;
-  const aspects = await prisma.recruitmentInterviewAspect.findMany({ where: { active: true, audience: "USER" }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, optional: true } });
+  const [aspects, guide] = await Promise.all([loadAspectsWithStandard("USER"), loadGuide()]);
   const open = !mine.submittedAt && c.status === "INTERVIEWING" && !c.interviewDecision;
   const summary = testSummary(c);
 
@@ -98,7 +99,7 @@ export default async function InterviewerPage({ params }: { params: Promise<{ in
             <p className="text-slate-600">Dicatat {formatDateTimeMedium(interview.cancelledAt)} WIB. Anda tidak perlu mengisi penilaian.</p>
           </div>
         ) : open ? (
-          <InterviewerForm interviewerId={mine.id} aspects={aspects} />
+          <InterviewerForm interviewerId={mine.id} aspects={aspects} guide={guide} />
         ) : mine.submittedAt ? (
           <div className="space-y-3 text-sm">
             <p className="text-slate-700">

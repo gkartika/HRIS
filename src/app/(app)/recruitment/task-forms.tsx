@@ -3,7 +3,8 @@
 import { startTransition, useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { reviewEssayAction, submitInterviewFormAction } from "./candidate-actions";
-import { ScoreMatrix } from "./score-matrix";
+import { ScoreMatrix, type MatrixAspectInfo } from "./score-matrix";
+import type { GuideData } from "@/lib/interview-standard-queries";
 
 const input = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const label = "mb-1 block text-xs text-slate-500";
@@ -54,7 +55,7 @@ export function ReviewForm({ testId }: { testId: string }) {
   );
 }
 
-export function InterviewerForm({ interviewerId, aspects }: { interviewerId: string; aspects: { id: string; label: string; optional?: boolean }[] }) {
+export function InterviewerForm({ interviewerId, aspects, guide }: { interviewerId: string; aspects: MatrixAspectInfo[]; guide?: GuideData | null }) {
   const router = useRouter();
   const action = submitInterviewFormAction.bind(null, interviewerId);
   const [error, formAction, pending] = useActionState(action, undefined);
@@ -76,7 +77,7 @@ export function InterviewerForm({ interviewerId, aspects }: { interviewerId: str
       {aspects.length > 0 && (
         <div className="space-y-2">
           <p className={label}>Nilai tiap aspek: 2 (sangat kurang) sampai 10 (sangat baik)</p>
-          <ScoreMatrix aspects={aspects} scores={scores} onChange={setScores} />
+          <ScoreMatrix aspects={aspects} scores={scores} onChange={setScores} guide={guide} />
         </div>
       )}
 

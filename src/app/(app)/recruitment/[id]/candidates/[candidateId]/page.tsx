@@ -25,7 +25,10 @@ import { progressOf } from "@/lib/recruitment-queries";
 import { getRecruitmentSettings } from "@/lib/recruitment-service";
 import { listSelectableStaff } from "@/lib/recruitment-flow";
 import { canCancelInterview, CANCEL_KIND_LABEL, cancelledLabel } from "@/lib/interview-cancel";
-import { canScheduleHr, canSubmitHr, formatAverage, matrixAverage, scoreText } from "@/lib/interview-matrix";
+import { canScheduleHr, canSubmitHr, formatAverage, matrixAverage } from "@/lib/interview-matrix";
+import { levelDescription, resolveStandard } from "@/lib/interview-standard";
+import { loadGuide, standardInclude } from "@/lib/interview-standard-queries";
+import { ScoreCell } from "../../../score-cell";
 import { ExecuteMovementButton } from "./execute-movement-button";
 import { ExecuteAddPositionForm } from "../../../../movements/[id]/decision-forms";
 import { listMovementSeatChoices } from "@/lib/movement-seats";
@@ -61,7 +64,7 @@ interface ResultColumn {
   key: string;
   title: string;
   subtitle: string;
-  scores: { label: string; order: number; score: number; maxScore: number }[];
+  scores: { label: string; order: number; score: number; maxScore: number; description: string | null }[];
   recommendation: "ACCEPTED" | "CONSIDERED" | "REJECTED" | null;
   note: string | null;
 }
@@ -92,7 +95,7 @@ function ResultsTable({ columns }: { columns: ResultColumn[] }) {
                 const x = c.scores.find((y) => y.label === name);
                 return (
                   <td key={c.key} className="px-3 py-2 tabular-nums text-slate-900">
-                    {x ? scoreText(x.score, x.maxScore) : <span className="text-slate-300">—</span>}
+                    {x ? <ScoreCell score={x.score} maxScore={x.maxScore} description={x.description} /> : <span className="text-slate-300">—</span>}
                   </td>
                 );
               })}
@@ -181,11 +184,14 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
   });
   if (!candidate || candidate.requestId !== id) notFound();
 
-  const [settings, staffRaw, aspects] = await Promise.all([
+  const [settings, staffRaw, aspects, guide] = await Promise.all([
     getRecruitmentSettings(),
     listSelectableStaff(),
-    prisma.recruitmentInterviewAspect.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.recruitmentInterviewAspect.findMany({ orderBy: { sortOrder: "asc" }, include: standardInclude }),
+    loadGuide(),
   ]);
+  // What each score means, per aspect (the HR copy of an aspect shares the standard of the user one).
+  const standardOf = new Map(aspects.map((x) => [x.id, resolveStandard(x)]));
   const staff = staffRaw.map((s) => ({ id: s.id, fullLegalName: s.fullLegalName, employeeNumber: s.employeeNumber, jobTitle: s.currentPosition?.job.jobTitle ?? null }));
 
   const isInternal = candidate.source === "INTERNAL";
@@ -205,7 +211,9 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
   const hrDefaults: HrInterviewDefaults | null = hr ? { ...wibParts(hr.scheduledAt), mode: hr.mode, location: hr.location } : null;
   const canScheduleHrNow = canScheduleHr({ candidateStatus: candidate.status, interviewDecision: candidate.interviewDecision, hrSubmitted, hrCancelled });
   const canSubmitHrNow = canSubmitHr({ candidateStatus: candidate.status, interviewDecision: candidate.interviewDecision, hasHrInterview: !!hr, hrCancelled, hrSubmitted });
-  const hrAspects = aspects.filter((x) => x.audience === "HR" && x.active).map((x) => ({ id: x.id, label: x.label, optional: x.optional, tag: x.label === "Energy" || x.label === "Energize" ? "khusus HR" : undefined }));
+  const hrAspects = aspects
+    .filter((x) => x.audience === "HR" && x.active)
+    .map((x) => ({ id: x.id, label: x.label, optional: x.optional, tag: x.label === "Energy" || x.label === "Energize" ? "khusus HR" : undefined, standard: standardOf.get(x.id) ?? null }));
   const submittedInterviewers = interview?.interviewers.filter((i) => i.submittedAt) ?? [];
   const interviewDefaults: InterviewDefaults | null = interview
     ? { ...wibParts(interview.scheduledAt), mode: interview.mode, location: interview.location, employeeIds: interview.interviewers.map((i) => i.employeeId) }
@@ -280,9 +288,9 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
   const sortOf = new Map(aspects.map((x) => [x.id, x.sortOrder]));
   const resultColumns: ResultColumn[] = [
     ...(hr && hrSubmitted
-      ? [{ key: "hr", title: "HR", subtitle: "Admin Rekrutmen", scores: hr.scores.map((x) => ({ label: x.aspectLabel, order: sortOf.get(x.aspectId) ?? 99, score: x.score, maxScore: x.maxScore })), recommendation: hr.recommendation, note: hr.note }]
+      ? [{ key: "hr", title: "HR", subtitle: "Admin Rekrutmen", scores: hr.scores.map((x) => ({ label: x.aspectLabel, order: sortOf.get(x.aspectId) ?? 99, score: x.score, maxScore: x.maxScore, description: levelDescription(standardOf.get(x.aspectId), x.score) })), recommendation: hr.recommendation, note: hr.note }]
       : []),
-    ...(interview?.interviewers.filter((i) => i.submittedAt).map((i) => ({ key: i.id, title: i.employee.fullLegalName, subtitle: "Interview user", scores: i.scores.map((x) => ({ label: x.aspectLabel, order: sortOf.get(x.aspectId) ?? 99, score: x.score, maxScore: x.maxScore })), recommendation: i.recommendation, note: i.note })) ?? []),
+    ...(interview?.interviewers.filter((i) => i.submittedAt).map((i) => ({ key: i.id, title: i.employee.fullLegalName, subtitle: "Interview user", scores: i.scores.map((x) => ({ label: x.aspectLabel, order: sortOf.get(x.aspectId) ?? 99, score: x.score, maxScore: x.maxScore, description: levelDescription(standardOf.get(x.aspectId), x.score) })), recommendation: i.recommendation, note: i.note })) ?? []),
   ];
 
   return (
@@ -514,6 +522,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
                 <HrInterviewForm
                   candidateId={candidate.id}
                   aspects={hrAspects}
+                  guide={guide}
                   userInterview={openUserInterview ? { when: `${formatDateTimeMedium(openUserInterview.scheduledAt)} WIB`, interviewers: openUserInterview.interviewers.length } : null}
                 />
               </div>

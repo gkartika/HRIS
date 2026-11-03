@@ -294,3 +294,34 @@ describe("buildSetupWarnings", () => {
     expect(out.hidden).toBe(3);
   });
 });
+
+describe("the HR round on the Beranda", () => {
+  it("asks Admin Rekrutmen to fill the HR form once the HR interview time has passed", () => {
+    const rows = buildRecruitmentRows(
+      [cand("h", "INTERVIEWING", { hrInterviewAt: ago(1), p: { hasHrInterview: true, hrSubmitted: false, hasInterview: true, interviewersTotal: 1 } })],
+      now
+    );
+    expect(rows.map((r) => r.type)).toEqual(["Isi penilaian HR"]);
+    expect(rows[0]).toMatchObject({ kind: "iv", actionLabel: "Isi penilaian" });
+  });
+  it("does not ask before the time, nor after the form was sent", () => {
+    const before = buildRecruitmentRows([cand("a", "INTERVIEWING", { hrInterviewAt: at(5), p: { hasHrInterview: true, hasInterview: true, interviewersTotal: 1 } })], now);
+    expect(before).toEqual([]);
+    const sent = buildRecruitmentRows([cand("b", "INTERVIEWING", { hrInterviewAt: null, p: { hasHrInterview: true, hrSubmitted: true, hasInterview: true, interviewersTotal: 1 } })], now);
+    expect(sent).toEqual([]);
+  });
+  it("with only the HR round planned, the user interview is the next row", () => {
+    const rows = buildRecruitmentRows([cand("c", "INTERVIEWING", { hrInterviewAt: at(5), p: { hasHrInterview: true } })], now);
+    expect(rows.map((r) => r.type)).toEqual(["Jadwalkan interview user"]);
+  });
+  it("lists the HR interview among the interviews of the coming week", () => {
+    const list = buildUpcomingInterviews(
+      [cand("x", "INTERVIEWING", { hrInterviewAt: at(2), hrInterviewMode: "OFFLINE", interviewAt: at(24 * 3), p: { hasHrInterview: true, hasInterview: true, interviewersTotal: 2 } })],
+      now
+    );
+    expect(list.map((i) => i.id)).toEqual(["hr-x", "x"]);
+    expect(list[0].interviewersLabel).toBe("Interview HR · Admin Rekrutmen");
+    expect(list[0].needsInterviewer).toBe(false);
+    expect(list[1].interviewersLabel).toBe("2 pewawancara");
+  });
+});

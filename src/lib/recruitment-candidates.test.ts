@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   accessCodeMatches,
-  averageScore,
   candidateNextStep,
   canStartTest,
   countDecisions,
@@ -304,6 +303,8 @@ describe("what HR Admin does next", () => {
   it("walks through the interview", () => {
     expect(candidateNextStep({ ...base, status: "TEST_PASSED" }).label).toBe("Undang interview");
     expect(candidateNextStep({ ...base, status: "INTERVIEWING" }).label).toBe("Jadwalkan interview");
+    // only the HR round is scheduled so far: the user interview is next
+    expect(candidateNextStep({ ...base, status: "INTERVIEWING", hasHrInterview: true })).toEqual({ label: "Jadwalkan interview user", needsAction: true });
     const mid = candidateNextStep({ ...base, status: "INTERVIEWING", hasInterview: true, interviewersTotal: 3, interviewersSubmitted: 2 });
     expect(mid).toEqual({ label: "Menunggu penilaian (2 dari 3)", needsAction: false });
     expect(candidateNextStep({ ...base, status: "INTERVIEWING", hasInterview: true, interviewersTotal: 3, interviewersSubmitted: 3 }).label).toBe("Tetapkan hasil akhir");
@@ -325,9 +326,7 @@ describe("what HR Admin does next", () => {
 });
 
 describe("interview results", () => {
-  it("averages and counts", () => {
-    expect(averageScore([5, 4, 4, 4, 4])).toBe(4.2);
-    expect(averageScore([])).toBeNull();
+  it("counts the decisions", () => {
     expect(countDecisions(["ACCEPTED", "ACCEPTED", "CONSIDERED", null])).toEqual({ ACCEPTED: 2, CONSIDERED: 1, REJECTED: 0 });
   });
 });

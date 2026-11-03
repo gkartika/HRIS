@@ -16,7 +16,6 @@ import {
   DECISION_LABEL,
   DECISION_TONE,
   TEST_FORM_LABEL,
-  averageScore,
   candidateNextStep,
   isActiveCandidateStatus,
   isExcellent,
@@ -26,6 +25,7 @@ import { progressOf } from "@/lib/recruitment-queries";
 import { getRecruitmentSettings } from "@/lib/recruitment-service";
 import { listSelectableStaff } from "@/lib/recruitment-flow";
 import { canCancelInterview, CANCEL_KIND_LABEL, cancelledLabel } from "@/lib/interview-cancel";
+import { canScheduleHr, canSubmitHr, formatAverage, matrixAverage, scoreText } from "@/lib/interview-matrix";
 import { ExecuteMovementButton } from "./execute-movement-button";
 import { ExecuteAddPositionForm } from "../../../../movements/[id]/decision-forms";
 import { listMovementSeatChoices } from "@/lib/movement-seats";
@@ -34,12 +34,15 @@ import {
   CancelInterviewPanel,
   DecisionForm,
   EndProcessForm,
+  HrInterviewForm,
   HrNotesForm,
   OfferSendPanel,
   OfferUploadForm,
   ReviewerPicker,
+  ScheduleHrInterviewForm,
   ScheduleInterviewForm,
   TestLinkPanel,
+  type HrInterviewDefaults,
   type InterviewDefaults,
   type TestRowInfo,
 } from "../../../candidate-forms";
@@ -51,6 +54,80 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
       {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
       <div className="mt-3">{children}</div>
     </section>
+  );
+}
+
+interface ResultColumn {
+  key: string;
+  title: string;
+  subtitle: string;
+  scores: { label: string; order: number; score: number; maxScore: number }[];
+  recommendation: "ACCEPTED" | "CONSIDERED" | "REJECTED" | null;
+  note: string | null;
+}
+
+function ResultsTable({ columns }: { columns: ResultColumn[] }) {
+  const order = new Map<string, number>();
+  for (const c of columns) for (const x of c.scores) order.set(x.label, Math.min(order.get(x.label) ?? 99, x.order));
+  const labels = [...order.entries()].sort((p, q) => p[1] - q[1]).map(([name]) => name);
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[420px] text-sm">
+        <thead>
+          <tr className="text-left text-xs text-slate-500">
+            <th className="py-2 pr-3 font-medium" />
+            {columns.map((c) => (
+              <th key={c.key} className="px-3 py-2 font-medium text-slate-700">
+                {c.title}
+                <span className="block text-[11px] font-normal text-slate-400">{c.subtitle}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="align-top">
+          {labels.map((name) => (
+            <tr key={name} className="border-t border-slate-100">
+              <td className="py-2 pr-3 text-slate-600">{name}</td>
+              {columns.map((c) => {
+                const x = c.scores.find((y) => y.label === name);
+                return (
+                  <td key={c.key} className="px-3 py-2 tabular-nums text-slate-900">
+                    {x ? scoreText(x.score, x.maxScore) : <span className="text-slate-300">—</span>}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+          {labels.length > 0 && (
+            <tr className="border-t border-slate-100">
+              <td className="py-2 pr-3 font-medium text-slate-700">Rata-rata</td>
+              {columns.map((c) => (
+                <td key={c.key} className="px-3 py-2 font-medium tabular-nums text-slate-900">
+                  {formatAverage(matrixAverage(c.scores.map((y) => y.score)))}
+                  {c.scores[0] && c.scores[0].maxScore !== 10 && <span className="text-xs font-normal text-slate-400"> dari {c.scores[0].maxScore}</span>}
+                </td>
+              ))}
+            </tr>
+          )}
+          <tr className="border-t border-slate-100">
+            <td className="py-2 pr-3 text-slate-600">Rekomendasi</td>
+            {columns.map((c) => (
+              <td key={c.key} className="px-3 py-2">
+                {c.recommendation ? <StatusChip tone={DECISION_TONE[c.recommendation]}>{DECISION_LABEL[c.recommendation]}</StatusChip> : <span className="text-xs text-slate-400">—</span>}
+              </td>
+            ))}
+          </tr>
+          <tr className="border-t border-slate-100">
+            <td className="py-2 pr-3 text-slate-600">Catatan</td>
+            {columns.map((c) => (
+              <td key={c.key} className="px-3 py-2 text-xs text-slate-700">
+                {c.note ?? "—"}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -85,6 +162,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
       interview: {
         include: { interviewers: { include: { employee: { select: { id: true, fullLegalName: true } }, scores: true }, orderBy: { createdAt: "asc" } } },
       },
+      hrInterview: { include: { scores: true } },
       offer: { include: { file: true } },
       movementRequest: {
         select: {
@@ -121,18 +199,29 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
   );
   const jobTitle = candidate.request.job?.jobTitle ?? "—";
   const interview = candidate.interview;
+  const hr = candidate.hrInterview;
+  const hrCancelled = !!hr?.cancelledAt;
+  const hrSubmitted = !!hr?.submittedAt;
+  const hrDefaults: HrInterviewDefaults | null = hr ? { ...wibParts(hr.scheduledAt), mode: hr.mode, location: hr.location } : null;
+  const canScheduleHrNow = canScheduleHr({ candidateStatus: candidate.status, interviewDecision: candidate.interviewDecision, hrSubmitted, hrCancelled });
+  const canSubmitHrNow = canSubmitHr({ candidateStatus: candidate.status, interviewDecision: candidate.interviewDecision, hasHrInterview: !!hr, hrCancelled, hrSubmitted });
+  const hrAspects = aspects.filter((x) => x.audience === "HR" && x.active).map((x) => ({ id: x.id, label: x.label, optional: x.optional, tag: x.label === "Energy" || x.label === "Energize" ? "khusus HR" : undefined }));
   const submittedInterviewers = interview?.interviewers.filter((i) => i.submittedAt) ?? [];
   const interviewDefaults: InterviewDefaults | null = interview
     ? { ...wibParts(interview.scheduledAt), mode: interview.mode, location: interview.location, employeeIds: interview.interviewers.map((i) => i.employeeId) }
     : null;
   const canSchedule = candidate.status === "TEST_PASSED" || (candidate.status === "INTERVIEWING" && !candidate.interviewDecision);
   const interviewCancelled = !!interview?.cancelledAt;
+  // "Pelamar tidak datang" cancels whatever is still open: the user interview, the HR interview, or both.
+  const openUserInterview = interview && !interviewCancelled ? interview : null;
+  const openHrInterview = hr && !hrCancelled && !hrSubmitted ? hr : null;
+  const cancelTarget = openUserInterview ?? openHrInterview;
   const canCancelInterviewNow = canCancelInterview({
     candidateStatus: candidate.status,
     interviewDecision: candidate.interviewDecision,
-    hasInterview: !!interview,
-    alreadyCancelled: interviewCancelled,
-    submittedInterviewers: submittedInterviewers.length,
+    hasInterview: !!(interview || hr),
+    alreadyCancelled: !cancelTarget,
+    submittedInterviewers: openUserInterview ? submittedInterviewers.length : 0,
   });
   const canDecide = candidate.status === "INTERVIEWING" && !candidate.interviewDecision && submittedInterviewers.length > 0;
   // Tautan tes and a second try for a test whose time ran out (the server checks the same rules again).
@@ -187,7 +276,14 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
         })
       : [];
   const offer = candidate.offer;
-  const aspectOrder = aspects.filter((a) => interview?.interviewers.some((i) => i.scores.some((s) => s.aspectId === a.id)));
+  // One table for everyone who scored: HR first, then each interviewer. Rows are matched by the label the score was given under.
+  const sortOf = new Map(aspects.map((x) => [x.id, x.sortOrder]));
+  const resultColumns: ResultColumn[] = [
+    ...(hr && hrSubmitted
+      ? [{ key: "hr", title: "HR", subtitle: "Admin Rekrutmen", scores: hr.scores.map((x) => ({ label: x.aspectLabel, order: sortOf.get(x.aspectId) ?? 99, score: x.score, maxScore: x.maxScore })), recommendation: hr.recommendation, note: hr.note }]
+      : []),
+    ...(interview?.interviewers.filter((i) => i.submittedAt).map((i) => ({ key: i.id, title: i.employee.fullLegalName, subtitle: "Interview user", scores: i.scores.map((x) => ({ label: x.aspectLabel, order: sortOf.get(x.aspectId) ?? 99, score: x.score, maxScore: x.maxScore })), recommendation: i.recommendation, note: i.note })) ?? []),
+  ];
 
   return (
     <div className="space-y-5">
@@ -373,8 +469,67 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
         </div>
       </Section>
 
+      {canCancelInterviewNow && cancelTarget && (
+        <CancelInterviewPanel
+          candidateId={candidate.id}
+          interviewers={openUserInterview?.interviewers.length ?? 0}
+          interviewTimePassed={cancelTarget.scheduledAt.getTime() <= new Date().getTime()}
+          requestNumber={candidate.request.requestNumber}
+        />
+      )}
+
+      {(canScheduleHrNow || hr) && (
+        <Section title="Interview HR" hint="Dilakukan Admin Rekrutmen. Jadwalnya terpisah dari interview user dan boleh diatur kapan saja. Kalau HR menolak, interview user dibatalkan.">
+          {hrCancelled && hr && (
+            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-medium text-slate-900">Interview HR dibatalkan: {cancelledLabel(hr.cancelKind).toLowerCase()}</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Dicatat {formatDateTimeMedium(hr.cancelledAt)} WIB
+                {hr.cancelReason ? ` · ${hr.cancelReason}` : ""}
+              </p>
+              {hr.cancelNote && <p className="mt-1 text-xs text-slate-600">{hr.cancelNote}</p>}
+            </div>
+          )}
+          {canScheduleHrNow && <ScheduleHrInterviewForm candidateId={candidate.id} existing={hrDefaults} />}
+          {hr && !hrCancelled && !canScheduleHrNow && (
+            <p className="text-sm text-slate-700">
+              {formatDateTimeMedium(hr.scheduledAt)} WIB · {hr.mode === "ONLINE" ? "Online" : "Offline"} · {hr.location}
+            </p>
+          )}
+          {hr && !hrCancelled && (
+            <p className="mt-2 text-xs text-slate-500">
+              {hr.invitationSentAt ? `Email undangan ke pelamar terkirim ${formatDateTimeMedium(hr.invitationSentAt)}.` : "Email undangan ke pelamar belum terkirim. Kirim lewat WhatsApp atau simpan jadwal lagi."}
+            </p>
+          )}
+          {hr && hrSubmitted && (
+            <p className="mt-3 text-sm text-slate-700">
+              Penilaian HR terkirim {formatDateTimeMedium(hr.submittedAt)} WIB.{" "}
+              {hr.recommendation && <StatusChip tone={DECISION_TONE[hr.recommendation]}>{DECISION_LABEL[hr.recommendation]}</StatusChip>} Hasilnya ada di tabel Hasil penilaian di bawah.
+            </p>
+          )}
+          {canSubmitHrNow && (
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-slate-900">Form penilaian HR</h3>
+              <div className="mt-2">
+                <HrInterviewForm
+                  candidateId={candidate.id}
+                  aspects={hrAspects}
+                  userInterview={openUserInterview ? { when: `${formatDateTimeMedium(openUserInterview.scheduledAt)} WIB`, interviewers: openUserInterview.interviewers.length } : null}
+                />
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {resultColumns.length > 0 && (
+        <Section title="Hasil penilaian" hint="Penilaian HR dan pewawancara user dalam satu tabel. Rata-rata hanya gambaran, keputusan akhir tetap di Admin Rekrutmen.">
+          <ResultsTable columns={resultColumns} />
+        </Section>
+      )}
+
       {(canSchedule || interview) && (
-        <Section title="Interview" hint="HR Admin menunjuk pewawancara. Tiap pewawancara mengisi penilaiannya sendiri dari akun masing-masing.">
+        <Section title="Interview user" hint="Admin Rekrutmen menunjuk pewawancara. Tiap pewawancara mengisi penilaiannya sendiri dari akun masing-masing.">
           {interviewCancelled && interview && (
             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
               <p className="font-medium text-slate-900">Interview dibatalkan: {cancelledLabel(interview.cancelKind).toLowerCase()}</p>
@@ -387,16 +542,6 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
                 <s>{formatDateTimeMedium(interview.scheduledAt)} WIB · {interview.mode === "ONLINE" ? "Online" : "Offline"} · {interview.location}</s>
                 {" "}· pewawancara dikabari: {interview.interviewers.map((i) => i.employee.fullLegalName).join(", ")}
               </p>
-            </div>
-          )}
-          {canCancelInterviewNow && interview && (
-            <div className="mb-4">
-              <CancelInterviewPanel
-                candidateId={candidate.id}
-                interviewers={interview.interviewers.length}
-                interviewTimePassed={interview.scheduledAt.getTime() <= new Date().getTime()}
-                requestNumber={candidate.request.requestNumber}
-              />
             </div>
           )}
           {canSchedule && (
@@ -420,61 +565,7 @@ export default async function CandidateDetailPage({ params }: { params: Promise<
           )}
 
           {interview && !interviewCancelled && (
-            <div className="mt-5">
-              <h3 className="text-sm font-medium text-slate-900">Penilaian pewawancara</h3>
-              <div className="mt-2 overflow-x-auto">
-                <table className="w-full min-w-[420px] text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-slate-500">
-                      <th className="py-2 pr-3 font-medium" />
-                      {interview.interviewers.map((i) => (
-                        <th key={i.id} className="px-3 py-2 font-medium text-slate-700">
-                          {i.employee.fullLegalName}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="align-top">
-                    {aspectOrder.map((a) => (
-                      <tr key={a.id} className="border-t border-slate-100">
-                        <td className="py-2 pr-3 text-slate-600">{a.label}</td>
-                        {interview.interviewers.map((i) => (
-                          <td key={i.id} className="px-3 py-2 tabular-nums text-slate-900">
-                            {i.submittedAt ? (i.scores.find((s) => s.aspectId === a.id)?.score ?? "—") : "—"}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                    {aspectOrder.length > 0 && (
-                      <tr className="border-t border-slate-100">
-                        <td className="py-2 pr-3 font-medium text-slate-700">Rata-rata</td>
-                        {interview.interviewers.map((i) => (
-                          <td key={i.id} className="px-3 py-2 font-medium tabular-nums text-slate-900">
-                            {i.submittedAt ? (averageScore(i.scores.map((s) => s.score)) ?? "—") : "—"}
-                          </td>
-                        ))}
-                      </tr>
-                    )}
-                    <tr className="border-t border-slate-100">
-                      <td className="py-2 pr-3 text-slate-600">Rekomendasi</td>
-                      {interview.interviewers.map((i) => (
-                        <td key={i.id} className="px-3 py-2">
-                          {i.recommendation ? <StatusChip tone={DECISION_TONE[i.recommendation]}>{DECISION_LABEL[i.recommendation]}</StatusChip> : <span className="text-xs text-slate-400">Belum mengisi</span>}
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-t border-slate-100">
-                      <td className="py-2 pr-3 text-slate-600">Catatan</td>
-                      {interview.interviewers.map((i) => (
-                        <td key={i.id} className="px-3 py-2 text-xs text-slate-700">
-                          {i.note ?? "—"}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
+            <div>
               <h3 className="mt-5 text-sm font-medium text-slate-900">Bagian HR Admin (administratif)</h3>
               <div className="mt-2">
                 <HrNotesForm

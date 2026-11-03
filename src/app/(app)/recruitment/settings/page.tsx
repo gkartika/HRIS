@@ -288,18 +288,19 @@ async function JobTestsTab({ q }: { q: string }) {
 
 async function InterviewTab() {
   const [aspects, settings] = await Promise.all([
-    prisma.recruitmentInterviewAspect.findMany({ orderBy: { sortOrder: "asc" }, include: { _count: { select: { scores: true } } } }),
+    prisma.recruitmentInterviewAspect.findMany({ orderBy: { sortOrder: "asc" }, include: { _count: { select: { scores: true, hrScores: true } } } }),
     getRecruitmentSettings(),
   ]);
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-medium text-slate-900">Aspek penilaian interview</h2>
-        <p className="mt-0.5 text-xs text-slate-500">Tiap pewawancara memberi nilai 1 sampai 5 untuk setiap aspek aktif. Mengubah nama aspek tidak mengubah penilaian yang sudah masuk.</p>
-        <div className="mt-3 divide-y divide-slate-100">
-          {aspects.map((a) => (
+  const group = (audience: "USER" | "HR", title: string, hint: string) => (
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <h2 className="text-sm font-medium text-slate-900">{title}</h2>
+      <p className="mt-0.5 text-xs text-slate-500">{hint}</p>
+      <div className="mt-3 divide-y divide-slate-100">
+        {aspects
+          .filter((a) => a.audience === audience)
+          .map((a) => (
             <div key={a.id} className="py-3">
-              <ActionForm action={saveAspectAction.bind(null, a.id)} submitLabel="Simpan" className="flex flex-wrap items-end gap-3">
+              <ActionForm action={saveAspectAction.bind(null, a.id, null)} submitLabel="Simpan" className="flex flex-wrap items-end gap-3">
                 <div className="min-w-[220px] flex-1">
                   <label className={lab} htmlFor={`al-${a.id}`}>Nama aspek</label>
                   <input id={`al-${a.id}`} name="label" defaultValue={a.label} required className={field} />
@@ -312,24 +313,37 @@ async function InterviewTab() {
                   <input type="checkbox" name="active" defaultChecked={a.active} />
                   Aktif
                 </label>
+                <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
+                  <input type="checkbox" name="optional" defaultChecked={a.optional} />
+                  Boleh dikosongkan
+                </label>
               </ActionForm>
               <div className="mt-1">
                 <ConfirmAction label="Hapus" confirmLabel="Ya, hapus aspek" action={deleteAspectAction.bind(null, a.id)} />
-                {a._count.scores > 0 && <span className="ml-2 text-[11px] text-slate-400">Sudah dipakai {a._count.scores} penilaian, nonaktifkan saja.</span>}
+                {a._count.scores + a._count.hrScores > 0 && <span className="ml-2 text-[11px] text-slate-400">Sudah dipakai {a._count.scores + a._count.hrScores} penilaian, nonaktifkan saja.</span>}
               </div>
             </div>
           ))}
-          {aspects.length === 0 && <p className="py-3 text-sm text-slate-400">Belum ada aspek. Tanpa aspek, pewawancara hanya mengisi rekomendasi dan catatan.</p>}
-        </div>
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <ActionForm action={saveAspectAction.bind(null, null)} submitLabel="Tambah aspek" resetOnSuccess className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[220px] flex-1">
-              <label className={lab} htmlFor="new-aspect">Aspek baru</label>
-              <input id="new-aspect" name="label" required placeholder="mis. Kerja sama tim" className={field} />
-            </div>
-          </ActionForm>
-        </div>
+        {aspects.filter((a) => a.audience === audience).length === 0 && <p className="py-3 text-sm text-slate-400">Belum ada aspek. Tanpa aspek, penilai hanya mengisi rekomendasi dan catatan.</p>}
       </div>
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <ActionForm action={saveAspectAction.bind(null, null, audience)} submitLabel="Tambah aspek" resetOnSuccess className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[220px] flex-1">
+            <label className={lab} htmlFor={`new-aspect-${audience}`}>Aspek baru</label>
+            <input id={`new-aspect-${audience}`} name="label" required placeholder="mis. Kerja sama tim" className={field} />
+          </div>
+          <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
+            <input type="checkbox" name="optional" />
+            Boleh dikosongkan
+          </label>
+        </ActionForm>
+      </div>
+    </div>
+  );
+  return (
+    <div className="space-y-4">
+      {group("USER", "Aspek penilaian interview user", "Dinilai pewawancara user. Nilainya 2 (sangat kurang), 4, 6, 8, sampai 10 (sangat baik) untuk setiap aspek aktif; aspek yang boleh dikosongkan (mis. Tes Lapangan) tidak ikut rata-rata kalau kosong. Mengubah nama tidak mengubah penilaian yang sudah masuk.")}
+      {group("HR", "Aspek penilaian interview HR", "Dinilai Admin Rekrutmen pada interview HR, dengan nilai yang sama. Aspek yang sudah dipakai tidak bisa dihapus, cukup dinonaktifkan.")}
 
       <div className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="text-sm font-medium text-slate-900">Jumlah pewawancara</h2>

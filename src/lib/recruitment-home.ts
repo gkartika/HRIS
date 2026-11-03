@@ -31,6 +31,9 @@ export interface HomeCandidate {
   progress: CandidateProgress;
   interviewAt: Date | null;
   interviewMode: "ONLINE" | "OFFLINE" | null;
+  /** The HR interview (Admin Rekrutmen) while its form is not sent yet. */
+  hrInterviewAt?: Date | null;
+  hrInterviewMode?: "ONLINE" | "OFFLINE" | null;
   offerSentAt: Date | null;
   movementStatus: string | null;
   /** Passed a test with an "Istimewa" score. */
@@ -155,8 +158,11 @@ export function buildRecruitmentRows(candidates: HomeCandidate[], now: Date, req
     const w = waitingRow(c, now);
     const base = { requestId: c.requestId, href: candidateHref(c), title: c.fullName };
     if (c.status === "INTERVIEWING") {
+      if (p.hasHrInterview && !p.hrSubmitted && c.hrInterviewAt && c.hrInterviewAt.getTime() <= now.getTime()) {
+        rows.push({ ...base, kind: "iv", type: "Isi penilaian HR", who: `${who(c)} · interview HR ${shortDate(c.hrInterviewAt)}`, ...w, actionLabel: "Isi penilaian" });
+      }
       if (!p.hasInterview) {
-        rows.push({ ...base, kind: "iv", type: "Jadwalkan interview", who: who(c), ...w, actionLabel: "Jadwalkan" });
+        rows.push({ ...base, kind: "iv", type: p.hasHrInterview ? "Jadwalkan interview user" : "Jadwalkan interview", who: who(c), ...w, actionLabel: "Jadwalkan" });
       } else if (decided(p)) {
         rows.push({
           ...base,
@@ -289,7 +295,27 @@ export interface UpcomingInterview {
 }
 
 export function buildUpcomingInterviews(candidates: HomeCandidate[], now: Date): UpcomingInterview[] {
-  return candidates
+  const within = (d: Date | null | undefined) => !!d && d.getTime() > now.getTime() && d.getTime() - now.getTime() <= 7 * DAY_MS;
+  const hrRows: UpcomingInterview[] = candidates
+    .filter((c) => c.status === "INTERVIEWING" && within(c.hrInterviewAt))
+    .map((c) => {
+      const at = c.hrInterviewAt as Date;
+      const days = daysUntil(at, now);
+      const weekday = `${WEEKDAYS[wibParts(at).getUTCDay()]}, ${shortDate(at)}`;
+      return {
+        id: `hr-${c.id}`,
+        at,
+        dayLabel: days === 0 ? `Hari ini · ${weekday}` : days === 1 ? `Besok · ${weekday}` : weekday,
+        time: timeOfDay(at),
+        fullName: c.fullName,
+        jobLabel: c.jobLabel,
+        modeLabel: c.hrInterviewMode === "ONLINE" ? "Online" : c.hrInterviewMode === "OFFLINE" ? "Offline" : null,
+        interviewersLabel: "Interview HR · Admin Rekrutmen",
+        needsInterviewer: false,
+        href: candidateHref({ requestId: c.requestId, id: c.id }),
+      };
+    });
+  const userRows = candidates
     .filter((c) => c.status === "INTERVIEWING" && c.interviewAt && c.interviewAt.getTime() > now.getTime() && c.interviewAt.getTime() - now.getTime() <= 7 * DAY_MS)
     .map((c) => {
       const at = c.interviewAt as Date;
@@ -308,8 +334,8 @@ export function buildUpcomingInterviews(candidates: HomeCandidate[], now: Date):
         needsInterviewer: total === 0,
         href: candidateHref({ requestId: c.requestId, id: c.id }),
       };
-    })
-    .sort((a, b) => a.at.getTime() - b.at.getTime());
+    });
+  return [...hrRows, ...userRows].sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 // ---------- progress of every vacancy ----------

@@ -17,9 +17,11 @@ import {
   reopenCandidateTest,
   reviewEssayTest,
   saveHrInterviewNotes,
+  scheduleHrInterview,
   scheduleInterview,
   sendOfferLink,
   setTestReviewers,
+  submitHrInterview,
   submitInterviewerForm,
   wibDateTime,
 } from "@/lib/recruitment-flow";
@@ -167,7 +169,7 @@ export async function submitInterviewFormAction(interviewerId: string, _prev: Re
   if (!["ACCEPTED", "CONSIDERED", "REJECTED"].includes(recommendation)) return "Pilih rekomendasi Anda.";
   const scores: Record<string, number> = {};
   for (const [key, value] of formData.entries()) {
-    if (key.startsWith("score_")) scores[key.slice(6)] = Number(value);
+    if (key.startsWith("score_") && String(value).trim() !== "") scores[key.slice(6)] = Number(value);
   }
   const res = await submitInterviewerForm({
     interviewerId,
@@ -181,6 +183,67 @@ export async function submitInterviewFormAction(interviewerId: string, _prev: Re
   revalidatePath("/recruitment/applicants");
   const interviewer = await prisma.recruitmentInterviewer.findUnique({ where: { id: interviewerId }, select: { interviewId: true } });
   if (interviewer) revalidatePath(`/recruitment/interview/${interviewer.interviewId}`);
+}
+
+// The HR round (Admin Rekrutmen): its own date, place and invitation.
+export async function scheduleHrInterviewAction(candidateId: string, _prev: ScheduleResult | undefined, formData: FormData): Promise<ScheduleResult> {
+  const auth = await hrAdminOr();
+  if ("error" in auth) return { error: auth.error };
+  const scheduledAt = wibDateTime((formData.get("date") as string) ?? "", (formData.get("time") as string) ?? "");
+  if (!scheduledAt) return { error: "Isi tanggal dan jam interview." };
+  const mode = formData.get("mode") as RecruitmentInterviewMode;
+  if (mode !== "OFFLINE" && mode !== "ONLINE") return { error: "Pilih bentuk interview." };
+  const location = ((formData.get("location") as string) ?? "").trim();
+
+  const res = await scheduleHrInterview({ candidateId, scheduledAt, mode, location, accountId: auth.session.user.id });
+  if (!res.ok) return { error: res.error };
+  await logAudit({ actorAccountId: auth.session.user.id, action: "UPDATE", datasetName: "RecruitmentHrInterview", recordId: candidateId, reason: "HR interview scheduled" });
+
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { id: candidateId },
+    select: { requestId: true, fullName: true, mobileNumber: true, request: { select: { job: { select: { jobTitle: true } } } } },
+  });
+  let whatsappUrl: string | undefined;
+  if (candidate) {
+    refresh(candidate.requestId, candidateId);
+    revalidatePath("/dashboard");
+    if (candidate.mobileNumber) {
+      const settings = await getRecruitmentSettings();
+      const vars = interviewMessageVars({ fullName: candidate.fullName, positionTitle: candidate.request.job?.jobTitle ?? "posisi yang dilamar", scheduledAt, location });
+      whatsappUrl = whatsappLink(candidate.mobileNumber, fillTemplate(settings.invitationWaTemplate, vars));
+    }
+  }
+  return { whatsappUrl, emailedCandidate: res.emailedCandidate, applicantEmailOff: res.applicantEmailOff };
+}
+
+// Admin Rekrutmen sends the HR form. Returns an error text, or a short message when the applicant was turned down
+// (what happened to the user interview).
+export type HrFormResult = { error?: string; message?: string };
+
+export async function submitHrInterviewAction(candidateId: string, _prev: HrFormResult | undefined, formData: FormData): Promise<HrFormResult> {
+  const auth = await hrAdminOr();
+  if ("error" in auth) return { error: auth.error };
+  const scores: Record<string, number> = {};
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("score_") && String(value).trim() !== "") scores[key.slice(6)] = Number(value);
+  }
+  const recommendation = ((formData.get("recommendation") as string) ?? "").trim();
+  const res = await submitHrInterview({ candidateId, accountId: auth.session.user.id, scores, recommendation, note: ((formData.get("note") as string) ?? "").slice(0, 2000) });
+  if (!res.ok) return { error: res.error };
+  await logAudit({
+    actorAccountId: auth.session.user.id,
+    action: res.rejected ? "REJECT" : "UPDATE",
+    datasetName: "RecruitmentHrInterview",
+    recordId: candidateId,
+    reason: res.rejected ? `HR interview: applicant turned down, user interview cancelled; ${res.interviewersEmailed}/${res.interviewers} interviewers emailed` : `HR interview form sent: ${recommendation}`,
+  });
+  const requestId = await requestIdOf(candidateId);
+  if (requestId) refresh(requestId, candidateId);
+  revalidatePath("/recruitment/tasks");
+  revalidatePath("/dashboard");
+  return res.rejected
+    ? { message: `Pelamar ditolak. Interview user dibatalkan${res.interviewers ? ` dan ${res.interviewers} pewawancara diberi tahu (${res.interviewersEmailed} email terkirim)` : ""}.` }
+    : { message: "Penilaian HR terkirim." };
 }
 
 export async function saveHrNotesAction(candidateId: string, _prev: Result, formData: FormData): Promise<Result> {

@@ -47,6 +47,7 @@ describe("texts", () => {
     expect(m.text).toContain("Dewi");
     expect(m.text).toContain("pelamar mengundurkan diri");
     expect(cancelEmail({ candidateName: "D", positionTitle: "O", tanggal: "t", jam: "j", kind: "NO_SHOW" }).text).toContain("pelamar tidak datang");
+    expect(cancelEmail({ candidateName: "D", positionTitle: "O", tanggal: "t", jam: "j", kind: "HR_REJECTED" }).text).toContain("tidak lolos interview HR");
   });
   it("the cancelled row stays 7 days for the interviewer", () => {
     expect(cancelNoticeVisible(new Date("2026-10-30T00:00:00Z"), now)).toBe(true);
@@ -56,5 +57,6 @@ describe("texts", () => {
   it("label", () => {
     expect(cancelledLabel("NO_SHOW")).toBe("Pelamar tidak datang");
     expect(cancelledLabel("WITHDREW")).toBe("Pelamar mengundurkan diri");
+    expect(cancelledLabel("HR_REJECTED")).toBe("Pelamar ditolak pada interview HR");
   });
 });

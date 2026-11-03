@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { reviewEssayAction, submitInterviewFormAction } from "./candidate-actions";
+import { ScoreMatrix } from "./score-matrix";
 
 const input = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const label = "mb-1 block text-xs text-slate-500";
@@ -53,7 +54,7 @@ export function ReviewForm({ testId }: { testId: string }) {
   );
 }
 
-export function InterviewerForm({ interviewerId, aspects }: { interviewerId: string; aspects: { id: string; label: string }[] }) {
+export function InterviewerForm({ interviewerId, aspects }: { interviewerId: string; aspects: { id: string; label: string; optional?: boolean }[] }) {
   const router = useRouter();
   const action = submitInterviewFormAction.bind(null, interviewerId);
   const [error, formAction, pending] = useActionState(action, undefined);
@@ -73,27 +74,9 @@ export function InterviewerForm({ interviewerId, aspects }: { interviewerId: str
       className="space-y-5"
     >
       {aspects.length > 0 && (
-        <div className="space-y-3">
-          <p className={label}>Nilai tiap aspek: 1 (sangat kurang) sampai 5 (sangat baik)</p>
-          {aspects.map((a) => (
-            <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2">
-              <span className="text-sm text-slate-900">{a.label}</span>
-              <div className="flex gap-1.5" role="group" aria-label={a.label}>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    aria-pressed={scores[a.id] === n}
-                    onClick={() => setScores((s) => ({ ...s, [a.id]: n }))}
-                    className={`h-9 w-9 rounded-lg border text-sm font-semibold ${scores[a.id] === n ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-indigo-300"}`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              {scores[a.id] && <input type="hidden" name={`score_${a.id}`} value={scores[a.id]} />}
-            </div>
-          ))}
+        <div className="space-y-2">
+          <p className={label}>Nilai tiap aspek: 2 (sangat kurang) sampai 10 (sangat baik)</p>
+          <ScoreMatrix aspects={aspects} scores={scores} onChange={setScores} />
         </div>
       )}
 

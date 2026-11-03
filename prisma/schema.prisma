@@ -3545,14 +3545,24 @@ model RecruitmentJobTest {
   @@id([jobId, testTypeId])
 }
 
-// What each interviewer scores 1-5; HR Admin edits this list.
+// What each interviewer scores (2, 4, 6, 8 or 10 for the matrix in use, 1-5 for older interviews); HR Admin edits
+// these lists. USER aspects are scored by the interviewers HR picks, HR aspects by Admin Rekrutmen in the HR interview.
+// An optional aspect may be left empty (Tes Lapangan).
 model RecruitmentInterviewAspect {
-  id        String  @id @default(cuid())
+  id        String                    @id @default(cuid())
   label     String
-  sortOrder Int     @default(0)
-  active    Boolean @default(true)
+  sortOrder Int                       @default(0)
+  active    Boolean                   @default(true)
+  audience  RecruitmentAspectAudience @default(USER)
+  optional  Boolean                   @default(false)
 
-  scores RecruitmentInterviewScore[]
+  scores   RecruitmentInterviewScore[]
+  hrScores RecruitmentHrScore[]
+}
+
+enum RecruitmentAspectAudience {
+  USER
+  HR
 }
 
 // Single settings row (id "default").
@@ -3621,6 +3631,8 @@ model RecruitmentCandidate {
 
   tests     RecruitmentCandidateTest[]
   interview RecruitmentInterview?
+  // The first, HR round by Admin Rekrutmen (its own schedule and form).
+  hrInterview RecruitmentHrInterview?
   offer     RecruitmentOffer?
   assessment RecruitmentAssessmentSubmission?
 
@@ -3714,6 +3726,46 @@ model RecruitmentInterview {
 enum InterviewCancelKind {
   WITHDREW // the applicant withdrew before the interview
   NO_SHOW // the interview time passed and the applicant did not come
+  HR_REJECTED // Admin Rekrutmen turned the applicant down at the HR interview, so the user interview was cancelled
+}
+
+// The HR round: Admin Rekrutmen interviews the applicant (own schedule), scores the HR matrix and recommends. A
+// rejection here ends the applicant and cancels the user interview.
+model RecruitmentHrInterview {
+  id                 String                   @id @default(cuid())
+  candidateId        String                   @unique
+  candidate          RecruitmentCandidate     @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  scheduledAt        DateTime
+  mode               RecruitmentInterviewMode
+  location           String
+  invitationSentAt   DateTime?
+  createdByAccountId String
+  scoredByAccountId  String?
+  recommendation     RecruitmentInterviewDecision?
+  note               String?
+  submittedAt        DateTime?
+  cancelledAt          DateTime?
+  cancelledByAccountId String?
+  cancelKind           InterviewCancelKind?
+  cancelReason         String?
+  cancelNote           String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  scores RecruitmentHrScore[]
+}
+
+model RecruitmentHrScore {
+  id            String                     @id @default(cuid())
+  hrInterviewId String
+  hrInterview   RecruitmentHrInterview     @relation(fields: [hrInterviewId], references: [id], onDelete: Cascade)
+  aspectId      String
+  aspect        RecruitmentInterviewAspect @relation(fields: [aspectId], references: [id])
+  aspectLabel   String
+  score         Int
+  maxScore      Int                        @default(10)
+
+  @@unique([hrInterviewId, aspectId])
 }
 
 model RecruitmentInterviewer {
@@ -3740,7 +3792,8 @@ model RecruitmentInterviewScore {
   aspectId      String
   aspect        RecruitmentInterviewAspect @relation(fields: [aspectId], references: [id])
   aspectLabel   String // label when scored, so a later rename does not rewrite history
-  score         Int // 1-5
+  score         Int // 2, 4, 6, 8 or 10 (older interviews: 1-5)
+  maxScore      Int                        @default(5) // 10 for the matrix in use, 5 for older interviews
 
   @@unique([interviewerId, aspectId])
 }

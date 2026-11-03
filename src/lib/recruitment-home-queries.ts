@@ -29,6 +29,8 @@ function toHomeCandidate(c: CandidateRow): HomeCandidate {
     progress: progressOf(c),
     interviewAt: c.interview?.scheduledAt ?? null,
     interviewMode: c.interview?.mode ?? null,
+    hrInterviewAt: c.hrInterview && !c.hrInterview.cancelledAt && !c.hrInterview.submittedAt ? c.hrInterview.scheduledAt : null,
+    hrInterviewMode: c.hrInterview?.mode ?? null,
     offerSentAt: c.offer?.sentAt ?? null,
     movementStatus: c.movementRequest?.status ?? null,
     excellent: c.tests.some((t) => t.passed === true && isExcellent(t.scorePercent, t.testType.excellentScore)),

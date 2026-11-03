@@ -6,10 +6,12 @@ import type { InterviewCancelKind, RecruitmentCandidateStatus, RecruitmentInterv
 export const CANCEL_KIND_LABEL: Record<InterviewCancelKind, string> = {
   WITHDREW: "Mengundurkan diri",
   NO_SHOW: "Tidak datang, tanpa kabar",
+  HR_REJECTED: "Ditolak pada interview HR",
 };
 export const CANCEL_KIND_HINT: Record<InterviewCancelKind, string> = {
   WITHDREW: "Tidak melanjutkan proses lamaran.",
   NO_SHOW: "Jam interview lewat dan pelamar tidak muncul.",
+  HR_REJECTED: "Admin Rekrutmen menolak pelamar pada interview HR.",
 };
 export const CANCEL_QUICK_REASONS = ["Sudah dapat pekerjaan lain", "Alasan pribadi / keluarga", "Lokasi kerja terlalu jauh", "Gaji tidak sesuai", "Lainnya"];
 // A cancelled interview stays in the interviewer's task list this long, then disappears from it.
@@ -46,7 +48,7 @@ export function closeReasonText(kind: InterviewCancelKind, reason: string | null
 }
 
 export function cancelEmail(args: { candidateName: string; positionTitle: string; tanggal: string; jam: string; kind: InterviewCancelKind }): { subject: string; text: string } {
-  const why = args.kind === "WITHDREW" ? "pelamar mengundurkan diri" : "pelamar tidak datang";
+  const why = args.kind === "WITHDREW" ? "pelamar mengundurkan diri" : args.kind === "HR_REJECTED" ? "pelamar tidak lolos interview HR" : "pelamar tidak datang";
   return {
     subject: "Interview dibatalkan (SAPA)",
     text: `Interview ${args.candidateName} untuk ${args.positionTitle} pada ${args.tanggal}, ${args.jam} dibatalkan karena ${why}. Anda tidak perlu mengisi penilaian.`,
@@ -59,5 +61,5 @@ export function cancelNoticeVisible(cancelledAt: Date | null, now: Date): boolea
 }
 
 export function cancelledLabel(kind: InterviewCancelKind | null): string {
-  return kind === "NO_SHOW" ? "Pelamar tidak datang" : "Pelamar mengundurkan diri";
+  return kind === "NO_SHOW" ? "Pelamar tidak datang" : kind === "HR_REJECTED" ? "Pelamar ditolak pada interview HR" : "Pelamar mengundurkan diri";
 }

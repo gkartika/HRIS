@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { formatDateTimeMedium } from "@/lib/format";
 import { requireSession } from "@/lib/require-session";
 import { cancelledLabel } from "@/lib/interview-cancel";
+import { scoreText } from "@/lib/interview-matrix";
 import { DECISION_LABEL, DECISION_TONE } from "@/lib/recruitment-candidates";
 import { testSummary } from "@/lib/recruitment-queries";
 import { InterviewerForm } from "../../task-forms";
@@ -39,7 +40,7 @@ export default async function InterviewerPage({ params }: { params: Promise<{ in
   if (!mine) return <AccessDenied />;
 
   const c = interview.candidate;
-  const aspects = await prisma.recruitmentInterviewAspect.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true } });
+  const aspects = await prisma.recruitmentInterviewAspect.findMany({ where: { active: true, audience: "USER" }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true, optional: true } });
   const open = !mine.submittedAt && c.status === "INTERVIEWING" && !c.interviewDecision;
   const summary = testSummary(c);
 
@@ -109,7 +110,7 @@ export default async function InterviewerPage({ params }: { params: Promise<{ in
                 {mine.scores.map((s) => (
                   <li key={s.id} className="flex justify-between border-b border-slate-100 py-1">
                     <span className="text-slate-600">{s.aspectLabel}</span>
-                    <span className="tabular-nums text-slate-900">{s.score}</span>
+                    <span className="tabular-nums text-slate-900">{scoreText(s.score, s.maxScore)}</span>
                   </li>
                 ))}
               </ul>

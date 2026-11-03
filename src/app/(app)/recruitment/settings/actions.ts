@@ -177,17 +177,22 @@ export async function deleteQuestionAction(questionId: string): Promise<Result> 
 
 // ---------- interview aspects ----------
 
-export async function saveAspectAction(aspectId: string | null, _prev: Result, formData: FormData): Promise<Result> {
+export async function saveAspectAction(aspectId: string | null, audience: "USER" | "HR" | null, _prev: Result, formData: FormData): Promise<Result> {
   const auth = await adminId();
   if ("error" in auth) return auth.error;
   const label = ((formData.get("label") as string) ?? "").trim();
   if (!label || label.length > 80) return "Isi nama aspek (maksimal 80 karakter).";
   const sortOrder = intField(formData, "sortOrder") || 0;
   if (aspectId) {
-    await prisma.recruitmentInterviewAspect.update({ where: { id: aspectId }, data: { label, sortOrder, active: formData.get("active") === "on" } });
+    await prisma.recruitmentInterviewAspect.update({
+      where: { id: aspectId },
+      data: { label, sortOrder, active: formData.get("active") === "on", optional: formData.get("optional") === "on" },
+    });
   } else {
     const last = await prisma.recruitmentInterviewAspect.aggregate({ _max: { sortOrder: true } });
-    await prisma.recruitmentInterviewAspect.create({ data: { label, sortOrder: sortOrder || (last._max.sortOrder ?? 0) + 1, active: true } });
+    await prisma.recruitmentInterviewAspect.create({
+      data: { label, sortOrder: sortOrder || (last._max.sortOrder ?? 0) + 1, active: true, audience: audience ?? "USER", optional: formData.get("optional") === "on" },
+    });
   }
   await logAudit({ actorAccountId: auth.id, action: aspectId ? "UPDATE" : "CREATE", datasetName: "RecruitmentInterviewAspect", recordId: aspectId, reason: label });
   done();
@@ -196,8 +201,8 @@ export async function saveAspectAction(aspectId: string | null, _prev: Result, f
 export async function deleteAspectAction(aspectId: string): Promise<Result> {
   const auth = await adminId();
   if ("error" in auth) return auth.error;
-  const used = await prisma.recruitmentInterviewScore.count({ where: { aspectId } });
-  if (used > 0) return "Aspek ini sudah dipakai menilai pelamar. Nonaktifkan saja.";
+  const [used, usedByHr] = await Promise.all([prisma.recruitmentInterviewScore.count({ where: { aspectId } }), prisma.recruitmentHrScore.count({ where: { aspectId } })]);
+  if (used + usedByHr > 0) return "Aspek ini sudah dipakai menilai pelamar. Nonaktifkan saja.";
   await prisma.recruitmentInterviewAspect.delete({ where: { id: aspectId } });
   await logAudit({ actorAccountId: auth.id, action: "DELETE", datasetName: "RecruitmentInterviewAspect", recordId: aspectId });
   done();

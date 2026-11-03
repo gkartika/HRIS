@@ -45,6 +45,7 @@ const candidateRowSelect = {
   },
   assessment: { select: { status: true, totalScore: true } },
   interview: { select: { id: true, scheduledAt: true, mode: true, interviewers: { select: { submittedAt: true } } } },
+  hrInterview: { select: { scheduledAt: true, mode: true, submittedAt: true, cancelledAt: true } },
   offer: { select: { sentAt: true, response: true } },
   movementRequest: { select: { id: true, requestNumber: true, status: true } },
 } satisfies Prisma.RecruitmentCandidateSelect;
@@ -67,6 +68,8 @@ export function progressOf(c: Omit<CandidateRow, "assessment">): CandidateProgre
     status: c.status,
     hasReviewer: c.tests.some((t) => t.testType.form === "ESSAY" && t.passed === null && t._count.reviewers > 0),
     hasInterview: !!c.interview,
+    hasHrInterview: !!c.hrInterview && !c.hrInterview.cancelledAt,
+    hrSubmitted: !!c.hrInterview?.submittedAt,
     interviewersTotal: interviewers.length,
     interviewersSubmitted: interviewers.filter((i) => i.submittedAt).length,
     hasOffer: !!c.offer,

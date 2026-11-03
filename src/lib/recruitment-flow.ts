@@ -12,6 +12,7 @@ import { HELD_MESSAGE } from "@/lib/recruitment-request-changes";
 import { fillTemplate, isValidSignatureDataUrl, fileExtension, validateOfferFile, REQUEST_FILLED_REASON } from "@/lib/recruitment-candidates";
 import { isMovementRequestOpen } from "@/lib/movement";
 import { cancelEmail, cancelProblem, closeReasonText } from "@/lib/interview-cancel";
+import { canScheduleHr, canSubmitHr, checkMatrixScores, hrFormProblem, hrRejectCloseReason, hrRejectEmail, HR_REJECT_KIND, MATRIX_MAX } from "@/lib/interview-matrix";
 import { FULFILLABLE_STATUSES, getRecruitmentSettings, refreshCandidateStatus, setCandidateStatus, type EngineResult } from "@/lib/recruitment-service";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
@@ -254,14 +255,12 @@ export async function submitInterviewerForm(args: {
   if (interviewer.interview.cancelledAt) return { ok: false, error: "Interview ini dibatalkan karena pelamar tidak datang. Tidak perlu mengisi penilaian." };
   if (candidate.status !== "INTERVIEWING" || candidate.interviewDecision) return { ok: false, error: "Interview ini sudah selesai." };
 
-  const aspects = await prisma.recruitmentInterviewAspect.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } });
-  for (const a of aspects) {
-    const s = args.scores[a.id];
-    if (!Number.isInteger(s) || s < 1 || s > 5) return { ok: false, error: `Beri nilai 1 sampai 5 untuk "${a.label}".` };
-  }
+  const aspects = await prisma.recruitmentInterviewAspect.findMany({ where: { active: true, audience: "USER" }, orderBy: { sortOrder: "asc" } });
+  const checked = checkMatrixScores(aspects.map((a) => ({ id: a.id, label: a.label, optional: a.optional })), args.scores);
+  if (!checked.ok) return { ok: false, error: checked.error };
   await prisma.$transaction([
     prisma.recruitmentInterviewScore.createMany({
-      data: aspects.map((a) => ({ interviewerId: interviewer.id, aspectId: a.id, aspectLabel: a.label, score: args.scores[a.id] })),
+      data: checked.scores.map((s) => ({ interviewerId: interviewer.id, aspectId: s.aspectId, aspectLabel: s.label, score: s.score, maxScore: MATRIX_MAX })),
     }),
     prisma.recruitmentInterviewer.update({
       where: { id: interviewer.id },
@@ -376,38 +375,45 @@ export async function cancelInterviewByCandidate(args: {
     include: {
       request: { select: { job: { select: { jobTitle: true } } } },
       interview: { include: { interviewers: { select: { employeeId: true, submittedAt: true } } } },
+      hrInterview: { select: { id: true, scheduledAt: true, location: true, submittedAt: true, cancelledAt: true } },
     },
   });
   if (!candidate) return { ok: false, error: "Pelamar tidak ditemukan." };
-  const interview = candidate.interview;
+  // The applicant may not come to the user interview, the HR interview or both. What is still open gets cancelled; an HR
+  // form that was already sent stays as history.
+  const userInterview = candidate.interview && !candidate.interview.cancelledAt ? candidate.interview : null;
+  const hrOpen = candidate.hrInterview && !candidate.hrInterview.cancelledAt && !candidate.hrInterview.submittedAt ? candidate.hrInterview : null;
+  const interview = userInterview ?? null;
+  const target = userInterview ?? hrOpen;
+  const anyScheduled = !!(candidate.interview || candidate.hrInterview);
   const problem = cancelProblem(
     {
       candidateStatus: candidate.status,
       interviewDecision: candidate.interviewDecision,
-      hasInterview: !!interview,
-      alreadyCancelled: !!interview?.cancelledAt,
-      submittedInterviewers: interview?.interviewers.filter((i) => i.submittedAt).length ?? 0,
+      hasInterview: anyScheduled,
+      alreadyCancelled: !target && anyScheduled,
+      submittedInterviewers: userInterview?.interviewers.filter((i) => i.submittedAt).length ?? 0,
     },
     { kind: args.kind, note: args.note },
-    interview?.scheduledAt ?? null,
+    target?.scheduledAt ?? null,
     new Date()
   );
-  if (problem || !interview) return { ok: false, error: problem ?? "Pelamar ini belum punya jadwal interview." };
+  if (problem || !target) return { ok: false, error: problem ?? "Pelamar ini belum punya jadwal interview." };
 
   const kind = args.kind as InterviewCancelKind;
   const reason = args.reason?.trim() || null;
   const note = args.note.trim();
   const closeReason = closeReasonText(kind, reason, note);
+  const cancelData = { cancelledAt: new Date(), cancelledByAccountId: args.accountId, cancelKind: kind, cancelReason: reason, cancelNote: note };
   await prisma.$transaction(async (tx) => {
-    await tx.recruitmentInterview.update({
-      where: { id: interview.id },
-      data: { cancelledAt: new Date(), cancelledByAccountId: args.accountId, cancelKind: kind, cancelReason: reason, cancelNote: note },
-    });
+    if (userInterview) await tx.recruitmentInterview.update({ where: { id: userInterview.id }, data: cancelData });
+    if (hrOpen) await tx.recruitmentHrInterview.update({ where: { id: hrOpen.id }, data: cancelData });
     await setCandidateStatus(tx, candidate.id, "WITHDRAWN", { closeReason });
     await tx.recruitmentOffer.updateMany({ where: { candidateId: candidate.id, response: null }, data: { tokenHash: null } });
     await cancelMovementOfCandidates(tx, [candidate.id], closeReason, args.accountId);
   });
 
+  if (!interview) return { ok: true, interviewersEmailed: 0, interviewers: 0 };
   const vars = interviewMessageVars({ fullName: candidate.fullName, positionTitle: candidate.request.job?.jobTitle ?? "posisi yang dilamar", scheduledAt: interview.scheduledAt, location: interview.location });
   const mail = cancelEmail({ candidateName: candidate.fullName, positionTitle: vars.posisi, tanggal: vars.tanggal, jam: vars.jam, kind });
   let interviewersEmailed = 0;
@@ -415,6 +421,123 @@ export async function cancelInterviewByCandidate(args: {
     if (await mailEmployee(i.employeeId, mail.subject, mail.text)) interviewersEmailed++;
   }
   return { ok: true, interviewersEmailed, interviewers: interview.interviewers.length };
+}
+
+// ---------- the HR round ----------
+
+// Admin Rekrutmen plans the HR interview (its own date, place and invitation); it can be moved until the form is sent.
+export async function scheduleHrInterview(args: {
+  candidateId: string;
+  scheduledAt: Date;
+  mode: RecruitmentInterviewMode;
+  location: string;
+  accountId: string;
+}): Promise<EngineResult & { emailedCandidate?: boolean; applicantEmailOff?: boolean }> {
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { id: args.candidateId },
+    include: {
+      request: { select: { heldAt: true, job: { select: { jobTitle: true } } } },
+      hrInterview: { select: { id: true, submittedAt: true, cancelledAt: true } },
+    },
+  });
+  if (!candidate) return { ok: false, error: "Pelamar tidak ditemukan." };
+  if (candidate.request.heldAt) return { ok: false, error: HELD_MESSAGE };
+  if (candidate.hrInterview?.submittedAt) return { ok: false, error: "Penilaian HR sudah terkirim, jadwalnya tidak bisa diubah." };
+  if (!canScheduleHr({ candidateStatus: candidate.status, interviewDecision: candidate.interviewDecision, hrSubmitted: false, hrCancelled: !!candidate.hrInterview?.cancelledAt })) {
+    return { ok: false, error: "Pelamar ini belum bisa dijadwalkan interview HR." };
+  }
+  const location = args.location.trim();
+  if (!location) return { ok: false, error: "Isi lokasi atau tautan meeting." };
+
+  const hrInterviewId = await prisma.$transaction(async (tx) => {
+    const hr = await tx.recruitmentHrInterview.upsert({
+      where: { candidateId: candidate.id },
+      update: { scheduledAt: args.scheduledAt, mode: args.mode, location },
+      create: { candidateId: candidate.id, scheduledAt: args.scheduledAt, mode: args.mode, location, createdByAccountId: args.accountId },
+    });
+    if (candidate.status !== "INTERVIEWING") await setCandidateStatus(tx, candidate.id, "INTERVIEWING");
+    return hr.id;
+  });
+
+  const settings = await getRecruitmentSettings();
+  const vars = interviewMessageVars({ fullName: candidate.fullName, positionTitle: candidate.request.job?.jobTitle ?? "posisi yang dilamar", scheduledAt: args.scheduledAt, location });
+  const emailedCandidate = await trySendToApplicant(candidate.email, "Undangan interview HR PT CBP", fillTemplate(settings.invitationEmailTemplate, vars));
+  if (emailedCandidate) await prisma.recruitmentHrInterview.update({ where: { id: hrInterviewId }, data: { invitationSentAt: new Date() } });
+  return { ok: true, emailedCandidate, applicantEmailOff: !APPLICANT_EMAILS_ENABLED };
+}
+
+// Admin Rekrutmen sends the HR form: matrix scores, recommendation, note. A rejection ends the applicant and cancels the
+// user interview (its unfilled forms with it); the interviewers are told.
+export async function submitHrInterview(args: {
+  candidateId: string;
+  accountId: string;
+  scores: Record<string, number | undefined>;
+  recommendation: string;
+  note: string;
+}): Promise<EngineResult & { rejected?: boolean; interviewers?: number; interviewersEmailed?: number }> {
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { id: args.candidateId },
+    include: {
+      request: { select: { job: { select: { jobTitle: true } } } },
+      hrInterview: true,
+      interview: { include: { interviewers: { select: { employeeId: true } } } },
+    },
+  });
+  if (!candidate || !candidate.hrInterview) return { ok: false, error: "Interview HR belum dijadwalkan." };
+  const hr = candidate.hrInterview;
+  if (hr.submittedAt) return { ok: false, error: "Penilaian HR sudah terkirim dan tidak bisa diubah." };
+  if (hr.cancelledAt) return { ok: false, error: "Interview HR ini dibatalkan." };
+  if (!canSubmitHr({ candidateStatus: candidate.status, interviewDecision: candidate.interviewDecision, hasHrInterview: true, hrCancelled: false, hrSubmitted: false })) {
+    return { ok: false, error: "Pelamar ini sudah tidak dalam tahap interview." };
+  }
+  const note = args.note.trim();
+  const formProblem = hrFormProblem({ recommendation: args.recommendation, note });
+  if (formProblem) return { ok: false, error: formProblem };
+
+  const aspects = await prisma.recruitmentInterviewAspect.findMany({ where: { active: true, audience: "HR" }, orderBy: { sortOrder: "asc" } });
+  const checked = checkMatrixScores(aspects.map((a) => ({ id: a.id, label: a.label, optional: a.optional })), args.scores);
+  if (!checked.ok) return { ok: false, error: checked.error };
+
+  const rejected = args.recommendation === "REJECTED";
+  const userInterview = candidate.interview && !candidate.interview.cancelledAt ? candidate.interview : null;
+  const closeReason = hrRejectCloseReason(note);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const sent = await tx.recruitmentHrInterview.updateMany({
+        where: { id: hr.id, submittedAt: null },
+        data: { scoredByAccountId: args.accountId, recommendation: args.recommendation as RecruitmentInterviewDecision, note: note || null, submittedAt: new Date() },
+      });
+      if (sent.count !== 1) throw new Error("already-sent");
+      await tx.recruitmentHrScore.createMany({
+        data: checked.scores.map((s) => ({ hrInterviewId: hr.id, aspectId: s.aspectId, aspectLabel: s.label, score: s.score, maxScore: MATRIX_MAX })),
+      });
+      if (!rejected) return;
+      if (userInterview) {
+        await tx.recruitmentInterview.update({
+          where: { id: userInterview.id },
+          data: { cancelledAt: new Date(), cancelledByAccountId: args.accountId, cancelKind: HR_REJECT_KIND, cancelReason: "Interview HR", cancelNote: note },
+        });
+      }
+      await setCandidateStatus(tx, candidate.id, "REJECTED", { closeReason });
+      await tx.recruitmentOffer.updateMany({ where: { candidateId: candidate.id, response: null }, data: { tokenHash: null } });
+      await cancelMovementOfCandidates(tx, [candidate.id], closeReason, args.accountId);
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "already-sent") return { ok: false, error: "Penilaian HR sudah terkirim dan tidak bisa diubah." };
+    throw error;
+  }
+  if (!rejected) return { ok: true, rejected: false };
+
+  let interviewersEmailed = 0;
+  const interviewers = userInterview?.interviewers ?? [];
+  if (userInterview) {
+    const vars = interviewMessageVars({ fullName: candidate.fullName, positionTitle: candidate.request.job?.jobTitle ?? "posisi yang dilamar", scheduledAt: userInterview.scheduledAt, location: userInterview.location });
+    const mail = hrRejectEmail({ candidateName: candidate.fullName, positionTitle: vars.posisi, tanggal: vars.tanggal, jam: vars.jam });
+    for (const i of interviewers) {
+      if (await mailEmployee(i.employeeId, mail.subject, mail.text)) interviewersEmailed++;
+    }
+  }
+  return { ok: true, rejected: true, interviewers: interviewers.length, interviewersEmailed };
 }
 
 // ---------- offering letter ----------

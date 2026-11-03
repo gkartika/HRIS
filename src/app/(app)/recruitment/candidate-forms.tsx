@@ -14,19 +14,23 @@ import {
   rejectCandidateAction,
   reopenTestAction,
   saveHrNotesAction,
+  scheduleHrInterviewAction,
   scheduleInterviewAction,
   sendOfferAction,
+  submitHrInterviewAction,
   setOpenForAction,
   setRequestTestsAction,
   regenerateAccessCodeAction,
   setReviewersAction,
   uploadOfferAction,
   purgeOldCandidatesAction,
+  type HrFormResult,
   type ScheduleResult,
   type SendOfferResult,
   type TestLinkResult,
 } from "./candidate-actions";
 import { OPEN_FOR_LABEL } from "@/lib/recruitment-candidates";
+import { ScoreMatrix, type MatrixAspectInfo } from "./score-matrix";
 import { CANCEL_KIND_HINT, CANCEL_KIND_LABEL, CANCEL_QUICK_REASONS } from "@/lib/interview-cancel";
 import type { InterviewCancelKind, RecruitmentInterviewDecision, RecruitmentOpenFor } from "@/generated/prisma/enums";
 
@@ -931,5 +935,151 @@ export function ClosureNoticeRow({ candidateId, name, note, whatsappUrl }: { can
       </span>
       {error && <span className="w-full text-xs text-rose-600">{error}</span>}
     </div>
+  );
+}
+
+// ---------- HR round (Admin Rekrutmen) ----------
+
+export interface HrInterviewDefaults {
+  date: string;
+  time: string;
+  mode: "OFFLINE" | "ONLINE";
+  location: string;
+}
+
+export function ScheduleHrInterviewForm({ candidateId, existing }: { candidateId: string; existing: HrInterviewDefaults | null }) {
+  const router = useRouter();
+  const action = scheduleHrInterviewAction.bind(null, candidateId);
+  const [result, formAction, pending] = useActionState<ScheduleResult | undefined, FormData>(action, undefined);
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const data = new FormData(e.currentTarget);
+        startTransition(async () => {
+          await formAction(data);
+          router.refresh();
+        });
+      }}
+      className="space-y-3"
+    >
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div>
+          <label className={label} htmlFor="hr-date">Tanggal</label>
+          <input id="hr-date" name="date" type="date" required defaultValue={existing?.date} className={input} />
+        </div>
+        <div>
+          <label className={label} htmlFor="hr-time">Jam (WIB)</label>
+          <input id="hr-time" name="time" type="time" required defaultValue={existing?.time ?? "09:00"} className={input} />
+        </div>
+        <div>
+          <label className={label} htmlFor="hr-mode">Bentuk</label>
+          <select id="hr-mode" name="mode" defaultValue={existing?.mode ?? "OFFLINE"} className={input}>
+            <option value="OFFLINE">Offline (di kantor)</option>
+            <option value="ONLINE">Online</option>
+          </select>
+        </div>
+        <div>
+          <label className={label} htmlFor="hr-loc">Lokasi / tautan meeting</label>
+          <input id="hr-loc" name="location" required defaultValue={existing?.location} placeholder="Ruang HR" className={input} />
+        </div>
+      </div>
+      {result?.error && <p className="text-xs text-rose-600">{result.error}</p>}
+      {result && !result.error && (
+        <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+          Jadwal interview HR tersimpan.{" "}
+          {result.emailedCandidate
+            ? "Email undangan terkirim ke pelamar."
+            : result.applicantEmailOff
+              ? "Email ke pelamar sedang dinonaktifkan, jadi tidak dikirim. Kirim undangan lewat WhatsApp."
+              : "Email ke pelamar tidak terkirim, kirim lewat WhatsApp."}
+          {result.whatsappUrl && (
+            <div className="mt-2">
+              <a href={result.whatsappUrl} target="_blank" rel="noopener noreferrer" className={`${ghost} inline-block bg-white`}>
+                Buka WhatsApp
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+      <button type="submit" disabled={pending} className={primary}>
+        {pending ? "Menyimpan..." : existing ? "Simpan perubahan jadwal HR" : "Jadwalkan interview HR dan kirim undangan"}
+      </button>
+    </form>
+  );
+}
+
+// The HR form: matrix scores, recommendation, note. Turning the applicant down says out loud what it will cause.
+export function HrInterviewForm({
+  candidateId,
+  aspects,
+  userInterview,
+}: {
+  candidateId: string;
+  aspects: MatrixAspectInfo[];
+  userInterview: { when: string; interviewers: number } | null;
+}) {
+  const router = useRouter();
+  const action = submitHrInterviewAction.bind(null, candidateId);
+  const [result, formAction, pending] = useActionState<HrFormResult | undefined, FormData>(action, undefined);
+  const [scores, setScores] = useState<Record<string, number>>({});
+  const [recommendation, setRecommendation] = useState("");
+  const rejecting = recommendation === "REJECTED";
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const data = new FormData(e.currentTarget);
+        startTransition(async () => {
+          await formAction(data);
+          router.refresh();
+        });
+      }}
+      className="space-y-4"
+    >
+      <p className={label}>Nilai tiap aspek: 2 (sangat kurang) sampai 10 (sangat baik)</p>
+      <ScoreMatrix aspects={aspects} scores={scores} onChange={setScores} />
+
+      <fieldset>
+        <legend className={label}>Rekomendasi HR</legend>
+        <div className="flex flex-wrap gap-4">
+          {[
+            ["ACCEPTED", "Diterima"],
+            ["CONSIDERED", "Dipertimbangkan"],
+            ["REJECTED", "Ditolak"],
+          ].map(([value, text]) => (
+            <label key={value} className="flex items-center gap-2 text-sm">
+              <input type="radio" name="recommendation" value={value} required checked={recommendation === value} onChange={() => setRecommendation(value)} />
+              {text}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div>
+        <label className={label} htmlFor="hr-note">Catatan{rejecting ? " (wajib kalau Ditolak)" : ""}</label>
+        <textarea id="hr-note" name="note" rows={3} required={rejecting} className={input} />
+      </div>
+
+      {rejecting && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50/60 p-3 text-xs text-rose-900">
+          Kalau dikirim: pelamar berstatus <b>Ditolak</b>
+          {userInterview ? (
+            <>
+              , interview user ({userInterview.when}) dibatalkan, penilaian user yang belum terisi ikut dibatalkan, dan {userInterview.interviewers} pewawancara diberi email.
+            </>
+          ) : (
+            "."
+          )}
+        </div>
+      )}
+      {result?.error && <p className="text-xs text-rose-600">{result.error}</p>}
+      {result?.message && <p className="text-xs text-emerald-700">{result.message}</p>}
+      <p className="text-xs text-slate-500">Penilaian tidak bisa diubah setelah dikirim.</p>
+      <button type="submit" disabled={pending} className={rejecting ? "rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60" : primary}>
+        {pending ? "Mengirim..." : rejecting ? "Kirim penilaian dan tolak pelamar" : "Kirim penilaian HR"}
+      </button>
+    </form>
   );
 }

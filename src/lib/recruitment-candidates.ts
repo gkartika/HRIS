@@ -408,6 +408,9 @@ export interface CandidateProgress {
   status: RecruitmentCandidateStatus;
   hasReviewer: boolean; // for an essay waiting for review
   hasInterview: boolean;
+  /** The HR round (Admin Rekrutmen) is scheduled and not cancelled. */
+  hasHrInterview?: boolean;
+  hrSubmitted?: boolean;
   interviewersTotal: number;
   interviewersSubmitted: number;
   hasOffer: boolean;
@@ -428,7 +431,7 @@ export function candidateNextStep(p: CandidateProgress): { label: string; needsA
     case "TEST_PASSED":
       return { label: "Undang interview", needsAction: true };
     case "INTERVIEWING":
-      if (!p.hasInterview) return { label: "Jadwalkan interview", needsAction: true };
+      if (!p.hasInterview) return { label: p.hasHrInterview ? "Jadwalkan interview user" : "Jadwalkan interview", needsAction: true };
       if (p.interviewersTotal > 0 && p.interviewersSubmitted >= p.interviewersTotal) {
         return { label: "Tetapkan hasil akhir", needsAction: true };
       }
@@ -448,11 +451,6 @@ export function candidateNextStep(p: CandidateProgress): { label: string; needsA
 }
 
 // ---------- interview results ----------
-
-export function averageScore(scores: number[]): number | null {
-  if (scores.length === 0) return null;
-  return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10;
-}
 
 export function countDecisions(
   recs: (RecruitmentInterviewDecision | null)[]

@@ -34,7 +34,7 @@ export default async function RecruitmentSettingsPage({ searchParams }: { search
 
   return (
     <div className="space-y-5">
-      <Breadcrumbs items={[{ label: "Pelamar", href: "/recruitment/applicants" }, { label: "Pengaturan Rekrutmen" }]} />
+      <Breadcrumbs items={[{ label: "Rekrutmen", href: "/recruitment" }, { label: "Pengaturan Rekrutmen" }]} />
       <div>
         <h1 className="text-lg font-medium text-slate-900">Pengaturan Rekrutmen</h1>
         <p className="mt-1 text-sm text-slate-500">Semuanya diatur di sini, tanpa perlu developer: jenis tes dan soalnya, tes tiap jabatan, aspek penilaian interview, dan pesan undangan.</p>

@@ -105,6 +105,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (canManageRecruitment(session)) {
     buckets.rekrutmenMutasi.push({ href: "/recruitment/applicants", label: "Pelamar", icon: "Users" });
     buckets.rekrutmenMutasi.push({ href: "/recruitment/dashboard", label: "Dasbor Rekrutmen", icon: "BarChart3" });
+    buckets.rekrutmenMutasi.push({ href: "/recruitment/settings", label: "Pengaturan Rekrutmen", icon: "Settings" });
   }
   if (hasRecruitmentWork) {
     buckets.rekrutmenMutasi.push({ href: "/recruitment/tasks", label: "Tugas Rekrutmen", icon: "ListChecks" });

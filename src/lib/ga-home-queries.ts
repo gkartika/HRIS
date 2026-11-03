@@ -4,6 +4,7 @@
 import { prisma } from "@/lib/db";
 import { planDueState, PLAN_DUE_SOON_DAYS, isWaitingForGoods } from "@/lib/ga-operations";
 import { listItemsWithStock } from "@/lib/consumables-queries";
+import { summarizeAssets, type AssetSummary } from "@/lib/asset-summary";
 import {
   countBy,
   daysSince,
@@ -51,7 +52,7 @@ export interface GaHomeData {
   tiles: GaTile[];
   todo: TodoRow[];
   todoCounts: Record<TodoKind | "all", number>;
-  assetSummary: { totalAssets: number; inUse: number; activeCustodies: number };
+  assetSummary: AssetSummary;
   lowStock: LowStockItem[];
 }
 
@@ -113,9 +114,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       orderBy: { clearanceDueDate: "asc" },
     }),
     Promise.all([
-      prisma.fixedAsset.count({ where: { activeFlag: true } }),
-      prisma.fixedAsset.count({ where: { activeFlag: true, status: "IN_USE" } }),
-      prisma.assetCustody.count({ where: { status: "ACTIVE" } }),
+      prisma.fixedAsset.findMany({ where: { activeFlag: true }, select: { category: true, status: true, trackingType: true, totalQuantity: true, availableQuantity: true } }),
       prisma.fixedAsset.count({ where: { activeFlag: true, status: "UNDER_REPAIR" } }),
       prisma.fixedAsset.count({ where: { activeFlag: true, status: { in: ["PENDING_DISPOSAL", "LOST_PENDING_REVIEW"] } } }),
     ]),
@@ -128,7 +127,8 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
       orderBy: { dueDate: "asc" },
     }),
   ]);
-  const [totalAssets, inUse, activeCustodies, underRepair, lostPending] = assetCounts;
+  const [assetRows, underRepair, lostPending] = assetCounts;
+  const assetSummary = summarizeAssets(assetRows);
   const plansWithOpenOrder = duePlans.length
     ? new Set(
         (await prisma.maintenanceWorkOrder.findMany({ relationLoadStrategy: "join", where: { sourcePlanId: { in: duePlans.map((p) => p.id) }, status: "OPEN" }, select: { sourcePlanId: true } })).map(
@@ -405,7 +405,7 @@ export async function getGaHomeData(now: Date = new Date()): Promise<GaHomeData>
     tiles,
     todo: sorted,
     todoCounts,
-    assetSummary: { totalAssets, inUse, activeCustodies },
+    assetSummary,
     lowStock: lowStock.slice(0, 5),
   };
 }

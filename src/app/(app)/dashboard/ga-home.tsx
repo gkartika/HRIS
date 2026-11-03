@@ -154,21 +154,47 @@ export async function GaHome({ filter }: { filter: TodoKind | "all" }) {
 
         <div className="space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <p className="text-sm font-semibold text-slate-900">Ringkasan aset</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-900">Ringkasan aset</p>
+              <Link href="/assets" className="text-xs text-indigo-600 hover:underline">
+                Semua aset →
+              </Link>
+            </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-              <Link href="/assets" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
-                <p className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.totalAssets}</p>
-                <p className="text-[11px] text-slate-500">Aset aktif</p>
+              <Link href="/assets?status=AVAILABLE" className="rounded-lg bg-emerald-50 p-2 hover:bg-emerald-100">
+                <p className="text-xl font-semibold tabular-nums text-emerald-800">{data.assetSummary.available}</p>
+                <p className="text-[11px] text-emerald-800">Belum digunakan</p>
               </Link>
               <Link href="/assets?status=IN_USE" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
                 <p className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.inUse}</p>
                 <p className="text-[11px] text-slate-500">Digunakan</p>
               </Link>
-              <Link href="/assets?status=IN_USE" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
-                <p className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.activeCustodies}</p>
-                <p className="text-[11px] text-slate-500">Penguasaan aktif</p>
+              <Link href="/assets?status=UNDER_REPAIR" className="rounded-lg bg-slate-50 p-2 hover:bg-slate-100">
+                <p className="text-xl font-semibold tabular-nums text-slate-900">{data.assetSummary.other}</p>
+                <p className="text-[11px] text-slate-500">Perbaikan / disposal</p>
               </Link>
             </div>
+            <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Per kategori</p>
+            <div className="mt-2 space-y-2.5">
+              {data.assetSummary.categories.map((c) => (
+                <Link key={c.category} href={c.categoryFilter ? `/assets?category=${encodeURIComponent(c.categoryFilter)}` : "/assets"} className="block rounded hover:bg-slate-50">
+                  <div className="flex items-baseline justify-between gap-2 text-xs">
+                    <span className="font-medium text-slate-800">{c.category}</span>
+                    <span className="tabular-nums text-slate-500">
+                      <b className="text-emerald-700">{c.available}</b> belum digunakan · <b className="text-slate-900">{c.inUse}</b> digunakan
+                      {c.other > 0 ? ` · ${c.other} perbaikan` : ""} · {c.total} total{c.records !== c.total ? ` (${c.records} aset)` : ""}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-slate-200" role="presentation">
+                    <div className="bg-indigo-500" style={{ width: `${(c.inUse / Math.max(1, c.total)) * 100}%` }} />
+                    <div className="bg-emerald-400" style={{ width: `${(c.available / Math.max(1, c.total)) * 100}%` }} />
+                    <div className="bg-amber-400" style={{ width: `${(c.other / Math.max(1, c.total)) * 100}%` }} />
+                  </div>
+                </Link>
+              ))}
+              {data.assetSummary.categories.length === 0 && <p className="text-sm text-slate-400">Belum ada aset.</p>}
+            </div>
+            <p className="mt-3 text-[11px] text-slate-400">Dihitung per unit (barang yang dilacak per jumlah dihitung per buah). Aset yang sudah dihapuskan tidak dihitung.</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-5">
             <div className="flex items-center justify-between">

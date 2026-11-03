@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n/id";
 import { commitImportBatch } from "../actions";
 import { DATASET_REGISTRY, isDatasetKey } from "@/lib/import-export/registry";
 import { STALE_AFTER_MS } from "@/lib/import-claim";
+import { isSkippedRow, sortPreviewRows } from "@/lib/import-preview";
 import { CommitButton } from "./commit-button";
 import { AutoRefresh } from "./auto-refresh";
 
@@ -33,8 +34,21 @@ export default async function ImportBatchPage({
   }
 
   const mod = isDatasetKey(batch.importType) ? DATASET_REGISTRY[batch.importType] : null;
-  const previewColumns = mod ? mod.templateHeaders.slice(0, 3) : [];
+  // The first three template columns, unless the file has its own headers (a raw fingerprint machine export reads Nama /
+  // Tgl/Waktu / Status): then those are shown, so the preview is not three columns of dashes.
+  const templateColumns = mod ? mod.templateHeaders.slice(0, 3) : [];
+  const firstRaw = batch.rows[0] ? (JSON.parse(batch.rows[0].rawData) as Record<string, string>) : {};
+  const previewColumns = templateColumns.some((col) => col in firstRaw)
+    ? templateColumns
+    : Object.keys(firstRaw)
+        .filter((key) => !key.startsWith("__EMPTY"))
+        .slice(0, 3);
   const commitWithId = commitImportBatch.bind(null, batchId);
+  // Rows to fix come first, then repeats (skipped), then valid ones.
+  const isSkipped = isSkippedRow;
+  const rows = sortPreviewRows(batch.rows);
+  const skipped = batch.rows.filter(isSkippedRow).length;
+  const rejected = batch.errorRows - skipped;
   // Another run is writing this batch right now (and is not dead yet): show
   // progress instead of a button, so it cannot be started a second time.
   const isImporting =
@@ -47,12 +61,16 @@ export default async function ImportBatchPage({
       <h1 className="text-lg font-medium text-slate-900">{t("importUi.previewTitle")}</h1>
       <p className="mt-1 text-sm text-slate-500">
         {mod?.label ?? batch.importType} — {batch.sourceFileName} —{" "}
-        {t("importUi.summary", {
-          valid: batch.validRows,
-          rejected: batch.errorRows,
-          total: batch.totalRows,
-        })}
+        {skipped > 0
+          ? `${batch.validRows} valid, ${rejected} ditolak, ${skipped} dilewati dari ${batch.totalRows} baris`
+          : t("importUi.summary", { valid: batch.validRows, rejected: batch.errorRows, total: batch.totalRows })}
       </p>
+      {(rejected > 0 || skipped > 0) && (
+        <p className="mt-1 text-xs text-slate-400">
+          {rejected > 0 ? "Baris yang perlu diperbaiki ada di paling atas. " : ""}
+          {skipped > 0 ? "Dilewati = pemindaian ganda pada hari yang sama atau sudah pernah diimpor; tidak perlu diperbaiki." : ""}
+        </p>
+      )}
 
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
@@ -69,7 +87,7 @@ export default async function ImportBatchPage({
             </tr>
           </thead>
           <tbody>
-            {batch.rows.map((row) => {
+            {rows.map((row) => {
               const raw = JSON.parse(row.rawData) as Record<string, string>;
               return (
                 <tr key={row.id} className="border-t border-slate-100">
@@ -84,7 +102,9 @@ export default async function ImportBatchPage({
                       className={`rounded-md px-2 py-1 text-xs font-medium ${
                         row.isValid
                           ? "bg-emerald-50 text-emerald-700"
-                          : "bg-rose-50 text-rose-700"
+                          : isSkipped(row)
+                            ? "bg-slate-100 text-slate-600"
+                            : "bg-rose-50 text-rose-700"
                       }`}
                     >
                       {row.isValid
@@ -93,7 +113,9 @@ export default async function ImportBatchPage({
                           : row.createdRecordId
                             ? "Dibuat"
                             : t("importUi.statusValid")
-                        : t("importUi.statusRejected")}
+                        : isSkipped(row)
+                          ? "Dilewati"
+                          : t("importUi.statusRejected")}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">{row.rejectionReason ?? "—"}</td>

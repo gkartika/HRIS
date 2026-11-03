@@ -22,8 +22,15 @@ const VALID_EVENT_TYPES = ["CHECK_IN", "CHECK_OUT"];
 // eventType/eventAt shape the rest of this module assumes. Detected by
 // header shape alone, so both formats work from the same upload with no
 // extra UI choice.
-function isRawMachineFormat(row: Record<string, string> | undefined): boolean {
-  return !!row && "Name" in row && "Status" in row && "Date/Time" in row;
+// The machine writes its headers in English (Name / Date/Time / Status) or Indonesian (Nama / Tgl/Waktu / Status).
+export function machineName(row: Record<string, string>): string | undefined {
+  return row.Name ?? row.Nama;
+}
+export function machineDateTime(row: Record<string, string>): string | undefined {
+  return row["Date/Time"] ?? row["Tgl/Waktu"];
+}
+export function isRawMachineFormat(row: Record<string, string> | undefined): boolean {
+  return !!row && ("Name" in row || "Nama" in row) && "Status" in row && ("Date/Time" in row || "Tgl/Waktu" in row);
 }
 
 // The raw export's "DD/MM/YYYY HH:mm:ss" breaks native Date parsing (it's
@@ -44,10 +51,11 @@ function parseMachineDateTime(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function mapMachineStatus(value: string): AttendanceEventType | null {
+// "C/In" and "C/Out", or "C/Masuk" and "C/Keluar" on a machine in Indonesian.
+export function mapMachineStatus(value: string): AttendanceEventType | null {
   const normalized = value.trim().toLowerCase();
-  if (normalized === "c/in") return "CHECK_IN";
-  if (normalized === "c/out") return "CHECK_OUT";
+  if (normalized === "c/in" || normalized === "c/masuk") return "CHECK_IN";
+  if (normalized === "c/out" || normalized === "c/keluar") return "CHECK_OUT";
   return null;
 }
 
@@ -153,9 +161,9 @@ async function dryRunRawMachineFormat(rows: Record<string, string>[]): Promise<D
 
   const parsed: ParsedMachineRow[] = rows.map((raw, index) => {
     const rowNumber = index + 2;
-    const name = raw.Name?.trim();
+    const name = machineName(raw)?.trim();
     const statusRaw = raw.Status?.trim();
-    const dateRaw = raw["Date/Time"]?.trim();
+    const dateRaw = machineDateTime(raw)?.trim();
 
     const errors: string[] = [];
     let employeeId: string | undefined;
@@ -176,7 +184,7 @@ async function dryRunRawMachineFormat(rows: Record<string, string>[]): Promise<D
 
     const eventType = statusRaw ? mapMachineStatus(statusRaw) : null;
     if (!statusRaw || !eventType) {
-      errors.push(`Status "${statusRaw ?? ""}" tidak dikenali — harus C/In atau C/Out`);
+      errors.push(`Status "${statusRaw ?? ""}" tidak dikenali — harus C/In, C/Out, C/Masuk atau C/Keluar`);
     }
 
     const eventAt = dateRaw ? parseMachineDateTime(dateRaw) : null;
@@ -319,9 +327,9 @@ async function commitRowCleanFormat(raw: Record<string, string>): Promise<Commit
 // still hold here — re-derived independently rather than trusted across the
 // two calls, same as the clean format above never trusting dryRun's lookup.
 async function commitRowRawMachineFormat(raw: Record<string, string>, session?: Session): Promise<CommitResult> {
-  const name = raw.Name.trim();
+  const name = (machineName(raw) ?? "").trim();
   const eventType = mapMachineStatus(raw.Status.trim());
-  const eventAt = parseMachineDateTime(raw["Date/Time"].trim());
+  const eventAt = parseMachineDateTime((machineDateTime(raw) ?? "").trim());
   if (!eventType || !eventAt) {
     throw new Error("Baris fingerprint tidak valid saat commit (status atau tanggal/waktu tidak terbaca).");
   }

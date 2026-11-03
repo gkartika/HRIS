@@ -2963,3 +2963,9 @@ Owner supplied the master data (folder GPT-module: question bank JSON, HR rubric
 - **Aspect lists:** two lists in Pengaturan Rekrutmen (user, HR), editable, each aspect has "Boleh dikosongkan". The five old aspects were switched off, not deleted.
 - **Beranda and Tugas:** "Isi penilaian HR" once the HR interview time passed, "Jadwalkan interview user" when only the HR round is planned, and HR interviews in "Interview 7 hari ke depan". The dashboard funnel counts the first invitation of either interview.
 - **Data:** migration 20261103180000 (additive; the only change to existing rows is switching off the five old aspects). Rules in `src/lib/interview-matrix.ts` with tests.
+
+### Fingerprint import matches the machine name to the employee name (2026-11-03)
+- **Why:** the earlier fix only made the raw machine file (Name / Date-Time / Status) readable; the name was still compared to the "ID Perangkat Fingerprint" of each employee's Penugasan Absensi, so every employee had to be filled in by hand first (none were).
+- **Now:** a name on the machine is matched to the full name of an active employee in SAPA (case and extra spaces ignored). A name that fits two employees, or nobody, is rejected with a plain reason. The old field is now an optional "Nama di mesin fingerprint" for people the machine spells differently; it is no longer required when a Fingerprint assignment is made.
+- **Employees without Penugasan Absensi:** an employee matched by name who has none gets a Fingerprint assignment from the day of their first punch (moved back if a later row is from an earlier day), so the daily attendance can be built for them. An employee who already has an assignment (any method) keeps it; the punch is attached to it.
+- **Standard CSV (fingerprintDeviceUserId / eventType / eventAt):** unchanged, still matched by that ID. No migration.

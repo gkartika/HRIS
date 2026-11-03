@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { companyToday, WIB_OFFSET_MS, formatCompanyTime } from "@/lib/company-time";
-import { normalizeName } from "@/lib/name-match";
+import { buildEmployeeNameIndex, normalizeName } from "@/lib/name-match";
+import type { Session } from "next-auth";
 import { normalizeWeekStart, buildIsScheduledToWorkLookup } from "@/lib/shift-assignment";
 import type { AttendanceEventType } from "@/generated/prisma/enums";
 import type { DryRunRow, ExportResult, CommitResult } from "./types";
@@ -145,19 +146,10 @@ async function dryRunCleanFormat(rows: Record<string, string>[]): Promise<DryRun
 // shift is expected to go through Jadwal Shift / Penugasan Absensi first,
 // not be inferred from a fingerprint scan alone.
 async function dryRunRawMachineFormat(rows: Record<string, string>[]): Promise<DryRunRow[]> {
-  const assignments = await prisma.attendanceAssignment.findMany({
-    where: { method: "FINGERPRINT", effectiveTo: null },
-    select: { employeeId: true, fingerprintDeviceUserId: true },
-  });
-  // A name that matches more than one assignment maps to null (ambiguous) so
-  // it's rejected explicitly instead of silently resolving to whichever
-  // assignment happened to be read last.
-  const employeeIdByName = new Map<string, string | null>();
-  for (const a of assignments) {
-    if (!a.fingerprintDeviceUserId) continue;
-    const key = normalizeName(a.fingerprintDeviceUserId);
-    employeeIdByName.set(key, employeeIdByName.has(key) ? null : a.employeeId);
-  }
+  // The machine name is matched to the full name of an active employee in SAPA. A "name on the machine" filled in at the
+  // employee's Penugasan Absensi (for someone the machine spells differently) finds the same employee. A name that
+  // matches more than one employee maps to null (ambiguous) so it's rejected explicitly instead of guessed.
+  const employeeIdByName = await loadEmployeeNameIndex();
 
   const parsed: ParsedMachineRow[] = rows.map((raw, index) => {
     const rowNumber = index + 2;
@@ -173,10 +165,10 @@ async function dryRunRawMachineFormat(rows: Record<string, string>[]): Promise<D
       const match = employeeIdByName.get(normalizeName(name));
       if (match === undefined) {
         errors.push(
-          `Nama "${name}" pada mesin fingerprint tidak terdaftar pada karyawan manapun — isi ID Perangkat Fingerprint karyawan dengan nama persis ini di Penugasan Absensi`
+          `Nama "${name}" pada mesin tidak cocok dengan nama karyawan aktif manapun di SAPA — samakan penulisan namanya, atau isi "Nama di mesin" karyawan itu di Penugasan Absensi dengan nama persis seperti di mesin`
         );
       } else if (match === null) {
-        errors.push(`Nama "${name}" cocok dengan lebih dari satu karyawan — perbaiki ID Perangkat Fingerprint yang duplikat di Penugasan Absensi`);
+        errors.push(`Nama "${name}" cocok dengan lebih dari satu karyawan — isi "Nama di mesin" yang berbeda untuk masing-masing di Penugasan Absensi`);
       } else {
         employeeId = match;
       }
@@ -295,8 +287,8 @@ async function dryRunRawMachineFormat(rows: Record<string, string>[]): Promise<D
   });
 }
 
-export async function commitRow(raw: Record<string, string>): Promise<CommitResult> {
-  if (isRawMachineFormat(raw)) return commitRowRawMachineFormat(raw);
+export async function commitRow(raw: Record<string, string>, session?: Session): Promise<CommitResult> {
+  if (isRawMachineFormat(raw)) return commitRowRawMachineFormat(raw, session);
   return commitRowCleanFormat(raw);
 }
 
@@ -326,7 +318,7 @@ async function commitRowCleanFormat(raw: Record<string, string>): Promise<Commit
 // valid, so the match-to-exactly-one-employee guarantee it computed should
 // still hold here — re-derived independently rather than trusted across the
 // two calls, same as the clean format above never trusting dryRun's lookup.
-async function commitRowRawMachineFormat(raw: Record<string, string>): Promise<CommitResult> {
+async function commitRowRawMachineFormat(raw: Record<string, string>, session?: Session): Promise<CommitResult> {
   const name = raw.Name.trim();
   const eventType = mapMachineStatus(raw.Status.trim());
   const eventAt = parseMachineDateTime(raw["Date/Time"].trim());
@@ -334,20 +326,34 @@ async function commitRowRawMachineFormat(raw: Record<string, string>): Promise<C
     throw new Error("Baris fingerprint tidak valid saat commit (status atau tanggal/waktu tidak terbaca).");
   }
 
-  const assignments = await prisma.attendanceAssignment.findMany({
-    where: { method: "FINGERPRINT", effectiveTo: null },
-    select: { id: true, employeeId: true, fingerprintDeviceUserId: true },
-  });
-  const normalized = normalizeName(name);
-  const matches = assignments.filter((a) => a.fingerprintDeviceUserId && normalizeName(a.fingerprintDeviceUserId) === normalized);
-  if (matches.length !== 1) {
+  const employeeId = (await loadEmployeeNameIndex()).get(normalizeName(name));
+  if (!employeeId) {
     throw new Error(`Tidak dapat mencocokkan nama "${name}" ke tepat satu karyawan saat commit.`);
   }
-  const assignment = matches[0];
+
+  // The employee's current assignment carries the punch. Someone matched by name who has none yet gets a Fingerprint
+  // assignment from the day of their first punch, so the daily attendance can be built for them (an assignment made here
+  // has no "name on the machine"; if a later row is from an earlier day, it starts from that day).
+  const current = await prisma.attendanceAssignment.findMany({
+    where: { employeeId, effectiveTo: null },
+    orderBy: { effectiveFrom: "asc" },
+    select: { id: true, method: true, fingerprintDeviceUserId: true, effectiveFrom: true },
+  });
+  let assignment = current.find((a) => a.method === "FINGERPRINT") ?? current[0];
+  const day = companyToday(eventAt);
+  if (!assignment) {
+    if (!session?.user?.id) throw new Error("Penugasan Absensi tidak bisa dibuat otomatis tanpa pengguna yang mengimpor.");
+    assignment = await prisma.attendanceAssignment.create({
+      data: { employeeId, method: "FINGERPRINT", effectiveFrom: day, assignedByAccountId: session.user.id },
+      select: { id: true, method: true, fingerprintDeviceUserId: true, effectiveFrom: true },
+    });
+  } else if (assignment.method === "FINGERPRINT" && !assignment.fingerprintDeviceUserId && assignment.effectiveFrom.getTime() > day.getTime()) {
+    await prisma.attendanceAssignment.update({ where: { id: assignment.id }, data: { effectiveFrom: day } });
+  }
 
   const event = await prisma.attendanceEvent.create({
     data: {
-      employeeId: assignment.employeeId,
+      employeeId,
       attendanceAssignmentId: assignment.id,
       eventType,
       eventSource: "FINGERPRINT_IMPORT",
@@ -356,6 +362,21 @@ async function commitRowRawMachineFormat(raw: Record<string, string>): Promise<C
   });
 
   return { id: event.id, action: "CREATE" };
+}
+
+// Active employees by full name, plus the optional "name on the machine" of their current assignment.
+async function loadEmployeeNameIndex(): Promise<Map<string, string | null>> {
+  const [employees, assignments] = await Promise.all([
+    prisma.employee.findMany({ where: { activeFlag: true }, select: { id: true, fullLegalName: true } }),
+    prisma.attendanceAssignment.findMany({
+      where: { effectiveTo: null, fingerprintDeviceUserId: { not: null } },
+      select: { employeeId: true, fingerprintDeviceUserId: true },
+    }),
+  ]);
+  return buildEmployeeNameIndex(
+    employees,
+    assignments.map((a) => ({ employeeId: a.employeeId, alias: a.fingerprintDeviceUserId as string }))
+  );
 }
 
 export async function exportData(): Promise<ExportResult> {

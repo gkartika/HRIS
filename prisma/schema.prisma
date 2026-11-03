@@ -1890,11 +1890,11 @@ model AttendanceAssignment {
   method                  AttendanceMethod
   geofenceId              String?
   geofence                AttendanceGeofence? @relation(fields: [geofenceId], references: [id])
-  // External device/badge identifier used to match a Fingerprint import row
-  // to this employee — only relevant when method = FINGERPRINT. For a
-  // machine whose export has no numeric ID column (just a display name),
-  // this holds that exact name string instead — fingerprint-attendance.ts
-  // auto-detects which export shape it's reading.
+  // Only relevant when method = FINGERPRINT. The standard CSV import matches
+  // its fingerprintDeviceUserId column to this. For a raw machine export
+  // (Name/Date-Time/Status) the name is matched to the employee's full name
+  // in SAPA, and this is only the optional "name on the machine" for someone
+  // the machine spells differently.
   fingerprintDeviceUserId String?
   effectiveFrom           DateTime
   effectiveTo             DateTime?

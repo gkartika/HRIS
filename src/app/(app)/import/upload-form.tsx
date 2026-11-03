@@ -39,8 +39,10 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
       {dataset === "fingerprint-attendance" && (
         <p className="mb-2 text-xs text-slate-400">
           Mendukung format ekspor CSV standar (fingerprintDeviceUserId/eventType/eventAt) maupun ekspor mentah
-          mesin fingerprint (Name/Date-Time/Status) — formatnya terdeteksi otomatis. Untuk ekspor mentah, isi ID
-          Perangkat Fingerprint karyawan di Penugasan Absensi dengan nama persis seperti yang tampil di mesin.
+          mesin fingerprint (Name/Date-Time/Status) — formatnya terdeteksi otomatis. Untuk ekspor mentah, nama di mesin
+          dicocokkan ke nama karyawan di SAPA, tidak perlu mengisi ID. Karyawan yang cocok tapi belum punya Penugasan
+          Absensi otomatis diberi penugasan Fingerprint. Kalau nama di mesin berbeda dari nama di SAPA, isi &quot;Nama di
+          mesin&quot; karyawan itu di Penugasan Absensi.
         </p>
       )}
       {dataset === "positions" && (

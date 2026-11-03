@@ -27,9 +27,6 @@ export async function setAttendanceAssignment(
 
   if (method !== "MOBILE" && method !== "FINGERPRINT") return "Metode absensi wajib dipilih.";
   if (!effectiveFromRaw) return "Tanggal mulai berlaku wajib diisi.";
-  if (method === "FINGERPRINT" && !fingerprintDeviceUserId) {
-    return "ID Perangkat Fingerprint wajib diisi untuk metode Fingerprint (dipakai mencocokkan data impor).";
-  }
 
   const effectiveFrom = new Date(effectiveFromRaw);
 

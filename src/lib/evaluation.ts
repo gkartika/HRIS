@@ -5,6 +5,7 @@
 // (Promosi/Mutasi/Demosi) and Manual HR — "do not keep an embedded
 // renewal-only evaluation implementation" (WF-19).
 import type { EvaluationStatus, EvaluationPurpose, MovementType } from "@/generated/prisma/enums";
+import { isCriterionStandard, type CriterionStandard } from "@/lib/evaluation-standard";
 
 export function formatEvaluationNumber(sequence: number, year: number): string {
   return `EVL-${year}-${String(sequence).padStart(4, "0")}`;
@@ -46,7 +47,7 @@ export function isEvaluationGateSatisfied(evaluationStatus: EvaluationStatus | n
   return evaluationStatus === null || evaluationStatus === "COMPLETED";
 }
 
-// FR-HC-01-07's form scale — every itemized criterion is scored 2/4/6/8.
+// FR-HC-01-07's form scale of the form used until 2026-10-21 — every itemized criterion is scored 2/4/6/8.
 export const EVALUATION_SCORE_SCALE = [2, 4, 6, 8] as const;
 
 export function isValidScoreValue(value: number): boolean {
@@ -61,12 +62,16 @@ export function isValidScoreValue(value: number): boolean {
 //
 // Each evaluation is released with a copy of the criteria (the "definition"), so a later change to the matrix
 // never alters an evaluation already under way. A saved grade is stored under its criterion's key.
-export const PERFORMANCE_SCALE = [2, 4, 6, 8] as const;
+export const PERFORMANCE_SCALE = [2, 4, 6, 8, 10] as const;
+// What a Performance grade is called (the matrix "Skala 2-10"); Tata Nilai grades have no names.
+export const PERFORMANCE_GRADE_NAME: Record<number, string> = { 2: "Sangat kurang", 4: "Kurang", 6: "Cukup", 8: "Baik", 10: "Sangat baik" };
 export const TATA_NILAI_SCALE = [0, 25, 50, 75, 100] as const;
 
 export interface MatrixCriterion {
   key: string;
   label: string;
+  /** What the criterion and each grade mean, as it was when the evaluation was released (null = no standard). */
+  standard?: CriterionStandard | null;
 }
 
 export interface MatrixDefinition {
@@ -127,19 +132,22 @@ export function matrixDefinitionOf(snapshot: unknown): MatrixDefinition {
   if (typeof snapshot === "object" && snapshot !== null) {
     const s = snapshot as { performance?: unknown; tataNilai?: unknown };
     if (isCriterionList(s.performance) && isCriterionList(s.tataNilai)) {
-      return { performance: s.performance.map(({ key, label }) => ({ key, label })), tataNilai: s.tataNilai.map(({ key, label }) => ({ key, label })) };
+      const keep = ({ key, label, standard }: MatrixCriterion): MatrixCriterion => ({ key, label, standard: isCriterionStandard(standard) ? standard : null });
+      return { performance: s.performance.map(keep), tataNilai: s.tataNilai.map(keep) };
     }
   }
   return DEFAULT_MATRIX;
 }
 
 // The copy stored on an evaluation when it is released: the active criteria of each section, in their order.
-export function buildMatrixDefinition(criteria: { section: "PERFORMANCE" | "TATA_NILAI"; key: string; label: string; sortOrder: number; active: boolean }[]): MatrixDefinition {
+export function buildMatrixDefinition(
+  criteria: { section: "PERFORMANCE" | "TATA_NILAI"; key: string; label: string; sortOrder: number; active: boolean; standard?: CriterionStandard | null }[]
+): MatrixDefinition {
   const pick = (section: "PERFORMANCE" | "TATA_NILAI") =>
     criteria
       .filter((c) => c.section === section && c.active)
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map(({ key, label }) => ({ key, label }));
+      .map(({ key, label, standard }) => ({ key, label, standard: standard ?? null }));
   return { performance: pick("PERFORMANCE"), tataNilai: pick("TATA_NILAI") };
 }
 
@@ -153,7 +161,7 @@ export function parseEvaluationMatrix(
   for (const { key } of definition.performance) {
     const raw = (read(performanceField(key)) ?? "").trim();
     const n = Number(raw);
-    if (!raw || !(PERFORMANCE_SCALE as readonly number[]).includes(n)) return { ok: false, error: "Semua penilaian Performance wajib diisi dengan nilai 2, 4, 6 atau 8." };
+    if (!raw || !(PERFORMANCE_SCALE as readonly number[]).includes(n)) return { ok: false, error: "Semua penilaian Performance wajib diisi dengan nilai 2, 4, 6, 8 atau 10." };
     performance[key] = n;
   }
   for (const { key } of definition.tataNilai) {

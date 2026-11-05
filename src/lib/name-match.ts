@@ -23,3 +23,26 @@ export function buildEmployeeNameIndex(
   for (const a of aliases) add(a.alias, a.employeeId);
   return index;
 }
+
+export const MACHINE_NAME_MAX = 100;
+
+// Is this "name on the machine" safe to give `employeeId`? Refused when it already points to another active employee (their full
+// name or their own machine name) so punches never land on the wrong person. Empty means "use the full name" and is fine.
+export function machineNameProblem(
+  name: string,
+  employeeId: string,
+  employees: { id: string; fullLegalName: string }[],
+  aliases: { employeeId: string; alias: string }[]
+): string | null {
+  const key = normalizeName(name);
+  if (!key) return null;
+  if (key.length > MACHINE_NAME_MAX) return `Nama di mesin terlalu panjang (maksimal ${MACHINE_NAME_MAX} karakter).`;
+  const others = buildEmployeeNameIndex(
+    employees.filter((e) => e.id !== employeeId),
+    aliases.filter((a) => a.employeeId !== employeeId)
+  );
+  if (!others.has(key)) return null;
+  const owner = others.get(key);
+  const who = owner ? employees.find((e) => e.id === owner)?.fullLegalName : null;
+  return who ? `Nama ini sudah dipakai karyawan lain (${who}). Isi nama yang berbeda.` : "Nama ini sudah dipakai lebih dari satu karyawan lain. Isi nama yang berbeda.";
+}

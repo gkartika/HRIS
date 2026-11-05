@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEmployeeNameIndex, normalizeName } from "./name-match";
+import { buildEmployeeNameIndex, machineNameProblem, normalizeName } from "./name-match";
 
 const people = [
   { id: "e1", fullLegalName: "Budi Santoso" },
@@ -38,5 +38,32 @@ describe("buildEmployeeNameIndex", () => {
 
   it("ignores an empty name", () => {
     expect(buildEmployeeNameIndex([{ id: "x", fullLegalName: "  " }], [{ employeeId: "x", alias: "" }]).size).toBe(0);
+  });
+});
+
+describe("machineNameProblem", () => {
+  const staff = [
+    { id: "e1", fullLegalName: "Ahmad Mansur Bin Encam" },
+    { id: "e2", fullLegalName: "Ahmad Faizin" },
+    { id: "e3", fullLegalName: "Dewi Lestari" },
+    { id: "e4", fullLegalName: "Dewi Lestari" },
+  ];
+  it("accepts a shorter name that nobody else uses, and an empty one", () => {
+    expect(machineNameProblem("Ahmad Mansur", "e1", staff, [])).toBeNull();
+    expect(machineNameProblem("  ", "e1", staff, [])).toBeNull();
+  });
+  it("refuses a name that is another employee's full name or machine name", () => {
+    expect(machineNameProblem("ahmad  faizin", "e1", staff, [])).toContain("Ahmad Faizin");
+    expect(machineNameProblem("Budi", "e1", staff, [{ employeeId: "e2", alias: "Budi" }])).toContain("Ahmad Faizin");
+  });
+  it("refuses a name already shared by two others", () => {
+    expect(machineNameProblem("Dewi Lestari", "e1", staff, [])).toContain("lebih dari satu");
+  });
+  it("lets an employee keep their own full name or machine name", () => {
+    expect(machineNameProblem("Ahmad Mansur Bin Encam", "e1", staff, [])).toBeNull();
+    expect(machineNameProblem("Ahmad Mansur", "e1", staff, [{ employeeId: "e1", alias: "Ahmad Mansur" }])).toBeNull();
+  });
+  it("refuses a name that is too long", () => {
+    expect(machineNameProblem("x".repeat(101), "e1", staff, [])).toContain("terlalu panjang");
   });
 });

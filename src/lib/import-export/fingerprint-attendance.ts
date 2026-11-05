@@ -154,8 +154,8 @@ async function dryRunCleanFormat(rows: Record<string, string>[]): Promise<DryRun
 // shift is expected to go through Jadwal Shift / Penugasan Absensi first,
 // not be inferred from a fingerprint scan alone.
 async function dryRunRawMachineFormat(rows: Record<string, string>[]): Promise<DryRunRow[]> {
-  // The machine name is matched to the full name of an active employee in SAPA. A "name on the machine" filled in at the
-  // employee's Penugasan Absensi (for someone the machine spells differently) finds the same employee. A name that
+  // The machine name is matched to the full name of an active employee in SAPA. A "name on the machine" filled in on the
+  // employee (profile, tab Akun; for someone the machine spells differently) finds the same employee. A name that
   // matches more than one employee maps to null (ambiguous) so it's rejected explicitly instead of guessed.
   const employeeIdByName = await loadEmployeeNameIndex();
 
@@ -173,10 +173,10 @@ async function dryRunRawMachineFormat(rows: Record<string, string>[]): Promise<D
       const match = employeeIdByName.get(normalizeName(name));
       if (match === undefined) {
         errors.push(
-          `Nama "${name}" pada mesin tidak cocok dengan nama karyawan aktif manapun di SAPA — samakan penulisan namanya, atau isi "Nama di mesin" karyawan itu di Penugasan Absensi dengan nama persis seperti di mesin`
+          `Nama "${name}" pada mesin tidak cocok dengan nama karyawan aktif manapun di SAPA. Bila nama di mesin lebih pendek dari nama di SAPA, isi "Nama di mesin" di profil karyawan itu (tab Akun) dengan nama persis seperti di mesin`
         );
       } else if (match === null) {
-        errors.push(`Nama "${name}" cocok dengan lebih dari satu karyawan — isi "Nama di mesin" yang berbeda untuk masing-masing di Penugasan Absensi`);
+        errors.push(`Nama "${name}" dipakai lebih dari satu karyawan. Beri salah satunya "Nama di mesin" yang berbeda di profil karyawan (tab Akun)`);
       } else {
         employeeId = match;
       }
@@ -372,19 +372,20 @@ async function commitRowRawMachineFormat(raw: Record<string, string>, session?: 
   return { id: event.id, action: "CREATE" };
 }
 
-// Active employees by full name, plus the optional "name on the machine" of their current assignment.
+// Active employees by full name, plus the optional "name on the machine": set on the employee, or (older) on the current
+// Penugasan Absensi.
 async function loadEmployeeNameIndex(): Promise<Map<string, string | null>> {
   const [employees, assignments] = await Promise.all([
-    prisma.employee.findMany({ where: { activeFlag: true }, select: { id: true, fullLegalName: true } }),
+    prisma.employee.findMany({ where: { activeFlag: true }, select: { id: true, fullLegalName: true, fingerprintMachineName: true } }),
     prisma.attendanceAssignment.findMany({
       where: { effectiveTo: null, fingerprintDeviceUserId: { not: null } },
       select: { employeeId: true, fingerprintDeviceUserId: true },
     }),
   ]);
-  return buildEmployeeNameIndex(
-    employees,
-    assignments.map((a) => ({ employeeId: a.employeeId, alias: a.fingerprintDeviceUserId as string }))
-  );
+  return buildEmployeeNameIndex(employees, [
+    ...employees.flatMap((e) => (e.fingerprintMachineName ? [{ employeeId: e.id, alias: e.fingerprintMachineName }] : [])),
+    ...assignments.map((a) => ({ employeeId: a.employeeId, alias: a.fingerprintDeviceUserId as string })),
+  ]);
 }
 
 export async function exportData(): Promise<ExportResult> {

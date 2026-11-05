@@ -12,6 +12,7 @@ import { AttendanceCard, type EvaluationAttendance } from "./attendance-card";
 import { EvaluationResultView, type EvaluatorResult } from "./evaluation-result";
 import { isOverdue } from "@/lib/work-calendar";
 import { ReleaseEvaluationForm, EvaluationSlotForm } from "./decision-forms";
+import { loadCriteriaWithStandards, loadVariantContext, variantChoices as buildVariantChoices } from "@/lib/evaluation-standard-queries";
 
 function EvaluationScoreSummary({ scores, total }: { scores: unknown; total: number | null }) {
   // evaluations submitted before 2026-10-21 keep showing the grades they were given
@@ -110,7 +111,11 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
   const overdue = isOverdue(evaluation.evaluationDueDate);
 
   const definition = matrixDefinitionOf(evaluation.matrixSnapshot);
-  const hasGuideline = canP1Submit || canP2Submit ? !!(await prisma.evaluationSetting.findUnique({ where: { id: "default" }, select: { guidelineFileId: true } }))?.guidelineFileId : false;
+  const setting = canP1Submit || canP2Submit ? await prisma.evaluationSetting.findUnique({ where: { id: "default" }, select: { guidelineFileId: true, standardDocNumber: true, standardRevision: true, standardEffectiveDate: true } }) : null;
+  const hasGuideline = !!setting?.guidelineFileId;
+  const guideHeader = { docNumber: setting?.standardDocNumber ?? null, revision: setting?.standardRevision ?? null, effectiveDate: setting?.standardEffectiveDate ?? null };
+  // At release Admin SDM sees which version of the standard SAPA would use for this person (level of the seat, subordinates).
+  const variantChoices = canRelease ? buildVariantChoices(await loadCriteriaWithStandards(), await loadVariantContext(evaluation.employeeId, evaluation.snapshotPositionId)) : [];
   const attendance: EvaluationAttendance = {
     sakit: evaluation.attendanceSakit,
     ijin: evaluation.attendanceIjin,
@@ -151,7 +156,7 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
         </p>
       )}
 
-      {canRelease && <ReleaseEvaluationForm evaluationId={evaluation.id} employees={employees} />}
+      {canRelease && <ReleaseEvaluationForm evaluationId={evaluation.id} employees={employees} variantChoices={variantChoices} />}
 
       {released && canSeeResults && anySubmitted && !hasOlderForm && <EvaluationResultView evaluators={evaluators} definition={definition} attendance={<AttendanceCard attendance={attendance} />} />}
 
@@ -181,8 +186,8 @@ export async function EvaluationPanel({ evaluationId, linkToDetail = false }: { 
         )
       )}
 
-      {canP1Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P1" attendance={attendance} definition={definition} hasGuideline={hasGuideline} />}
-      {canP2Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P2" attendance={attendance} definition={definition} hasGuideline={hasGuideline} />}
+      {canP1Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P1" attendance={attendance} definition={definition} hasGuideline={hasGuideline} guideHeader={guideHeader} />}
+      {canP2Submit && <EvaluationSlotForm evaluationId={evaluation.id} slot="P2" attendance={attendance} definition={definition} hasGuideline={hasGuideline} guideHeader={guideHeader} />}
     </div>
   );
 }

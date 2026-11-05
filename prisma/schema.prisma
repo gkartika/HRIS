@@ -487,15 +487,54 @@ model EvaluationCriterion {
   label     String
   sortOrder Int               @default(0)
   active    Boolean           @default(true)
+  // The standard shown to the evaluator (from the owner's matrices): what the criterion means, a note for it, and
+  // what each grade means (EvaluationCriterionLevel, per version where a criterion has more than one).
+  definition String?
+  note       String?
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
+  variants EvaluationCriterionVariant[]
+  levels   EvaluationCriterionLevel[]
+
   @@index([section, sortOrder])
+}
+
+// A version of the standard of one criterion and who it is for: a list of job levels (HL = Harian Lepas) or whether the person
+// has people reporting to them. Kepemimpinan has two (individual / with subordinates), Pengambilan Keputusan has two (by level).
+model EvaluationCriterionVariant {
+  id                    String              @id @default(cuid())
+  criterionId           String
+  criterion             EvaluationCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  key                   String
+  label                 String
+  sortOrder             Int                 @default(0)
+  appliesToLevels       String?
+  appliesToSubordinates Boolean?
+
+  @@unique([criterionId, key])
+}
+
+// What one grade means for one criterion (and version; "DEFAULT" when the criterion has a single set of texts). Tata Nilai
+// texts hold one behaviour per line.
+model EvaluationCriterionLevel {
+  id          String              @id @default(cuid())
+  criterionId String
+  criterion   EvaluationCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  variantKey  String              @default("DEFAULT")
+  score       Int
+  description String
+
+  @@unique([criterionId, variantKey, score])
 }
 
 // One row ("default"): the PDF guideline evaluators can open from the form.
 model EvaluationSetting {
   id              String      @id @default("default")
+  // Header of the standard document, filled in on screen.
+  standardDocNumber     String?
+  standardRevision      String?
+  standardEffectiveDate String?
   guidelineFileId String?     @unique
   guidelineFile   FileObject? @relation("EvaluationGuidelineFile", fields: [guidelineFileId], references: [id], onDelete: SetNull)
   updatedAt       DateTime    @updatedAt
@@ -1072,6 +1111,9 @@ model Employee {
   // and for "who holds what" is always the Assignment table, never this field.
   currentPositionId          String?
   currentPosition            Position?        @relation("PositionHolder", fields: [currentPositionId], references: [id])
+  // Name the fingerprint machine writes when it differs from fullLegalName (the machine cuts long names). Optional, set by
+  // Admin SDM; without it the import matches the full name.
+  fingerprintMachineName     String?
   activeFlag                 Boolean          @default(true)
   createdAt                  DateTime         @default(now())
   updatedAt                  DateTime         @updatedAt

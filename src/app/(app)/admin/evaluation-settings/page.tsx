@@ -7,6 +7,9 @@ import { PERFORMANCE_SCALE, TATA_NILAI_SCALE } from "@/lib/evaluation";
 import { SettingsTabs } from "../settings-tabs";
 import { CriteriaSectionManager, type CriterionRow } from "./criteria-manager";
 import { GuidelineCard, type GuidelineInfo } from "./guideline-card";
+import { StandardEditor, StandardHeaderForm, type StandardRow } from "./standard-editor";
+import { DEFAULT_VARIANT } from "@/lib/evaluation-standard";
+import { loadCriteriaWithStandards } from "@/lib/evaluation-standard-queries";
 
 function sizeLabel(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -40,16 +43,32 @@ export default async function EvaluationSettingsPage() {
   const session = await requireSession();
   if (!isHrAdmin(session)) return <AccessDenied />;
 
-  const [criteria, setting] = await Promise.all([
+  const [criteria, withStandards, setting] = await Promise.all([
     prisma.evaluationCriterion.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, section: true, label: true, active: true } }),
+    loadCriteriaWithStandards(),
     prisma.evaluationSetting.findUnique({
       where: { id: "default" },
-      select: { guidelineFile: { select: { originalFileName: true, sizeBytes: true, createdAt: true, uploadedByAccount: { select: { usernameOrEmail: true } } } } },
+      select: { standardDocNumber: true, standardRevision: true, standardEffectiveDate: true, guidelineFile: { select: { originalFileName: true, sizeBytes: true, createdAt: true, uploadedByAccount: { select: { usernameOrEmail: true } } } } },
     }),
   ]);
   const rowsOf = (section: "PERFORMANCE" | "TATA_NILAI"): CriterionRow[] => criteria.filter((c) => c.section === section).map(({ id, label, active }) => ({ id, label, active }));
   const performance = rowsOf("PERFORMANCE");
   const tataNilai = rowsOf("TATA_NILAI");
+
+  const standardRows: StandardRow[] = withStandards.map((c) => {
+    const textsOf = (variantKey: string) => Object.fromEntries(c.levels.filter((l) => l.variantKey === variantKey).map((l) => [l.score, l.description]));
+    return {
+      id: c.id,
+      label: c.label,
+      section: c.section,
+      active: c.active,
+      definition: c.definition ?? "",
+      note: c.note ?? "",
+      scale: [...(c.section === "PERFORMANCE" ? PERFORMANCE_SCALE : TATA_NILAI_SCALE)],
+      plain: textsOf(DEFAULT_VARIANT),
+      variants: c.variants.map((v) => ({ key: v.key, label: v.label, levels: v.appliesToLevels ?? "", subordinates: v.appliesToSubordinates === true ? "yes" : v.appliesToSubordinates === false ? "no" : "", texts: textsOf(v.key) })),
+    };
+  });
 
   const file = setting?.guidelineFile;
   const guideline: GuidelineInfo | null = file
@@ -84,6 +103,9 @@ export default async function EvaluationSettingsPage() {
             rows={tataNilai}
           />
         </div>
+
+        <StandardHeaderForm docNumber={setting?.standardDocNumber ?? ""} revision={setting?.standardRevision ?? ""} effectiveDate={setting?.standardEffectiveDate ?? ""} />
+        <StandardEditor rows={standardRows} />
 
         <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <h2 className="text-sm font-semibold text-slate-900">Pratinjau untuk evaluator</h2>

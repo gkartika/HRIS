@@ -53,10 +53,10 @@ function AssignmentForm({
         )}
         {method === "FINGERPRINT" && (
           <div>
-            <label className="mb-1 block text-xs text-slate-500">Nama di mesin fingerprint (opsional)</label>
+            <label className="mb-1 block text-xs text-slate-500">ID di mesin fingerprint (opsional)</label>
             <input
               name="fingerprintDeviceUserId"
-              placeholder="Kosongkan kalau sama dengan nama di SAPA"
+              placeholder="Untuk CSV standar. Nama di mesin: lihat kartu di atas"
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
@@ -104,7 +104,7 @@ export function AttendanceAssignmentPanel({
             Metode: <span className="font-medium text-slate-900">{METHOD_LABEL[current.method]}</span>
           </p>
           {current.geofenceName && <p>Lokasi: {current.geofenceName}</p>}
-          {current.fingerprintDeviceUserId && <p>Nama di mesin: {current.fingerprintDeviceUserId}</p>}
+          {current.fingerprintDeviceUserId && <p>ID di mesin: {current.fingerprintDeviceUserId}</p>}
           <p className="text-xs text-slate-400">Berlaku sejak {current.effectiveFrom}</p>
         </div>
       ) : (

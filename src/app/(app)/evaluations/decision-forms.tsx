@@ -4,11 +4,20 @@ import { useActionState, useRef, useState } from "react";
 import { AttendanceCard, type EvaluationAttendance } from "./attendance-card";
 import { releaseEvaluation, submitEvaluation, createManualEvaluation } from "./actions";
 import { t } from "@/lib/i18n/id";
-import { PERFORMANCE_SCALE, TATA_NILAI_SCALE, performanceField, tataNilaiField, type MatrixDefinition } from "@/lib/evaluation";
+import { PERFORMANCE_SCALE, PERFORMANCE_GRADE_NAME, TATA_NILAI_SCALE, performanceField, tataNilaiField, type MatrixDefinition } from "@/lib/evaluation";
+import { CriterionCards } from "./criterion-cards";
+import { EvaluationGuideButton, guideFromDefinition, type GuideHeader } from "./evaluation-guide";
 import type { Employee } from "@/generated/prisma/client";
 type EmployeeOption = Pick<Employee, "id" | "fullLegalName" | "employeeNumber">;
 
-export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationId: string; employees: EmployeeOption[] }) {
+export interface VariantChoice {
+  key: string;
+  label: string;
+  suggested: string;
+  variants: { key: string; label: string }[];
+}
+
+export function ReleaseEvaluationForm({ evaluationId, employees, variantChoices = [] }: { evaluationId: string; employees: EmployeeOption[]; variantChoices?: VariantChoice[] }) {
   const action = releaseEvaluation.bind(null, evaluationId);
   const [error, formAction, isPending] = useActionState(action, undefined);
 
@@ -55,6 +64,26 @@ export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationI
           <input name="attendanceIjinHalfDay" type="number" min={0} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
         </div>
       </div>
+      {variantChoices.length > 0 && (
+        <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+          <p className="text-xs font-semibold text-indigo-900">Standar penilaian yang dipakai</p>
+          <p className="mt-0.5 text-xs text-slate-600">Terisi otomatis dari data organisasi (level jabatan dan ada tidaknya bawahan). Ubah hanya bila tidak sesuai.</p>
+          <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+            {variantChoices.map((c) => (
+              <div key={c.key}>
+                <label className="mb-1 block text-xs text-slate-500">{c.label}</label>
+                <select name={`variant_${c.key}`} defaultValue={c.suggested} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                  {c.variants.map((v) => (
+                    <option key={v.key} value={v.key}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <button
         type="submit"
@@ -67,82 +96,20 @@ export function ReleaseEvaluationForm({ evaluationId, employees }: { evaluationI
   );
 }
 
-// One section of the matrix: a row per criterion, a button per grade. On a phone each criterion becomes a card.
-function GradeMatrix({
-  title,
-  hint,
-  criteria,
-  fieldOf,
-  scale,
-  values,
-  onPick,
-  highlightMissing,
-}: {
-  title: string;
-  hint: string;
-  criteria: { key: string; label: string }[];
-  fieldOf: (key: string) => string;
-  scale: readonly number[];
-  values: Record<string, number | undefined>;
-  onPick: (key: string, n: number) => void;
-  highlightMissing: boolean;
-}) {
-  const cols = { "--n": scale.length } as React.CSSProperties;
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4" style={cols}>
-      <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-      <p className="mt-0.5 text-xs text-slate-500">{hint}</p>
-      <div className="mt-3" role="presentation">
-        <div className="mb-1 hidden gap-1.5 text-center text-xs font-bold text-slate-500 sm:grid sm:grid-cols-[minmax(0,1fr)_repeat(var(--n),56px)]" aria-hidden="true">
-          <span />
-          {scale.map((n) => (
-            <span key={n}>{n}</span>
-          ))}
-        </div>
-        {criteria.map(({ key, label }) => {
-          const value = values[key];
-          const missing = highlightMissing && value === undefined;
-          return (
-            <fieldset
-              key={key}
-              data-missing={missing ? "true" : undefined}
-              className={`grid grid-cols-[repeat(var(--n),1fr)] items-center gap-1.5 border-0 border-t border-slate-100 py-2 sm:grid-cols-[minmax(0,1fr)_repeat(var(--n),56px)] ${missing ? "rounded-lg bg-amber-50 pl-2 shadow-[inset_3px_0_0_#f59e0b]" : ""}`}
-            >
-              <legend className="sr-only">{label}</legend>
-              <span className="col-span-full mb-1 flex items-start gap-2 text-sm leading-snug text-slate-900 sm:col-span-1 sm:mb-0">
-                <span className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${value === undefined ? "invisible" : "bg-green-600"}`} aria-hidden="true">
-                  <svg width="10" height="10" viewBox="0 0 16 16"><path d="M3.8 8.4l2.7 2.7 5.7-6" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </span>
-                {label}
-              </span>
-              {scale.map((n, i) => (
-                <label key={n} className="relative block">
-                  <input type="radio" name={fieldOf(key)} value={n} checked={value === n} onChange={() => onPick(key, n)} required={i === 0} className="peer sr-only" />
-                  <span className="grid h-10 cursor-pointer place-items-center rounded-[10px] border-[1.5px] border-slate-300 bg-white text-sm font-semibold text-slate-600 transition hover:border-indigo-600 hover:text-indigo-600 peer-checked:border-indigo-600 peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:shadow-md peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-indigo-600">
-                    {n}
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 export function EvaluationSlotForm({
   evaluationId,
   slot,
   attendance,
   definition,
   hasGuideline,
+  guideHeader,
 }: {
   evaluationId: string;
   slot: "P1" | "P2";
   attendance: EvaluationAttendance;
   definition: MatrixDefinition;
   hasGuideline: boolean;
+  guideHeader: GuideHeader;
 }) {
   const action = submitEvaluation.bind(null, evaluationId, slot);
   const [error, formAction, isPending] = useActionState(action, undefined);
@@ -154,6 +121,7 @@ export function EvaluationSlotForm({
   const total = definition.performance.length + definition.tataNilai.length;
   const answered = definition.performance.filter((c) => performance[c.key] !== undefined).length + definition.tataNilai.filter((c) => tataNilai[c.key] !== undefined).length;
   const ready = answered === total;
+  const hasStandard = [...definition.performance, ...definition.tataNilai].some((c) => c.standard);
 
   // Pressing the button too early points at what is still missing instead of doing nothing.
   function showMissing() {
@@ -180,22 +148,26 @@ export function EvaluationSlotForm({
         </a>
       )}
       <AttendanceCard attendance={attendance} hint />
-      <GradeMatrix
+      <CriterionCards
         title={t("evaluation.matrix.performanceTitle")}
         hint={t("evaluation.matrix.performanceHint")}
         criteria={definition.performance}
-        fieldOf={(k) => performanceField(k)}
         scale={PERFORMANCE_SCALE}
+        gradeName={PERFORMANCE_GRADE_NAME}
+        numbering="letter"
+        fieldOf={(k) => performanceField(k)}
         values={performance}
         onPick={(k, n) => setPerformance((p) => ({ ...p, [k]: n }))}
         highlightMissing={highlightMissing}
+        toolbar={hasStandard ? <EvaluationGuideButton guide={guideFromDefinition(definition, guideHeader)} /> : undefined}
       />
-      <GradeMatrix
+      <CriterionCards
         title={t("evaluation.matrix.tataNilaiTitle")}
         hint={t("evaluation.matrix.tataNilaiHint")}
         criteria={definition.tataNilai}
-        fieldOf={(k) => tataNilaiField(k)}
         scale={TATA_NILAI_SCALE}
+        numbering="number"
+        fieldOf={(k) => tataNilaiField(k)}
         values={tataNilai}
         onPick={(k, n) => setTataNilai((p) => ({ ...p, [k]: n }))}
         highlightMissing={highlightMissing}

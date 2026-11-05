@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { usedDaysThisYearByType } from "@/lib/absence-quota";
 import { AccountAccessPanel } from "./account-access-panel";
 import { AttendanceAssignmentPanel } from "./attendance-panel";
+import { MachineNameCard } from "./machine-name-card";
 import { AbsenceQuotaPanel } from "./absence-quota-panel";
 
 const SECTION_DIVIDERS =
@@ -28,8 +29,9 @@ export async function AkunTabContent({
   canManageAbsenceQuota: boolean;
 }) {
   async function loadAttendance() {
-    if (!canSeeAttendance) return { geofences: [], current: null };
-    const [geofences, current] = await Promise.all([
+    if (!canSeeAttendance) return { geofences: [], current: null, person: null };
+    const [person, geofences, current] = await Promise.all([
+      prisma.employee.findUnique({ where: { id: employeeId }, select: { fullLegalName: true, fingerprintMachineName: true } }),
       canManageAttendance
         ? prisma.attendanceGeofence.findMany({ where: { activeFlag: true }, orderBy: { siteName: "asc" } })
         : Promise.resolve([]),
@@ -39,10 +41,10 @@ export async function AkunTabContent({
         orderBy: { effectiveFrom: "desc" },
       }),
     ]);
-    return { geofences, current };
+    return { geofences, current, person };
   }
 
-  const [{ geofences, current: currentAttendanceAssignment }, absenceQuotaRows] = await Promise.all([
+  const [{ geofences, current: currentAttendanceAssignment, person }, absenceQuotaRows] = await Promise.all([
     loadAttendance(),
     canManageAbsenceQuota
       ? (async () => {
@@ -69,6 +71,9 @@ export async function AkunTabContent({
     <div className={SECTION_DIVIDERS}>
       {canManageAccountAccess && (
         <AccountAccessPanel employeeId={employeeId} accountStatus={accountStatus} personalEmail={personalEmail} />
+      )}
+      {canSeeAttendance && person && (
+        <MachineNameCard employeeId={employeeId} fullName={person.fullLegalName} machineName={person.fingerprintMachineName} canManage={canManageAttendance} />
       )}
       {canSeeAttendance && (
         <AttendanceAssignmentPanel

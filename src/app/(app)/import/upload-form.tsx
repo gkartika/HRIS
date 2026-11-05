@@ -41,8 +41,8 @@ export function UploadForm({ dataset, label }: { dataset: DatasetKey; label: str
           Mendukung format ekspor CSV standar (fingerprintDeviceUserId/eventType/eventAt) maupun ekspor mentah
           mesin fingerprint (Name/Date-Time/Status) — formatnya terdeteksi otomatis. Untuk ekspor mentah, nama di mesin
           dicocokkan ke nama karyawan di SAPA, tidak perlu mengisi ID. Karyawan yang cocok tapi belum punya Penugasan
-          Absensi otomatis diberi penugasan Fingerprint. Kalau nama di mesin berbeda dari nama di SAPA, isi &quot;Nama di
-          mesin&quot; karyawan itu di Penugasan Absensi.
+          Absensi otomatis diberi penugasan Fingerprint. Kalau nama di mesin berbeda atau lebih pendek dari nama di SAPA, isi
+          &quot;Nama di mesin absensi&quot; di profil karyawan itu (tab Akun); karyawan lain tidak perlu diatur.
         </p>
       )}
       {dataset === "positions" && (

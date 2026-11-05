@@ -521,7 +521,7 @@ export const strings = {
     submittedNotice: "Evaluasi telah dikirim.",
     matrix: {
       performanceTitle: "Bagian 1 — Performance",
-      performanceHint: "Nilai untuk tiap kriteria: 2, 4, 6 atau 8.",
+      performanceHint: "Nilai untuk tiap kriteria: 2, 4, 6, 8 atau 10.",
       performanceTotal: "Total Performance",
       tataNilaiTitle: "Bagian 2 — Tata Nilai",
       tataNilaiHint: "Nilai untuk tiap tata nilai: 0, 25, 50, 75 atau 100.",

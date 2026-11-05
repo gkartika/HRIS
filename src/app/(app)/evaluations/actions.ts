@@ -12,11 +12,11 @@ import {
   allAssignedEvaluatorsSubmitted,
   canReleaseEvaluationStatus,
   canSubmitEvaluationSlot,
-  buildMatrixDefinition,
   matrixDefinitionOf,
   parseEvaluationMatrix,
 } from "@/lib/evaluation";
 import { addWorkingDays } from "@/lib/work-calendar";
+import { buildReleaseMatrix, loadCriteriaWithStandards, loadVariantContext } from "@/lib/evaluation-standard-queries";
 import type { Prisma } from "@/generated/prisma/client";
 
 
@@ -88,8 +88,15 @@ export async function releaseEvaluation(
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
 
-  // The evaluation is released with the criteria as they are now; later edits in Pengaturan Evaluasi do not touch it.
-  const matrix = buildMatrixDefinition(await prisma.evaluationCriterion.findMany({ select: { section: true, key: true, label: true, sortOrder: true, active: true } }));
+  // The evaluation is released with the criteria and their standard as they are now, and the version of the standard meant for
+  // this person (or the one Admin SDM picked); later edits in Pengaturan Evaluasi do not touch it.
+  const [criteria, variantContext] = await Promise.all([loadCriteriaWithStandards(), loadVariantContext(evaluation.employeeId, evaluation.snapshotPositionId)]);
+  const overrides: Record<string, string> = {};
+  for (const c of criteria) {
+    const picked = ((formData.get(`variant_${c.key}`) as string) ?? "").trim();
+    if (picked && c.variants.some((v) => v.key === picked)) overrides[c.key] = picked;
+  }
+  const matrix = buildReleaseMatrix(criteria, variantContext, overrides);
   if (matrix.performance.length === 0 || matrix.tataNilai.length === 0) {
     return "Matriks penilaian belum punya kriteria aktif. Atur dulu di Pengaturan > Evaluasi.";
   }

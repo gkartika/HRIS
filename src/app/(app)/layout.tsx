@@ -95,6 +95,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // account.
   if (isHrAdmin(session)) {
     buckets.karyawanOrg.push({ href: "/organization", label: t("nav.organization"), icon: "Building2" });
+    // The list of every Evaluasi Kinerja and "Buat evaluasi manual" (Admin SDM only). Evaluations also still appear as Beranda tasks.
+    buckets.karyawanOrg.push({ href: "/evaluations", label: "Evaluasi Kinerja", icon: "ClipboardCheck" });
   }
   // Admin SDM sees the list only to create an employee from an approved request.
   if (canSubmitRecruitmentRequest(session) || canManageRecruitment(session) || canCreateEmployeeFromRequest(session)) {
@@ -126,13 +128,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (canViewOnboarding(session, hrManagerPositions.map((p) => p.positionId))) {
     buckets.rekrutmenMutasi.push({ href: "/onboarding", label: t("onboarding.navLabel"), icon: "ClipboardCheck" });
   }
-  // Contracts and Evaluations dropped from the sidebar entirely, per direct
-  // request: a Contract is reachable from its Employee's own page (list +
-  // "Buat Kontrak Baru" there), and an Evaluation task shows up as a
-  // Dashboard approval item (linking straight to its form) instead of a
-  // standing nav entry nobody needs most days — see pending-approvals.ts's
-  // pendingOwnEvaluations and dashboard/page.tsx's "Kontrak & Evaluasi"
-  // approval category.
+  // Contracts dropped from the sidebar entirely, per direct request: a Contract is reachable from its Employee's
+  // own page (list + "Buat Kontrak Baru" there). An Evaluation task shows up as a Dashboard approval item (see
+  // pending-approvals.ts's pendingOwnEvaluations and dashboard/page.tsx's "Kontrak & Evaluasi" category); Admin SDM
+  // alone also has "Evaluasi Kinerja" (the list and "Buat evaluasi manual") under Karyawan & Organisasi, added
+  // 2026-11-05 because there was no clickable way to reach that list.
   if (session.user.employeeId) {
     buckets.saya.push({ href: "/my-evaluations", label: t("evaluation.myEvaluationsTitle"), icon: "FileSignature" });
   }
